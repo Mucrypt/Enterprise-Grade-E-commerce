@@ -87,9 +87,11 @@ export function ProductTable({ products }: { products: Product[] }) {
               <TableCell className='font-mono text-sm'>{product.sku}</TableCell>
               <TableCell>${product.basePrice.toFixed(2)}</TableCell>
               <TableCell>{product.minOrderQuantity || 'N/A'}</TableCell>
-              <TableCell>{getStatusBadge(product.isActive)}</TableCell>
+              <TableCell>{getStatusBadge(product.isActive ?? false)}</TableCell>
               <TableCell className='text-sm text-gray-500'>
-                {format(new Date(product.createdAt), 'MMM d, yyyy')}
+                {product.createdAt
+                  ? format(new Date(product.createdAt), 'MMM d, yyyy')
+                  : 'N/A'}
               </TableCell>
               <TableCell className='text-right'>
                 <DropdownMenu>
@@ -117,7 +119,7 @@ export function ProductTable({ products }: { products: Product[] }) {
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
-                      onClick={() => setDeleteId(product.id)}
+                      onClick={() => product.id && setDeleteId(product.id)}
                       className='text-red-600'
                     >
                       <Trash2 className='h-4 w-4 mr-2' />
