@@ -58,14 +58,12 @@ export const adminService = {
     page?: number
     limit?: number
   }) {
-    const { data } = await apiClient.get('/admin', { params })
-    return data
+    return await apiClient.get('/admin', { params })
   },
 
   // Get admin by ID
   async getAdmin(id: string) {
-    const { data } = await apiClient.get(`/admin/${id}`)
-    return data
+    return await apiClient.get(`/admin/${id}`)
   },
 
   // Invite new admin
@@ -75,8 +73,7 @@ export const adminService = {
     lastName: string
     role: 'admin' | 'super_admin'
   }) {
-    const { data } = await apiClient.post('/admin/invite', inviteData)
-    return data
+    return await apiClient.post('/admin/invite', inviteData)
   },
 
   // Update admin
@@ -87,16 +84,14 @@ export const adminService = {
       lastName?: string
       role?: 'admin' | 'super_admin'
       status?: 'active' | 'inactive' | 'suspended'
-    }
+    },
   ) {
-    const { data } = await apiClient.put(`/admin/${id}`, updateData)
-    return data
+    return await apiClient.put(`/admin/${id}`, updateData)
   },
 
   // Delete admin
   async deleteAdmin(id: string) {
-    const { data } = await apiClient.delete(`/admin/${id}`)
-    return data
+    return await apiClient.delete(`/admin/${id}`)
   },
 
   // Get admin activity logs
@@ -109,19 +104,16 @@ export const adminService = {
     page?: number
     limit?: number
   }) {
-    const { data } = await apiClient.get('/admin/activity-logs', { params })
-    return data
+    return await apiClient.get('/admin/activity-logs', { params })
   },
 
   // Get admin permissions
   async getPermissions() {
-    const { data } = await apiClient.get('/admin/permissions')
-    return data
+    return await apiClient.get('/admin/permissions')
   },
 
   // Get current admin's permissions
   async getMyPermissions() {
-    const { data } = await apiClient.get('/admin/me/permissions')
-    return data
+    return await apiClient.get('/admin/me/permissions')
   },
 }
