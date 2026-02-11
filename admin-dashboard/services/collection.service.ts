@@ -61,19 +61,19 @@ export const collectionService = {
     visibility?: string
     isActive?: boolean
   }) {
-    const { data } = await apiClient.get('/collections/products', { params })
+    const data = await apiClient.get('/collections/products', { params })
     return data
   },
 
   // Get single product collection
   async getProductCollection(id: string) {
-    const { data } = await apiClient.get(`/collections/products/${id}`)
+    const data = await apiClient.get(`/collections/products/${id}`)
     return data
   },
 
   // Create product collection
   async createProductCollection(collectionData: CreateCollectionData) {
-    const { data } = await apiClient.post(
+    const data = await apiClient.post(
       '/collections/products',
       collectionData,
     )
@@ -85,7 +85,7 @@ export const collectionService = {
     id: string,
     collectionData: Partial<CreateCollectionData>,
   ) {
-    const { data } = await apiClient.put(
+    const data = await apiClient.put(
       `/collections/products/${id}`,
       collectionData,
     )
@@ -94,13 +94,13 @@ export const collectionService = {
 
   // Delete product collection
   async deleteProductCollection(id: string) {
-    const { data } = await apiClient.delete(`/collections/products/${id}`)
+    const data = await apiClient.delete(`/collections/products/${id}`)
     return data
   },
 
   // Add products to collection
   async addProductsToCollection(collectionId: string, productIds: string[]) {
-    const { data } = await apiClient.post(
+    const data = await apiClient.post(
       `/collections/products/${collectionId}/products`,
       {
         productIds,
@@ -111,7 +111,7 @@ export const collectionService = {
 
   // Remove product from collection
   async removeProductFromCollection(collectionId: string, productId: string) {
-    const { data } = await apiClient.delete(
+    const data = await apiClient.delete(
       `/collections/products/${collectionId}/products/${productId}`,
     )
     return data
@@ -122,7 +122,7 @@ export const collectionService = {
     collectionId: string,
     items: Array<{ productId: string; position: number }>,
   ) {
-    const { data } = await apiClient.put(
+    const data = await apiClient.put(
       `/collections/products/${collectionId}/products/reorder`,
       { items },
     )
@@ -140,19 +140,19 @@ export const collectionService = {
     visibility?: string
     isActive?: boolean
   }) {
-    const { data } = await apiClient.get('/collections/categories', { params })
+    const data = await apiClient.get('/collections/categories', { params })
     return data
   },
 
   // Get single category collection
   async getCategoryCollection(id: string) {
-    const { data } = await apiClient.get(`/collections/categories/${id}`)
+    const data = await apiClient.get(`/collections/categories/${id}`)
     return data
   },
 
   // Create category collection
   async createCategoryCollection(collectionData: CreateCollectionData) {
-    const { data } = await apiClient.post(
+    const data = await apiClient.post(
       '/collections/categories',
       collectionData,
     )
@@ -164,7 +164,7 @@ export const collectionService = {
     id: string,
     collectionData: Partial<CreateCollectionData>,
   ) {
-    const { data } = await apiClient.put(
+    const data = await apiClient.put(
       `/collections/categories/${id}`,
       collectionData,
     )
@@ -173,13 +173,13 @@ export const collectionService = {
 
   // Delete category collection
   async deleteCategoryCollection(id: string) {
-    const { data } = await apiClient.delete(`/collections/categories/${id}`)
+    const data = await apiClient.delete(`/collections/categories/${id}`)
     return data
   },
 
   // Add categories to collection
   async addCategoriesToCollection(collectionId: string, categoryIds: string[]) {
-    const { data } = await apiClient.post(
+    const data = await apiClient.post(
       `/collections/categories/${collectionId}/categories`,
       {
         categoryIds,
@@ -190,7 +190,7 @@ export const collectionService = {
 
   // Remove category from collection
   async removeCategoryFromCollection(collectionId: string, categoryId: string) {
-    const { data } = await apiClient.delete(
+    const data = await apiClient.delete(
       `/collections/categories/${collectionId}/categories/${categoryId}`,
     )
     return data
@@ -201,7 +201,7 @@ export const collectionService = {
     collectionId: string,
     items: Array<{ categoryId: string; position: number }>,
   ) {
-    const { data } = await apiClient.put(
+    const data = await apiClient.put(
       `/collections/categories/${collectionId}/categories/reorder`,
       { items },
     )
