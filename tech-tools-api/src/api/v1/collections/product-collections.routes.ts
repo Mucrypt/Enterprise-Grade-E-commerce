@@ -1,0 +1,76 @@
+import { Router } from 'express'
+import {
+  createProductCollection,
+  getAllProductCollections,
+  getProductCollectionById,
+  updateProductCollection,
+  deleteProductCollection,
+  addProductsToCollection,
+  removeProductFromCollection,
+  reorderProductsInCollection,
+} from './product-collections.controller'
+import { authenticate, authorize } from '../../../middleware/auth'
+
+const router = Router()
+
+// =====================================================
+// PRODUCT COLLECTIONS ROUTES
+// Public routes: GET
+// Protected routes: POST, PUT, DELETE (admin only)
+// =====================================================
+
+// Create a new product collection
+router.post(
+  '/',
+  authenticate,
+  authorize('admin', 'super_admin'),
+  createProductCollection,
+)
+
+// Get all product collections (public with filters)
+router.get('/', getAllProductCollections)
+
+// Get single product collection by ID (public)
+router.get('/:collectionId', getProductCollectionById)
+
+// Update product collection
+router.put(
+  '/:collectionId',
+  authenticate,
+  authorize('admin', 'super_admin'),
+  updateProductCollection,
+)
+
+// Delete product collection
+router.delete(
+  '/:collectionId',
+  authenticate,
+  authorize('admin', 'super_admin'),
+  deleteProductCollection,
+)
+
+// Add products to collection
+router.post(
+  '/:collectionId/products',
+  authenticate,
+  authorize('admin', 'super_admin'),
+  addProductsToCollection,
+)
+
+// Remove product from collection
+router.delete(
+  '/:collectionId/products/:productId',
+  authenticate,
+  authorize('admin', 'super_admin'),
+  removeProductFromCollection,
+)
+
+// Reorder products in collection
+router.put(
+  '/:collectionId/products/reorder',
+  authenticate,
+  authorize('admin', 'super_admin'),
+  reorderProductsInCollection,
+)
+
+export default router

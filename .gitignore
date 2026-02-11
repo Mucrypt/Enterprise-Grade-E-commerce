@@ -1,0 +1,40 @@
+# Root ignores (monorepo)
+
+# Dependencies
+**/node_modules/
+
+# Build output
+**/dist/
+**/build/
+**/.next/
+**/out/
+
+# Logs
+**/logs/
+**/*.log
+
+# Local env (never commit)
+.env
+.env.*
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+
+# Temporary
+**/.cache/
+**/tmp/
+**/temp/
+
+# Uploaded/media artifacts
+tech-tools-api/uploads/
+
+# Backups
+**/backups/
+
+# TLS / certbot artifacts
+**/letsencrypt/
+**/*.pem
+**/*.key
+**/*.crt

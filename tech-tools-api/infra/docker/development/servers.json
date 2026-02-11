@@ -1,0 +1,17 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "TechTools PostgreSQL",
+      "Group": "Development",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "techtools",
+      "Username": "techtools_user",
+      "SSLMode": "prefer",
+      "Comment": "TechTools API Development Database",
+      "DBRestriction": "techtools",
+      "PassFile": "/tmp/pgpassfile",
+      "SharedServers": false
+    }
+  }
+}

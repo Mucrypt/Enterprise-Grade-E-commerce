@@ -1,0 +1,47 @@
+{
+  "name": "techtools-enterprise",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TechTools Enterprise E-commerce Platform",
+  "scripts": {
+    "infra:dev": "docker compose --env-file .env -f infrastructure/docker-compose.dev.yml up -d --build",
+    "infra:dev:logs": "docker compose --env-file .env -f infrastructure/docker-compose.dev.yml logs -f",
+    "infra:dev:stop": "docker compose --env-file .env -f infrastructure/docker-compose.dev.yml down",
+    "infra:dev:restart": "npm run infra:dev:stop && npm run infra:dev",
+
+    "infra:prod": "docker compose --env-file .env -f infrastructure/docker-compose.prod.yml up -d --build",
+    "infra:prod:logs": "docker compose --env-file .env -f infrastructure/docker-compose.prod.yml logs -f",
+    "infra:prod:stop": "docker compose --env-file .env -f infrastructure/docker-compose.prod.yml down",
+    "infra:prod:restart": "npm run infra:prod:stop && npm run infra:prod",
+
+    "api:logs": "docker compose --env-file .env -f infrastructure/docker-compose.dev.yml logs -f api",
+    "admin:logs": "docker compose --env-file .env -f infrastructure/docker-compose.dev.yml logs -f admin-dashboard",
+    "web:logs": "docker compose --env-file .env -f infrastructure/docker-compose.dev.yml logs -f web-store",
+
+    "db:backup": "cd tech-tools-api && npm run db:backup",
+    "db:migrate": "docker exec techtools-api-dev npm run migrate",
+    "types:generate": "cd tech-tools-api && npm run generate:types && cd ../admin-dashboard && npm run sync:types",
+
+    "health:check": "curl -f http://localhost:8080/health && curl -f http://localhost:9000/health",
+    "clean": "npm run infra:dev:stop && docker system prune -f",
+    "clean:all": "npm run infra:dev:stop && docker system prune -af --volumes"
+  },
+  "workspaces": [
+    "tech-tools-api",
+    "admin-dashboard",
+    "e-commerce-web-store"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/techtools-enterprise.git"
+  },
+  "keywords": [
+    "e-commerce",
+    "b2b",
+    "b2c",
+    "marketplace",
+    "enterprise"
+  ],
+  "author": "TechTools Team",
+  "license": "MIT"
+}

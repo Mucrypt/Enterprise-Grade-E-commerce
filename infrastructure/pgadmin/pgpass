@@ -1,0 +1,2 @@
+postgres:5432:techtools:techtools_user:ChangeMe123!
+postgres:5432:*:techtools_user:ChangeMe123!

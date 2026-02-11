@@ -1,0 +1,1941 @@
+{
+  "info": {
+    "name": "TechTools Enterprise E-commerce API",
+    "description": "Complete API collection for TechTools Enterprise E-commerce platform with authentication, products, orders, payments, and more.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "12345678"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{auth_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Add timestamp to all requests",
+          "pm.environment.set('timestamp', new Date().toISOString());"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global test to check response time",
+          "pm.test('Response time is less than 2000ms', function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(2000);",
+          "});"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "🏥 Health & System",
+      "item": [
+        {
+          "name": "API Health Check",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Check if the API server is running and healthy"
+          },
+          "response": []
+        },
+        {
+          "name": "API v1 Health Check",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "health"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "API Documentation",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/docs",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "docs"]
+            },
+            "description": "Get all available API endpoints documentation"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🔐 Authentication",
+      "item": [
+        {
+          "name": "Register New User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.user) {",
+                  "        pm.environment.set('user_id', response.data.user.id);",
+                  "        pm.environment.set('user_email', response.data.user.email);",
+                  "    }",
+                  "    pm.test('User registered successfully', () => {",
+                  "        pm.expect(response.success).to.be.true;",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"SecurePass123!@#\",\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"phone\": \"+1234567890\",\n  \"role\": \"customer\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "register"]
+            },
+            "description": "Register a new user account. Role can be: customer, admin, super_admin"
+          },
+          "response": []
+        },
+        {
+          "name": "Login User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.accessToken) {",
+                  "        pm.environment.set('auth_token', response.data.accessToken);",
+                  "        pm.environment.set('refresh_token', response.data.refreshToken);",
+                  "        pm.environment.set('user_id', response.data.user.id);",
+                  "        console.log('✅ Auth token saved to environment');",
+                  "    }",
+                  "    pm.test('Login successful', () => {",
+                  "        pm.expect(response.success).to.be.true;",
+                  "        pm.expect(response.data.accessToken).to.exist;",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"SecurePass123!@#\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "login"]
+            },
+            "description": "Login with email and password to get JWT access token"
+          },
+          "response": []
+        },
+        {
+          "name": "Logout User",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "logout"]
+            },
+            "description": "Logout current user and invalidate tokens"
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Email",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"verification-token-from-email\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/verify-email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "verify-email"]
+            },
+            "description": "Verify user email with token sent to email"
+          },
+          "response": []
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/forgot-password",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "forgot-password"]
+            },
+            "description": "Request password reset email"
+          },
+          "response": []
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"reset-token-from-email\",\n  \"password\": \"NewSecurePass123!@#\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/reset-password",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "reset-password"]
+            },
+            "description": "Reset password using token from email"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "👤 User Management",
+      "item": [
+        {
+          "name": "Get User Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "profile"]
+            },
+            "description": "Get current authenticated user's profile"
+          },
+          "response": []
+        },
+        {
+          "name": "Update User Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Smith\",\n  \"phone\": \"+1234567890\",\n  \"dateOfBirth\": \"1990-01-15\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "profile"]
+            },
+            "description": "Update current user's profile information"
+          },
+          "response": []
+        },
+        {
+          "name": "Get User Addresses",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/addresses",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "addresses"]
+            },
+            "description": "Get all addresses for current user"
+          },
+          "response": []
+        },
+        {
+          "name": "Add User Address",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"shipping\",\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"street\": \"123 Main Street\",\n  \"city\": \"New York\",\n  \"state\": \"NY\",\n  \"zipCode\": \"10001\",\n  \"country\": \"USA\",\n  \"phone\": \"+1234567890\",\n  \"isDefault\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/addresses",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "addresses"]
+            },
+            "description": "Add new address for current user"
+          },
+          "response": []
+        },
+        {
+          "name": "Update User Address",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"street\": \"456 Updated Street\",\n  \"city\": \"Los Angeles\",\n  \"state\": \"CA\",\n  \"zipCode\": \"90001\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/addresses/:addressId",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "addresses", ":addressId"],
+              "variable": [
+                {
+                  "key": "addressId",
+                  "value": "address-uuid-here"
+                }
+              ]
+            },
+            "description": "Update specific address"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete User Address",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/addresses/:addressId",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "addresses", ":addressId"],
+              "variable": [
+                {
+                  "key": "addressId",
+                  "value": "address-uuid-here"
+                }
+              ]
+            },
+            "description": "Delete specific address"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📦 Products",
+      "item": [
+        {
+          "name": "Get All Products",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/products?page=1&limit=20&sortBy=createdAt&order=desc",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "products"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt"
+                },
+                {
+                  "key": "order",
+                  "value": "desc"
+                },
+                {
+                  "key": "category",
+                  "value": "electronics",
+                  "disabled": true
+                },
+                {
+                  "key": "minPrice",
+                  "value": "0",
+                  "disabled": true
+                },
+                {
+                  "key": "maxPrice",
+                  "value": "1000",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Get paginated list of all products with optional filters"
+          },
+          "response": []
+        },
+        {
+          "name": "Search Products",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/products/search?q=laptop&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "products", "search"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "laptop"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Full-text search across products"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Product By ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.id) {",
+                  "        pm.environment.set('product_id', response.data.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/products/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "products", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{product_id}}"
+                }
+              ]
+            },
+            "description": "Get single product details by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Product (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.id) {",
+                  "        pm.environment.set('product_id', response.data.id);",
+                  "        console.log('✅ Product ID saved:', response.data.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Premium Wireless Headphones\",\n  \"description\": \"High-quality wireless headphones with active noise cancellation\",\n  \"sku\": \"WH-1000XM5\",\n  \"price\": 399.99,\n  \"compareAtPrice\": 449.99,\n  \"costPrice\": 200.00,\n  \"stock\": 150,\n  \"lowStockThreshold\": 20,\n  \"categoryId\": \"category-uuid-here\",\n  \"supplierId\": \"supplier-uuid-here\",\n  \"brand\": \"Sony\",\n  \"weight\": 0.25,\n  \"dimensions\": {\n    \"length\": 20,\n    \"width\": 18,\n    \"height\": 8\n  },\n  \"images\": [\n    \"https://example.com/images/headphones-1.jpg\",\n    \"https://example.com/images/headphones-2.jpg\"\n  ],\n  \"tags\": [\"wireless\", \"bluetooth\", \"noise-cancelling\", \"premium\"],\n  \"specifications\": {\n    \"battery\": \"30 hours\",\n    \"connectivity\": \"Bluetooth 5.2\",\n    \"driver\": \"40mm\"\n  },\n  \"isActive\": true,\n  \"isFeatured\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/products",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "products"]
+            },
+            "description": "Create new product (Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Product (Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Premium Wireless Headphones - Updated\",\n  \"price\": 379.99,\n  \"stock\": 200,\n  \"isFeatured\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/products/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "products", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{product_id}}"
+                }
+              ]
+            },
+            "description": "Update existing product (Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Product (Admin)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/products/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "products", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{product_id}}"
+                }
+              ]
+            },
+            "description": "Delete product (Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Product Variations",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/products/:id/variations",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "products", ":id", "variations"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{product_id}}"
+                }
+              ]
+            },
+            "description": "Get all variations for a product (e.g., colors, sizes)"
+          },
+          "response": []
+        },
+        {
+          "name": "Add Product Variation (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Black Color\",\n  \"sku\": \"WH-1000XM5-BLK\",\n  \"price\": 399.99,\n  \"stock\": 50,\n  \"attributes\": {\n    \"color\": \"Black\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/products/:id/variations",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "products", ":id", "variations"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{product_id}}"
+                }
+              ]
+            },
+            "description": "Add variation to product (Admin only)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🏷️ Categories",
+      "item": [
+        {
+          "name": "Get All Categories",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/categories",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "categories"]
+            },
+            "description": "Get all product categories"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Category By ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.id) {",
+                  "        pm.environment.set('category_id', response.data.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/categories/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "categories", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{category_id}}"
+                }
+              ]
+            },
+            "description": "Get single category details"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Category Products",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/categories/:id/products?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "categories", ":id", "products"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{category_id}}"
+                }
+              ]
+            },
+            "description": "Get all products in a category"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Category (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.id) {",
+                  "        pm.environment.set('category_id', response.data.id);",
+                  "        console.log('✅ Category ID saved:', response.data.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Electronics\",\n  \"slug\": \"electronics\",\n  \"description\": \"Electronic devices and accessories\",\n  \"parentId\": null,\n  \"image\": \"https://example.com/categories/electronics.jpg\",\n  \"isActive\": true,\n  \"sortOrder\": 1,\n  \"metadata\": {\n    \"icon\": \"electronics-icon\",\n    \"color\": \"#3B82F6\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/categories",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "categories"]
+            },
+            "description": "Create new category (Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Category (Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Electronics & Gadgets\",\n  \"description\": \"Latest electronic devices and gadgets\",\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/categories/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "categories", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{category_id}}"
+                }
+              ]
+            },
+            "description": "Update category (Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Category (Admin)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/categories/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "categories", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{category_id}}"
+                }
+              ]
+            },
+            "description": "Delete category (Admin only)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🛒 Orders",
+      "item": [
+        {
+          "name": "Get User Orders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/orders?page=1&limit=20&status=pending",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "orders"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "status",
+                  "value": "pending",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Get all orders for authenticated user"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Order By ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.id) {",
+                  "        pm.environment.set('order_id', response.data.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/orders/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "orders", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{order_id}}"
+                }
+              ]
+            },
+            "description": "Get single order details"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.id) {",
+                  "        pm.environment.set('order_id', response.data.id);",
+                  "        console.log('✅ Order ID saved:', response.data.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"productId\": \"{{product_id}}\",\n      \"variationId\": null,\n      \"quantity\": 2,\n      \"price\": 399.99\n    }\n  ],\n  \"shippingAddress\": {\n    \"firstName\": \"John\",\n    \"lastName\": \"Doe\",\n    \"street\": \"123 Main Street\",\n    \"city\": \"New York\",\n    \"state\": \"NY\",\n    \"zipCode\": \"10001\",\n    \"country\": \"USA\",\n    \"phone\": \"+1234567890\"\n  },\n  \"billingAddress\": {\n    \"firstName\": \"John\",\n    \"lastName\": \"Doe\",\n    \"street\": \"123 Main Street\",\n    \"city\": \"New York\",\n    \"state\": \"NY\",\n    \"zipCode\": \"10001\",\n    \"country\": \"USA\",\n    \"phone\": \"+1234567890\"\n  },\n  \"paymentMethod\": \"credit_card\",\n  \"shippingMethod\": \"standard\",\n  \"notes\": \"Please deliver after 5 PM\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/orders",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "orders"]
+            },
+            "description": "Create new order"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Order Items",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/orders/:id/items",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "orders", ":id", "items"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{order_id}}"
+                }
+              ]
+            },
+            "description": "Get all items in an order"
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel Order",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Changed my mind\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/orders/:id/cancel",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "orders", ":id", "cancel"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{order_id}}"
+                }
+              ]
+            },
+            "description": "Cancel order (customer)"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Order Status (Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"shipped\",\n  \"trackingNumber\": \"TRACK123456789\",\n  \"carrier\": \"FedEx\",\n  \"notes\": \"Package shipped via FedEx\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/orders/:id/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "orders", ":id", "status"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{order_id}}"
+                }
+              ]
+            },
+            "description": "Update order status (Admin only)\nStatuses: pending, processing, shipped, delivered, cancelled, refunded"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "💳 Payments",
+      "item": [
+        {
+          "name": "Create Payment Intent",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.clientSecret) {",
+                  "        pm.environment.set('payment_client_secret', response.data.clientSecret);",
+                  "        pm.environment.set('payment_intent_id', response.data.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{order_id}}\",\n  \"amount\": 799.98,\n  \"currency\": \"usd\",\n  \"paymentMethod\": \"card\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/payments/intent",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "payments", "intent"]
+            },
+            "description": "Create payment intent for order"
+          },
+          "response": []
+        },
+        {
+          "name": "Confirm Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentIntentId\": \"{{payment_intent_id}}\",\n  \"paymentMethodId\": \"pm_card_visa\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/payments/confirm",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "payments", "confirm"]
+            },
+            "description": "Confirm payment with payment method"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Payment Methods",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/payments/methods",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "payments", "methods"]
+            },
+            "description": "Get all saved payment methods for user"
+          },
+          "response": []
+        },
+        {
+          "name": "Add Payment Method",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"card\",\n  \"cardNumber\": \"4242424242424242\",\n  \"expMonth\": 12,\n  \"expYear\": 2027,\n  \"cvc\": \"123\",\n  \"cardholderName\": \"John Doe\",\n  \"isDefault\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/payments/methods",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "payments", "methods"]
+            },
+            "description": "Add new payment method"
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Payment Method",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/payments/methods/:methodId",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "payments", "methods", ":methodId"],
+              "variable": [
+                {
+                  "key": "methodId",
+                  "value": "pm_123456"
+                }
+              ]
+            },
+            "description": "Remove saved payment method"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Payment History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/payments/history?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "payments", "history"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get user's payment history"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🏭 Suppliers (Admin)",
+      "item": [
+        {
+          "name": "Get All Suppliers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get all suppliers (Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Supplier By ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.id) {",
+                  "        pm.environment.set('supplier_id', response.data.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{supplier_id}}"
+                }
+              ]
+            },
+            "description": "Get supplier details (Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Supplier",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.id) {",
+                  "        pm.environment.set('supplier_id', response.data.id);",
+                  "        console.log('✅ Supplier ID saved:', response.data.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Tech Suppliers Inc.\",\n  \"email\": \"contact@techsuppliers.com\",\n  \"phone\": \"+1234567890\",\n  \"address\": {\n    \"street\": \"789 Industrial Blvd\",\n    \"city\": \"San Francisco\",\n    \"state\": \"CA\",\n    \"zipCode\": \"94102\",\n    \"country\": \"USA\"\n  },\n  \"website\": \"https://techsuppliers.com\",\n  \"contactPerson\": {\n    \"name\": \"Jane Smith\",\n    \"email\": \"jane@techsuppliers.com\",\n    \"phone\": \"+1234567891\"\n  },\n  \"paymentTerms\": \"Net 30\",\n  \"shippingTerms\": \"FOB\",\n  \"taxId\": \"12-3456789\",\n  \"isActive\": true,\n  \"rating\": 4.5,\n  \"notes\": \"Reliable supplier for electronics\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers"]
+            },
+            "description": "Create new supplier (Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Supplier",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Tech Suppliers Inc. - Updated\",\n  \"rating\": 5.0,\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{supplier_id}}"
+                }
+              ]
+            },
+            "description": "Update supplier (Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Supplier",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{supplier_id}}"
+                }
+              ]
+            },
+            "description": "Delete supplier (Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Supplier Products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/:id/products?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", ":id", "products"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{supplier_id}}"
+                }
+              ]
+            },
+            "description": "Get all products from supplier (Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Sync Supplier Products",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"syncType\": \"full\",\n  \"updatePrices\": true,\n  \"updateStock\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/suppliers/:id/sync",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "suppliers", ":id", "sync"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{supplier_id}}"
+                }
+              ]
+            },
+            "description": "Sync products with supplier system (Admin only)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🔐 Admin Management (Super Admin)",
+      "item": [
+        {
+          "name": "Invite Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.invitationToken) {",
+                  "        pm.collectionVariables.set('admin_invitation_token', response.data.invitationToken);",
+                  "        pm.collectionVariables.set('invited_admin_email', response.data.invitation.email);",
+                  "        console.log('✅ Invitation token saved:', response.data.invitationToken);",
+                  "    }",
+                  "    pm.test('Admin invited successfully', () => {",
+                  "        pm.expect(response.message).to.include('Admin invitation sent');",
+                  "    });",
+                  "} else {",
+                  "    pm.test('Request failed: ' + pm.response.json().error, () => {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([201]);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newadmin@techtools.com\",\n  \"name\": \"John Admin Manager\",\n  \"role\": \"admin\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/invite",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "invite"]
+            },
+            "description": "**Super Admin Only**: Send invitation email to create new admin account.\n\n**Security:**\n- Requires super_admin role\n- Generates secure 48-hour token\n- Prevents duplicate invitations\n- Sends email with acceptance link\n\n**Request Body:**\n- `email` (required): New admin's email\n- `name` (required): Admin's full name\n- `role` (required): Either 'admin' or 'super_admin'\n\n**Response:**\n- Returns invitation details and token\n- Token auto-saved to collection variable"
+          },
+          "response": []
+        },
+        {
+          "name": "Accept Admin Invitation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.token) {",
+                  "        pm.collectionVariables.set('auth_token', response.data.token);",
+                  "        pm.collectionVariables.set('user_id', response.data.admin.id);",
+                  "        pm.collectionVariables.set('admin_id', response.data.admin.id);",
+                  "        console.log('✅ New admin authenticated, ID:', response.data.admin.id);",
+                  "    }",
+                  "    pm.test('Admin account created successfully', () => {",
+                  "        pm.expect(response.message).to.include('successfully');",
+                  "    });",
+                  "} else {",
+                  "    pm.test('Request failed: ' + pm.response.json().error, () => {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([201]);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{admin_invitation_token}}\",\n  \"password\": \"AdminSecure123!\",\n  \"confirmPassword\": \"AdminSecure123!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/invitations/accept",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "invitations", "accept"]
+            },
+            "description": "**Public Endpoint**: Complete admin account creation using invitation token.\n\n**No Authentication Required** - Uses invitation token for security\n\n**Request Body:**\n- `token` (required): Invitation token from email (auto-filled from previous step)\n- `password` (required): Strong password (min 8 chars)\n- `confirmPassword` (required): Password confirmation\n\n**Security:**\n- Token expires after 48 hours\n- Token is single-use only\n- Creates admin with invited role\n- Logs activity in audit system\n\n**Response:**\n- Returns JWT token and admin profile\n- Token auto-saved to collection variable"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Admins",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.admins && response.data.admins.length > 0) {",
+                  "        const firstAdmin = response.data.admins[0];",
+                  "        pm.collectionVariables.set('admin_id', firstAdmin.id);",
+                  "        console.log('✅ Admin ID saved:', firstAdmin.id);",
+                  "    }",
+                  "    pm.test('Admins list retrieved', () => {",
+                  "        pm.expect(response.data.admins).to.be.an('array');",
+                  "        pm.expect(response.data.pagination).to.be.an('object');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin?page=1&limit=20&role=all&status=active&sortBy=created_at&order=desc",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Results per page"
+                },
+                {
+                  "key": "role",
+                  "value": "all",
+                  "description": "Filter by role: all, admin, super_admin"
+                },
+                {
+                  "key": "status",
+                  "value": "active",
+                  "description": "Filter by status: all, active, suspended"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "created_at",
+                  "description": "Sort field: created_at, name, email"
+                },
+                {
+                  "key": "order",
+                  "value": "desc",
+                  "description": "Sort order: asc, desc"
+                }
+              ]
+            },
+            "description": "**Admin Access**: List all admin accounts with filtering and pagination.\n\n**Query Parameters:**\n- `page` (default: 1): Page number\n- `limit` (default: 20): Results per page\n- `role` (default: all): Filter - all, admin, super_admin\n- `status` (default: all): Filter - all, active, suspended\n- `sortBy` (default: created_at): Sort field\n- `order` (default: desc): asc or desc\n\n**Response:**\n- Array of admin profiles (password excluded)\n- Pagination metadata\n- First admin ID auto-saved to variable"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Admin by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.test('Admin details retrieved', () => {",
+                  "        pm.expect(response.data.admin).to.be.an('object');",
+                  "        pm.expect(response.data.admin).to.have.property('id');",
+                  "        pm.expect(response.data.admin).to.have.property('email');",
+                  "        pm.expect(response.data.admin).to.not.have.property('password');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/:adminId",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", ":adminId"],
+              "variable": [
+                {
+                  "key": "adminId",
+                  "value": "{{admin_id}}"
+                }
+              ]
+            },
+            "description": "**Admin Access**: Get detailed information about a specific admin.\n\n**Path Parameter:**\n- `adminId` (required): UUID of the admin (auto-filled from saved variable)\n\n**Response:**\n- Complete admin profile\n- Password excluded for security\n- Includes role, status, created/updated timestamps\n- Last login information"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.test('Admin updated successfully', () => {",
+                  "        pm.expect(response.message).to.include('updated');",
+                  "        pm.expect(response.data.admin).to.be.an('object');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Admin Name\",\n  \"role\": \"admin\",\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/:adminId",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", ":adminId"],
+              "variable": [
+                {
+                  "key": "adminId",
+                  "value": "{{admin_id}}"
+                }
+              ]
+            },
+            "description": "**Super Admin Only**: Update admin account details.\n\n**Path Parameter:**\n- `adminId` (required): UUID of the admin to update\n\n**Request Body (all optional):**\n- `name`: New admin name\n- `role`: Change role (admin or super_admin)\n- `status`: Change status (active or suspended)\n\n**Security:**\n- Only super_admin can update other admins\n- Cannot downgrade last super_admin\n- Cannot change own role\n- All changes logged in audit system\n\n**Response:**\n- Updated admin profile\n- Change confirmation message"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.test('Admin deleted successfully', () => {",
+                  "        pm.expect(response.message).to.include('deleted');",
+                  "    });",
+                  "    // Clear the deleted admin's ID",
+                  "    pm.collectionVariables.set('admin_id', '');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/:adminId",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", ":adminId"],
+              "variable": [
+                {
+                  "key": "adminId",
+                  "value": "{{admin_id}}"
+                }
+              ]
+            },
+            "description": "**Super Admin Only**: Permanently delete an admin account.\n\n**Path Parameter:**\n- `adminId` (required): UUID of the admin to delete\n\n**Security:**\n- Only super_admin can delete admins\n- Cannot delete last super_admin\n- Cannot delete own account\n- Deletion logged in audit system\n- Revokes all admin sessions\n\n**⚠️ Warning:**\n- This action is permanent\n- All admin's sessions will be terminated\n- Audit logs are preserved\n\n**Response:**\n- Deletion confirmation message"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Admin Activity Logs",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.test('Activity logs retrieved', () => {",
+                  "        pm.expect(response.data.logs).to.be.an('array');",
+                  "        pm.expect(response.data.pagination).to.be.an('object');",
+                  "    });",
+                  "    if (response.data.logs.length > 0) {",
+                  "        console.log('📊 Total logs:', response.data.pagination.total);",
+                  "        console.log('📝 Latest action:', response.data.logs[0].action);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/logs/activity?page=1&limit=50&adminId=&action=&startDate=&endDate=",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "logs", "activity"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number"
+                },
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Logs per page (max 100)"
+                },
+                {
+                  "key": "adminId",
+                  "value": "",
+                  "description": "Filter by specific admin UUID"
+                },
+                {
+                  "key": "action",
+                  "value": "",
+                  "description": "Filter by action: invite_admin, update_admin, delete_admin, etc."
+                },
+                {
+                  "key": "startDate",
+                  "value": "",
+                  "description": "Filter from date (ISO 8601)"
+                },
+                {
+                  "key": "endDate",
+                  "value": "",
+                  "description": "Filter to date (ISO 8601)"
+                }
+              ]
+            },
+            "description": "**Admin Access**: Retrieve comprehensive audit logs of all admin activities.\n\n**Query Parameters:**\n- `page` (default: 1): Page number\n- `limit` (default: 50, max: 100): Logs per page\n- `adminId`: Filter by specific admin\n- `action`: Filter by action type\n- `startDate`: Filter from date (ISO format)\n- `endDate`: Filter to date (ISO format)\n\n**Logged Actions:**\n- Admin invitations sent\n- Account creations and deletions\n- Role and status changes\n- Login attempts and sessions\n- Permission modifications\n\n**Response:**\n- Array of activity logs\n- Each log includes: action, admin, timestamp, IP, user agent, details\n- Pagination metadata"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Role Permissions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.test('Role permissions retrieved', () => {",
+                  "        pm.expect(response.data.permissions).to.be.an('array');",
+                  "        pm.expect(response.data.role).to.be.a('string');",
+                  "    });",
+                  "    console.log('🔑 Role:', response.data.role);",
+                  "    console.log('🔐 Total permissions:', response.data.permissions.length);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/permissions/:role",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "permissions", ":role"],
+              "variable": [
+                {
+                  "key": "role",
+                  "value": "super_admin",
+                  "description": "Role: admin or super_admin"
+                }
+              ]
+            },
+            "description": "**Admin Access**: Get all permissions assigned to a specific role.\n\n**Path Parameter:**\n- `role` (required): Either 'admin' or 'super_admin'\n\n**Permission Categories:**\n- **Users**: manage_users, view_users, delete_users\n- **Products**: manage_products, view_products, delete_products\n- **Orders**: manage_orders, view_orders, cancel_orders\n- **Categories**: manage_categories, view_categories, delete_categories\n- **Payments**: manage_payments, view_payments\n- **Suppliers**: manage_suppliers, view_suppliers\n- **Admins**: manage_admins, view_admins (super_admin only)\n- **Settings**: manage_settings, view_settings\n\n**Response:**\n- Role name\n- Array of permission objects with:\n  - Permission ID, name, resource, action\n  - Description of what it allows"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:9000",
+      "type": "string"
+    },
+    {
+      "key": "auth_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "product_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "category_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "order_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "supplier_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "admin_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "admin_invitation_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "invited_admin_email",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

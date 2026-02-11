@@ -1,0 +1,1812 @@
+{
+  "info": {
+    "name": "TechTools Enterprise E-commerce API - Complete",
+    "description": "Complete enterprise-grade API collection with Authentication, Admin Management, Products, Categories, Media Management, Collections, Orders, Payments, and more.\n\n**Quick Start:**\n1. Import this collection\n2. Import environment (Development or Production)\n3. Run 'Login as Super Admin' request\n4. Start testing!\n\n**Super Admin Credentials:**\n- Email: romeomukulah@gmail.com\n- ID: c429e249-c897-496a-8da8-12bc5209f609\n\n**New Features:**\n✨ Media Management (Images & Videos)\n✨ Product Collections\n✨ Category Collections\n✨ Create Products/Categories with Media",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "2.0.0"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{auth_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global pre-request script",
+          "pm.environment.set('timestamp', new Date().toISOString());",
+          "",
+          "// Check if auth token exists for protected routes",
+          "const authToken = pm.environment.get('auth_token');",
+          "if (!authToken && pm.request.auth && pm.request.auth.type === 'bearer') {",
+          "    console.warn('⚠️ No auth token found. Login first!');",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global test script",
+          "pm.test('Status code is successful (2xx or 3xx)', function () {",
+          "    pm.expect(pm.response.code).to.be.within(200, 399);",
+          "});",
+          "",
+          "pm.test('Response time is acceptable', function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(3000);",
+          "});",
+          "",
+          "pm.test('Response has correct content-type', function () {",
+          "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+          "});"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "🏥 Health & System",
+      "description": "Monitor API health, system status, and get documentation",
+      "item": [
+        {
+          "name": "API Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('API is healthy', () => {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.status).to.equal('healthy');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Check if the API server is running and healthy"
+          }
+        },
+        {
+          "name": "API Documentation",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/docs",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "docs"]
+            },
+            "description": "Get comprehensive API documentation with all available endpoints"
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔐 Authentication",
+      "description": "User registration, login, password reset, email verification",
+      "item": [
+        {
+          "name": "Register User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('user_id', response.data.user.id);",
+                  "    pm.environment.set('auth_token', response.data.tokens.accessToken);",
+                  "    pm.environment.set('refresh_token', response.data.tokens.refreshToken);",
+                  "    console.log('✅ User registered:', response.data.user.email);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"customer@example.com\",\n  \"password\": \"SecurePass123!\",\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"phoneNumber\": \"+1234567890\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "register"]
+            },
+            "description": "Register a new customer account. Admin accounts must be created through the invitation system."
+          }
+        },
+        {
+          "name": "Login as Super Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('auth_token', response.data.tokens.accessToken);",
+                  "    pm.environment.set('refresh_token', response.data.tokens.refreshToken);",
+                  "    pm.environment.set('user_id', response.data.user.id);",
+                  "    pm.environment.set('user_email', response.data.user.email);",
+                  "    pm.environment.set('user_type', response.data.user.userType);",
+                  "    ",
+                  "    console.log('✅ Logged in as Super Admin');",
+                  "    console.log('📧 Email:', response.data.user.email);",
+                  "    console.log('🆔 User ID:', response.data.user.id);",
+                  "    console.log('🔑 Token saved to environment');",
+                  "    ",
+                  "    pm.test('User is super admin', () => {",
+                  "        pm.expect(response.data.user.userType).to.equal('super_admin');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"romeomukulah@gmail.com\",\n  \"password\": \"your_password_here\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "login"]
+            },
+            "description": "**IMPORTANT**: Login as Super Admin to access all endpoints.\n\n**Super Admin:**\n- Email: romeomukulah@gmail.com\n- ID: c429e249-c897-496a-8da8-12bc5209f609\n\nThis will automatically save the auth token to your environment."
+          }
+        },
+        {
+          "name": "Login User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('auth_token', response.data.tokens.accessToken);",
+                  "    pm.environment.set('refresh_token', response.data.tokens.refreshToken);",
+                  "    pm.environment.set('user_id', response.data.user.id);",
+                  "    console.log('✅ Logged in:', response.data.user.email);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"YourPassword123!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('auth_token', response.data.accessToken);",
+                  "    console.log('✅ Token refreshed');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "refresh"]
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "logout"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "👥 Admin Management",
+      "description": "Enterprise admin management: invitations, permissions, activity logs",
+      "item": [
+        {
+          "name": "Invite Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('admin_invitation_token', response.data.invitation.token);",
+                  "    pm.environment.set('invited_admin_email', response.data.invitation.email);",
+                  "    console.log('✅ Admin invited:', response.data.invitation.email);",
+                  "    console.log('🔑 Token:', response.data.invitation.token);",
+                  "    console.log('⏰ Expires:', response.data.invitation.expiresAt);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newadmin@techtools.com\",\n  \"role\": \"admin\",\n  \"firstName\": \"Jane\",\n  \"lastName\": \"Smith\",\n  \"expiresInHours\": 48\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/invite",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "invite"]
+            },
+            "description": "**Super Admin Only**: Send admin invitation email with secure token"
+          }
+        },
+        {
+          "name": "Accept Admin Invitation",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{admin_invitation_token}}\",\n  \"password\": \"AdminPass123!\",\n  \"firstName\": \"Jane\",\n  \"lastName\": \"Smith\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/accept-invitation",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "accept-invitation"]
+            },
+            "description": "Accept admin invitation and create account using the invitation token"
+          }
+        },
+        {
+          "name": "Get All Admins",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin?page=1&limit=50&role=admin&status=active",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "50" },
+                { "key": "role", "value": "admin", "disabled": true },
+                { "key": "status", "value": "active", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Admin by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "{{user_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Admin",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Updated\",\n  \"lastName\": \"Name\",\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/{{admin_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "{{admin_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Admin",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/{{admin_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "{{admin_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Get Activity Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/activity-logs?page=1&limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "activity-logs"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "50" },
+                { "key": "adminId", "value": "", "disabled": true },
+                { "key": "action", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Role Permissions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/permissions/:role",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "permissions", ":role"],
+              "variable": [{ "key": "role", "value": "super_admin" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📦 Products",
+      "description": "Product CRUD operations, search, variations",
+      "item": [
+        {
+          "name": "Create Product (JSON)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('product_id', response.data.product.id);",
+                  "    console.log('✅ Product created:', response.data.product.name);",
+                  "    console.log('🆔 Product ID:', response.data.product.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \"PROD-{{$randomInt}}\",\n  \"name\": \"Premium Wireless Keyboard\",\n  \"slug\": \"premium-wireless-keyboard-{{$randomInt}}\",\n  \"description\": \"High-quality wireless keyboard with RGB backlighting, mechanical switches, and long battery life. Perfect for gaming and productivity.\",\n  \"shortDescription\": \"RGB wireless mechanical keyboard\",\n  \"categoryId\": \"{{category_id}}\",\n  \"basePrice\": 129.99,\n  \"salePrice\": 99.99,\n  \"costPrice\": 60.00,\n  \"taxRate\": 0.15,\n  \"weight\": 800,\n  \"weightUnit\": \"g\",\n  \"length\": 45,\n  \"width\": 15,\n  \"height\": 3.5,\n  \"dimensionsUnit\": \"cm\",\n  \"isActive\": true,\n  \"isFeatured\": true,\n  \"isBackorderAllowed\": false,\n  \"minOrderQuantity\": 1,\n  \"maxOrderQuantity\": 10,\n  \"metaTitle\": \"Premium Wireless RGB Keyboard | TechTools\",\n  \"metaDescription\": \"Shop our premium wireless keyboard with RGB lighting and mechanical switches. Free shipping on orders over $100.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/products",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "products"]
+            },
+            "description": "Create product without media (media can be added later)"
+          }
+        },
+        {
+          "name": "Create Product with Media",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('product_id', response.data.product.id);",
+                  "    console.log('✅ Product created with media:', response.data.product.name);",
+                  "    console.log('📁 Media files:', response.data.product.media?.length || 0);",
+                  "    console.log('🆔 Product ID:', response.data.product.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "sku",
+                  "value": "PROD-{{$randomInt}}",
+                  "type": "text"
+                },
+                { "key": "name", "value": "Gaming Mouse Pro", "type": "text" },
+                {
+                  "key": "slug",
+                  "value": "gaming-mouse-pro-{{$randomInt}}",
+                  "type": "text"
+                },
+                {
+                  "key": "description",
+                  "value": "Professional gaming mouse with 16000 DPI, RGB lighting, and programmable buttons",
+                  "type": "text"
+                },
+                {
+                  "key": "shortDescription",
+                  "value": "Professional gaming mouse 16K DPI",
+                  "type": "text"
+                },
+                {
+                  "key": "categoryId",
+                  "value": "{{category_id}}",
+                  "type": "text"
+                },
+                { "key": "basePrice", "value": "79.99", "type": "text" },
+                { "key": "salePrice", "value": "59.99", "type": "text" },
+                { "key": "weight", "value": "120", "type": "text" },
+                { "key": "weightUnit", "value": "g", "type": "text" },
+                { "key": "isFeatured", "value": "true", "type": "text" },
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": "",
+                  "description": "Upload image 1 (JPG, PNG, WebP)"
+                },
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": "",
+                  "description": "Upload image 2",
+                  "disabled": true
+                },
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": "",
+                  "description": "Upload image 3",
+                  "disabled": true
+                },
+                {
+                  "key": "videos",
+                  "type": "file",
+                  "src": "",
+                  "description": "Upload demo video (MP4)",
+                  "disabled": true
+                },
+                {
+                  "key": "imageDescriptions",
+                  "value": "[{\"title\":\"Front View\",\"description\":\"Mouse from front\"},{\"title\":\"Side View\",\"description\":\"Side angle\"}]",
+                  "type": "text",
+                  "description": "JSON array of image descriptions"
+                },
+                {
+                  "key": "videoTitle",
+                  "value": "Product Demo Video",
+                  "type": "text",
+                  "disabled": true
+                },
+                {
+                  "key": "videoDescription",
+                  "value": "See the mouse in action",
+                  "type": "text",
+                  "disabled": true
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/products",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "products"]
+            },
+            "description": "**NEW**: Create product with images and videos in one request!\n\n**Form Fields:**\n- Standard product fields (sku, name, description, price, etc.)\n- `images`: Up to 10 image files\n- `videos`: Up to 3 video files\n- `imageDescriptions`: JSON array with title/description for each image\n- `videoTitle`, `videoDescription`: Video metadata\n\n**Auto-Processing:**\n✅ Images converted to WebP\n✅ 4 sizes generated (thumbnail, small, medium, large)\n✅ First image set as primary\n✅ Videos uploaded and processed\n\n**Note**: Click on 'images' and 'videos' fields to select files from your computer"
+          }
+        },
+        {
+          "name": "Get All Products",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/products?page=1&limit=20&sortBy=created_at&sortOrder=desc",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "products"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "categoryId", "value": "", "disabled": true },
+                { "key": "minPrice", "value": "", "disabled": true },
+                { "key": "maxPrice", "value": "", "disabled": true },
+                { "key": "featured", "value": "true", "disabled": true },
+                { "key": "inStock", "value": "true", "disabled": true },
+                { "key": "sortBy", "value": "created_at" },
+                { "key": "sortOrder", "value": "desc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Product by ID",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/products/{{product_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "products", "{{product_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Search Products",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/products/search?q=keyboard&page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "products", "search"],
+              "query": [
+                { "key": "q", "value": "keyboard" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Product",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Product Name\",\n  \"basePrice\": 149.99,\n  \"salePrice\": 119.99,\n  \"isFeatured\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/products/{{product_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "products", "{{product_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Product",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/products/{{product_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "products", "{{product_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🖼️ Product Media",
+      "description": "Upload, manage, and optimize product images and videos",
+      "item": [
+        {
+          "name": "Upload Product Image",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('media_id', response.data.id);",
+                  "    console.log('✅ Media uploaded');",
+                  "    console.log('🖼️ Type:', response.data.media_type);",
+                  "    console.log('📁 File size:', response.data.file_size, 'bytes');",
+                  "    console.log('🔗 URLs:', Object.keys(response.data.cdn_urls || {}));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Select image file (JPG, PNG, WebP, GIF - Max 10MB)"
+                },
+                {
+                  "key": "altText",
+                  "value": "Product main view",
+                  "type": "text"
+                },
+                {
+                  "key": "title",
+                  "value": "Product Front View",
+                  "type": "text"
+                },
+                {
+                  "key": "description",
+                  "value": "High-quality product photo from front angle",
+                  "type": "text",
+                  "disabled": true
+                },
+                {
+                  "key": "position",
+                  "value": "0",
+                  "type": "text",
+                  "description": "Display order (0 = first)"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/products/{{product_id}}/media",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "products", "{{product_id}}", "media"]
+            },
+            "description": "**Upload & Auto-Optimize Images**\n\n**What Happens:**\n✅ Converts to WebP format\n✅ Generates 4 sizes:\n  - Thumbnail: 150x150px\n  - Small: 300x300px\n  - Medium: 600x600px\n  - Large: 1200x1200px\n✅ Compresses for optimal loading\n✅ Returns CDN-ready URLs\n\n**Supported Formats:**\n- JPG/JPEG\n- PNG\n- WebP\n- GIF\n\n**Max Size:** 10MB"
+          }
+        },
+        {
+          "name": "Upload Product Video",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    console.log('✅ Video uploaded');",
+                  "    console.log('🎬 Duration:', response.data.video_duration, 'seconds');",
+                  "    console.log('📁 File size:', response.data.file_size, 'bytes');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Select video file (MP4, MOV - Max 100MB)"
+                },
+                {
+                  "key": "title",
+                  "value": "Product Demo Video",
+                  "type": "text"
+                },
+                {
+                  "key": "description",
+                  "value": "Watch the product in action",
+                  "type": "text"
+                },
+                {
+                  "key": "position",
+                  "value": "10",
+                  "type": "text",
+                  "description": "Display order"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/products/{{product_id}}/media",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "products", "{{product_id}}", "media"]
+            },
+            "description": "**Upload Product Videos**\n\n**Supported Formats:**\n- MP4\n- MPEG\n- QuickTime (MOV)\n- AVI\n\n**Max Size:** 100MB\n\n**Note:** For production, consider video transcoding service for optimization."
+          }
+        },
+        {
+          "name": "Get All Product Media",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/products/{{product_id}}/media?type=image",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "products", "{{product_id}}", "media"],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "image",
+                  "description": "Filter: image or video",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Media by ID",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/products/{{product_id}}/media/{{media_id}}",
+              "host": ["{{base_url}}"],
+              "path": [
+                "api",
+                "v1",
+                "products",
+                "{{product_id}}",
+                "media",
+                "{{media_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Media Metadata",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"altText\": \"Updated alt text for SEO\",\n  \"title\": \"Updated Title\",\n  \"description\": \"Updated description\",\n  \"position\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/products/{{product_id}}/media/{{media_id}}",
+              "host": ["{{base_url}}"],
+              "path": [
+                "api",
+                "v1",
+                "products",
+                "{{product_id}}",
+                "media",
+                "{{media_id}}"
+              ]
+            },
+            "description": "Update media metadata (alt text, title, description, position)"
+          }
+        },
+        {
+          "name": "Set Primary Image",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/products/{{product_id}}/media/{{media_id}}/set-primary",
+              "host": ["{{base_url}}"],
+              "path": [
+                "api",
+                "v1",
+                "products",
+                "{{product_id}}",
+                "media",
+                "{{media_id}}",
+                "set-primary"
+              ]
+            },
+            "description": "Set this image as the primary product image (shown in listings)"
+          }
+        },
+        {
+          "name": "Reorder Media",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mediaOrder\": [\n    {\"mediaId\": \"media-uuid-1\", \"position\": 0},\n    {\"mediaId\": \"media-uuid-2\", \"position\": 1},\n    {\"mediaId\": \"media-uuid-3\", \"position\": 2}\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/products/{{product_id}}/media/reorder",
+              "host": ["{{base_url}}"],
+              "path": [
+                "api",
+                "v1",
+                "products",
+                "{{product_id}}",
+                "media",
+                "reorder"
+              ]
+            },
+            "description": "Change the display order of product media"
+          }
+        },
+        {
+          "name": "Delete Media",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/products/{{product_id}}/media/{{media_id}}",
+              "host": ["{{base_url}}"],
+              "path": [
+                "api",
+                "v1",
+                "products",
+                "{{product_id}}",
+                "media",
+                "{{media_id}}"
+              ]
+            },
+            "description": "Delete media file and all its optimized versions"
+          }
+        }
+      ]
+    },
+    {
+      "name": "📁 Categories",
+      "description": "Category management and hierarchy",
+      "item": [
+        {
+          "name": "Create Category (JSON)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('category_id', response.data.category.id);",
+                  "    console.log('✅ Category created:', response.data.category.name);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Computer Peripherals\",\n  \"description\": \"Keyboards, mice, webcams, and other computer accessories\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/categories",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "categories"]
+            }
+          }
+        },
+        {
+          "name": "Create Category with Media",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('category_id', response.data.category.id);",
+                  "    console.log('✅ Category created with media');",
+                  "    console.log('📁 Media files:', response.data.category.media?.length || 0);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Gaming Gear", "type": "text" },
+                {
+                  "key": "description",
+                  "value": "Professional gaming equipment and accessories",
+                  "type": "text"
+                },
+                {
+                  "key": "thumbnail",
+                  "type": "file",
+                  "src": "",
+                  "description": "Category thumbnail (for listings)"
+                },
+                {
+                  "key": "thumbnailAlt",
+                  "value": "Gaming gear category",
+                  "type": "text"
+                },
+                {
+                  "key": "thumbnailTitle",
+                  "value": "Gaming Gear",
+                  "type": "text"
+                },
+                {
+                  "key": "banner",
+                  "type": "file",
+                  "src": "",
+                  "description": "Category banner (for category page)",
+                  "disabled": true
+                },
+                {
+                  "key": "bannerAlt",
+                  "value": "Gaming gear banner",
+                  "type": "text",
+                  "disabled": true
+                },
+                {
+                  "key": "icon",
+                  "type": "file",
+                  "src": "",
+                  "description": "Category icon (for navigation)",
+                  "disabled": true
+                },
+                {
+                  "key": "iconAlt",
+                  "value": "Gaming icon",
+                  "type": "text",
+                  "disabled": true
+                },
+                {
+                  "key": "video",
+                  "type": "file",
+                  "src": "",
+                  "description": "Category video (promotional)",
+                  "disabled": true
+                },
+                {
+                  "key": "videoTitle",
+                  "value": "Gaming Gear Collection",
+                  "type": "text",
+                  "disabled": true
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/categories",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "categories"]
+            },
+            "description": "**NEW**: Create category with media!\n\n**Media Types:**\n- **Thumbnail**: For category listings/grids\n- **Banner**: For top of category pages\n- **Icon**: For navigation menus\n- **Video**: Promotional video\n\nAll images auto-optimized to WebP with multiple sizes."
+          }
+        },
+        {
+          "name": "Get All Categories",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/categories",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "categories"]
+            }
+          }
+        },
+        {
+          "name": "Get Category by ID",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/categories/{{category_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "categories", "{{category_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Category",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Category Name\",\n  \"description\": \"Updated description\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/categories/{{category_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "categories", "{{category_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Category",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/categories/{{category_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "categories", "{{category_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🎨 Category Media",
+      "description": "Upload and manage category images and videos",
+      "item": [
+        {
+          "name": "Upload Category Thumbnail",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" },
+                {
+                  "key": "altText",
+                  "value": "Category thumbnail",
+                  "type": "text"
+                },
+                {
+                  "key": "title",
+                  "value": "Category Thumbnail",
+                  "type": "text"
+                },
+                { "key": "mediaPurpose", "value": "thumbnail", "type": "text" },
+                { "key": "position", "value": "0", "type": "text" }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/categories/{{category_id}}/media",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "categories", "{{category_id}}", "media"]
+            },
+            "description": "Upload thumbnail image (used in category listings)"
+          }
+        },
+        {
+          "name": "Upload Category Banner",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" },
+                {
+                  "key": "altText",
+                  "value": "Category banner",
+                  "type": "text"
+                },
+                { "key": "title", "value": "Category Banner", "type": "text" },
+                { "key": "mediaPurpose", "value": "banner", "type": "text" },
+                { "key": "position", "value": "1", "type": "text" }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/categories/{{category_id}}/media",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "categories", "{{category_id}}", "media"]
+            },
+            "description": "Upload banner image (used at top of category pages)"
+          }
+        },
+        {
+          "name": "Upload Category Icon",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" },
+                { "key": "altText", "value": "Category icon", "type": "text" },
+                { "key": "title", "value": "Category Icon", "type": "text" },
+                { "key": "mediaPurpose", "value": "icon", "type": "text" },
+                { "key": "position", "value": "2", "type": "text" }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/categories/{{category_id}}/media",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "categories", "{{category_id}}", "media"]
+            },
+            "description": "Upload icon image (used in navigation/menus)"
+          }
+        },
+        {
+          "name": "Get All Category Media",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/categories/{{category_id}}/media?purpose=thumbnail",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "categories", "{{category_id}}", "media"],
+              "query": [
+                {
+                  "key": "purpose",
+                  "value": "thumbnail",
+                  "description": "Filter: thumbnail, banner, icon, video",
+                  "disabled": true
+                },
+                { "key": "type", "value": "image", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Category Media",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"altText\": \"Updated category thumbnail\",\n  \"title\": \"Updated Title\",\n  \"mediaPurpose\": \"thumbnail\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/categories/{{category_id}}/media/{{media_id}}",
+              "host": ["{{base_url}}"],
+              "path": [
+                "api",
+                "v1",
+                "categories",
+                "{{category_id}}",
+                "media",
+                "{{media_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Category Media",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/categories/{{category_id}}/media/{{media_id}}",
+              "host": ["{{base_url}}"],
+              "path": [
+                "api",
+                "v1",
+                "categories",
+                "{{category_id}}",
+                "media",
+                "{{media_id}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🎯 Product Collections",
+      "description": "Create and manage product collections (e.g., Summer Sale, New Arrivals)",
+      "item": [
+        {
+          "name": "Create Product Collection",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('collection_id', response.data.id);",
+                  "    console.log('✅ Collection created:', response.data.name);",
+                  "    console.log('🆔 Collection ID:', response.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Summer Sale 2026\",\n  \"slug\": \"summer-sale-2026\",\n  \"description\": \"Hot deals for the summer season! Save up to 50% on selected items.\",\n  \"visibility\": \"public\",\n  \"displayOrder\": \"manual\",\n  \"startsAt\": \"2026-06-01T00:00:00Z\",\n  \"endsAt\": \"2026-08-31T23:59:59Z\",\n  \"isActive\": true,\n  \"metaTitle\": \"Summer Sale 2026 - Up to 50% Off | TechTools\",\n  \"metaDescription\": \"Shop our summer sale and save big on electronics, gadgets, and accessories.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/collections/products",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "collections", "products"]
+            },
+            "description": "**NEW**: Create product collections!\n\n**Use Cases:**\n- Seasonal sales (Summer Sale, Holiday Deals)\n- New arrivals\n- Featured products\n- Bestsellers\n- Trending items\n\n**Display Order Options:**\n- `manual`: Custom order (you control)\n- `newest`: Newest products first\n- `popular`: Most popular first\n- `price_asc`: Lowest price first\n- `price_desc`: Highest price first\n\n**Visibility:**\n- `public`: Everyone can see\n- `private`: Admin only\n- `hidden`: Hidden from listings"
+          }
+        },
+        {
+          "name": "Get All Product Collections",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/collections/products?page=1&limit=20&visibility=public&active=true",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "collections", "products"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "visibility", "value": "public", "disabled": true },
+                { "key": "active", "value": "true", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Collection by ID",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/collections/products/{{collection_id}}",
+              "host": ["{{base_url}}"],
+              "path": [
+                "api",
+                "v1",
+                "collections",
+                "products",
+                "{{collection_id}}"
+              ]
+            },
+            "description": "Get collection with all products included"
+          }
+        },
+        {
+          "name": "Update Collection",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Collection Name\",\n  \"description\": \"Updated description\",\n  \"isActive\": true,\n  \"visibility\": \"public\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/collections/products/{{collection_id}}",
+              "host": ["{{base_url}}"],
+              "path": [
+                "api",
+                "v1",
+                "collections",
+                "products",
+                "{{collection_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Add Products to Collection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productIds\": [\n    \"{{product_id}}\"\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/collections/products/{{collection_id}}/products",
+              "host": ["{{base_url}}"],
+              "path": [
+                "api",
+                "v1",
+                "collections",
+                "products",
+                "{{collection_id}}",
+                "products"
+              ]
+            },
+            "description": "Add one or more products to a collection"
+          }
+        },
+        {
+          "name": "Remove Product from Collection",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/collections/products/{{collection_id}}/products/{{product_id}}",
+              "host": ["{{base_url}}"],
+              "path": [
+                "api",
+                "v1",
+                "collections",
+                "products",
+                "{{collection_id}}",
+                "products",
+                "{{product_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Reorder Products in Collection",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productOrder\": [\n    {\"productId\": \"product-uuid-1\", \"position\": 0},\n    {\"productId\": \"product-uuid-2\", \"position\": 1},\n    {\"productId\": \"product-uuid-3\", \"position\": 2}\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/collections/products/{{collection_id}}/products/reorder",
+              "host": ["{{base_url}}"],
+              "path": [
+                "api",
+                "v1",
+                "collections",
+                "products",
+                "{{collection_id}}",
+                "products",
+                "reorder"
+              ]
+            },
+            "description": "Change the order of products in collection (only for manual display order)"
+          }
+        },
+        {
+          "name": "Delete Collection",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/collections/products/{{collection_id}}",
+              "host": ["{{base_url}}"],
+              "path": [
+                "api",
+                "v1",
+                "collections",
+                "products",
+                "{{collection_id}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📂 Category Collections",
+      "description": "Create and manage category collections (e.g., Featured Categories)",
+      "item": [
+        {
+          "name": "Create Category Collection",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('category_collection_id', response.data.id);",
+                  "    console.log('✅ Category collection created:', response.data.name);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Featured Categories\",\n  \"slug\": \"featured-categories\",\n  \"description\": \"Our most popular product categories\",\n  \"visibility\": \"public\",\n  \"displayOrder\": \"manual\",\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/collections/categories",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "collections", "categories"]
+            },
+            "description": "Create category collections for organizing categories"
+          }
+        },
+        {
+          "name": "Get All Category Collections",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/collections/categories?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "collections", "categories"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Category Collection by ID",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/collections/categories/{{category_collection_id}}",
+              "host": ["{{base_url}}"],
+              "path": [
+                "api",
+                "v1",
+                "collections",
+                "categories",
+                "{{category_collection_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Add Categories to Collection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"categoryIds\": [\n    \"{{category_id}}\"\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/collections/categories/{{category_collection_id}}/categories",
+              "host": ["{{base_url}}"],
+              "path": [
+                "api",
+                "v1",
+                "collections",
+                "categories",
+                "{{category_collection_id}}",
+                "categories"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Remove Category from Collection",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/collections/categories/{{category_collection_id}}/categories/{{category_id}}",
+              "host": ["{{base_url}}"],
+              "path": [
+                "api",
+                "v1",
+                "collections",
+                "categories",
+                "{{category_collection_id}}",
+                "categories",
+                "{{category_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Reorder Categories in Collection",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"categoryOrder\": [\n    {\"categoryId\": \"category-uuid-1\", \"position\": 0},\n    {\"categoryId\": \"category-uuid-2\", \"position\": 1}\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/collections/categories/{{category_collection_id}}/categories/reorder",
+              "host": ["{{base_url}}"],
+              "path": [
+                "api",
+                "v1",
+                "collections",
+                "categories",
+                "{{category_collection_id}}",
+                "categories",
+                "reorder"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Category Collection",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/collections/categories/{{category_collection_id}}",
+              "host": ["{{base_url}}"],
+              "path": [
+                "api",
+                "v1",
+                "collections",
+                "categories",
+                "{{category_collection_id}}"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:9000",
+      "type": "string"
+    },
+    {
+      "key": "auth_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "c429e249-c897-496a-8da8-12bc5209f609",
+      "type": "string",
+      "description": "Super Admin User ID"
+    },
+    {
+      "key": "user_email",
+      "value": "romeomukulah@gmail.com",
+      "type": "string",
+      "description": "Super Admin Email"
+    },
+    {
+      "key": "user_type",
+      "value": "super_admin",
+      "type": "string"
+    },
+    {
+      "key": "product_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "category_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "media_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "collection_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "category_collection_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "order_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "admin_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "admin_invitation_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "invited_admin_email",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
