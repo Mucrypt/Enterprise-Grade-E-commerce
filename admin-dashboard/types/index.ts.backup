@@ -1,0 +1,145 @@
+export interface User {
+  id: string
+  email: string
+  firstName: string
+  lastName: string
+  userType: 'super_admin' | 'admin' | 'customer'
+  emailVerified: boolean
+  createdAt: string
+  updatedAt?: string
+}
+
+export interface AuthResponse {
+  success: boolean
+  data: {
+    accessToken: string
+    refreshToken: string
+    user: User
+  }
+}
+
+export interface Product {
+  id: string
+  sku: string
+  name: string
+  slug: string
+  description: string
+  shortDescription?: string
+  categoryId: string
+  brandId?: string
+  basePrice: number
+  salePrice?: number
+  costPrice?: number
+  taxRate?: number
+  weight?: number
+  weightUnit?: string
+  length?: number
+  width?: number
+  height?: number
+  dimensionsUnit?: string
+  isActive: boolean
+  isDigital: boolean
+  isFeatured: boolean
+  isBackorderAllowed: boolean
+  minOrderQuantity: number
+  maxOrderQuantity?: number
+  metaTitle?: string
+  metaDescription?: string
+  createdAt: string
+  updatedAt?: string
+  media?: MediaFile[]
+}
+
+export interface Category {
+  id: string
+  name: string
+  slug?: string
+  description?: string
+  parentId?: string
+  createdAt: string
+  updatedAt?: string
+  media?: MediaFile[]
+}
+
+export interface MediaFile {
+  id: string
+  productId?: string
+  categoryId?: string
+  mediaType: 'image' | 'video'
+  mediaPurpose?: 'thumbnail' | 'banner' | 'icon' | 'video'
+  filePath: string
+  cdnUrls: {
+    original?: string
+    thumbnail?: string
+    small?: string
+    medium?: string
+    large?: string
+  }
+  fileSize: number
+  mimeType: string
+  altText?: string
+  title?: string
+  description?: string
+  position: number
+  isPrimary?: boolean
+  videoDuration?: number
+  createdAt: string
+  updatedAt?: string
+}
+
+export interface Collection {
+  id: string
+  name: string
+  slug: string
+  description?: string
+  visibility: 'public' | 'private' | 'hidden'
+  displayOrder:
+    | 'manual'
+    | 'newest'
+    | 'popular'
+    | 'price_asc'
+    | 'price_desc'
+    | 'alphabetical'
+  isActive: boolean
+  itemsCount: number
+  startsAt?: string
+  endsAt?: string
+  metaTitle?: string
+  metaDescription?: string
+  createdAt: string
+  updatedAt?: string
+}
+
+export interface ApiResponse<T> {
+  success: boolean
+  data: T
+  message?: string
+  error?: string
+}
+
+export interface PaginatedResponse<T> {
+  success: boolean
+  data: {
+    items: T[]
+    pagination: {
+      page: number
+      limit: number
+      total: number
+      pages: number
+    }
+  }
+}
+
+export interface AdminActivity {
+  id: string
+  adminId: string
+  action: string
+  resource: string
+  resourceId?: string
+  details?: Record<string, any>
+  ipAddress?: string
+  userAgent?: string
+  createdAt: string
+}
+
+// Force Turbopack cache refresh

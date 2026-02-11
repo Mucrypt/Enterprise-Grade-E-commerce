@@ -1,0 +1,123 @@
+# ================================
+# Docker Compose for Admin Dashboard
+# Development & Production Setup
+# ================================
+
+version: '3.8'
+
+services:
+  # ========================================
+  # Admin Dashboard (Next.js)
+  # ========================================
+  admin-dashboard:
+    container_name: techtools-admin-dashboard
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - '3001:3001'
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:9000/api/v1
+      - NEXT_PUBLIC_MEDIA_URL=http://localhost:9000/media
+      - API_INTERNAL_URL=http://api:9000/api/v1
+      - REDIS_URL=redis://admin-redis:6379
+      - SESSION_SECRET=${SESSION_SECRET:-your-super-secret-session-key-change-in-production}
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    networks:
+      - techtools-network
+    depends_on:
+      - admin-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3001/']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ========================================
+  # Redis (Session & Cache)
+  # ========================================
+  admin-redis:
+    container_name: techtools-admin-redis
+    image: redis:7-alpine
+    ports:
+      - '6380:6379'
+    volumes:
+      - admin-redis-data:/data
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis-secure-password}
+    networks:
+      - techtools-network
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # ========================================
+  # Nginx (Reverse Proxy & Load Balancer)
+  # ========================================
+  admin-nginx:
+    container_name: techtools-admin-nginx
+    image: nginx:alpine
+    ports:
+      - '8080:80'
+      - '8443:443'
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - nginx-cache:/var/cache/nginx
+      - nginx-logs:/var/log/nginx
+    networks:
+      - techtools-network
+    depends_on:
+      - admin-dashboard
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'wget',
+          '--quiet',
+          '--tries=1',
+          '--spider',
+          'http://localhost/health',
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ========================================
+  # Redis Commander (Optional - Dev Only)
+  # ========================================
+  redis-commander:
+    container_name: techtools-redis-commander
+    image: rediscommander/redis-commander:latest
+    environment:
+      - REDIS_HOSTS=local:admin-redis:6379:0:${REDIS_PASSWORD:-redis-secure-password}
+    ports:
+      - '8082:8081'
+    networks:
+      - techtools-network
+    depends_on:
+      - admin-redis
+    restart: unless-stopped
+    profiles:
+      - dev
+
+networks:
+  techtools-network:
+    driver: bridge
+
+volumes:
+  admin-redis-data:
+    driver: local
+  nginx-cache:
+    driver: local
+  nginx-logs:
+    driver: local
