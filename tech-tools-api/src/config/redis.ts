@@ -4,11 +4,16 @@ import logger from '../utils/logger'
 let redisClient: ReturnType<typeof createClient>
 
 export const createRedisClient = () => {
-  return createClient({
-    url: `redis://${process.env.REDIS_HOST || 'localhost'}:${
-      process.env.REDIS_PORT || 6379
-    }`,
-  })
+  const host = process.env.REDIS_HOST || 'localhost'
+  const port = process.env.REDIS_PORT || 6379
+  const password = process.env.REDIS_PASSWORD
+
+  // Build Redis URL with optional password
+  const url = password
+    ? `redis://:${encodeURIComponent(password)}@${host}:${port}`
+    : `redis://${host}:${port}`
+
+  return createClient({ url })
 }
 
 export const connectRedis = async (): Promise<void> => {
