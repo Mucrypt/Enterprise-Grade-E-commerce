@@ -112,7 +112,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshUser = async () => {
     try {
       const userData = await authService.getCurrentUser()
-      setUser(userData.data.user)
+      if (userData.data?.user) {
+        setUser(userData.data.user)
+      }
     } catch (error) {
       console.error('Failed to refresh user:', error)
       await logout()
