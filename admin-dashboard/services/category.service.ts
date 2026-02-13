@@ -3,18 +3,68 @@ import type { Category, ApiResponse } from '@/types'
 
 export interface CreateCategoryDTO {
   name: string
+  slug?: string
   description?: string
-  parentId?: string
+  parentId?: string | null
+  metaTitle?: string
+  metaDescription?: string
+  displayOrder?: number
+  isActive?: boolean
 }
 
 export interface UpdateCategoryDTO extends Partial<CreateCategoryDTO> {}
 
+export interface GetCategoriesParams {
+  page?: number
+  limit?: number
+  search?: string
+  isActive?: boolean
+  parentId?: string | null
+  sortBy?: string
+  sortOrder?: 'asc' | 'desc'
+}
+
+export interface PaginatedCategoriesResponse {
+  categories: Category[]
+  pagination: {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+  }
+}
+
 export const categoryService = {
   /**
-   * Get all categories
+   * Get all active categories (public)
    */
   async getCategories(): Promise<ApiResponse<{ categories: Category[] }>> {
     return apiClient.get<ApiResponse<{ categories: Category[] }>>('/categories')
+  },
+
+  /**
+   * Get all categories for admin (includes inactive, with pagination)
+   */
+  async getAllCategories(
+    params: GetCategoriesParams = {},
+  ): Promise<ApiResponse<PaginatedCategoriesResponse>> {
+    const queryParams = new URLSearchParams()
+    if (params.page) queryParams.append('page', String(params.page))
+    if (params.limit) queryParams.append('limit', String(params.limit))
+    if (params.search) queryParams.append('search', params.search)
+    if (params.isActive !== undefined)
+      queryParams.append('isActive', String(params.isActive))
+    if (params.parentId !== undefined)
+      queryParams.append(
+        'parentId',
+        params.parentId === null ? 'null' : params.parentId,
+      )
+    if (params.sortBy) queryParams.append('sortBy', params.sortBy)
+    if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder)
+
+    return apiClient.get<ApiResponse<PaginatedCategoriesResponse>>(
+      `/categories/admin/all?${queryParams.toString()}`,
+    )
   },
 
   /**
@@ -51,11 +101,17 @@ export const categoryService = {
     const formData = new FormData()
 
     // Add category data
-    Object.entries(data).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        formData.append(key, String(value))
-      }
-    })
+    formData.append('name', data.name)
+    if (data.slug) formData.append('slug', data.slug)
+    if (data.description) formData.append('description', data.description)
+    if (data.parentId) formData.append('parentId', data.parentId)
+    if (data.metaTitle) formData.append('metaTitle', data.metaTitle)
+    if (data.metaDescription)
+      formData.append('metaDescription', data.metaDescription)
+    if (data.displayOrder !== undefined)
+      formData.append('displayOrder', String(data.displayOrder))
+    if (data.isActive !== undefined)
+      formData.append('isActive', String(data.isActive))
 
     // Add media files
     if (thumbnail) formData.append('thumbnail', thumbnail)
@@ -70,7 +126,7 @@ export const categoryService = {
   },
 
   /**
-   * Update category
+   * Update category (JSON only)
    */
   async updateCategory(
     id: string,
@@ -83,10 +139,77 @@ export const categoryService = {
   },
 
   /**
-   * Delete category
+   * Update category with media
    */
-  async deleteCategory(id: string): Promise<ApiResponse<any>> {
-    return apiClient.delete<ApiResponse<any>>(`/categories/${id}`)
+  async updateCategoryWithMedia(
+    id: string,
+    data: UpdateCategoryDTO,
+    files: {
+      thumbnail?: File
+      banner?: File
+      icon?: File
+      video?: File
+    },
+  ): Promise<ApiResponse<{ category: Category }>> {
+    const formData = new FormData()
+
+    // Add category data
+    if (data.name) formData.append('name', data.name)
+    if (data.slug) formData.append('slug', data.slug)
+    if (data.description !== undefined)
+      formData.append('description', data.description || '')
+    if (data.parentId !== undefined)
+      formData.append('parentId', data.parentId || '')
+    if (data.metaTitle) formData.append('metaTitle', data.metaTitle)
+    if (data.metaDescription)
+      formData.append('metaDescription', data.metaDescription)
+    if (data.displayOrder !== undefined)
+      formData.append('displayOrder', String(data.displayOrder))
+    if (data.isActive !== undefined)
+      formData.append('isActive', String(data.isActive))
+
+    // Add media files
+    if (files.thumbnail) formData.append('thumbnail', files.thumbnail)
+    if (files.banner) formData.append('banner', files.banner)
+    if (files.icon) formData.append('icon', files.icon)
+    if (files.video) formData.append('video', files.video)
+
+    return apiClient.putFormData<ApiResponse<{ category: Category }>>(
+      `/categories/${id}`,
+      formData,
+    )
+  },
+
+  /**
+   * Delete category (soft delete)
+   */
+  async deleteCategory(id: string): Promise<ApiResponse<{ message: string }>> {
+    return apiClient.delete<ApiResponse<{ message: string }>>(
+      `/categories/${id}`,
+    )
+  },
+
+  /**
+   * Restore deleted category
+   */
+  async restoreCategory(
+    id: string,
+  ): Promise<ApiResponse<{ category: Category }>> {
+    return apiClient.post<ApiResponse<{ category: Category }>>(
+      `/categories/${id}/restore`,
+    )
+  },
+
+  /**
+   * Delete category media
+   */
+  async deleteCategoryMedia(
+    categoryId: string,
+    mediaId: string,
+  ): Promise<ApiResponse<{ message: string }>> {
+    return apiClient.delete<ApiResponse<{ message: string }>>(
+      `/categories/${categoryId}/media/${mediaId}`,
+    )
   },
 
   /**
