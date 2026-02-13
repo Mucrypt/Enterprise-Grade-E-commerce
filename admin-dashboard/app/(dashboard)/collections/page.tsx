@@ -123,7 +123,7 @@ export default function CollectionsPage() {
     queryFn: async () => {
       const params: any = { page, limit: 20 }
       if (visibilityFilter !== 'all') params.visibility = visibilityFilter
-      const response = await collectionService.getProductCollections(params)
+      const response = await collectionService.getProductCollections(params) as { data: any }
       return response.data
     },
     enabled: activeTab === 'products',
@@ -139,7 +139,7 @@ export default function CollectionsPage() {
     queryFn: async () => {
       const params: any = { page, limit: 20 }
       if (visibilityFilter !== 'all') params.visibility = visibilityFilter
-      const response = await collectionService.getCategoryCollections(params)
+      const response = await collectionService.getCategoryCollections(params) as { data: any }
       return response.data
     },
     enabled: activeTab === 'categories',
