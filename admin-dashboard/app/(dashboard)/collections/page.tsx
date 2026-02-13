@@ -123,7 +123,9 @@ export default function CollectionsPage() {
     queryFn: async () => {
       const params: any = { page, limit: 20 }
       if (visibilityFilter !== 'all') params.visibility = visibilityFilter
-      const response = await collectionService.getProductCollections(params) as { data: any }
+      const response = (await collectionService.getProductCollections(
+        params,
+      )) as { data: any }
       return response.data
     },
     enabled: activeTab === 'products',
@@ -139,7 +141,9 @@ export default function CollectionsPage() {
     queryFn: async () => {
       const params: any = { page, limit: 20 }
       if (visibilityFilter !== 'all') params.visibility = visibilityFilter
-      const response = await collectionService.getCategoryCollections(params) as { data: any }
+      const response = (await collectionService.getCategoryCollections(
+        params,
+      )) as { data: any }
       return response.data
     },
     enabled: activeTab === 'categories',
@@ -297,16 +301,16 @@ export default function CollectionsPage() {
       name: `${collection.name} (Copy)`,
       slug: `${collection.slug}-copy-${Date.now()}`,
       description: collection.description || '',
-      short_description: collection.short_description || '',
-      image_url: collection.image_url || '',
-      banner_url: collection.banner_url || '',
-      visibility: collection.visibility,
-      display_order: collection.display_order,
+      shortDescription: collection.short_description || '',
+      imageUrl: collection.image_url || '',
+      bannerUrl: collection.banner_url || '',
+      visibility: collection.visibility as 'public' | 'private' | 'hidden',
+      displayOrder: String(collection.display_order),
       position: collection.position + 1,
-      is_active: false, // Start as inactive
-      is_featured: false,
-      starts_at: collection.starts_at,
-      ends_at: collection.ends_at,
+      isActive: false, // Start as inactive
+      isFeatured: false,
+      startsAt: collection.starts_at,
+      endsAt: collection.ends_at,
     }
 
     try {
