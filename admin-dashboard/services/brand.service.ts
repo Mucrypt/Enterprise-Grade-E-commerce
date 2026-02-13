@@ -6,10 +6,12 @@ export interface Brand {
   name: string
   slug: string
   description?: string
-  logoUrl?: string
-  websiteUrl?: string
-  isActive?: boolean
-  createdAt?: string
+  logo_url?: string
+  website_url?: string
+  is_active: boolean
+  product_count?: number
+  created_at: string
+  updated_at: string
 }
 
 export interface CreateBrandDTO {
@@ -22,15 +24,64 @@ export interface CreateBrandDTO {
 
 export interface UpdateBrandDTO extends Partial<CreateBrandDTO> {}
 
+export interface BrandListParams {
+  page?: number
+  limit?: number
+  search?: string
+  isActive?: boolean
+  sortBy?: string
+  sortOrder?: 'asc' | 'desc'
+}
+
+export interface BrandListResponse {
+  brands: Brand[]
+  pagination: {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+  }
+}
+
 export const brandService = {
   /**
-   * Get all brands
+   * Get all brands with filtering and pagination
+   */
+  async getAllBrands(
+    params?: BrandListParams,
+  ): Promise<ApiResponse<BrandListResponse>> {
+    try {
+      const queryParams = new URLSearchParams()
+      if (params?.page) queryParams.append('page', String(params.page))
+      if (params?.limit) queryParams.append('limit', String(params.limit))
+      if (params?.search) queryParams.append('search', params.search)
+      if (params?.isActive !== undefined)
+        queryParams.append('isActive', String(params.isActive))
+      if (params?.sortBy) queryParams.append('sortBy', params.sortBy)
+      if (params?.sortOrder) queryParams.append('sortOrder', params.sortOrder)
+
+      const query = queryParams.toString()
+      return await apiClient.get<ApiResponse<BrandListResponse>>(
+        `/brands${query ? `?${query}` : ''}`,
+      )
+    } catch {
+      return {
+        success: true,
+        data: {
+          brands: [],
+          pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+        },
+      } as ApiResponse<BrandListResponse>
+    }
+  },
+
+  /**
+   * Get all brands (simple version)
    */
   async getBrands(): Promise<ApiResponse<{ brands: Brand[] }>> {
     try {
       return await apiClient.get<ApiResponse<{ brands: Brand[] }>>('/brands')
     } catch {
-      // Fallback if brands endpoint doesn't exist yet
       return {
         success: true,
         data: { brands: [] },
@@ -94,5 +145,35 @@ export const brandService = {
    */
   async deleteBrand(id: string): Promise<ApiResponse<unknown>> {
     return apiClient.delete<ApiResponse<unknown>>(`/brands/${id}`)
+  },
+
+  /**
+   * Bulk update brands
+   */
+  async bulkUpdateBrands(
+    ids: string[],
+    data: { is_active?: boolean },
+  ): Promise<ApiResponse<{ updated: number }>> {
+    return apiClient.post<ApiResponse<{ updated: number }>>(
+      '/brands/bulk/update',
+      {
+        ids,
+        data,
+      },
+    )
+  },
+
+  /**
+   * Bulk delete brands
+   */
+  async bulkDeleteBrands(
+    ids: string[],
+  ): Promise<ApiResponse<{ deleted: number }>> {
+    return apiClient.post<ApiResponse<{ deleted: number }>>(
+      '/brands/bulk/delete',
+      {
+        ids,
+      },
+    )
   },
 }

@@ -49,8 +49,10 @@ import {
   Settings,
   HelpCircle,
   Sparkles,
+  Plus,
 } from 'lucide-react'
 import { MediaManager, type MediaFile } from './MediaManager'
+import { BrandForm } from '@/components/brands/BrandForm'
 import type { Products } from '@/types'
 
 // Comprehensive validation schema
@@ -168,6 +170,7 @@ export function EnhancedProductForm({
   const [images, setImages] = useState<MediaFile[]>([])
   const [videos, setVideos] = useState<MediaFile[]>([])
   const [autoSlug, setAutoSlug] = useState(mode === 'create')
+  const [isBrandFormOpen, setIsBrandFormOpen] = useState(false)
 
   // Fetch categories
   const { data: categoriesData } = useQuery({
@@ -189,6 +192,22 @@ export function EnhancedProductForm({
 
   const categories = categoriesData || []
   const brands = brandsData || []
+
+  // Create brand mutation
+  const createBrandMutation = useMutation({
+    mutationFn: (data: any) => brandService.createBrand(data),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['brands'] })
+      setIsBrandFormOpen(false)
+      if (response?.data?.brand?.id) {
+        setValue('brandId', response.data.brand.id)
+      }
+      toast.success('Brand created successfully')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || 'Failed to create brand')
+    },
+  })
 
   // Form setup
   const {
@@ -657,30 +676,41 @@ export function EnhancedProductForm({
                     {/* Brand */}
                     <div className='space-y-2'>
                       <Label>Brand</Label>
-                      <Controller
-                        name='brandId'
-                        control={control}
-                        render={({ field }) => (
-                          <Select
-                            value={field.value || 'none'}
-                            onValueChange={(val: string) =>
-                              field.onChange(val === 'none' ? '' : val)
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder='Select brand (optional)' />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value='none'>No brand</SelectItem>
-                              {brands.map((brand: any) => (
-                                <SelectItem key={brand.id} value={brand.id}>
-                                  {brand.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
-                      />
+                      <div className='flex gap-2'>
+                        <Controller
+                          name='brandId'
+                          control={control}
+                          render={({ field }) => (
+                            <Select
+                              value={field.value || 'none'}
+                              onValueChange={(val: string) =>
+                                field.onChange(val === 'none' ? '' : val)
+                              }
+                            >
+                              <SelectTrigger className='flex-1'>
+                                <SelectValue placeholder='Select brand (optional)' />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value='none'>No brand</SelectItem>
+                                {brands.map((brand: any) => (
+                                  <SelectItem key={brand.id} value={brand.id}>
+                                    {brand.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        />
+                        <Button
+                          type='button'
+                          variant='outline'
+                          size='icon'
+                          onClick={() => setIsBrandFormOpen(true)}
+                          title='Create new brand'
+                        >
+                          <Plus className='h-4 w-4' />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </CardContent>
@@ -1275,6 +1305,16 @@ export function EnhancedProductForm({
           )}
         </div>
       </div>
+
+      {/* Inline Brand Creation Dialog */}
+      <BrandForm
+        open={isBrandFormOpen}
+        onClose={() => setIsBrandFormOpen(false)}
+        onSubmit={async (data) => {
+          await createBrandMutation.mutateAsync(data)
+        }}
+        isLoading={createBrandMutation.isPending}
+      />
     </form>
   )
 }

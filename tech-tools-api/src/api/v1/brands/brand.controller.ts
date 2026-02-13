@@ -257,3 +257,115 @@ export const deleteBrand = async (req: AuthRequest, res: Response) => {
     })
   }
 }
+
+// Bulk update brands
+export const bulkUpdateBrands = async (req: AuthRequest, res: Response) => {
+  try {
+    const { ids, data } = req.body
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Brand IDs array is required',
+      })
+    }
+
+    if (!data || typeof data !== 'object') {
+      return res.status(400).json({
+        success: false,
+        error: 'Update data is required',
+      })
+    }
+
+    const updates: string[] = []
+    const values: any[] = []
+    let paramIndex = 1
+
+    if (data.is_active !== undefined) {
+      updates.push(`is_active = $${paramIndex}`)
+      values.push(data.is_active)
+      paramIndex++
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No valid update fields provided',
+      })
+    }
+
+    const placeholders = ids.map((_, i) => `$${paramIndex + i}`).join(', ')
+    values.push(...ids)
+
+    const result = await query(
+      `UPDATE brands SET ${updates.join(', ')} WHERE id IN (${placeholders}) RETURNING id`,
+      values
+    )
+
+    logger.info('Bulk update brands:', { count: result.rowCount, ids })
+
+    res.json({
+      success: true,
+      data: {
+        updated: result.rowCount,
+      },
+      message: `${result.rowCount} brand(s) updated successfully`,
+    })
+  } catch (error) {
+    logger.error('Bulk update brands error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update brands',
+    })
+  }
+}
+
+// Bulk delete brands
+export const bulkDeleteBrands = async (req: AuthRequest, res: Response) => {
+  try {
+    const { ids } = req.body
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Brand IDs array is required',
+      })
+    }
+
+    // Check if any brands are used by products
+    const placeholders = ids.map((_, i) => `$${i + 1}`).join(', ')
+    const productsCheck = await query(
+      `SELECT brand_id, COUNT(*) as count FROM products WHERE brand_id IN (${placeholders}) GROUP BY brand_id`,
+      ids
+    )
+
+    if (productsCheck.rows.length > 0) {
+      const brandsInUse = productsCheck.rows.map((r: any) => r.brand_id)
+      return res.status(400).json({
+        success: false,
+        error: `Cannot delete brands that are used by products. Brands in use: ${brandsInUse.length}`,
+      })
+    }
+
+    const result = await query(
+      `DELETE FROM brands WHERE id IN (${placeholders}) RETURNING id`,
+      ids
+    )
+
+    logger.info('Bulk delete brands:', { count: result.rowCount, ids })
+
+    res.json({
+      success: true,
+      data: {
+        deleted: result.rowCount,
+      },
+      message: `${result.rowCount} brand(s) deleted successfully`,
+    })
+  } catch (error) {
+    logger.error('Bulk delete brands error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete brands',
+    })
+  }
+}
