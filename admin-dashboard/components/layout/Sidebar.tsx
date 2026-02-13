@@ -37,32 +37,32 @@ const navigation: NavItem[] = [
   },
   {
     title: 'Products',
-    href: '/dashboard/products',
+    href: '/products',
     icon: Package,
     children: [
       {
         title: 'All Products',
-        href: '/dashboard/products',
+        href: '/products',
         icon: Package,
       },
       {
         title: 'Add Product',
-        href: '/dashboard/products/new',
+        href: '/products/new',
         icon: Package,
       },
       {
         title: 'Categories',
-        href: '/dashboard/categories',
+        href: '/categories',
         icon: FolderTree,
       },
       {
         title: 'Collections',
-        href: '/dashboard/collections',
+        href: '/collections',
         icon: Layers,
       },
       {
         title: 'Brands',
-        href: '/dashboard/brands',
+        href: '/brands',
         icon: Tag,
       },
     ],
