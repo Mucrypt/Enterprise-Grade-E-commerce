@@ -192,7 +192,7 @@ export default function CategoriesPage() {
     formData: any,
     files: { thumbnail?: File; banner?: File; icon?: File },
   ) => {
-    if (editingCategory) {
+    if (editingCategory && editingCategory.id) {
       await updateMutation.mutateAsync({
         id: editingCategory.id,
         data: formData,
@@ -261,7 +261,11 @@ export default function CategoriesPage() {
           </CardHeader>
           <CardContent>
             <div className='text-2xl font-bold'>
-              {allCategories.filter((c: Category) => !c.parent_id).length}
+              {
+                allCategories.filter(
+                  (c: Category) => !c.parent_id && !c.parentId,
+                ).length
+              }
             </div>
           </CardContent>
         </Card>
@@ -308,12 +312,12 @@ export default function CategoriesPage() {
             </div>
             <Select
               value={statusFilter}
-              onValueChange={(v) => {
+              onValueChange={(v: string) => {
                 setStatusFilter(v)
                 setPage(1)
               }}
             >
-              <SelectTrigger className='w-[150px]'>
+              <SelectTrigger className='w-37.5'>
                 <SelectValue placeholder='Status' />
               </SelectTrigger>
               <SelectContent>
@@ -324,19 +328,19 @@ export default function CategoriesPage() {
             </Select>
             <Select
               value={parentFilter}
-              onValueChange={(v) => {
+              onValueChange={(v: string) => {
                 setParentFilter(v)
                 setPage(1)
               }}
             >
-              <SelectTrigger className='w-[180px]'>
+              <SelectTrigger className='w-45'>
                 <SelectValue placeholder='Parent' />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value='all'>All Categories</SelectItem>
                 <SelectItem value='root'>Root Only</SelectItem>
                 {allCategories.map((cat: Category) => (
-                  <SelectItem key={cat.id} value={cat.id}>
+                  <SelectItem key={cat.id} value={cat.id!}>
                     {cat.name}
                   </SelectItem>
                 ))}
@@ -376,14 +380,14 @@ export default function CategoriesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className='w-[80px]'>Image</TableHead>
+                    <TableHead className='w-20'>Image</TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>Slug</TableHead>
                     <TableHead>Parent</TableHead>
                     <TableHead className='text-center'>Products</TableHead>
                     <TableHead className='text-center'>Order</TableHead>
                     <TableHead className='text-center'>Status</TableHead>
-                    <TableHead className='w-[70px]'></TableHead>
+                    <TableHead className='w-17.5'></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -457,7 +461,7 @@ export default function CategoriesPage() {
                             </DropdownMenuItem>
                             {category.is_active ? (
                               <DropdownMenuItem
-                                onClick={() => setDeleteId(category.id)}
+                                onClick={() => setDeleteId(category.id!)}
                                 className='text-destructive'
                               >
                                 <Trash2 className='mr-2 h-4 w-4' />
@@ -465,7 +469,7 @@ export default function CategoriesPage() {
                               </DropdownMenuItem>
                             ) : (
                               <DropdownMenuItem
-                                onClick={() => setRestoreId(category.id)}
+                                onClick={() => setRestoreId(category.id!)}
                               >
                                 <RotateCcw className='mr-2 h-4 w-4' />
                                 Restore
