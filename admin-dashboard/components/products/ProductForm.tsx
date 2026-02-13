@@ -192,7 +192,7 @@ export function ProductForm() {
 
           <div className='space-y-2'>
             <Label htmlFor='category_id'>Category *</Label>
-            <Select onValueChange={(value) => setValue('category_id', value)}>
+            <Select onValueChange={(value: string) => setValue('category_id', value)}>
               <SelectTrigger>
                 <SelectValue placeholder='Select a category' />
               </SelectTrigger>
