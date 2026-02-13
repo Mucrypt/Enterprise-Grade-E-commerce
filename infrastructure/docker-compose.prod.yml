@@ -198,6 +198,28 @@ services:
         while :; do sleep 6h & wait $${!}; nginx -s reload; done &
         nginx -g "daemon off;"'
 
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: techtools-pgadmin-prod
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@nexusai.lt}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-ChangeMe123!}
+      PGADMIN_CONFIG_CONSOLE_LOG_LEVEL: 10
+      SCRIPT_NAME: /pgadmin
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - techtools-prod-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: always
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
+
   certbot:
     image: certbot/certbot
     container_name: techtools-certbot
@@ -219,3 +241,4 @@ volumes:
   nginx_logs:
   certbot_conf:
   certbot_www:
+  pgadmin_data:
