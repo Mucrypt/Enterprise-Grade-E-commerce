@@ -415,7 +415,7 @@ export function MediaManager({
                 )}
               >
                 <div className='flex items-center gap-3 flex-1 min-w-0'>
-                  <div className='w-12 h-12 rounded bg-muted flex items-center justify-center flex-shrink-0'>
+                  <div className='w-12 h-12 rounded bg-muted flex items-center justify-center shrink-0'>
                     {video.url && !video.error ? (
                       <video
                         src={video.url}

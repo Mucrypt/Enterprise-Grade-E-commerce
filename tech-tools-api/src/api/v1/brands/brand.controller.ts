@@ -14,7 +14,9 @@ export const getBrands = async (req: Request, res: Response) => {
     let paramIndex = 1
 
     if (search) {
-      conditions.push(`(name ILIKE $${paramIndex} OR description ILIKE $${paramIndex})`)
+      conditions.push(
+        `(name ILIKE $${paramIndex} OR description ILIKE $${paramIndex})`,
+      )
       values.push(`%${search}%`)
       paramIndex++
     }
@@ -25,7 +27,8 @@ export const getBrands = async (req: Request, res: Response) => {
       paramIndex++
     }
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+    const whereClause =
+      conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
 
     // Get total count
     const countResult = await query(
@@ -68,10 +71,7 @@ export const getBrandById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params
 
-    const result = await query(
-      'SELECT * FROM brands WHERE id = $1',
-      [id],
-    )
+    const result = await query('SELECT * FROM brands WHERE id = $1', [id])
 
     if (result.rows.length === 0) {
       return res.status(404).json({
@@ -98,7 +98,14 @@ export const getBrandById = async (req: Request, res: Response) => {
 // Create brand
 export const createBrand = async (req: AuthRequest, res: Response) => {
   try {
-    const { name, slug, description, logoUrl, websiteUrl, isActive = true } = req.body
+    const {
+      name,
+      slug,
+      description,
+      logoUrl,
+      websiteUrl,
+      isActive = true,
+    } = req.body
 
     // Check if brand name or slug exists
     const existingBrand = await query(
@@ -145,7 +152,9 @@ export const updateBrand = async (req: AuthRequest, res: Response) => {
     const { name, slug, description, logoUrl, websiteUrl, isActive } = req.body
 
     // Check if brand exists
-    const existingBrand = await query('SELECT * FROM brands WHERE id = $1', [id])
+    const existingBrand = await query('SELECT * FROM brands WHERE id = $1', [
+      id,
+    ])
 
     if (existingBrand.rows.length === 0) {
       return res.status(404).json({
@@ -155,7 +164,10 @@ export const updateBrand = async (req: AuthRequest, res: Response) => {
     }
 
     // Check for duplicate name/slug if changed
-    if (name !== existingBrand.rows[0].name || slug !== existingBrand.rows[0].slug) {
+    if (
+      name !== existingBrand.rows[0].name ||
+      slug !== existingBrand.rows[0].slug
+    ) {
       const duplicateCheck = await query(
         'SELECT id FROM brands WHERE (name = $1 OR slug = $2) AND id != $3',
         [name, slug, id],
@@ -205,7 +217,9 @@ export const deleteBrand = async (req: AuthRequest, res: Response) => {
     const { id } = req.params
 
     // Check if brand exists
-    const existingBrand = await query('SELECT * FROM brands WHERE id = $1', [id])
+    const existingBrand = await query('SELECT * FROM brands WHERE id = $1', [
+      id,
+    ])
 
     if (existingBrand.rows.length === 0) {
       return res.status(404).json({

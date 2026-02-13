@@ -6,7 +6,7 @@ import {
   updateBrand,
   deleteBrand,
 } from './brand.controller'
-import { authenticateToken, requireRole } from '../../../middleware/auth'
+import { authenticate, authorize } from '../../../middleware/auth'
 
 const router = Router()
 
@@ -15,8 +15,8 @@ router.get('/', getBrands)
 router.get('/:id', getBrandById)
 
 // Admin routes
-router.post('/', authenticateToken, requireRole(['admin']), createBrand)
-router.put('/:id', authenticateToken, requireRole(['admin']), updateBrand)
-router.delete('/:id', authenticateToken, requireRole(['admin']), deleteBrand)
+router.post('/', authenticate, authorize('admin'), createBrand)
+router.put('/:id', authenticate, authorize('admin'), updateBrand)
+router.delete('/:id', authenticate, authorize('admin'), deleteBrand)
 
 export default router

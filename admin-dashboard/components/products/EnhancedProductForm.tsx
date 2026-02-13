@@ -663,7 +663,9 @@ export function EnhancedProductForm({
                         render={({ field }) => (
                           <Select
                             value={field.value || 'none'}
-                            onValueChange={(val) => field.onChange(val === 'none' ? '' : val)}
+                            onValueChange={(val: string) =>
+                              field.onChange(val === 'none' ? '' : val)
+                            }
                           >
                             <SelectTrigger>
                               <SelectValue placeholder='Select brand (optional)' />
@@ -807,8 +809,8 @@ export function EnhancedProductForm({
                             profitMargin > 0
                               ? 'text-green-600'
                               : profitMargin < 0
-                                ? 'text-red-600'
-                                : ''
+                              ? 'text-red-600'
+                              : ''
                           }`}
                         >
                           {profitMargin.toFixed(1)}%
@@ -1243,7 +1245,7 @@ export function EnhancedProductForm({
                 </div>
                 <div className='flex justify-between'>
                   <span className='text-muted-foreground'>ID</span>
-                  <span className='font-mono text-xs truncate max-w-[120px]'>
+                  <span className='font-mono text-xs truncate max-w-30'>
                     {product.id}
                   </span>
                 </div>

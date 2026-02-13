@@ -425,7 +425,7 @@ export default function ProductsPage() {
             <div className='flex flex-wrap items-center gap-2'>
               {/* Category Filter */}
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className='w-[150px]'>
+                <SelectTrigger className='w-37.5'>
                   <SelectValue placeholder='Category' />
                 </SelectTrigger>
                 <SelectContent>
@@ -440,7 +440,7 @@ export default function ProductsPage() {
 
               {/* Status Filter */}
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className='w-[130px]'>
+                <SelectTrigger className='w-32.5'>
                   <SelectValue placeholder='Status' />
                 </SelectTrigger>
                 <SelectContent>
@@ -460,7 +460,7 @@ export default function ProductsPage() {
                   setSortOrder(newSortOrder as 'asc' | 'desc')
                 }}
               >
-                <SelectTrigger className='w-[160px]'>
+                <SelectTrigger className='w-40'>
                   <SelectValue placeholder='Sort by' />
                 </SelectTrigger>
                 <SelectContent>
@@ -757,7 +757,7 @@ export default function ProductsPage() {
                     {columns.find((c) => c.id === 'name')?.visible && (
                       <TableCell>
                         <div className='flex items-center gap-3'>
-                          <div className='w-10 h-10 rounded bg-muted flex items-center justify-center flex-shrink-0'>
+                          <div className='w-10 h-10 rounded bg-muted flex items-center justify-center shrink-0'>
                             <Package className='h-5 w-5 text-muted-foreground' />
                           </div>
                           <div className='min-w-0'>
@@ -768,7 +768,7 @@ export default function ProductsPage() {
                               {product.name}
                             </Link>
                             {product.shortDescription && (
-                              <p className='text-xs text-muted-foreground truncate max-w-[200px]'>
+                              <p className='text-xs text-muted-foreground truncate max-w-50'>
                                 {product.shortDescription}
                               </p>
                             )}
