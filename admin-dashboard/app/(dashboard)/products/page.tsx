@@ -64,10 +64,15 @@ import {
   ArrowDown,
   X,
   Columns,
+  Copy,
+  Image as ImageIcon,
+  Box,
+  Star,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Products } from '@/types'
@@ -86,6 +91,7 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
   { id: 'name', label: 'Product', visible: true, sortable: true },
   { id: 'sku', label: 'SKU', visible: true, sortable: true },
   { id: 'price', label: 'Price', visible: true, sortable: true },
+  { id: 'stock', label: 'Stock', visible: true, sortable: false },
   { id: 'category', label: 'Category', visible: true, sortable: false },
   { id: 'status', label: 'Status', visible: true, sortable: false },
   { id: 'created', label: 'Created', visible: true, sortable: true },
@@ -220,9 +226,7 @@ export default function ProductsPage() {
       setSelectedProducts(new Set())
     },
     onError: (error: any) => {
-      toast.error(
-        error.response?.data?.message || 'Failed to delete products',
-      )
+      toast.error(error.response?.data?.message || 'Failed to delete products')
     },
   })
 
@@ -241,11 +245,43 @@ export default function ProductsPage() {
       setSelectedProducts(new Set())
     },
     onError: (error: any) => {
-      toast.error(
-        error.response?.data?.message || 'Failed to update products',
-      )
+      toast.error(error.response?.data?.message || 'Failed to update products')
     },
   })
+
+  // Duplicate handler
+  const handleDuplicate = async (product: Products) => {
+    const duplicatedData = {
+      sku: `${product.sku}-COPY-${Date.now()}`,
+      name: `${product.name} (Copy)`,
+      slug: `${product.slug}-copy-${Date.now()}`,
+      description: product.description || '',
+      shortDescription: product.shortDescription || '',
+      categoryId: product.categoryId,
+      brandId: product.brandId,
+      basePrice: product.basePrice || 0,
+      salePrice: product.salePrice,
+      costPrice: product.costPrice,
+      taxRate: product.taxRate,
+      weight: product.weight,
+      weightUnit: product.weightUnit,
+      isActive: false, // Start as inactive
+      isDigital: product.isDigital,
+      isFeatured: false,
+      metaTitle: product.metaTitle,
+      metaDescription: product.metaDescription,
+    }
+
+    try {
+      await productService.createProduct(duplicatedData)
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+      toast.success('Product duplicated successfully')
+    } catch (error: any) {
+      toast.error(
+        error.response?.data?.message || 'Failed to duplicate product',
+      )
+    }
+  }
 
   // Selection handlers
   const handleSelectAll = useCallback(
@@ -687,6 +723,9 @@ export default function ProductsPage() {
                     </button>
                   </TableHead>
                 )}
+                {columns.find((c) => c.id === 'stock')?.visible && (
+                  <TableHead className='text-center'>Stock</TableHead>
+                )}
                 {columns.find((c) => c.id === 'category')?.visible && (
                   <TableHead>Category</TableHead>
                 )}
@@ -747,7 +786,9 @@ export default function ProductsPage() {
                       <TableCell>
                         <Checkbox
                           checked={selectedProducts.has(product.id!)}
-                          onCheckedChange={(checked: boolean | 'indeterminate') =>
+                          onCheckedChange={(
+                            checked: boolean | 'indeterminate',
+                          ) =>
                             handleSelectProduct(product.id!, checked === true)
                           }
                           aria-label={`Select ${product.name}`}
@@ -757,9 +798,26 @@ export default function ProductsPage() {
                     {columns.find((c) => c.id === 'name')?.visible && (
                       <TableCell>
                         <div className='flex items-center gap-3'>
-                          <div className='w-10 h-10 rounded bg-muted flex items-center justify-center shrink-0'>
-                            <Package className='h-5 w-5 text-muted-foreground' />
-                          </div>
+                          {(() => {
+                            const primaryImage =
+                              (product as any).images?.find(
+                                (img: any) => img.is_primary,
+                              ) || (product as any).images?.[0]
+                            return primaryImage?.image_url ? (
+                              <div className='relative w-10 h-10 rounded overflow-hidden bg-muted shrink-0'>
+                                <Image
+                                  src={primaryImage.image_url}
+                                  alt={product.name}
+                                  fill
+                                  className='object-cover'
+                                />
+                              </div>
+                            ) : (
+                              <div className='w-10 h-10 rounded bg-muted flex items-center justify-center shrink-0'>
+                                <ImageIcon className='h-5 w-5 text-muted-foreground' />
+                              </div>
+                            )
+                          })()}
                           <div className='min-w-0'>
                             <Link
                               href={`/products/${product.id}`}
@@ -795,10 +853,33 @@ export default function ProductsPage() {
                         </div>
                       </TableCell>
                     )}
+                    {columns.find((c) => c.id === 'stock')?.visible && (
+                      <TableCell className='text-center'>
+                        {(() => {
+                          const stock = (product as any).total_stock || 0
+                          return (
+                            <Badge
+                              variant={
+                                stock > 10
+                                  ? 'secondary'
+                                  : stock > 0
+                                  ? 'outline'
+                                  : 'destructive'
+                              }
+                            >
+                              <Box className='h-3 w-3 mr-1' />
+                              {stock}
+                            </Badge>
+                          )
+                        })()}
+                      </TableCell>
+                    )}
                     {columns.find((c) => c.id === 'category')?.visible && (
                       <TableCell>
                         <Badge variant='outline'>
-                          {product.categoryId || 'Uncategorized'}
+                          {(product as any).category_name ||
+                            product.categoryId ||
+                            'Uncategorized'}
                         </Badge>
                       </TableCell>
                     )}
@@ -835,7 +916,7 @@ export default function ProductsPage() {
                               <MoreHorizontal className='h-4 w-4' />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align='end'>
+                          <DropdownMenuContent align='end' className='w-44'>
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
@@ -853,6 +934,25 @@ export default function ProductsPage() {
                             >
                               <Edit className='h-4 w-4 mr-2' />
                               Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleDuplicate(product)}
+                            >
+                              <Copy className='h-4 w-4 mr-2' />
+                              Duplicate
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuLabel>Quick Actions</DropdownMenuLabel>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                bulkUpdateMutation.mutate({
+                                  productIds: [product.id!],
+                                  updates: { isFeatured: !product.isFeatured },
+                                })
+                              }
+                            >
+                              <Star className='h-4 w-4 mr-2' />
+                              {product.isFeatured ? 'Unfeature' : 'Feature'}
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem

@@ -9,6 +9,8 @@ import {
   deleteCategoryMedia,
   restoreCategory,
   getCategoryProducts,
+  bulkDeleteCategories,
+  bulkUpdateCategories,
 } from './category.controller'
 import { authenticate, authorize } from '../../../middleware/auth'
 import { upload } from '../../../utils/media'
@@ -17,6 +19,22 @@ const router = Router()
 
 // Public routes
 router.get('/', getCategories)
+
+// Bulk operations (must be before :id routes)
+router.delete(
+  '/bulk/delete',
+  authenticate,
+  authorize('admin', 'super_admin'),
+  bulkDeleteCategories,
+)
+
+router.put(
+  '/bulk/update',
+  authenticate,
+  authorize('admin', 'super_admin'),
+  bulkUpdateCategories,
+)
+
 router.get('/:id', getCategoryById)
 router.get('/:id/products', getCategoryProducts)
 

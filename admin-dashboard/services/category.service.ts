@@ -218,4 +218,29 @@ export const categoryService = {
   async getCategoryProducts(id: string): Promise<ApiResponse<any>> {
     return apiClient.get<ApiResponse<any>>(`/categories/${id}/products`)
   },
+
+  /**
+   * Bulk delete categories
+   */
+  async bulkDeleteCategories(
+    ids: string[],
+  ): Promise<ApiResponse<{ deletedCount: number }>> {
+    return apiClient.delete<ApiResponse<{ deletedCount: number }>>(
+      '/categories/bulk/delete',
+      { data: { ids } },
+    )
+  },
+
+  /**
+   * Bulk update categories
+   */
+  async bulkUpdateCategories(
+    ids: string[],
+    data: { is_active?: boolean; display_order?: number },
+  ): Promise<ApiResponse<{ updatedCount: number }>> {
+    return apiClient.put<ApiResponse<{ updatedCount: number }>>(
+      '/categories/bulk/update',
+      { ids, data },
+    )
+  },
 }

@@ -908,3 +908,100 @@ export const getCategoryProducts = async (req: Request, res: Response) => {
     })
   }
 }
+
+export const bulkDeleteCategories = async (req: Request, res: Response) => {
+  try {
+    const { ids } = req.body
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid or empty ids array',
+      })
+    }
+
+    // Soft delete categories
+    const placeholders = ids.map((_, i) => `$${i + 1}`).join(', ')
+    const result = await query(
+      `UPDATE categories SET deleted_at = NOW(), updated_at = NOW() WHERE id IN (${placeholders}) AND deleted_at IS NULL`,
+      ids,
+    )
+
+    res.json({
+      success: true,
+      message: `${result.rowCount} categories deleted successfully`,
+      data: { deletedCount: result.rowCount },
+    })
+  } catch (error) {
+    logger.error('Bulk delete categories error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to bulk delete categories',
+    })
+  }
+}
+
+export const bulkUpdateCategories = async (req: Request, res: Response) => {
+  try {
+    const { ids, data } = req.body
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid or empty ids array',
+      })
+    }
+
+    if (!data || typeof data !== 'object') {
+      return res.status(400).json({
+        success: false,
+        error: 'Update data is required',
+      })
+    }
+
+    // Build dynamic SET clause for allowed fields
+    const allowedFields = ['is_active', 'display_order']
+    const updates: string[] = []
+    const values: unknown[] = []
+    let paramIndex = 1
+
+    for (const field of allowedFields) {
+      if (data[field] !== undefined) {
+        updates.push(`${field} = $${paramIndex}`)
+        values.push(data[field])
+        paramIndex++
+      }
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No valid fields to update',
+      })
+    }
+
+    updates.push(`updated_at = NOW()`)
+
+    const placeholders = ids.map((_, i) => `$${paramIndex + i}`).join(', ')
+    values.push(...ids)
+
+    const result = await query(
+      `UPDATE categories SET ${updates.join(
+        ', ',
+      )} WHERE id IN (${placeholders}) AND deleted_at IS NULL`,
+      values,
+    )
+
+    res.json({
+      success: true,
+      message: `${result.rowCount} categories updated successfully`,
+      data: { updatedCount: result.rowCount },
+    })
+  } catch (error) {
+    logger.error('Bulk update categories error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to bulk update categories',
+    })
+  }
+}
