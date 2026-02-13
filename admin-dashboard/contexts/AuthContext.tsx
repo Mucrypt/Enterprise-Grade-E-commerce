@@ -43,7 +43,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const userData = await authService.getCurrentUser()
-      setUser(userData.data.user)
+      if (userData.data?.user) {
+        setUser(userData.data.user)
+      }
     } catch (error) {
       console.error('Failed to load user:', error)
       localStorage.removeItem('accessToken')
