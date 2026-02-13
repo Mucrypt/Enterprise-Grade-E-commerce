@@ -302,7 +302,7 @@ export function EnhancedProductForm({
     mutationFn: async (data: ProductFormData) => {
       if (!product?.id) throw new Error('Product ID is required')
 
-      return productService.updateProduct(product.id, {
+      const productData = {
         sku: data.sku,
         name: data.name,
         slug: data.slug,
@@ -328,7 +328,27 @@ export function EnhancedProductForm({
         maxOrderQuantity: data.maxOrderQuantity || undefined,
         metaTitle: data.metaTitle || undefined,
         metaDescription: data.metaDescription || undefined,
-      })
+      }
+
+      // Get new files from media state
+      const imageFiles = images
+        .filter((img) => img.file && !img.error && !img.url?.startsWith('http'))
+        .map((img) => img.file!)
+      const videoFiles = videos
+        .filter((vid) => vid.file && !vid.error && !vid.url?.startsWith('http'))
+        .map((vid) => vid.file!)
+
+      // Use updateProductWithMedia if there are new files
+      if (imageFiles.length > 0 || videoFiles.length > 0) {
+        return productService.updateProductWithMedia(
+          product.id,
+          productData,
+          imageFiles.length > 0 ? imageFiles : undefined,
+          videoFiles.length > 0 ? videoFiles : undefined,
+        )
+      }
+
+      return productService.updateProduct(product.id, productData)
     },
     onSuccess: () => {
       toast.success('Product updated successfully!')

@@ -583,12 +583,293 @@ export const searchProducts = async (req: Request, res: Response) => {
 export const updateProduct = async (req: AuthRequest, res: Response) => {
   try {
     const productId = req.params.productId
-    const updates = req.body
+
+    // Check if product exists
+    const existingProduct = await query(
+      'SELECT * FROM products WHERE id = $1 AND deleted_at IS NULL',
+      [productId],
+    )
+
+    if (existingProduct.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Product not found',
+      })
+    }
+
+    const {
+      sku,
+      name,
+      slug,
+      description,
+      shortDescription,
+      brandId,
+      categoryId,
+      basePrice,
+      salePrice,
+      costPrice,
+      taxRate,
+      weight,
+      weightUnit,
+      length,
+      width,
+      height,
+      dimensionsUnit,
+      isActive,
+      isDigital,
+      isFeatured,
+      isBackorderAllowed,
+      minOrderQuantity,
+      maxOrderQuantity,
+      metaTitle,
+      metaDescription,
+    } = req.body
+
+    // Check if SKU is being changed and if new SKU exists
+    if (sku && sku !== existingProduct.rows[0].sku) {
+      const existingSku = await query(
+        'SELECT id FROM products WHERE sku = $1 AND id != $2',
+        [sku, productId],
+      )
+      if (existingSku.rows.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Product with this SKU already exists',
+        })
+      }
+    }
+
+    // Check if slug is being changed and if new slug exists
+    if (slug && slug !== existingProduct.rows[0].slug) {
+      const existingSlug = await query(
+        'SELECT id FROM products WHERE slug = $1 AND id != $2',
+        [slug, productId],
+      )
+      if (existingSlug.rows.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Product with this slug already exists',
+        })
+      }
+    }
+
+    // Build dynamic update query
+    const updateFields: string[] = []
+    const values: any[] = []
+    let paramIndex = 1
+
+    const fieldsToUpdate: { [key: string]: any } = {
+      sku,
+      name,
+      slug,
+      description,
+      short_description: shortDescription,
+      brand_id: brandId,
+      category_id: categoryId,
+      base_price: basePrice,
+      sale_price: salePrice,
+      cost_price: costPrice,
+      tax_rate: taxRate,
+      weight,
+      weight_unit: weightUnit,
+      length,
+      width,
+      height,
+      dimensions_unit: dimensionsUnit,
+      is_active: isActive,
+      is_digital: isDigital,
+      is_featured: isFeatured,
+      is_backorder_allowed: isBackorderAllowed,
+      min_order_quantity: minOrderQuantity,
+      max_order_quantity: maxOrderQuantity,
+      meta_title: metaTitle,
+      meta_description: metaDescription,
+    }
+
+    for (const [field, value] of Object.entries(fieldsToUpdate)) {
+      if (value !== undefined) {
+        updateFields.push(`${field} = $${paramIndex}`)
+        values.push(value)
+        paramIndex++
+      }
+    }
+
+    // Always update updated_at
+    updateFields.push(`updated_at = NOW()`)
+
+    if (updateFields.length === 1) {
+      return res.status(400).json({
+        success: false,
+        error: 'No fields to update',
+      })
+    }
+
+    values.push(productId)
+
+    const result = await query(
+      `UPDATE products SET ${updateFields.join(
+        ', ',
+      )} WHERE id = $${paramIndex} RETURNING *`,
+      values,
+    )
+
+    // Process uploaded media files if any
+    const files = req.files as
+      | { [fieldname: string]: Express.Multer.File[] }
+      | undefined
+    const uploadedMedia: any[] = []
+
+    if (files) {
+      const { imageDescriptions, videoTitle, videoDescription, videoPurpose } =
+        req.body
+
+      try {
+        // Process images
+        if (files.images && files.images.length > 0) {
+          const imageDescArray = imageDescriptions
+            ? JSON.parse(imageDescriptions)
+            : []
+
+          // Get current max position
+          const maxPosResult = await query(
+            'SELECT COALESCE(MAX(position), -1) as max_pos FROM product_media WHERE product_id = $1',
+            [productId],
+          )
+          let position = maxPosResult.rows[0].max_pos + 1
+
+          for (let i = 0; i < files.images.length; i++) {
+            const file = files.images[i]
+
+            const validation = validateImageFile(file)
+            if (!validation.valid) {
+              throw new Error(`Image ${i + 1}: ${validation.error}`)
+            }
+
+            const processed = await processProductImage(file)
+
+            const cdnUrls = {
+              original: processed.original.url,
+              thumbnail: processed.optimized.thumbnail?.url || '',
+              small: processed.optimized.small?.url || '',
+              medium: processed.optimized.medium?.url || '',
+              large: processed.optimized.large?.url || '',
+            }
+
+            const mediaResult = await query(
+              `INSERT INTO product_media (
+                product_id, media_type, file_path, cdn_urls, 
+                file_size, mime_type, alt_text, title, description, position, is_primary
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
+              RETURNING *`,
+              [
+                productId,
+                'image',
+                processed.original.url,
+                JSON.stringify(cdnUrls),
+                processed.original.fileSize,
+                file.mimetype,
+                `${name || existingProduct.rows[0].name} - Image ${
+                  position + 1
+                }`,
+                imageDescArray[i]?.title ||
+                  `${name || existingProduct.rows[0].name} - Image ${
+                    position + 1
+                  }`,
+                imageDescArray[i]?.description || '',
+                position,
+                false, // Don't override primary on update
+              ],
+            )
+
+            uploadedMedia.push(mediaResult.rows[0])
+            position++
+          }
+        }
+
+        // Process videos
+        if (files.videos && files.videos.length > 0) {
+          const maxPosResult = await query(
+            'SELECT COALESCE(MAX(position), -1) as max_pos FROM product_media WHERE product_id = $1',
+            [productId],
+          )
+          let position = maxPosResult.rows[0].max_pos + 1
+
+          for (let i = 0; i < files.videos.length; i++) {
+            const file = files.videos[i]
+
+            const validation = validateVideoFile(file)
+            if (!validation.valid) {
+              throw new Error(`Video ${i + 1}: ${validation.error}`)
+            }
+
+            const processed = await processVideo(file, 'product')
+
+            const cdnUrls = {
+              url: processed.url,
+              thumbnailUrl: processed.thumbnailUrl,
+            }
+
+            const mediaResult = await query(
+              `INSERT INTO product_media (
+                product_id, media_type, file_path, cdn_urls, 
+                file_size, mime_type, title, description, position
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
+              RETURNING *`,
+              [
+                productId,
+                'video',
+                processed.url,
+                JSON.stringify(cdnUrls),
+                processed.fileSize,
+                file.mimetype,
+                videoTitle || `${name || existingProduct.rows[0].name} - Video`,
+                videoDescription || videoPurpose || '',
+                position,
+              ],
+            )
+
+            uploadedMedia.push(mediaResult.rows[0])
+            position++
+          }
+        }
+      } catch (mediaError) {
+        logger.error(
+          'Media processing error during product update:',
+          mediaError,
+        )
+      }
+    }
+
+    // Fetch complete product with media
+    const completeProduct = await query(
+      `SELECT p.*, 
+        c.name as category_name,
+        b.name as brand_name,
+        (SELECT json_agg(pm ORDER BY pm.position) 
+         FROM product_media pm 
+         WHERE pm.product_id = p.id) as media
+       FROM products p 
+       LEFT JOIN categories c ON p.category_id = c.id
+       LEFT JOIN brands b ON p.brand_id = b.id
+       WHERE p.id = $1`,
+      [productId],
+    )
+
+    logger.info('Product updated:', {
+      productId,
+      updatedBy: req.user?.userId,
+      mediaAdded: uploadedMedia.length,
+    })
 
     res.json({
       success: true,
-      message: 'Update product - Not yet implemented',
-      data: { productId, updates },
+      data: {
+        product: completeProduct.rows[0],
+      },
+      message:
+        uploadedMedia.length > 0
+          ? `Product updated successfully with ${uploadedMedia.length} new media file(s)`
+          : 'Product updated successfully',
     })
   } catch (error) {
     logger.error('Update product error:', error)
@@ -602,17 +883,265 @@ export const updateProduct = async (req: AuthRequest, res: Response) => {
 export const deleteProduct = async (req: AuthRequest, res: Response) => {
   try {
     const productId = req.params.productId
+    const { permanent = false } = req.query
 
-    res.json({
-      success: true,
-      message: 'Delete product - Not yet implemented',
-      data: { productId },
-    })
+    // Check if product exists
+    const existingProduct = await query(
+      'SELECT * FROM products WHERE id = $1',
+      [productId],
+    )
+
+    if (existingProduct.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Product not found',
+      })
+    }
+
+    const product = existingProduct.rows[0]
+
+    if (permanent === 'true') {
+      // Hard delete - remove all related data first
+      await query('DELETE FROM product_media WHERE product_id = $1', [
+        productId,
+      ])
+      await query('DELETE FROM product_specifications WHERE product_id = $1', [
+        productId,
+      ])
+      await query('DELETE FROM product_variations WHERE product_id = $1', [
+        productId,
+      ])
+      await query('DELETE FROM inventory WHERE product_id = $1', [productId])
+      await query('DELETE FROM products WHERE id = $1', [productId])
+
+      logger.info('Product permanently deleted:', {
+        productId,
+        name: product.name,
+        deletedBy: req.user?.userId,
+      })
+
+      res.json({
+        success: true,
+        message: 'Product permanently deleted',
+      })
+    } else {
+      // Soft delete - set deleted_at timestamp
+      await query(
+        'UPDATE products SET deleted_at = NOW(), is_active = false, updated_at = NOW() WHERE id = $1',
+        [productId],
+      )
+
+      logger.info('Product soft deleted:', {
+        productId,
+        name: product.name,
+        deletedBy: req.user?.userId,
+      })
+
+      res.json({
+        success: true,
+        message: 'Product deleted successfully',
+        data: {
+          productId,
+          deletedAt: new Date().toISOString(),
+        },
+      })
+    }
   } catch (error) {
     logger.error('Delete product error:', error)
     res.status(500).json({
       success: false,
       error: 'Delete failed',
+    })
+  }
+}
+
+// Restore a soft-deleted product
+export const restoreProduct = async (req: AuthRequest, res: Response) => {
+  try {
+    const productId = req.params.productId
+
+    // Check if product exists and is deleted
+    const existingProduct = await query(
+      'SELECT * FROM products WHERE id = $1 AND deleted_at IS NOT NULL',
+      [productId],
+    )
+
+    if (existingProduct.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Deleted product not found',
+      })
+    }
+
+    await query(
+      'UPDATE products SET deleted_at = NULL, updated_at = NOW() WHERE id = $1',
+      [productId],
+    )
+
+    // Fetch restored product
+    const restoredProduct = await query(
+      `SELECT p.*, 
+        c.name as category_name,
+        b.name as brand_name
+       FROM products p 
+       LEFT JOIN categories c ON p.category_id = c.id
+       LEFT JOIN brands b ON p.brand_id = b.id
+       WHERE p.id = $1`,
+      [productId],
+    )
+
+    logger.info('Product restored:', {
+      productId,
+      restoredBy: req.user?.userId,
+    })
+
+    res.json({
+      success: true,
+      message: 'Product restored successfully',
+      data: {
+        product: restoredProduct.rows[0],
+      },
+    })
+  } catch (error) {
+    logger.error('Restore product error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Restore failed',
+    })
+  }
+}
+
+// Bulk operations
+export const bulkDeleteProducts = async (req: AuthRequest, res: Response) => {
+  try {
+    const { productIds, permanent = false } = req.body
+
+    if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Product IDs are required',
+      })
+    }
+
+    if (permanent) {
+      // Hard delete
+      for (const productId of productIds) {
+        await query('DELETE FROM product_media WHERE product_id = $1', [
+          productId,
+        ])
+        await query(
+          'DELETE FROM product_specifications WHERE product_id = $1',
+          [productId],
+        )
+        await query('DELETE FROM product_variations WHERE product_id = $1', [
+          productId,
+        ])
+        await query('DELETE FROM inventory WHERE product_id = $1', [productId])
+      }
+
+      await query('DELETE FROM products WHERE id = ANY($1)', [productIds])
+
+      logger.info('Products permanently deleted:', {
+        count: productIds.length,
+        deletedBy: req.user?.userId,
+      })
+
+      res.json({
+        success: true,
+        message: `${productIds.length} products permanently deleted`,
+      })
+    } else {
+      // Soft delete
+      await query(
+        'UPDATE products SET deleted_at = NOW(), is_active = false, updated_at = NOW() WHERE id = ANY($1)',
+        [productIds],
+      )
+
+      logger.info('Products bulk soft deleted:', {
+        count: productIds.length,
+        deletedBy: req.user?.userId,
+      })
+
+      res.json({
+        success: true,
+        message: `${productIds.length} products deleted successfully`,
+      })
+    }
+  } catch (error) {
+    logger.error('Bulk delete products error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Bulk delete failed',
+    })
+  }
+}
+
+export const bulkUpdateProducts = async (req: AuthRequest, res: Response) => {
+  try {
+    const { productIds, updates } = req.body
+
+    if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Product IDs are required',
+      })
+    }
+
+    const allowedBulkFields = [
+      'is_active',
+      'is_featured',
+      'category_id',
+      'brand_id',
+      'tax_rate',
+    ]
+    const updateFields: string[] = []
+    const values: any[] = []
+    let paramIndex = 1
+
+    for (const [field, value] of Object.entries(updates)) {
+      const snakeField = field.replace(
+        /[A-Z]/g,
+        (letter) => `_${letter.toLowerCase()}`,
+      )
+      if (allowedBulkFields.includes(snakeField) && value !== undefined) {
+        updateFields.push(`${snakeField} = $${paramIndex}`)
+        values.push(value)
+        paramIndex++
+      }
+    }
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No valid fields to update',
+      })
+    }
+
+    updateFields.push(`updated_at = NOW()`)
+    values.push(productIds)
+
+    await query(
+      `UPDATE products SET ${updateFields.join(
+        ', ',
+      )} WHERE id = ANY($${paramIndex})`,
+      values,
+    )
+
+    logger.info('Products bulk updated:', {
+      count: productIds.length,
+      fields: Object.keys(updates),
+      updatedBy: req.user?.userId,
+    })
+
+    res.json({
+      success: true,
+      message: `${productIds.length} products updated successfully`,
+    })
+  } catch (error) {
+    logger.error('Bulk update products error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Bulk update failed',
     })
   }
 }

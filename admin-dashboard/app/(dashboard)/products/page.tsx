@@ -138,9 +138,17 @@ export default function ProductsPage() {
     queryKey: ['products', filters, debouncedSearch],
     queryFn: async () => {
       const response = await productService.getProducts(filters)
+      // Handle both API response formats (products vs items, totalPages vs pages)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = response?.data as any
       return {
-        items: response?.data?.items || [],
-        pagination: response?.data?.pagination || { page: 1, limit: 20, total: 0, pages: 1 },
+        items: data?.items || data?.products || [],
+        pagination: {
+          page: data?.pagination?.page || 1,
+          limit: data?.pagination?.limit || 20,
+          total: data?.pagination?.total || 0,
+          pages: data?.pagination?.pages || data?.pagination?.totalPages || 1,
+        },
       }
     },
   })
@@ -199,6 +207,43 @@ export default function ProductsPage() {
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.message || 'Failed to delete product')
+    },
+  })
+
+  // Bulk delete mutation
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (productIds: string[]) =>
+      productService.bulkDeleteProducts(productIds),
+    onSuccess: () => {
+      toast.success(`${selectedProducts.size} products deleted successfully`)
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+      setSelectedProducts(new Set())
+    },
+    onError: (error: any) => {
+      toast.error(
+        error.response?.data?.message || 'Failed to delete products',
+      )
+    },
+  })
+
+  // Bulk update mutation
+  const bulkUpdateMutation = useMutation({
+    mutationFn: ({
+      productIds,
+      updates,
+    }: {
+      productIds: string[]
+      updates: { isActive?: boolean; isFeatured?: boolean }
+    }) => productService.bulkUpdateProducts(productIds, updates),
+    onSuccess: () => {
+      toast.success('Products updated successfully')
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+      setSelectedProducts(new Set())
+    },
+    onError: (error: any) => {
+      toast.error(
+        error.response?.data?.message || 'Failed to update products',
+      )
     },
   })
 
@@ -504,16 +549,72 @@ export default function ProductsPage() {
               <span className='text-sm font-medium'>
                 {selectedProducts.size} selected
               </span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant='outline' size='sm'>
+                    Bulk Actions
+                    <ArrowUpDown className='h-4 w-4 ml-1' />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align='start'>
+                  <DropdownMenuLabel>Update Status</DropdownMenuLabel>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      bulkUpdateMutation.mutate({
+                        productIds: Array.from(selectedProducts),
+                        updates: { isActive: true },
+                      })
+                    }
+                  >
+                    Activate Products
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      bulkUpdateMutation.mutate({
+                        productIds: Array.from(selectedProducts),
+                        updates: { isActive: false },
+                      })
+                    }
+                  >
+                    Deactivate Products
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>Featured</DropdownMenuLabel>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      bulkUpdateMutation.mutate({
+                        productIds: Array.from(selectedProducts),
+                        updates: { isFeatured: true },
+                      })
+                    }
+                  >
+                    Mark as Featured
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      bulkUpdateMutation.mutate({
+                        productIds: Array.from(selectedProducts),
+                        updates: { isFeatured: false },
+                      })
+                    }
+                  >
+                    Remove Featured
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button
                 variant='outline'
                 size='sm'
                 className='text-destructive'
-                onClick={() => {
-                  toast.info('Bulk delete coming soon')
-                }}
+                onClick={() =>
+                  bulkDeleteMutation.mutate(Array.from(selectedProducts))
+                }
+                disabled={bulkDeleteMutation.isPending}
               >
                 <Trash2 className='h-4 w-4 mr-1' />
-                Delete Selected
+                {bulkDeleteMutation.isPending
+                  ? 'Deleting...'
+                  : 'Delete Selected'}
               </Button>
               <Button
                 variant='ghost'

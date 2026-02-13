@@ -5,6 +5,9 @@ import {
   createProduct,
   updateProduct,
   deleteProduct,
+  restoreProduct,
+  bulkDeleteProducts,
+  bulkUpdateProducts,
   getProductVariations,
   addProductVariation,
   updateProductVariation,
@@ -36,18 +39,43 @@ router.post(
   validate(productSchemas.create),
   createProduct,
 )
-router.put(
-  '/:id',
+
+// Bulk operations (must come before :id routes)
+router.post(
+  '/bulk/delete',
   authenticate,
   authorize('admin', 'super_admin'),
+  bulkDeleteProducts,
+)
+router.post(
+  '/bulk/update',
+  authenticate,
+  authorize('admin', 'super_admin'),
+  bulkUpdateProducts,
+)
+
+router.put(
+  '/:productId',
+  authenticate,
+  authorize('admin', 'super_admin'),
+  upload.fields([
+    { name: 'images', maxCount: 10 },
+    { name: 'videos', maxCount: 3 },
+  ]),
   validate(productSchemas.update),
   updateProduct,
 )
 router.delete(
-  '/:id',
+  '/:productId',
   authenticate,
   authorize('admin', 'super_admin'),
   deleteProduct,
+)
+router.post(
+  '/:productId/restore',
+  authenticate,
+  authorize('admin', 'super_admin'),
+  restoreProduct,
 )
 router.post(
   '/:id/variations',

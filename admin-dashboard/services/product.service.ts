@@ -42,6 +42,15 @@ export interface ProductFilters {
   sortOrder?: 'asc' | 'desc'
   featured?: boolean
   inStock?: boolean
+  search?: string
+}
+
+export interface BulkUpdateDTO {
+  isActive?: boolean
+  isFeatured?: boolean
+  categoryId?: string
+  brandId?: string
+  taxRate?: number
 }
 
 export const productService = {
@@ -114,10 +123,68 @@ export const productService = {
   },
 
   /**
-   * Delete product
+   * Update product with media
    */
-  async deleteProduct(id: string): Promise<ApiResponse<any>> {
-    return apiClient.delete<ApiResponse<any>>(`/products/${id}`)
+  async updateProductWithMedia(id: string, data: UpdateProductDTO, images?: File[], videos?: File[]): Promise<ApiResponse<{ product: Product }>> {
+    const formData = new FormData()
+
+    // Add product data as form fields
+    Object.entries(data).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        formData.append(key, String(value))
+      }
+    })
+
+    // Add images
+    if (images) {
+      images.forEach((image) => {
+        formData.append('images', image)
+      })
+    }
+
+    // Add videos
+    if (videos) {
+      videos.forEach((video) => {
+        formData.append('videos', video)
+      })
+    }
+
+    return apiClient.putFormData<ApiResponse<{ product: Product }>>(`/products/${id}`, formData)
+  },
+
+  /**
+   * Delete product (soft delete by default)
+   */
+  async deleteProduct(id: string, permanent: boolean = false): Promise<ApiResponse<{ productId: string; deletedAt?: string }>> {
+    const query = permanent ? '?permanent=true' : ''
+    return apiClient.delete<ApiResponse<{ productId: string; deletedAt?: string }>>(`/products/${id}${query}`)
+  },
+
+  /**
+   * Restore a soft-deleted product
+   */
+  async restoreProduct(id: string): Promise<ApiResponse<{ product: Product }>> {
+    return apiClient.post<ApiResponse<{ product: Product }>>(`/products/${id}/restore`)
+  },
+
+  /**
+   * Bulk delete products
+   */
+  async bulkDeleteProducts(productIds: string[], permanent: boolean = false): Promise<ApiResponse<{ message: string }>> {
+    return apiClient.post<ApiResponse<{ message: string }>>('/products/bulk/delete', {
+      productIds,
+      permanent,
+    })
+  },
+
+  /**
+   * Bulk update products
+   */
+  async bulkUpdateProducts(productIds: string[], updates: BulkUpdateDTO): Promise<ApiResponse<{ message: string }>> {
+    return apiClient.post<ApiResponse<{ message: string }>>('/products/bulk/update', {
+      productIds,
+      updates,
+    })
   },
 
   /**
