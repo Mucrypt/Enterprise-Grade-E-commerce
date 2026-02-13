@@ -588,12 +588,11 @@ export default function CollectionsPage() {
       {/* Collection Items Manager */}
       {managingItemsCollection && (
         <CollectionItemsManager
-          collectionId={managingItemsCollection.id}
-          collectionName={managingItemsCollection.name}
-          collectionType={activeTab === 'products' ? 'product' : 'category'}
+          collection={managingItemsCollection}
+          type={activeTab === 'products' ? 'product' : 'category'}
           open={!!managingItemsCollection}
-          onClose={() => setManagingItemsCollection(null)}
-          onItemsChange={() => {
+          onClose={() => {
+            setManagingItemsCollection(null)
             queryClient.invalidateQueries({
               queryKey: [
                 activeTab === 'products'
