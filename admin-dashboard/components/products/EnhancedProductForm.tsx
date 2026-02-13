@@ -662,14 +662,14 @@ export function EnhancedProductForm({
                         control={control}
                         render={({ field }) => (
                           <Select
-                            value={field.value || ''}
-                            onValueChange={field.onChange}
+                            value={field.value || 'none'}
+                            onValueChange={(val) => field.onChange(val === 'none' ? '' : val)}
                           >
                             <SelectTrigger>
                               <SelectValue placeholder='Select brand (optional)' />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value=''>No brand</SelectItem>
+                              <SelectItem value='none'>No brand</SelectItem>
                               {brands.map((brand: any) => (
                                 <SelectItem key={brand.id} value={brand.id}>
                                   {brand.name}
