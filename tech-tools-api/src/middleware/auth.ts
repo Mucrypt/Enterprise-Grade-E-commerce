@@ -5,6 +5,7 @@ import getRedisClient from '../config/redis'
 
 export interface AuthRequest extends Request {
   user?: {
+    id: any
     userId: string
     email: string
     userType: string

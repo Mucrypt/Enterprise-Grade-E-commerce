@@ -18,6 +18,9 @@ import {
   Shield,
   BarChart3,
   Tag,
+  Truck,
+  Ticket,
+  Star,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -77,6 +80,11 @@ const navigation: NavItem[] = [
     href: '/dashboard/orders',
     icon: ShoppingCart,
     badge: 'New',
+  },
+  {
+    title: 'Shipping',
+    href: '/dashboard/shipping',
+    icon: Truck,
   },
   {
     title: 'Customers',

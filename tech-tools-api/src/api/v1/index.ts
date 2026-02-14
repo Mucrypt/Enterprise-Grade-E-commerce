@@ -12,6 +12,9 @@ import categoryCollectionsRoutes from './collections/category-collections.routes
 import orderRoutes from './orders/order.routes'
 import paymentRoutes from './payments/payment.routes'
 import supplierRoutes from './suppliers/supplier.routes'
+import shippingRoutes from './shipping/shipping.routes'
+import couponRoutes from './coupons/coupon.routes'
+import reviewRoutes from './reviews/review.routes'
 
 const router = Router()
 
@@ -39,6 +42,9 @@ router.use('/collections/categories', categoryCollectionsRoutes) // Category col
 router.use('/orders', orderRoutes)
 router.use('/payments', paymentRoutes)
 router.use('/suppliers', supplierRoutes)
+router.use('/shipping', shippingRoutes)
+router.use('/coupons', couponRoutes)
+router.use('/reviews', reviewRoutes)
 
 // Documentation route
 router.get('/docs', (_req, res) => {
