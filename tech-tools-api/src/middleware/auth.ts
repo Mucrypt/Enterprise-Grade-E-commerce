@@ -36,6 +36,7 @@ export const authenticate = async (
       ) as jwt.JwtPayload
 
       req.user = {
+        id: decoded.userId,
         userId: decoded.userId,
         email: decoded.email,
         userType: decoded.userType,
