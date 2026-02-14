@@ -10,6 +10,7 @@
     "start:dev": "ts-node src/index.ts",
     "migrate:up": "ts-node src/database/migrate.ts up",
     "migrate:down": "ts-node src/database/migrate.ts down",
+    "migrate:status": "ts-node src/database/migrate.ts status",
     "migrate:admin": "./infra/scripts/migrate-admin-schema.sh",
     "seed": "ts-node src/database/seeds/run-seeds.ts",
     "seed:superadmin": "ts-node src/database/seeds/create-super-admin.ts",

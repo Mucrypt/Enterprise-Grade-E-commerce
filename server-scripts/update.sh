@@ -95,6 +95,12 @@ esac
 log_info "Waiting for services to be healthy..."
 sleep 10
 
+# Step 4: Run migrations (only for api or all)
+if [ "$SERVICE" == "api" ] || [ "$SERVICE" == "all" ]; then
+    log_info "Step 4/4: Running database migrations..."
+    ./server-scripts/migrate.sh up
+fi
+
 # Show status
 echo ""
 docker ps --format 'table {{.Names}}\t{{.Status}}' | grep techtools

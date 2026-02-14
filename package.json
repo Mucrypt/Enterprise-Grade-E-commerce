@@ -19,7 +19,9 @@
     "web:logs": "docker compose --env-file .env -f infrastructure/docker-compose.dev.yml logs -f web-store",
 
     "db:backup": "cd tech-tools-api && npm run db:backup",
-    "db:migrate": "docker exec techtools-api-dev npm run migrate",
+    "db:migrate": "docker exec techtools-api-dev npm run migrate:up",
+    "db:migrate:status": "docker exec techtools-api-dev npm run migrate:status",
+    "db:migrate:down": "docker exec techtools-api-dev npm run migrate:down",
     "types:generate": "cd tech-tools-api && npm run generate:types && cd ../admin-dashboard && npm run sync:types",
 
     "health:check": "curl -f http://localhost:8080/health && curl -f http://localhost:9000/health",
