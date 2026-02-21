@@ -160,6 +160,17 @@ function generateSlug(name: string): string {
     .replace(/^-|-$/g, '')
 }
 
+// Helper to safely parse numeric values from API (PostgreSQL returns DECIMAL as strings)
+function parseNumber(value: unknown, defaultValue: number): number
+function parseNumber(value: unknown, defaultValue: null): number | null
+function parseNumber(value: unknown, defaultValue: number | null): number | null {
+  if (value === null || value === undefined || value === '') {
+    return defaultValue
+  }
+  const parsed = typeof value === 'number' ? value : parseFloat(String(value))
+  return isNaN(parsed) ? defaultValue : parsed
+}
+
 export function EnhancedProductForm({
   product,
   mode,
@@ -227,19 +238,19 @@ export function EnhancedProductForm({
       shortDescription: product?.shortDescription || '',
       categoryId: product?.categoryId || '',
       brandId: product?.brandId || '',
-      basePrice: product?.basePrice || 0,
-      salePrice: product?.salePrice || null,
-      costPrice: product?.costPrice || null,
-      taxRate: product?.taxRate || null,
+      basePrice: parseNumber(product?.basePrice, 0),
+      salePrice: parseNumber(product?.salePrice, null),
+      costPrice: parseNumber(product?.costPrice, null),
+      taxRate: parseNumber(product?.taxRate, null),
       sku: product?.sku || '',
-      minOrderQuantity: product?.minOrderQuantity || 1,
-      maxOrderQuantity: product?.maxOrderQuantity || null,
+      minOrderQuantity: parseNumber(product?.minOrderQuantity, 1),
+      maxOrderQuantity: parseNumber(product?.maxOrderQuantity, null),
       isBackorderAllowed: product?.isBackorderAllowed || false,
-      weight: product?.weight || null,
+      weight: parseNumber(product?.weight, null),
       weightUnit: (product?.weightUnit as 'kg' | 'g' | 'lb' | 'oz') || 'kg',
-      length: product?.length || null,
-      width: product?.width || null,
-      height: product?.height || null,
+      length: parseNumber(product?.length, null),
+      width: parseNumber(product?.width, null),
+      height: parseNumber(product?.height, null),
       dimensionsUnit: (product?.dimensionsUnit as 'cm' | 'in' | 'm') || 'cm',
       isDigital: product?.isDigital || false,
       metaTitle: product?.metaTitle || '',
