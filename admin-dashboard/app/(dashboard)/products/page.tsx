@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { productService, ProductFilters } from '@/services/product.service'
 import { categoryService } from '@/services/category.service'
+import { getAbsoluteMediaUrl } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -803,10 +804,13 @@ export default function ProductsPage() {
                               (product as any).images?.find(
                                 (img: any) => img.is_primary,
                               ) || (product as any).images?.[0]
-                            return primaryImage?.image_url ? (
+                            const imageUrl = getAbsoluteMediaUrl(
+                              primaryImage?.image_url,
+                            )
+                            return imageUrl ? (
                               <div className='relative w-10 h-10 rounded overflow-hidden bg-muted shrink-0'>
                                 <Image
-                                  src={primaryImage.image_url}
+                                  src={imageUrl}
                                   alt={product.name}
                                   fill
                                   className='object-cover'

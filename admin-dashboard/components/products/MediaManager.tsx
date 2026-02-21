@@ -20,7 +20,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { cn } from '@/lib/utils'
+import { cn, getAbsoluteMediaUrl } from '@/lib/utils'
 
 export interface MediaFile {
   id: string
@@ -270,7 +270,11 @@ export function MediaManager({
                 {/* Image Preview */}
                 {image.url ? (
                   <img
-                    src={image.url}
+                    src={
+                      image.url.startsWith('blob:')
+                        ? image.url
+                        : getAbsoluteMediaUrl(image.url) || image.url
+                    }
                     alt='Product preview'
                     className='w-full h-full object-cover'
                   />
@@ -418,7 +422,11 @@ export function MediaManager({
                   <div className='w-12 h-12 rounded bg-muted flex items-center justify-center shrink-0'>
                     {video.url && !video.error ? (
                       <video
-                        src={video.url}
+                        src={
+                          video.url.startsWith('blob:')
+                            ? video.url
+                            : getAbsoluteMediaUrl(video.url) || video.url
+                        }
                         className='w-full h-full object-cover rounded'
                       />
                     ) : (
