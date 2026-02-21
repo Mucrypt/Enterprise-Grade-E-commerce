@@ -163,7 +163,10 @@ function generateSlug(name: string): string {
 // Helper to safely parse numeric values from API (PostgreSQL returns DECIMAL as strings)
 function parseNumber(value: unknown, defaultValue: number): number
 function parseNumber(value: unknown, defaultValue: null): number | null
-function parseNumber(value: unknown, defaultValue: number | null): number | null {
+function parseNumber(
+  value: unknown,
+  defaultValue: number | null,
+): number | null {
   if (value === null || value === undefined || value === '') {
     return defaultValue
   }
@@ -182,6 +185,48 @@ export function EnhancedProductForm({
   const [videos, setVideos] = useState<MediaFile[]>([])
   const [autoSlug, setAutoSlug] = useState(mode === 'create')
   const [isBrandFormOpen, setIsBrandFormOpen] = useState(false)
+  const [mediaInitialized, setMediaInitialized] = useState(false)
+
+  // Initialize existing media when editing a product
+  useEffect(() => {
+    if (mode === 'edit' && product && !mediaInitialized) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const productMedia = (product as any).media
+      if (Array.isArray(productMedia)) {
+        const existingImages: MediaFile[] = []
+        const existingVideos: MediaFile[] = []
+
+        productMedia.forEach((media: any) => {
+          const mediaType = media.media_type || media.type
+          const url = media.file_path || media.url
+          const thumbnailUrl = media.cdn_urls?.thumbnail || media.thumbnail_url
+
+          const mediaFile: MediaFile = {
+            id: media.id,
+            url: url,
+            thumbnailUrl: thumbnailUrl,
+            type: mediaType === 'video' ? 'video' : 'image',
+            isPrimary: media.is_primary || media.isPrimary,
+            position: media.position || 0,
+          }
+
+          if (mediaType === 'video') {
+            existingVideos.push(mediaFile)
+          } else {
+            existingImages.push(mediaFile)
+          }
+        })
+
+        // Sort by position
+        existingImages.sort((a, b) => a.position - b.position)
+        existingVideos.sort((a, b) => a.position - b.position)
+
+        setImages(existingImages)
+        setVideos(existingVideos)
+      }
+      setMediaInitialized(true)
+    }
+  }, [mode, product, mediaInitialized])
 
   // Fetch categories
   const { data: categoriesData } = useQuery({
@@ -360,12 +405,12 @@ export function EnhancedProductForm({
         metaDescription: data.metaDescription || undefined,
       }
 
-      // Get new files from media state
+      // Get new files from media state (files with temp IDs are newly added)
       const imageFiles = images
-        .filter((img) => img.file && !img.error && !img.url?.startsWith('http'))
+        .filter((img) => img.file && !img.error && img.id.startsWith('temp-'))
         .map((img) => img.file!)
       const videoFiles = videos
-        .filter((vid) => vid.file && !vid.error && !vid.url?.startsWith('http'))
+        .filter((vid) => vid.file && !vid.error && vid.id.startsWith('temp-'))
         .map((vid) => vid.file!)
 
       // Use updateProductWithMedia if there are new files
