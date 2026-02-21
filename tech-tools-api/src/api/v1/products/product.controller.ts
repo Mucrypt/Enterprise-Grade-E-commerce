@@ -100,22 +100,23 @@ export const getProducts = async (req: Request, res: Response) => {
           SELECT COALESCE(
             json_agg(
               json_build_object(
-                'id', pi.id,
-                'image_url', pi.image_url,
-                'alt_text', pi.alt_text,
-                'is_primary', pi.is_primary,
-                'display_order', pi.display_order
-              ) ORDER BY pi.is_primary DESC, pi.display_order
+                'id', pm.id,
+                'image_url', COALESCE(pm.file_path, pm.url),
+                'alt_text', pm.alt_text,
+                'is_primary', pm.is_primary,
+                'display_order', pm.position,
+                'cdn_urls', pm.cdn_urls
+              ) ORDER BY pm.is_primary DESC, pm.position
             ),
             '[]'::json
           )
           FROM (
-            SELECT id, image_url, alt_text, is_primary, display_order
-            FROM product_images
-            WHERE product_id = p.id
-            ORDER BY is_primary DESC, display_order
+            SELECT id, file_path, url, alt_text, is_primary, position, cdn_urls
+            FROM product_media
+            WHERE product_id = p.id AND (media_type = 'image' OR type = 'image')
+            ORDER BY is_primary DESC, position
             LIMIT 5
-          ) pi
+          ) pm
         ) as images,
         (
           SELECT COALESCE(SUM(i.available_stock), 0)
@@ -165,14 +166,15 @@ export const getProductById = async (req: Request, res: Response) => {
         b.slug as brand_slug,
         (
           SELECT json_agg(json_build_object(
-            'id', pi.id,
-            'image_url', pi.image_url,
-            'alt_text', pi.alt_text,
-            'is_primary', pi.is_primary,
-            'display_order', pi.display_order
-          ) ORDER BY pi.is_primary DESC, pi.display_order)
-          FROM product_images pi
-          WHERE pi.product_id = p.id
+            'id', pm.id,
+            'image_url', COALESCE(pm.file_path, pm.url),
+            'alt_text', pm.alt_text,
+            'is_primary', pm.is_primary,
+            'display_order', pm.position,
+            'cdn_urls', pm.cdn_urls
+          ) ORDER BY pm.is_primary DESC, pm.position)
+          FROM product_media pm
+          WHERE pm.product_id = p.id AND (pm.media_type = 'image' OR pm.type = 'image')
         ) as images,
         (
           SELECT json_agg(json_build_object(
