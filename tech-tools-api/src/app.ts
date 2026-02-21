@@ -15,6 +15,9 @@ import logger from './utils/logger'
 
 const app: Application = express()
 
+// Trust proxy for rate limiting behind nginx/cloudflare
+app.set('trust proxy', true)
+
 // Swagger documentation (disabled for now)
 // const swaggerDocument = YAML.load('./swagger.yaml')
 

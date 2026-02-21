@@ -73,6 +73,8 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       AWS_REGION: ${AWS_REGION:-us-east-1}
       S3_BUCKET_NAME: ${S3_BUCKET_NAME}
+    volumes:
+      - api_uploads:/app/uploads
     networks:
       - techtools-prod-network
     depends_on:
@@ -242,3 +244,4 @@ volumes:
   certbot_conf:
   certbot_www:
   pgadmin_data:
+  api_uploads:

@@ -27,6 +27,12 @@ RUN apk add --no-cache dumb-init
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 
+# Create uploads directory with proper ownership
+RUN mkdir -p /app/uploads/products/images /app/uploads/products/videos /app/uploads/products/thumbnails \
+             /app/uploads/categories/images /app/uploads/categories/videos /app/uploads/categories/thumbnails \
+             /app/uploads/temp && \
+    chown -R nodejs:nodejs /app/uploads
+
 # Copy package files for production install
 COPY --chown=nodejs:nodejs package*.json ./
 

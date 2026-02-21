@@ -101,6 +101,7 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3001,http://localhost:5173,http://localhost:8080}
     volumes:
       - ../tech-tools-api/src:/app/src
+      - ../tech-tools-api/scripts:/app/scripts
       - ../tech-tools-api/package.json:/app/package.json
       - ../tech-tools-api/tsconfig.json:/app/tsconfig.json
       - /app/node_modules

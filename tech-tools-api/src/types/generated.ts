@@ -1,5 +1,5 @@
 // Auto-generated from PostgreSQL database schema
-// Generated on: 2026-02-10T21:25:33.021Z
+// Generated on: 2026-02-18T18:39:07.721Z
 // DO NOT EDIT MANUALLY - Run npm run generate:types to regenerate
 
 export interface AdminActivityLogs {
@@ -224,6 +224,68 @@ export interface CategoryMedia {
   updatedAt?: string
 }
 
+export interface CouponUsage {
+  // Default: uuid_generate_v4()
+  id?: string
+  couponId?: string
+  userId?: string
+  orderId?: string
+  discountApplied: number
+  orderTotal?: number
+  // Default: CURRENT_TIMESTAMP
+  usedAt?: string
+  ipAddress?: any
+  userAgent?: string
+}
+
+export interface Coupons {
+  // Default: uuid_generate_v4()
+  id?: string
+  code: string
+  name: string
+  description?: string
+  // Default: 'percentage'::coupon_type
+  discountType?: any
+  discountValue: number
+  maxDiscountAmount?: number
+  usageLimit?: number
+  // Default: 0
+  usageCount?: number
+  // Default: 1
+  usageLimitPerUser?: number
+  startsAt?: string
+  expiresAt?: string
+  minPurchaseAmount?: number
+  minItemsCount?: number
+  // Default: false
+  isFirstOrderOnly?: boolean
+  // Default: false
+  isSingleUse?: boolean
+  // Default: false
+  isStackable?: boolean
+  // Default: 'all'::character varying
+  appliesTo?: string
+  targetIds?: string[]
+  excludedProductIds?: string[]
+  excludedCategoryIds?: string[]
+  buyQuantity?: number
+  getQuantity?: number
+  getDiscountPercent?: number
+  // Default: 'active'::coupon_status
+  status?: any
+  // Default: true
+  isActive?: boolean
+  // Default: 0
+  totalDiscountGiven?: number
+  // Default: 0
+  totalOrdersUsed?: number
+  createdBy?: string
+  // Default: CURRENT_TIMESTAMP
+  createdAt?: string
+  // Default: CURRENT_TIMESTAMP
+  updatedAt?: string
+}
+
 export interface Inventory {
   // Default: uuid_generate_v4()
   id?: string
@@ -424,6 +486,30 @@ export interface ProductMedia {
   updatedAt?: string
 }
 
+export interface ProductReviewSummary {
+  productId: string
+  // Default: 0
+  totalReviews?: number
+  // Default: 0
+  averageRating?: number
+  // Default: 0
+  rating1Count?: number
+  // Default: 0
+  rating2Count?: number
+  // Default: 0
+  rating3Count?: number
+  // Default: 0
+  rating4Count?: number
+  // Default: 0
+  rating5Count?: number
+  // Default: 0
+  verifiedPurchaseCount?: number
+  // Default: 0
+  withImagesCount?: number
+  // Default: CURRENT_TIMESTAMP
+  updatedAt?: string
+}
+
 export interface ProductSpecifications {
   // Default: uuid_generate_v4()
   id?: string
@@ -500,6 +586,43 @@ export interface Products {
   deletedAt?: string
 }
 
+export interface ReviewImages {
+  // Default: uuid_generate_v4()
+  id?: string
+  reviewId?: string
+  imageUrl: string
+  thumbnailUrl?: string
+  altText?: string
+  // Default: 0
+  sortOrder?: number
+  // Default: CURRENT_TIMESTAMP
+  createdAt?: string
+}
+
+export interface ReviewResponses {
+  // Default: uuid_generate_v4()
+  id?: string
+  reviewId?: string
+  responderId?: string
+  response: string
+  // Default: true
+  isOfficial?: boolean
+  // Default: CURRENT_TIMESTAMP
+  createdAt?: string
+  // Default: CURRENT_TIMESTAMP
+  updatedAt?: string
+}
+
+export interface ReviewVotes {
+  // Default: uuid_generate_v4()
+  id?: string
+  reviewId?: string
+  userId?: string
+  voteType?: string
+  // Default: CURRENT_TIMESTAMP
+  createdAt?: string
+}
+
 export interface Reviews {
   // Default: uuid_generate_v4()
   id?: string
@@ -515,6 +638,140 @@ export interface Reviews {
   isApproved?: boolean
   // Default: 0
   helpfulCount?: number
+  // Default: CURRENT_TIMESTAMP
+  createdAt?: string
+  // Default: CURRENT_TIMESTAMP
+  updatedAt?: string
+  // Default: 0
+  imagesCount?: number
+  adminResponse?: string
+  responseAt?: string
+  // Default: false
+  isFeatured?: boolean
+  // Default: 'pending'::character varying
+  status?: string
+  // Default: 0
+  reportedCount?: number
+}
+
+export interface ShippingCarriers {
+  // Default: uuid_generate_v4()
+  id?: string
+  carrierCode: string
+  carrierName: string
+  description?: string
+  logoUrl?: string
+  // Default: false
+  isActive?: boolean
+  // Default: true
+  isSandbox?: boolean
+  // Default: '{}'::jsonb
+  credentials?: any
+  // Default: '{}'::jsonb
+  settings?: any
+  // Default: CURRENT_TIMESTAMP
+  createdAt?: string
+  // Default: CURRENT_TIMESTAMP
+  updatedAt?: string
+}
+
+export interface ShippingLabels {
+  // Default: uuid_generate_v4()
+  id?: string
+  orderId?: string
+  carrier: string
+  serviceCode: string
+  trackingNumber: string
+  labelData?: string
+  // Default: 'PDF'::character varying
+  labelFormat?: string
+  cost?: number
+  // Default: 'created'::character varying
+  status?: string
+  voidedAt?: string
+  createdBy?: string
+  // Default: CURRENT_TIMESTAMP
+  createdAt?: string
+  // Default: CURRENT_TIMESTAMP
+  updatedAt?: string
+}
+
+export interface ShippingMethods {
+  // Default: uuid_generate_v4()
+  id?: string
+  zoneId?: string
+  name: string
+  description?: string
+  // Default: 'flat_rate'::character varying
+  methodType?: string
+  carrier?: string
+  carrierServiceCode?: string
+  flatRate?: number
+  minWeight?: number
+  maxWeight?: number
+  minOrderAmount?: number
+  maxOrderAmount?: number
+  ratePerKg?: number
+  // Default: true
+  isActive?: boolean
+  // Default: 0
+  displayOrder?: number
+  // Default: CURRENT_TIMESTAMP
+  createdAt?: string
+  // Default: CURRENT_TIMESTAMP
+  updatedAt?: string
+}
+
+export interface ShippingSettings {
+  // Default: 1
+  id?: number
+  // Default: 'lb'::character varying
+  defaultWeightUnit?: string
+  // Default: 'in'::character varying
+  defaultDimensionUnit?: string
+  // Default: 'US'::character varying
+  defaultCountry?: string
+  freeShippingThreshold?: number
+  // Default: 0
+  handlingFee?: number
+  // Default: false
+  insuranceEnabled?: boolean
+  // Default: false
+  signatureRequired?: boolean
+  originAddress?: any
+  // Default: CURRENT_TIMESTAMP
+  createdAt?: string
+  // Default: CURRENT_TIMESTAMP
+  updatedAt?: string
+}
+
+export interface ShippingTrackingHistory {
+  // Default: uuid_generate_v4()
+  id?: string
+  labelId?: string
+  trackingNumber: string
+  carrier: string
+  status?: string
+  statusDescription?: string
+  location?: string
+  eventTimestamp?: string
+  rawData?: any
+  // Default: CURRENT_TIMESTAMP
+  createdAt?: string
+}
+
+export interface ShippingZones {
+  // Default: uuid_generate_v4()
+  id?: string
+  name: string
+  // Default: '{}'::text[]
+  countries?: string[]
+  // Default: '{}'::text[]
+  states?: string[]
+  // Default: '{}'::text[]
+  postalCodes?: string[]
+  // Default: true
+  isActive?: boolean
   // Default: CURRENT_TIMESTAMP
   createdAt?: string
   // Default: CURRENT_TIMESTAMP
@@ -590,6 +847,18 @@ export interface UserAddresses {
   createdAt?: string
   // Default: CURRENT_TIMESTAMP
   updatedAt?: string
+}
+
+export interface UserCoupons {
+  // Default: uuid_generate_v4()
+  id?: string
+  userId?: string
+  couponId?: string
+  // Default: CURRENT_TIMESTAMP
+  assignedAt?: string
+  usedAt?: string
+  // Default: false
+  isUsed?: boolean
 }
 
 export interface Users {
