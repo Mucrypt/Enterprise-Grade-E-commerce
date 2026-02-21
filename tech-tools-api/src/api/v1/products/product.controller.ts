@@ -101,7 +101,7 @@ export const getProducts = async (req: Request, res: Response) => {
             json_agg(
               json_build_object(
                 'id', pm.id,
-                'image_url', COALESCE(pm.file_path, pm.url),
+                'image_url', pm.url,
                 'alt_text', pm.alt_text,
                 'is_primary', pm.is_primary,
                 'display_order', pm.position,
@@ -111,9 +111,9 @@ export const getProducts = async (req: Request, res: Response) => {
             '[]'::json
           )
           FROM (
-            SELECT id, file_path, url, alt_text, is_primary, position, cdn_urls
+            SELECT id, url, alt_text, is_primary, position, cdn_urls
             FROM product_media
-            WHERE product_id = p.id AND (media_type = 'image' OR type = 'image')
+            WHERE product_id = p.id AND type = 'image'
             ORDER BY is_primary DESC, position
             LIMIT 5
           ) pm
@@ -167,14 +167,14 @@ export const getProductById = async (req: Request, res: Response) => {
         (
           SELECT json_agg(json_build_object(
             'id', pm.id,
-            'image_url', COALESCE(pm.file_path, pm.url),
+            'image_url', pm.url,
             'alt_text', pm.alt_text,
             'is_primary', pm.is_primary,
             'display_order', pm.position,
             'cdn_urls', pm.cdn_urls
           ) ORDER BY pm.is_primary DESC, pm.position)
           FROM product_media pm
-          WHERE pm.product_id = p.id AND (pm.media_type = 'image' OR pm.type = 'image')
+          WHERE pm.product_id = p.id AND pm.type = 'image'
         ) as images,
         (
           SELECT json_agg(json_build_object(
@@ -390,9 +390,9 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
           // Save to database
           const mediaResult = await query(
             `INSERT INTO product_media (
-              product_id, media_type, file_path, cdn_urls, 
-              file_size, mime_type, alt_text, title, description, position, is_primary
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
+              product_id, type, url, cdn_urls, 
+              file_size, alt_text, title, position, is_primary, format
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
             RETURNING *`,
             [
               productId,
@@ -400,12 +400,11 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
               processed.original.url,
               JSON.stringify(cdnUrls),
               processed.original.fileSize,
-              file.mimetype,
               `${name} - Image ${i + 1}`,
               imageDescArray[i]?.title || `${name} - Image ${i + 1}`,
-              imageDescArray[i]?.description || '',
               i, // position based on upload order
               i === 0, // first image is primary by default
+              file.mimetype?.split('/')[1] || 'jpg',
             ],
           )
 
@@ -436,10 +435,9 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
           // Save to database
           const mediaResult = await query(
             `INSERT INTO product_media (
-              product_id, media_type, file_path, cdn_urls, 
-              file_size, mime_type, title, description, 
-              video_duration, position
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
+              product_id, type, url, cdn_urls, 
+              file_size, title, position, format, duration
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
             RETURNING *`,
             [
               productId,
@@ -447,11 +445,10 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
               processed.url,
               JSON.stringify(cdnUrls),
               processed.fileSize,
-              file.mimetype,
               videoTitle || `${name} - Video`,
-              videoDescription || videoPurpose || '',
-              null, // duration not implemented yet in processVideo
               files.images ? files.images.length + i : i, // position after images
+              file.mimetype?.split('/')[1] || 'mp4',
+              null, // duration not implemented yet in processVideo
             ],
           )
 
@@ -759,9 +756,9 @@ export const updateProduct = async (req: AuthRequest, res: Response) => {
 
             const mediaResult = await query(
               `INSERT INTO product_media (
-                product_id, media_type, file_path, cdn_urls, 
-                file_size, mime_type, alt_text, title, description, position, is_primary
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
+                product_id, type, url, cdn_urls, 
+                file_size, alt_text, title, position, is_primary, format
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
               RETURNING *`,
               [
                 productId,
@@ -769,17 +766,11 @@ export const updateProduct = async (req: AuthRequest, res: Response) => {
                 processed.original.url,
                 JSON.stringify(cdnUrls),
                 processed.original.fileSize,
-                file.mimetype,
-                `${name || existingProduct.rows[0].name} - Image ${
-                  position + 1
-                }`,
-                imageDescArray[i]?.title ||
-                  `${name || existingProduct.rows[0].name} - Image ${
-                    position + 1
-                  }`,
-                imageDescArray[i]?.description || '',
+                `${name || existingProduct.rows[0].name} - Image ${position + 1}`,
+                imageDescArray[i]?.title || `${name || existingProduct.rows[0].name} - Image ${position + 1}`,
                 position,
                 false, // Don't override primary on update
+                file.mimetype?.split('/')[1] || 'jpg',
               ],
             )
 
@@ -813,8 +804,8 @@ export const updateProduct = async (req: AuthRequest, res: Response) => {
 
             const mediaResult = await query(
               `INSERT INTO product_media (
-                product_id, media_type, file_path, cdn_urls, 
-                file_size, mime_type, title, description, position
+                product_id, type, url, cdn_urls, 
+                file_size, title, position, format, duration
               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
               RETURNING *`,
               [
@@ -823,10 +814,10 @@ export const updateProduct = async (req: AuthRequest, res: Response) => {
                 processed.url,
                 JSON.stringify(cdnUrls),
                 processed.fileSize,
-                file.mimetype,
                 videoTitle || `${name || existingProduct.rows[0].name} - Video`,
-                videoDescription || videoPurpose || '',
                 position,
+                file.mimetype?.split('/')[1] || 'mp4',
+                null, // duration
               ],
             )
 
