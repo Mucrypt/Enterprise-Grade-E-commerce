@@ -22,6 +22,16 @@ const nextConfig: NextConfig = {
         hostname: '*.techtools.com',
         pathname: '/media/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'nexusai.lt',
+        pathname: '/media/**',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.nexusai.lt',
+        pathname: '/media/**',
+      },
     ],
     formats: ['image/webp', 'image/avif'],
   },

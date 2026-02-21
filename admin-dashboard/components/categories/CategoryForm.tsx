@@ -202,9 +202,18 @@ export function CategoryForm({
   const getExistingMediaUrl = (purpose: string) => {
     if (!category?.media) return null
     const media = category.media.find((m: any) => m.media_purpose === purpose)
-    return (
+    const path =
       media?.cdn_urls?.medium || media?.cdn_urls?.original || media?.file_path
-    )
+    if (!path) return null
+    // Convert relative path to absolute URL
+    const mediaBase =
+      process.env.NEXT_PUBLIC_MEDIA_URL || 'https://nexusai.lt/media'
+    const cleanPath = path.startsWith('/media/')
+      ? path.slice(7)
+      : path.startsWith('/')
+      ? path.slice(1)
+      : path
+    return `${mediaBase}/${cleanPath}`
   }
 
   // Filter out current category from parent options

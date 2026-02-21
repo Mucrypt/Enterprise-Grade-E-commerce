@@ -404,9 +404,19 @@ export default function CategoriesPage() {
 
   const getMediaUrl = (category: Category, purpose: string) => {
     const media = category.media?.find((m: any) => m.media_purpose === purpose)
-    return (
+    const path =
       media?.cdn_urls?.thumbnail || media?.cdn_urls?.small || media?.file_path
-    )
+    if (!path) return null
+    // Convert relative path to absolute URL
+    // Path is like /media/categories/... or categories/...
+    const mediaBase =
+      process.env.NEXT_PUBLIC_MEDIA_URL || 'https://nexusai.lt/media'
+    const cleanPath = path.startsWith('/media/')
+      ? path.slice(7)
+      : path.startsWith('/')
+      ? path.slice(1)
+      : path
+    return `${mediaBase}/${cleanPath}`
   }
 
   return (
