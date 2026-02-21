@@ -135,6 +135,39 @@ export default function ProductsPage() {
     [page, limit, categoryFilter, sortBy, sortOrder],
   )
 
+  // Normalize product from snake_case API response to camelCase
+  const normalizeProduct = (p: any): Products => ({
+    ...p,
+    id: p.id,
+    sku: p.sku,
+    name: p.name,
+    slug: p.slug,
+    description: p.description,
+    shortDescription: p.short_description || p.shortDescription,
+    categoryId: p.category_id || p.categoryId,
+    brandId: p.brand_id || p.brandId,
+    basePrice: parseFloat(p.base_price) || p.basePrice || 0,
+    salePrice: p.sale_price ? parseFloat(p.sale_price) : p.salePrice,
+    costPrice: p.cost_price ? parseFloat(p.cost_price) : p.costPrice,
+    taxRate: p.tax_rate ? parseFloat(p.tax_rate) : p.taxRate,
+    weight: p.weight ? parseFloat(p.weight) : undefined,
+    weightUnit: p.weight_unit || p.weightUnit,
+    isActive: p.is_active ?? p.isActive ?? true,
+    isDigital: p.is_digital ?? p.isDigital ?? false,
+    isFeatured: p.is_featured ?? p.isFeatured ?? false,
+    metaTitle: p.meta_title || p.metaTitle,
+    metaDescription: p.meta_description || p.metaDescription,
+    createdAt: p.created_at || p.createdAt,
+    updatedAt: p.updated_at || p.updatedAt,
+    // Nested objects
+    categoryName: p.category_name || p.categoryName,
+    categorySlug: p.category_slug || p.categorySlug,
+    brandName: p.brand_name || p.brandName,
+    brandSlug: p.brand_slug || p.brandSlug,
+    images: p.images || [],
+    total_stock: p.total_stock || 0,
+  })
+
   // Fetch products
   const {
     data: productsData,
@@ -148,8 +181,9 @@ export default function ProductsPage() {
       // Handle both API response formats (products vs items, totalPages vs pages)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = response?.data as any
+      const rawItems = data?.items || data?.products || []
       return {
-        items: data?.items || data?.products || [],
+        items: rawItems.map(normalizeProduct),
         pagination: {
           page: data?.pagination?.page || 1,
           limit: data?.pagination?.limit || 20,
@@ -703,7 +737,9 @@ export default function ProductsPage() {
                   </TableHead>
                 )}
                 {columns.find((c) => c.id === 'sku')?.visible && (
-                  <TableHead className='min-w-[120px] whitespace-nowrap'>SKU</TableHead>
+                  <TableHead className='min-w-30 whitespace-nowrap'>
+                    SKU
+                  </TableHead>
                 )}
                 {columns.find((c) => c.id === 'price')?.visible && (
                   <TableHead>
