@@ -805,7 +805,10 @@ export default function ProductsPage() {
                                 (img: any) => img.is_primary,
                               ) || (product as any).images?.[0]
                             const imageUrl = getAbsoluteMediaUrl(
-                              primaryImage?.image_url,
+                              primaryImage?.image_url ||
+                                primaryImage?.file_path ||
+                                primaryImage?.url ||
+                                primaryImage?.cdn_urls?.thumbnail,
                             )
                             return imageUrl ? (
                               <div className='relative w-10 h-10 rounded overflow-hidden bg-muted shrink-0'>
