@@ -168,14 +168,29 @@ export const getProductById = async (req: Request, res: Response) => {
           SELECT json_agg(json_build_object(
             'id', pm.id,
             'image_url', pm.url,
+            'url', pm.url,
+            'type', pm.type,
             'alt_text', pm.alt_text,
             'is_primary', pm.is_primary,
-            'display_order', pm.position,
+            'position', pm.position,
             'cdn_urls', pm.cdn_urls
           ) ORDER BY pm.is_primary DESC, pm.position)
           FROM product_media pm
           WHERE pm.product_id = p.id AND pm.type = 'image'
         ) as images,
+        (
+          SELECT json_agg(json_build_object(
+            'id', pm.id,
+            'url', pm.url,
+            'type', pm.type,
+            'alt_text', pm.alt_text,
+            'is_primary', pm.is_primary,
+            'position', pm.position,
+            'cdn_urls', pm.cdn_urls
+          ) ORDER BY pm.position)
+          FROM product_media pm
+          WHERE pm.product_id = p.id
+        ) as media,
         (
           SELECT json_agg(json_build_object(
             'id', ps.id,
@@ -212,7 +227,7 @@ export const getProductById = async (req: Request, res: Response) => {
        FROM products p
        LEFT JOIN categories c ON p.category_id = c.id
        LEFT JOIN brands b ON p.brand_id = b.id
-       WHERE p.id = $1 AND p.is_active = true AND p.deleted_at IS NULL`,
+       WHERE p.id = $1 AND p.deleted_at IS NULL`,
       [id],
     )
 
@@ -766,8 +781,13 @@ export const updateProduct = async (req: AuthRequest, res: Response) => {
                 processed.original.url,
                 JSON.stringify(cdnUrls),
                 processed.original.fileSize,
-                `${name || existingProduct.rows[0].name} - Image ${position + 1}`,
-                imageDescArray[i]?.title || `${name || existingProduct.rows[0].name} - Image ${position + 1}`,
+                `${name || existingProduct.rows[0].name} - Image ${
+                  position + 1
+                }`,
+                imageDescArray[i]?.title ||
+                  `${name || existingProduct.rows[0].name} - Image ${
+                    position + 1
+                  }`,
                 position,
                 false, // Don't override primary on update
                 file.mimetype?.split('/')[1] || 'jpg',

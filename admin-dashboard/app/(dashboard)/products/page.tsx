@@ -703,7 +703,7 @@ export default function ProductsPage() {
                   </TableHead>
                 )}
                 {columns.find((c) => c.id === 'sku')?.visible && (
-                  <TableHead>SKU</TableHead>
+                  <TableHead className='min-w-[120px] whitespace-nowrap'>SKU</TableHead>
                 )}
                 {columns.find((c) => c.id === 'price')?.visible && (
                   <TableHead>
@@ -842,7 +842,7 @@ export default function ProductsPage() {
                       </TableCell>
                     )}
                     {columns.find((c) => c.id === 'sku')?.visible && (
-                      <TableCell className='font-mono text-sm'>
+                      <TableCell className='font-mono text-xs whitespace-nowrap'>
                         {product.sku}
                       </TableCell>
                     )}
