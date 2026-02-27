@@ -1,5 +1,5 @@
 # Multi-stage build for production
-FROM node:20-alpine AS builder
+FROM node:22-bookworm-slim AS builder
 
 WORKDIR /app
 
@@ -16,16 +16,17 @@ COPY . .
 RUN npm run build
 
 # Production stage
-FROM node:20-alpine
+FROM node:22-bookworm-slim
 
 WORKDIR /app
 
 # Install dumb-init for proper signal handling
-RUN apk add --no-cache dumb-init
+RUN apt-get update && apt-get install -y --no-install-recommends dumb-init && \
+    rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
+RUN groupadd --gid 1001 nodejs && \
+    useradd --uid 1001 --gid nodejs --shell /bin/bash --create-home nodejs
 
 # Create uploads directory with proper ownership
 RUN mkdir -p /app/uploads/products/images /app/uploads/products/videos /app/uploads/products/thumbnails \
