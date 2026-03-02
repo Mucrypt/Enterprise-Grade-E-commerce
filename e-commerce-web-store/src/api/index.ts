@@ -198,11 +198,41 @@ export const authApi = {
   async login(email: string, password: string) {
     const response = await api.post<{
       success: boolean
-      data: { user: User; token: string }
+      data: {
+        user: {
+          id: string
+          email: string
+          firstName: string
+          lastName: string
+          userType: string
+          emailVerified: boolean
+          createdAt: string
+        }
+        tokens: {
+          accessToken: string
+          refreshToken: string
+        }
+      }
     }>('/auth/login', { email, password })
 
-    localStorage.setItem('auth_token', response.data.data.token)
-    return response.data.data
+    const { user: apiUser, tokens } = response.data.data
+    localStorage.setItem('auth_token', tokens.accessToken)
+    localStorage.setItem('refresh_token', tokens.refreshToken)
+    
+    // Map camelCase to snake_case
+    return {
+      user: {
+        id: apiUser.id,
+        email: apiUser.email,
+        first_name: apiUser.firstName,
+        last_name: apiUser.lastName,
+        phone: null,
+        avatar_url: null,
+        is_verified: apiUser.emailVerified,
+        created_at: apiUser.createdAt,
+      } as User,
+      token: tokens.accessToken,
+    }
   },
 
   // Register
@@ -214,17 +244,71 @@ export const authApi = {
   }) {
     const response = await api.post<{
       success: boolean
-      data: { user: User; token: string }
+      data: {
+        user: {
+          id: string
+          email: string
+          firstName: string
+          lastName: string
+          userType: string
+          createdAt: string
+        }
+        tokens: {
+          accessToken: string
+          refreshToken: string
+        }
+      }
     }>('/auth/register', data)
 
-    localStorage.setItem('auth_token', response.data.data.token)
-    return response.data.data
+    const { user: apiUser, tokens } = response.data.data
+    localStorage.setItem('auth_token', tokens.accessToken)
+    localStorage.setItem('refresh_token', tokens.refreshToken)
+    
+    // Map camelCase to snake_case
+    return {
+      user: {
+        id: apiUser.id,
+        email: apiUser.email,
+        first_name: apiUser.firstName,
+        last_name: apiUser.lastName,
+        phone: null,
+        avatar_url: null,
+        is_verified: false,
+        created_at: apiUser.createdAt,
+      } as User,
+      token: tokens.accessToken,
+    }
   },
 
   // Get current user
   async getCurrentUser() {
-    const response = await api.get<ApiResponse<User>>('/auth/me')
-    return response.data.data
+    const response = await api.get<{
+      success: boolean
+      data: {
+        user: {
+          id: string
+          email: string
+          firstName: string
+          lastName: string
+          userType: string
+          emailVerified: boolean
+          createdAt: string
+        }
+      }
+    }>('/auth/me')
+    
+    const apiUser = response.data.data.user
+    // Map camelCase API response to snake_case frontend User type
+    return {
+      id: apiUser.id,
+      email: apiUser.email,
+      first_name: apiUser.firstName,
+      last_name: apiUser.lastName,
+      phone: null,
+      avatar_url: null,
+      is_verified: apiUser.emailVerified,
+      created_at: apiUser.createdAt,
+    } as User
   },
 
   // Logout
