@@ -218,7 +218,7 @@ export const authApi = {
     const { user: apiUser, tokens } = response.data.data
     localStorage.setItem('auth_token', tokens.accessToken)
     localStorage.setItem('refresh_token', tokens.refreshToken)
-    
+
     // Map camelCase to snake_case
     return {
       user: {
@@ -263,7 +263,7 @@ export const authApi = {
     const { user: apiUser, tokens } = response.data.data
     localStorage.setItem('auth_token', tokens.accessToken)
     localStorage.setItem('refresh_token', tokens.refreshToken)
-    
+
     // Map camelCase to snake_case
     return {
       user: {
@@ -296,7 +296,7 @@ export const authApi = {
         }
       }
     }>('/auth/me')
-    
+
     const apiUser = response.data.data.user
     // Map camelCase API response to snake_case frontend User type
     return {

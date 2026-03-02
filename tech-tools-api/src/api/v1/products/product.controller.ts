@@ -157,6 +157,10 @@ export const getProductById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params
 
+    // Check if id is a UUID or a slug
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+    const whereCondition = isUUID ? 'p.id = $1' : 'p.slug = $1'
+
     const result = await query(
       `SELECT 
         p.*,
@@ -227,7 +231,7 @@ export const getProductById = async (req: Request, res: Response) => {
        FROM products p
        LEFT JOIN categories c ON p.category_id = c.id
        LEFT JOIN brands b ON p.brand_id = b.id
-       WHERE p.id = $1 AND p.deleted_at IS NULL`,
+       WHERE ${whereCondition} AND p.deleted_at IS NULL`,
       [id],
     )
 
@@ -238,15 +242,16 @@ export const getProductById = async (req: Request, res: Response) => {
       })
     }
 
-    // Get variations if any
+    const product = result.rows[0]
+
+    // Get variations if any - use the actual product.id from the result
     const variationsResult = await query(
       `SELECT * FROM product_variations 
        WHERE product_id = $1 AND is_active = true
        ORDER BY created_at`,
-      [id],
+      [product.id],
     )
 
-    const product = result.rows[0]
     product.variations = variationsResult.rows
 
     res.json({
