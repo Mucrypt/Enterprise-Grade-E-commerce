@@ -225,7 +225,7 @@ export default function ProductCard({
         </div>
 
         {/* Free Shipping Badge */}
-        {(product.sale_price || product.base_price) >= 50 && (
+        {Number(product.sale_price || product.base_price) >= 50 && (
           <div className="flex items-center gap-1 mt-2 text-xs text-green-600">
             <Truck className="w-3.5 h-3.5" />
             <span>Free Shipping</span>
