@@ -35,6 +35,7 @@ export default function ProfilePage() {
     logout,
     updateUser,
     isLoading: authLoading,
+    hasHydrated,
   } = useAuthStore()
   const [activeTab, setActiveTab] = useState<TabType>('profile')
   const [isEditing, setIsEditing] = useState(false)
@@ -50,10 +51,10 @@ export default function ProfilePage() {
   })
 
   useEffect(() => {
-    if (!isAuthenticated && !authLoading) {
+    if (hasHydrated && !isAuthenticated && !authLoading) {
       navigate('/login', { state: { from: { pathname: '/profile' } } })
     }
-  }, [isAuthenticated, authLoading, navigate])
+  }, [isAuthenticated, authLoading, hasHydrated, navigate])
 
   useEffect(() => {
     if (user) {
@@ -93,7 +94,7 @@ export default function ProfilePage() {
     navigate('/')
   }
 
-  if (authLoading) {
+  if (authLoading || !hasHydrated) {
     return (
       <div className='min-h-screen bg-gray-50 flex items-center justify-center'>
         <Loader className='w-8 h-8 animate-spin text-orange-500' />
