@@ -76,7 +76,11 @@ SELECT * FROM (VALUES
     ('Lighting', 'lighting', 'LED headlights, fog lights, interior lights, and accent lighting', 7, true),
     ('Cleaning & Maintenance', 'cleaning-maintenance', 'Car wash supplies, polishes, waxes, and detailing products', 8, true),
     ('Phone & GPS Mounts', 'phone-gps-mounts', 'Smartphone holders, GPS mounts, and wireless charging pads', 9, true),
-    ('Performance Parts', 'performance-parts', 'Air filters, exhausts, chip tuners, and performance upgrades', 10, true)
+    ('Performance Parts', 'performance-parts', 'Air filters, exhausts, chip tuners, and performance upgrades', 10, true),
+    ('Work & Safety Gear', 'work-safety-gear', 'LED work lights, safety glasses, headlamps, and hands-free lighting solutions', 11, true),
+    ('Tools & Emergency', 'tools-emergency', 'Jump starters, tire inflators, roadside emergency kits, and portable tools', 12, true),
+    ('Interior Comfort', 'interior-comfort', 'Seat covers, cushions, organizers, and comfort accessories', 13, true),
+    ('Safety & Security', 'safety-security', 'Dash cams, alarms, GPS trackers, and vehicle security systems', 14, true)
 ) AS v(name, slug, description, display_order, is_active)
 WHERE NOT EXISTS (SELECT 1 FROM categories WHERE slug = v.slug);
 EOF
@@ -176,6 +180,141 @@ SELECT 'CAR-JUMP-010', 'Portable Jump Starter Power Bank 2000A Peak', 'portable-
     c.id, b.id, 99.99, 79.99, 40.00, 0.8, 'kg', true, true
 FROM categories c, brands b WHERE c.slug = 'tools-emergency' AND b.slug = 'powerdrive'
 AND NOT EXISTS (SELECT 1 FROM products WHERE sku = 'CAR-JUMP-010');
+
+-- Product 11: LED Safety Work Glasses (Like HandiBeam)
+INSERT INTO products (sku, name, slug, description, short_description, category_id, brand_id, base_price, sale_price, cost_price, weight, weight_unit, is_active, is_featured)
+SELECT 'LED-GLASS-011', 'HandiBeam LED Safety Glasses with Built-in Lights', 'handibeam-led-safety-glasses',
+    'Revolutionary hands-free lighting solution! These LED safety glasses feature ultra-bright COB LED lights built directly into the frame. Perfect for automotive work, DIY projects, camping, and emergency situations. Anti-fog lenses with UV protection. 3 brightness modes with 8+ hours battery life. Rechargeable via USB-C.',
+    'Hands-free LED safety glasses with 3 brightness modes, anti-fog lenses, and 8hr battery life.',
+    c.id, b.id, 34.95, 29.99, 12.00, 0.15, 'kg', true, true
+FROM categories c, brands b WHERE c.slug = 'work-safety-gear' AND b.slug = 'brightbeam'
+AND NOT EXISTS (SELECT 1 FROM products WHERE sku = 'LED-GLASS-011');
+
+-- Product 12: LED Headlamp Rechargeable
+INSERT INTO products (sku, name, slug, description, short_description, category_id, brand_id, base_price, sale_price, cost_price, weight, weight_unit, is_active, is_featured)
+SELECT 'LED-HEAD-012', 'Ultra Bright LED Headlamp 2000 Lumens Rechargeable', 'ultra-bright-led-headlamp-2000-lumens',
+    'Illuminate any workspace with this powerful 2000 lumen LED headlamp. Features wide-angle flood beam and focused spot beam modes. IPX6 waterproof rating, adjustable headband, and 30-hour runtime on low mode. Perfect for night driving repairs, camping, and emergency situations.',
+    '2000 lumen rechargeable headlamp with 5 modes, IPX6 waterproof, and 30hr battery life.',
+    c.id, b.id, 29.99, 24.99, 10.00, 0.2, 'kg', true, true
+FROM categories c, brands b WHERE c.slug = 'work-safety-gear' AND b.slug = 'brightbeam'
+AND NOT EXISTS (SELECT 1 FROM products WHERE sku = 'LED-HEAD-012');
+
+-- Product 13: Magnetic Work Light
+INSERT INTO products (sku, name, slug, description, short_description, category_id, brand_id, base_price, sale_price, cost_price, weight, weight_unit, is_active, is_featured)
+SELECT 'LED-WORK-013', 'Magnetic LED Work Light 1500 Lumens Rechargeable', 'magnetic-led-work-light-1500-lumens',
+    'The ultimate under-hood work light! Strong magnetic base attaches to any metal surface. 1500 lumens with 180° adjustable head. Built-in hook for hanging. Red flashing emergency mode. USB-C rechargeable with power bank function to charge your phone.',
+    'Magnetic work light with 1500 lumens, 180° swivel, hook mount, and USB-C charging.',
+    c.id, b.id, 39.99, 34.99, 14.00, 0.35, 'kg', true, false
+FROM categories c, brands b WHERE c.slug = 'work-safety-gear' AND b.slug = 'brightbeam'
+AND NOT EXISTS (SELECT 1 FROM products WHERE sku = 'LED-WORK-013');
+
+-- Product 14: Under Car Inspection Light
+INSERT INTO products (sku, name, slug, description, short_description, category_id, brand_id, base_price, sale_price, cost_price, weight, weight_unit, is_active, is_featured)
+SELECT 'LED-INSP-014', 'Slim LED Inspection Light for Under Car Work', 'slim-led-inspection-light-under-car',
+    'Ultra-slim design fits in tight spaces. Only 8mm thick! 500 lumens with 120° wide beam angle. Strong magnetic strip runs the full length for secure mounting. Flexible body bends to fit contours. Essential tool for mechanics and DIY enthusiasts.',
+    'Ultra-slim 8mm inspection light with magnetic strip and flexible body for tight spaces.',
+    c.id, b.id, 24.99, 19.99, 8.00, 0.18, 'kg', true, false
+FROM categories c, brands b WHERE c.slug = 'work-safety-gear' AND b.slug = 'brightbeam'
+AND NOT EXISTS (SELECT 1 FROM products WHERE sku = 'LED-INSP-014');
+
+-- Product 15: LED Cap Light Clip-On
+INSERT INTO products (sku, name, slug, description, short_description, category_id, brand_id, base_price, sale_price, cost_price, weight, weight_unit, is_active, is_featured)
+SELECT 'LED-CAP-015', 'LED Cap Light Clip-On Hands-Free Work Light', 'led-cap-light-clip-on-hands-free',
+    'Clip-on LED light attaches to any cap or hat brim. Provides 200 lumens of hands-free illumination. 90° tilt adjustment to direct light exactly where needed. Motion sensor on/off option. Includes 2 units per pack.',
+    '200 lumen clip-on cap light with motion sensor - 2 pack included.',
+    c.id, b.id, 16.99, 12.99, 5.00, 0.08, 'kg', true, false
+FROM categories c, brands b WHERE c.slug = 'work-safety-gear' AND b.slug = 'brightbeam'
+AND NOT EXISTS (SELECT 1 FROM products WHERE sku = 'LED-CAP-015');
+
+-- Product 16: Night Driving Glasses Anti-Glare
+INSERT INTO products (sku, name, slug, description, short_description, category_id, brand_id, base_price, sale_price, cost_price, weight, weight_unit, is_active, is_featured)
+SELECT 'GLASS-NIGHT-016', 'Night Driving Glasses with Anti-Glare Yellow Lens', 'night-driving-glasses-anti-glare',
+    'Reduce headlight glare and eye strain during night driving. Yellow-tinted polarized lenses enhance contrast and depth perception. Lightweight aluminum-magnesium frame. UV400 protection. Comes with hard case and cleaning cloth.',
+    'Anti-glare night driving glasses with polarized yellow lenses and UV400 protection.',
+    c.id, b.id, 29.99, 24.99, 9.00, 0.1, 'kg', true, false
+FROM categories c, brands b WHERE c.slug = 'safety-security' AND b.slug = 'safeguard-auto'
+AND NOT EXISTS (SELECT 1 FROM products WHERE sku = 'GLASS-NIGHT-016');
+
+-- Product 17: USB Rechargeable LED Flashlight
+INSERT INTO products (sku, name, slug, description, short_description, category_id, brand_id, base_price, sale_price, cost_price, weight, weight_unit, is_active, is_featured)
+SELECT 'LED-FLASH-017', 'Tactical LED Flashlight 5000 Lumens Rechargeable', 'tactical-led-flashlight-5000-lumens',
+    'Military-grade tactical flashlight with 5000 lumens output. Zoom function from wide flood to focused beam. 5 modes: High, Medium, Low, Strobe, SOS. Aircraft-grade aluminum body with IPX7 waterproof rating. USB-C rechargeable with battery indicator.',
+    '5000 lumen tactical flashlight with zoom, 5 modes, and IPX7 waterproof rating.',
+    c.id, b.id, 45.99, 39.99, 15.00, 0.25, 'kg', true, true
+FROM categories c, brands b WHERE c.slug = 'tools-emergency' AND b.slug = 'powerdrive'
+AND NOT EXISTS (SELECT 1 FROM products WHERE sku = 'LED-FLASH-017');
+
+-- Product 18: Car Interior LED Strip Kit
+INSERT INTO products (sku, name, slug, description, short_description, category_id, brand_id, base_price, sale_price, cost_price, weight, weight_unit, is_active, is_featured)
+SELECT 'LED-STRIP-018', 'Car Interior LED Strip Light Kit RGB with App Control', 'car-interior-led-strip-kit-rgb',
+    'Transform your car interior with ambient lighting. 48 LED strips in 4 pieces for door, dash, and footwell. 16 million colors with app and remote control. Music sync mode pulses with your audio. DIY installation in minutes.',
+    'RGB interior LED strip kit with app control, music sync, and 16 million colors.',
+    c.id, b.id, 34.99, 27.99, 11.00, 0.3, 'kg', true, true
+FROM categories c, brands b WHERE c.slug = 'lighting' AND b.slug = 'brightbeam'
+AND NOT EXISTS (SELECT 1 FROM products WHERE sku = 'LED-STRIP-018');
+
+-- Product 19: Emergency Road Flares LED
+INSERT INTO products (sku, name, slug, description, short_description, category_id, brand_id, base_price, sale_price, cost_price, weight, weight_unit, is_active, is_featured)
+SELECT 'LED-FLARE-019', 'LED Road Flares Emergency Disc Lights 3-Pack', 'led-road-flares-emergency-disc-3pack',
+    'Be seen in emergencies! These LED road flares are visible from over 1 mile away. 9 light modes including SOS and strobe. Magnetic base attaches to vehicles. Crush-proof and waterproof. Rechargeable with 20+ hour runtime per disc.',
+    'LED emergency road flares 3-pack with 9 modes, magnetic base, and 1-mile visibility.',
+    c.id, b.id, 39.99, 34.99, 14.00, 0.4, 'kg', true, false
+FROM categories c, brands b WHERE c.slug = 'tools-emergency' AND b.slug = 'safeguard-auto'
+AND NOT EXISTS (SELECT 1 FROM products WHERE sku = 'LED-FLARE-019');
+
+-- Product 20: Mechanic Creeper Light
+INSERT INTO products (sku, name, slug, description, short_description, category_id, brand_id, base_price, sale_price, cost_price, weight, weight_unit, is_active, is_featured)
+SELECT 'LED-CREEP-020', 'LED Light Bar for Mechanic Creeper 36-inch', 'led-light-bar-mechanic-creeper-36inch',
+    'Attach to your creeper or workbench for brilliant under-car illumination. 36-inch LED bar with 2400 lumens. Rechargeable lithium battery lasts 6 hours on full brightness. Quick-release magnetic mounts included.',
+    '36-inch LED light bar for creepers with 2400 lumens and magnetic quick-release mounts.',
+    c.id, b.id, 69.99, 59.99, 25.00, 0.8, 'kg', true, false
+FROM categories c, brands b WHERE c.slug = 'work-safety-gear' AND b.slug = 'brightbeam'
+AND NOT EXISTS (SELECT 1 FROM products WHERE sku = 'LED-CREEP-020');
+
+-- Product 21: Premium Leather Seat Covers
+INSERT INTO products (sku, name, slug, description, short_description, category_id, brand_id, base_price, sale_price, cost_price, weight, weight_unit, is_active, is_featured)
+SELECT 'SEAT-LEATH-021', 'Premium Synthetic Leather Seat Covers Full Set', 'premium-leather-seat-covers-full-set',
+    'Upgrade your interior with these premium synthetic leather seat covers. Universal fit for most cars. Waterproof backing protects original seats. Easy installation with elastic straps and hooks. Available in Black, Gray, Tan, and Red.',
+    'Full set leather seat covers with waterproof backing and universal fit.',
+    c.id, b.id, 129.99, 99.99, 45.00, 3.5, 'kg', true, true
+FROM categories c, brands b WHERE c.slug = 'interior-comfort' AND b.slug = 'luxeride'
+AND NOT EXISTS (SELECT 1 FROM products WHERE sku = 'SEAT-LEATH-021');
+
+-- Product 22: Car Trunk Organizer
+INSERT INTO products (sku, name, slug, description, short_description, category_id, brand_id, base_price, sale_price, cost_price, weight, weight_unit, is_active, is_featured)
+SELECT 'ORG-TRUNK-022', 'Collapsible Car Trunk Organizer with Cooler Compartment', 'collapsible-car-trunk-organizer-cooler',
+    'Keep your trunk organized with this multi-compartment organizer. Features insulated cooler section for groceries. Collapses flat when not in use. Non-slip bottom prevents sliding. Multiple pockets for tools and accessories.',
+    'Collapsible trunk organizer with insulated cooler and anti-slip base.',
+    c.id, b.id, 44.99, 36.99, 16.00, 1.2, 'kg', true, false
+FROM categories c, brands b WHERE c.slug = 'interior-comfort' AND b.slug = 'luxeride'
+AND NOT EXISTS (SELECT 1 FROM products WHERE sku = 'ORG-TRUNK-022');
+
+-- Product 23: Digital Tire Pressure Gauge
+INSERT INTO products (sku, name, slug, description, short_description, category_id, brand_id, base_price, sale_price, cost_price, weight, weight_unit, is_active, is_featured)
+SELECT 'TOOL-GAUGE-023', 'Digital Tire Pressure Gauge with Backlit Display', 'digital-tire-pressure-gauge-backlit',
+    'Professional accuracy in a compact design. Large backlit LCD display readable in any light. Measures 0-150 PSI for cars, trucks, and motorcycles. Auto-off feature saves battery. Includes ergonomic grip and protective cap.',
+    'Digital tire gauge with 0-150 PSI range, backlit display, and ergonomic grip.',
+    c.id, b.id, 14.99, 11.99, 4.00, 0.12, 'kg', true, false
+FROM categories c, brands b WHERE c.slug = 'tools-emergency' AND b.slug = 'autotech-pro'
+AND NOT EXISTS (SELECT 1 FROM products WHERE sku = 'TOOL-GAUGE-023');
+
+-- Product 24: OBD2 Bluetooth Scanner
+INSERT INTO products (sku, name, slug, description, short_description, category_id, brand_id, base_price, sale_price, cost_price, weight, weight_unit, is_active, is_featured)
+SELECT 'DIAG-OBD-024', 'OBD2 Bluetooth Scanner Car Diagnostic Tool', 'obd2-bluetooth-scanner-diagnostic-tool',
+    'Diagnose check engine lights instantly from your smartphone. Compatible with iOS and Android via Bluetooth. Reads and clears fault codes. Shows live engine data including RPM, speed, fuel trim, and oxygen sensors. Works with all 1996+ vehicles.',
+    'Bluetooth OBD2 scanner for smartphone with live data and code reading.',
+    c.id, b.id, 29.99, 24.99, 9.00, 0.08, 'kg', true, true
+FROM categories c, brands b WHERE c.slug = 'tools-emergency' AND b.slug = 'autotech-pro'
+AND NOT EXISTS (SELECT 1 FROM products WHERE sku = 'DIAG-OBD-024');
+
+-- Product 25: Car Vacuum Cleaner Cordless
+INSERT INTO products (sku, name, slug, description, short_description, category_id, brand_id, base_price, sale_price, cost_price, weight, weight_unit, is_active, is_featured)
+SELECT 'CLEAN-VAC-025', 'Cordless Car Vacuum Cleaner 12000PA Powerful Suction', 'cordless-car-vacuum-cleaner-12000pa',
+    'Keep your car spotless with this powerful cordless vacuum. 12000PA suction picks up dirt, crumbs, and pet hair. HEPA filter traps allergens. Includes crevice tool, brush attachment, and extension hose. 30-minute runtime on single charge.',
+    'Cordless car vacuum with 12000PA suction, HEPA filter, and 30min runtime.',
+    c.id, b.id, 59.99, 49.99, 22.00, 0.9, 'kg', true, true
+FROM categories c, brands b WHERE c.slug = 'cleaning-maintenance' AND b.slug = 'carcare-plus'
+AND NOT EXISTS (SELECT 1 FROM products WHERE sku = 'CLEAN-VAC-025');
 EOF
     log_success "Products seeded!"
 }
@@ -197,12 +336,33 @@ SELECT p.id, 'Main Warehouse',
         WHEN p.sku = 'CAR-PERF-008' THEN 35
         WHEN p.sku = 'CAR-MIRR-009' THEN 300
         WHEN p.sku = 'CAR-JUMP-010' THEN 80
+        WHEN p.sku = 'LED-GLASS-011' THEN 250
+        WHEN p.sku = 'LED-HEAD-012' THEN 180
+        WHEN p.sku = 'LED-WORK-013' THEN 120
+        WHEN p.sku = 'LED-INSP-014' THEN 200
+        WHEN p.sku = 'LED-CAP-015' THEN 350
+        WHEN p.sku = 'GLASS-NIGHT-016' THEN 150
+        WHEN p.sku = 'LED-FLASH-017' THEN 100
+        WHEN p.sku = 'LED-STRIP-018' THEN 180
+        WHEN p.sku = 'LED-FLARE-019' THEN 120
+        WHEN p.sku = 'LED-CREEP-020' THEN 60
+        WHEN p.sku = 'SEAT-LEATH-021' THEN 45
+        WHEN p.sku = 'ORG-TRUNK-022' THEN 90
+        WHEN p.sku = 'TOOL-GAUGE-023' THEN 400
+        WHEN p.sku = 'DIAG-OBD-024' THEN 200
+        WHEN p.sku = 'CLEAN-VAC-025' THEN 85
         ELSE 50
     END,
-    10
+    CASE 
+        WHEN p.sku LIKE 'LED-%' THEN 15
+        ELSE 10
+    END
 FROM products p
 WHERE p.sku IN ('CAR-AUD-001', 'CAR-DASH-002', 'CAR-LED-003', 'CAR-CHRG-004', 'CAR-SEAT-005', 
-                'CAR-TIRE-006', 'CAR-COAT-007', 'CAR-PERF-008', 'CAR-MIRR-009', 'CAR-JUMP-010')
+                'CAR-TIRE-006', 'CAR-COAT-007', 'CAR-PERF-008', 'CAR-MIRR-009', 'CAR-JUMP-010',
+                'LED-GLASS-011', 'LED-HEAD-012', 'LED-WORK-013', 'LED-INSP-014', 'LED-CAP-015',
+                'GLASS-NIGHT-016', 'LED-FLASH-017', 'LED-STRIP-018', 'LED-FLARE-019', 'LED-CREEP-020',
+                'SEAT-LEATH-021', 'ORG-TRUNK-022', 'TOOL-GAUGE-023', 'DIAG-OBD-024', 'CLEAN-VAC-025')
 AND NOT EXISTS (SELECT 1 FROM inventory i WHERE i.product_id = p.id);
 EOF
     log_success "Inventory seeded!"
