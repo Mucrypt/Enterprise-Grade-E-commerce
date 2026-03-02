@@ -77,7 +77,7 @@ export function getPlaceholderImage(
 
 // Get product image or placeholder
 export function getProductImage(
-  product: { images?: { url: string; is_primary?: boolean }[] },
+  product: { images?: { url: string; is_primary?: boolean }[] | null },
   size?: { w: number; h: number },
 ): string {
   const primaryImage = product.images?.find((img) => img.is_primary)
