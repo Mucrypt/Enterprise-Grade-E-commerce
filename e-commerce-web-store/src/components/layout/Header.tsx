@@ -247,7 +247,7 @@ export default function Header() {
 
               {/* User Account */}
               <Link
-                to={isAuthenticated ? '/account' : '/login'}
+                to={isAuthenticated ? '/profile' : '/login'}
                 className='hidden sm:flex items-center gap-2 px-3 py-2 hover:bg-gray-100 rounded-lg transition-colors'
               >
                 {isAuthenticated && user ? (

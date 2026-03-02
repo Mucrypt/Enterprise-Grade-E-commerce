@@ -61,7 +61,7 @@ export default function MobileMenu({ categories }: MobileMenuProps) {
 
           {isAuthenticated && user ? (
             <Link
-              to='/account'
+              to='/profile'
               onClick={closeMobileMenu}
               className='flex items-center gap-4'
             >
@@ -170,7 +170,7 @@ export default function MobileMenu({ categories }: MobileMenuProps) {
             </h3>
             <nav className='space-y-1'>
               <Link
-                to='/account/orders'
+                to='/orders'
                 onClick={closeMobileMenu}
                 className='flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors'
               >
@@ -186,7 +186,7 @@ export default function MobileMenu({ categories }: MobileMenuProps) {
                 <span>Wishlist</span>
               </Link>
               <Link
-                to='/account/settings'
+                to='/profile'
                 onClick={closeMobileMenu}
                 className='flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors'
               >
