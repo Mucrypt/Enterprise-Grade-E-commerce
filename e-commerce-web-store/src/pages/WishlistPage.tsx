@@ -289,7 +289,7 @@ export default function WishlistPage() {
               <p className='text-2xl font-bold text-gray-900'>
                 {formatPrice(
                   items.reduce(
-                    (sum, item) => sum + (item.sale_price || item.base_price),
+                    (sum, item) => sum + Number(item.sale_price || item.base_price),
                     0,
                   ),
                 )}
@@ -302,7 +302,7 @@ export default function WishlistPage() {
                       (sum, item) =>
                         sum +
                         (item.sale_price
-                          ? item.base_price - item.sale_price
+                          ? Number(item.base_price) - Number(item.sale_price)
                           : 0),
                       0,
                     ),

@@ -99,8 +99,8 @@ export const useCartStore = create<CartStore>()(
 
       getSubtotal: () => {
         return get().items.reduce((total, item) => {
-          const price = item.product.sale_price || item.product.base_price;
-          const variantAdjustment = item.variant?.price_adjustment || 0;
+          const price = Number(item.product.sale_price || item.product.base_price);
+          const variantAdjustment = Number(item.variant?.price_adjustment || 0);
           return total + (price + variantAdjustment) * item.quantity;
         }, 0);
       },
