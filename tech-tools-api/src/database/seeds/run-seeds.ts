@@ -5,7 +5,7 @@ import { seedCollections } from './005_seed_collections'
 
 async function runAllSeeds() {
   console.log('🚀 Starting database seeding...\n')
-  
+
   try {
     // Seed in order (brands and categories first, then products, then collections)
     await seedBrands()
@@ -15,7 +15,7 @@ async function runAllSeeds() {
     await seedProducts()
     console.log('')
     await seedCollections()
-    
+
     console.log('\n🎉 All seeds completed successfully!')
     process.exit(0)
   } catch (error) {

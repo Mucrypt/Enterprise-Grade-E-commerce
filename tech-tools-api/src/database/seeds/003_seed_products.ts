@@ -281,10 +281,9 @@ export async function seedProducts() {
     // Get brand ID if specified
     let brandId = null
     if (product.brand_slug) {
-      const brandResult = await query(
-        'SELECT id FROM brands WHERE slug = $1',
-        [product.brand_slug]
-      )
+      const brandResult = await query('SELECT id FROM brands WHERE slug = $1', [
+        product.brand_slug,
+      ])
       if (brandResult.rows.length > 0) {
         brandId = brandResult.rows[0].id
       }
