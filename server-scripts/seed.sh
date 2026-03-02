@@ -208,9 +208,9 @@ EOF
     log_success "Inventory seeded!"
 }
 
-# Seed Collections
+# Seed Product Collections
 seed_collections() {
-    log_info "Seeding collections..."
+    log_info "Seeding product collections..."
     run_sql <<'EOF'
 INSERT INTO product_collections (name, slug, description, short_description, is_active, is_featured, position, visibility)
 SELECT * FROM (VALUES
@@ -225,7 +225,24 @@ SELECT * FROM (VALUES
 ) AS v(name, slug, description, short_description, is_active, is_featured, position, visibility)
 WHERE NOT EXISTS (SELECT 1 FROM product_collections WHERE slug = v.slug);
 EOF
-    log_success "Collections seeded!"
+    log_success "Product collections seeded!"
+}
+
+# Seed Category Collections
+seed_category_collections() {
+    log_info "Seeding category collections..."
+    run_sql <<'EOF'
+INSERT INTO category_collections (name, slug, description, short_description, is_active, is_featured, position, visibility, display_order)
+SELECT * FROM (VALUES
+    ('Popular Categories', 'popular-categories', 'Most viewed product categories', 'Browse our most popular categories', true, true, 1, 'public', 'popular'),
+    ('New Categories', 'new-categories', 'Recently added product categories', 'Explore our newest categories', true, false, 2, 'public', 'newest'),
+    ('Featured Categories', 'featured-categories', 'Hand-picked category selections', 'Our top category picks', true, true, 3, 'public', 'manual'),
+    ('Electronics Hub', 'electronics-hub', 'All electronics categories in one place', 'Electronic products collection', true, false, 4, 'public', 'alphabetical'),
+    ('Car Accessories Collection', 'car-accessories-collection', 'Categories for car enthusiasts', 'Everything for your car', true, false, 5, 'public', 'manual')
+) AS v(name, slug, description, short_description, is_active, is_featured, position, visibility, display_order)
+WHERE NOT EXISTS (SELECT 1 FROM category_collections WHERE slug = v.slug);
+EOF
+    log_success "Category collections seeded!"
 }
 
 # Main execution
@@ -242,6 +259,13 @@ case $COMMAND in
         ;;
     collections)
         seed_collections
+        seed_category_collections
+        ;;
+    category-collections)
+        seed_category_collections
+        ;;
+    product-collections)
+        seed_collections
         ;;
     all)
         seed_brands
@@ -249,9 +273,10 @@ case $COMMAND in
         seed_products
         seed_inventory
         seed_collections
+        seed_category_collections
         ;;
     *)
-        echo "Usage: $0 [all|brands|categories|products|collections]"
+        echo "Usage: $0 [all|brands|categories|products|collections|category-collections|product-collections]"
         exit 1
         ;;
 esac
