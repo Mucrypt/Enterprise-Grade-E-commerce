@@ -125,8 +125,8 @@ export default function CollectionsPage() {
       if (visibilityFilter !== 'all') params.visibility = visibilityFilter
       const response = (await collectionService.getProductCollections(
         params,
-      )) as { data: any }
-      return response.data
+      )) as { data: any; pagination: any }
+      return { collections: response.data, pagination: response.pagination }
     },
     enabled: activeTab === 'products',
   })
@@ -143,8 +143,8 @@ export default function CollectionsPage() {
       if (visibilityFilter !== 'all') params.visibility = visibilityFilter
       const response = (await collectionService.getCategoryCollections(
         params,
-      )) as { data: any }
-      return response.data
+      )) as { data: any; pagination: any }
+      return { collections: response.data, pagination: response.pagination }
     },
     enabled: activeTab === 'categories',
   })
