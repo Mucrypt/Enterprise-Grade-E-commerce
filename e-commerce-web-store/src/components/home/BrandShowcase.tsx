@@ -5,9 +5,8 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronRight } from 'lucide-react'
-import { Brand } from '../../types'
+import type { Brand } from '../../types'
 import { brandsApi } from '../../api'
-import { cn } from '../../utils'
 
 export default function BrandShowcase() {
   const [brands, setBrands] = useState<Brand[]>([])

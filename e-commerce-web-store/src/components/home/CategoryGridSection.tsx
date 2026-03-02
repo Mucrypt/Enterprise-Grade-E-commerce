@@ -17,9 +17,8 @@ import {
   Car,
   ChevronRight,
 } from 'lucide-react'
-import { Category } from '../../types'
+import type { Category } from '../../types'
 import { categoriesApi } from '../../api'
-import { cn } from '../../utils'
 
 // Category icon mapping
 const categoryIcons: Record<

@@ -5,10 +5,9 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronRight, Star, TrendingUp } from 'lucide-react'
-import { Product } from '../../types'
+import type { Product } from '../../types'
 import { productsApi } from '../../api'
 import ProductCard from '../common/ProductCard'
-import { cn } from '../../utils'
 
 type TabType = 'featured' | 'bestsellers' | 'new'
 
