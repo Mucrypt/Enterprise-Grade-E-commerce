@@ -13,7 +13,7 @@ cd /root/Enterprise-Grade-E-commerce
 # Configuration
 POSTGRES_CONTAINER="techtools-postgres-prod"
 DB_USER="${DB_USER:-techtools_user}"
-DB_NAME="${DB_NAME:-techtools}"
+DB_NAME="${DB_NAME:-techtools_db}"
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
