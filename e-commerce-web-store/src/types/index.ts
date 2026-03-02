@@ -16,23 +16,45 @@ export interface Product extends BaseEntity {
   slug: string;
   description: string;
   short_description: string;
-  base_price: number;
-  sale_price: number | null;
-  cost_price: number;
+  base_price: number | string;
+  sale_price: number | string | null;
+  cost_price: number | string;
   category_id: string;
   brand_id: string | null;
   category_name: string;
   category_slug: string;
   brand_name: string | null;
   brand_slug: string | null;
-  weight: number;
+  weight: number | string;
   weight_unit: string;
   is_active: boolean;
   is_featured: boolean;
   total_stock: number;
-  images: ProductImage[];
+  images: ProductImage[] | null;
+  media?: ProductImage[] | null;
+  specifications?: ProductSpecification[] | null;
+  inventory?: ProductInventory[];
+  average_rating?: number | string;
+  review_count?: number | string;
   meta_title: string | null;
   meta_description: string | null;
+}
+
+export interface ProductSpecification {
+  id: string;
+  spec_key: string;
+  spec_value: string;
+  spec_group: string;
+  display_order: number;
+}
+
+export interface ProductInventory {
+  id: string;
+  warehouse_location: string;
+  current_stock: number;
+  reserved_stock: number;
+  available_stock: number;
+  low_stock_threshold: number;
 }
 
 export interface ProductImage {

@@ -12,25 +12,29 @@ export function cn(...inputs: ClassValue[]) {
 
 // Format price with currency
 export function formatPrice(
-  price: number,
+  price: number | string | null | undefined,
   currency: string = 'EUR',
   locale: string = 'en-EU',
 ): string {
+  const numPrice = typeof price === 'string' ? parseFloat(price) : (price ?? 0)
+  if (isNaN(numPrice)) return '€0.00'
   return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(price)
+  }).format(numPrice)
 }
 
 // Calculate discount percentage
 export function calculateDiscount(
-  basePrice: number,
-  salePrice: number,
+  basePrice: number | string,
+  salePrice: number | string | null,
 ): number {
-  if (!salePrice || salePrice >= basePrice) return 0
-  return Math.round(((basePrice - salePrice) / basePrice) * 100)
+  const base = typeof basePrice === 'string' ? parseFloat(basePrice) : basePrice
+  const sale = typeof salePrice === 'string' ? parseFloat(salePrice) : (salePrice ?? 0)
+  if (!sale || sale >= base || isNaN(base) || isNaN(sale)) return 0
+  return Math.round(((base - sale) / base) * 100)
 }
 
 // Format date

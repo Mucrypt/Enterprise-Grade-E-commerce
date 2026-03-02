@@ -78,8 +78,11 @@ export const productsApi = {
 
   // Get single product by slug
   async getBySlug(slug: string) {
-    const response = await api.get<ApiResponse<Product>>(`/products/${slug}`)
-    return response.data.data
+    const response = await api.get<{
+      success: boolean
+      data: { product: Product }
+    }>(`/products/${slug}`)
+    return response.data.data.product
   },
 
   // Get featured products
