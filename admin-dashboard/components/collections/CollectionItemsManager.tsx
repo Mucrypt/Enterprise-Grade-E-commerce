@@ -109,12 +109,14 @@ export function CollectionItemsManager({
         const response = (await collectionService.getProductCollection(
           collectionId,
         )) as any
-        return response?.products || []
+        // API returns { success, data: { ...collection, products: [...] } }
+        return response?.data?.products || response?.products || []
       } else {
         const response = (await collectionService.getCategoryCollection(
           collectionId,
         )) as any
-        return response?.categories || []
+        // API returns { success, data: { ...collection, categories: [...] } }
+        return response?.data?.categories || response?.categories || []
       }
     },
     enabled: !!collectionId && open,
@@ -129,10 +131,12 @@ export function CollectionItemsManager({
           limit: 50,
           search: searchQuery,
         })) as any
-        return response?.items || response?.products || []
+        // API returns { success, data: { products: [...], pagination: {...} } }
+        return response?.data?.products || response?.products || []
       } else {
         const response = (await categoryService.getCategories()) as any
-        return response?.categories || []
+        // API returns { success, data: { categories: [...] } }
+        return response?.data?.categories || response?.categories || []
       }
     },
     enabled: showAddItems,
