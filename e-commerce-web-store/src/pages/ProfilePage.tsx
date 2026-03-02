@@ -144,7 +144,7 @@ export default function ProfilePage() {
             </div>
             <div className='flex-1'>
               <h1 className='text-2xl font-bold text-gray-900'>
-                {user.first_name} {user.last_name}
+                {user.first_name || ''} {user.last_name || ''}
               </h1>
               <p className='text-gray-500'>{user.email}</p>
               <p className='text-sm text-orange-500 mt-1'>

@@ -253,11 +253,11 @@ export default function Header() {
                 {isAuthenticated && user ? (
                   <>
                     <div className='w-8 h-8 bg-linear-to-br from-orange-400 to-red-500 rounded-full flex items-center justify-center text-white text-sm font-medium'>
-                      {user.first_name.charAt(0)}
+                      {user.first_name?.charAt(0) || user.email?.charAt(0) || 'U'}
                     </div>
                     <div className='hidden xl:block text-left'>
                       <p className='text-xs text-gray-500'>Welcome back</p>
-                      <p className='text-sm font-medium'>{user.first_name}</p>
+                      <p className='text-sm font-medium'>{user.first_name || 'User'}</p>
                     </div>
                   </>
                 ) : (

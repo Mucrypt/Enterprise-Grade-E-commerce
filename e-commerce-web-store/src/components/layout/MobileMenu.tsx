@@ -66,11 +66,11 @@ export default function MobileMenu({ categories }: MobileMenuProps) {
               className='flex items-center gap-4'
             >
               <div className='w-14 h-14 bg-white/20 rounded-full flex items-center justify-center text-2xl font-bold'>
-                {user.first_name.charAt(0)}
+                {user.first_name?.charAt(0) || user.email?.charAt(0) || 'U'}
               </div>
               <div>
                 <p className='font-semibold text-lg'>
-                  {user.first_name} {user.last_name}
+                  {user.first_name || ''} {user.last_name || ''}
                 </p>
                 <p className='text-white/80 text-sm'>{user.email}</p>
               </div>
