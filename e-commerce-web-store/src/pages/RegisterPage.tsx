@@ -98,8 +98,8 @@ export default function RegisterPage() {
       await register({
         email: formData.email,
         password: formData.password,
-        first_name: formData.firstName,
-        last_name: formData.lastName,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
       })
       navigate('/')
     } catch (err) {

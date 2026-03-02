@@ -211,8 +211,8 @@ export const authApi = {
   async register(data: {
     email: string
     password: string
-    first_name: string
-    last_name: string
+    firstName: string
+    lastName: string
   }) {
     const response = await api.post<{
       success: boolean
