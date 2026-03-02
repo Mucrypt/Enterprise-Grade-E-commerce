@@ -1,34 +1,73 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+// ============================================
+// TechTools E-Commerce Store - Main App
+// ============================================
+
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import Layout from './components/layout/Layout'
+import HomePage from './pages/HomePage'
+import ProductsPage from './pages/ProductsPage'
+import ProductDetailPage from './pages/ProductDetailPage'
+import CartPage from './pages/CartPage'
+import CheckoutPage from './pages/CheckoutPage'
+import OrderConfirmationPage from './pages/OrderConfirmationPage'
+import LoginPage from './pages/LoginPage'
+import RegisterPage from './pages/RegisterPage'
+import ProfilePage from './pages/ProfilePage'
+import OrdersPage from './pages/OrdersPage'
+import WishlistPage from './pages/WishlistPage'
+
+// Create React Query client
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      refetchOnWindowFocus: false,
+    },
+  },
+})
 
 function App() {
-  const [count, setCount] = useState(0)
-
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <Routes>
+          <Route path='/' element={<Layout />}>
+            {/* Home */}
+            <Route index element={<HomePage />} />
+
+            {/* Products */}
+            <Route path='products' element={<ProductsPage />} />
+            <Route path='product/:slug' element={<ProductDetailPage />} />
+            <Route path='category/:slug' element={<ProductsPage />} />
+            <Route path='brand/:slug' element={<ProductsPage />} />
+            <Route path='sale' element={<ProductsPage />} />
+            <Route path='new-arrivals' element={<ProductsPage />} />
+            <Route path='search' element={<ProductsPage />} />
+
+            {/* Cart & Checkout */}
+            <Route path='cart' element={<CartPage />} />
+            <Route path='checkout' element={<CheckoutPage />} />
+            <Route
+              path='order-confirmation'
+              element={<OrderConfirmationPage />}
+            />
+
+            {/* Auth */}
+            <Route path='login' element={<LoginPage />} />
+            <Route path='register' element={<RegisterPage />} />
+
+            {/* User Profile */}
+            <Route path='profile' element={<ProfilePage />} />
+            <Route path='orders' element={<OrdersPage />} />
+            <Route path='wishlist' element={<WishlistPage />} />
+
+            {/* 404 - Fallback to Home */}
+            <Route path='*' element={<HomePage />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </QueryClientProvider>
   )
 }
 
