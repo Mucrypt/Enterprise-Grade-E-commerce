@@ -43,10 +43,8 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('auth_token')
-      window.location.href = '/login'
-    }
+    // Don't auto-redirect on 401 - let the app handle auth state
+    // The auth store will clear state when API calls fail
     return Promise.reject(error)
   },
 )
