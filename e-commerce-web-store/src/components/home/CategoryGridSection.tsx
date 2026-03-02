@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import type { Category } from '../../types'
 import { categoriesApi } from '../../api'
+import { cn } from '../../utils'
 
 // Category icon mapping
 const categoryIcons: Record<

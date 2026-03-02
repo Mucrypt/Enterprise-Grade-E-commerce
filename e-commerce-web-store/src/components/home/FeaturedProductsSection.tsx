@@ -8,6 +8,7 @@ import { ChevronRight, Star, TrendingUp } from 'lucide-react'
 import type { Product } from '../../types'
 import { productsApi } from '../../api'
 import ProductCard from '../common/ProductCard'
+import { cn } from '../../utils'
 
 type TabType = 'featured' | 'bestsellers' | 'new'
 
