@@ -158,7 +158,8 @@ export const getProductById = async (req: Request, res: Response) => {
     const { id } = req.params
 
     // Check if id is a UUID or a slug
-    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+    const isUUID =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
     const whereCondition = isUUID ? 'p.id = $1' : 'p.slug = $1'
 
     const result = await query(

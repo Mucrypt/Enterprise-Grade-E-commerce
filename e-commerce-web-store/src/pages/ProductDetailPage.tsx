@@ -318,7 +318,9 @@ export default function ProductDetailPage() {
                     </span>
                     <span className='px-2 py-1 bg-red-500 text-white text-xs font-bold rounded'>
                       SAVE{' '}
-                      {formatPrice(Number(product.base_price) - Number(product.sale_price))}
+                      {formatPrice(
+                        Number(product.base_price) - Number(product.sale_price),
+                      )}
                     </span>
                   </>
                 )}

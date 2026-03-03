@@ -76,7 +76,9 @@ export default function CartPage() {
           {/* Cart Items */}
           <div className='lg:col-span-2 space-y-4'>
             {items.map((item) => {
-              const price = Number(item.product.sale_price || item.product.base_price)
+              const price = Number(
+                item.product.sale_price || item.product.base_price,
+              )
               const itemTotal = price * item.quantity
 
               return (

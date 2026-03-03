@@ -743,8 +743,10 @@ export default function CheckoutPage() {
                         </div>
                         <p className='font-medium text-gray-900'>
                           {formatPrice(
-                            Number(item.product.sale_price ||
-                              item.product.base_price) * item.quantity,
+                            Number(
+                              item.product.sale_price ||
+                                item.product.base_price,
+                            ) * item.quantity,
                           )}
                         </p>
                       </div>
