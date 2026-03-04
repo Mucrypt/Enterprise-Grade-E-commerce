@@ -33,7 +33,6 @@ export default function LoginScreen() {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
   const [errors, setErrors] = useState<{ email?: string; password?: string }>(
     {},
   )
@@ -110,13 +109,7 @@ export default function LoginScreen() {
               autoCapitalize='none'
               autoCorrect={false}
               error={errors.email}
-              leftIcon={
-                <Ionicons
-                  name='mail-outline'
-                  size={20}
-                  color={AppColors.gray400}
-                />
-              }
+              leftIcon='mail-outline'
             />
 
             <Input
@@ -128,26 +121,9 @@ export default function LoginScreen() {
                 if (errors.password)
                   setErrors({ ...errors, password: undefined })
               }}
-              secureTextEntry={!showPassword}
+              secureTextEntry
               error={errors.password}
-              leftIcon={
-                <Ionicons
-                  name='lock-closed-outline'
-                  size={20}
-                  color={AppColors.gray400}
-                />
-              }
-              rightIcon={
-                <TouchableOpacity
-                  onPress={() => setShowPassword(!showPassword)}
-                >
-                  <Ionicons
-                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                    size={20}
-                    color={AppColors.gray400}
-                  />
-                </TouchableOpacity>
-              }
+              leftIcon='lock-closed-outline'
             />
 
             <TouchableOpacity

@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: AppSpacing.base,
-    paddingBottom: AppSpacing['3xl'],
+    paddingBottom: 100,
   },
   row: {
     justifyContent: 'space-between',

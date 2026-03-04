@@ -2,7 +2,7 @@
 // TechTools Mobile App - Register Screen
 // ============================================
 
-import React, { useState } from 'react';
+import React, { useState } from 'react'
 import {
   View,
   Text,
@@ -12,81 +12,85 @@ import {
   Platform,
   ScrollView,
   Alert,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Input, Button } from '@/components';
-import { AppColors, AppSpacing, AppBorderRadius, AppGradients } from '@/constants/appTheme';
-import { useAuthStore } from '@/stores';
-import { isValidEmail, validatePassword } from '@/utils';
+} from 'react-native'
+import { LinearGradient } from 'expo-linear-gradient'
+import { Ionicons } from '@expo/vector-icons'
+import { useRouter } from 'expo-router'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { Input, Button } from '@/components'
+import {
+  AppColors,
+  AppSpacing,
+  AppBorderRadius,
+  AppGradients,
+} from '@/constants/appTheme'
+import { useAuthStore } from '@/stores'
+import { isValidEmail, validatePassword } from '@/utils'
 
 export default function RegisterScreen() {
-  const router = useRouter();
-  const { register, isLoading, error, clearError } = useAuthStore();
-  
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [acceptTerms, setAcceptTerms] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const router = useRouter()
+  const { register, isLoading, error, clearError } = useAuthStore()
+
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [acceptTerms, setAcceptTerms] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   const validateForm = () => {
-    const newErrors: Record<string, string> = {};
-    
+    const newErrors: Record<string, string> = {}
+
     if (!firstName.trim()) {
-      newErrors.firstName = 'First name is required';
+      newErrors.firstName = 'First name is required'
     }
-    
+
     if (!lastName.trim()) {
-      newErrors.lastName = 'Last name is required';
+      newErrors.lastName = 'Last name is required'
     }
-    
+
     if (!email) {
-      newErrors.email = 'Email is required';
+      newErrors.email = 'Email is required'
     } else if (!isValidEmail(email)) {
-      newErrors.email = 'Please enter a valid email';
+      newErrors.email = 'Please enter a valid email'
     }
-    
-    const passwordValidation = validatePassword(password);
+
+    const passwordValidation = validatePassword(password)
     if (!passwordValidation.isValid) {
-      newErrors.password = passwordValidation.errors[0];
+      newErrors.password = passwordValidation.errors[0]
     }
-    
+
     if (password !== confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
+      newErrors.confirmPassword = 'Passwords do not match'
     }
-    
+
     if (!acceptTerms) {
-      newErrors.terms = 'Please accept the terms and conditions';
+      newErrors.terms = 'Please accept the terms and conditions'
     }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
+
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
 
   const handleRegister = async () => {
-    clearError();
-    
-    if (!validateForm()) return;
-    
+    clearError()
+
+    if (!validateForm()) return
+
     try {
-      await register({ email, password, firstName, lastName });
-      router.replace('/(tabs)');
+      await register({ email, password, firstName, lastName })
+      router.replace('/(tabs)')
     } catch (err: any) {
-      Alert.alert('Registration Failed', err.message || 'Please try again.');
+      Alert.alert('Registration Failed', err.message || 'Please try again.')
     }
-  };
+  }
 
   const clearFieldError = (field: string) => {
     if (errors[field]) {
-      setErrors({ ...errors, [field]: '' });
+      setErrors({ ...errors, [field]: '' })
     }
-  };
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -97,14 +101,14 @@ export default function RegisterScreen() {
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps='handled'
         >
           {/* Back Button */}
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.back()}
           >
-            <Ionicons name="arrow-back" size={24} color={AppColors.gray800} />
+            <Ionicons name='arrow-back' size={24} color={AppColors.gray800} />
           </TouchableOpacity>
 
           {/* Header */}
@@ -113,7 +117,7 @@ export default function RegisterScreen() {
               colors={AppGradients.secondary as [string, string, ...string[]]}
               style={styles.logoContainer}
             >
-              <Ionicons name="person-add" size={36} color={AppColors.white} />
+              <Ionicons name='person-add' size={36} color={AppColors.white} />
             </LinearGradient>
             <Text style={styles.title}>Create Account</Text>
             <Text style={styles.subtitle}>Sign up to start shopping</Text>
@@ -124,24 +128,24 @@ export default function RegisterScreen() {
             <View style={styles.nameRow}>
               <View style={styles.nameField}>
                 <Input
-                  label="First Name"
-                  placeholder="John"
+                  label='First Name'
+                  placeholder='John'
                   value={firstName}
                   onChangeText={(text) => {
-                    setFirstName(text);
-                    clearFieldError('firstName');
+                    setFirstName(text)
+                    clearFieldError('firstName')
                   }}
                   error={errors.firstName}
                 />
               </View>
               <View style={styles.nameField}>
                 <Input
-                  label="Last Name"
-                  placeholder="Doe"
+                  label='Last Name'
+                  placeholder='Doe'
                   value={lastName}
                   onChangeText={(text) => {
-                    setLastName(text);
-                    clearFieldError('lastName');
+                    setLastName(text)
+                    clearFieldError('lastName')
                   }}
                   error={errors.lastName}
                 />
@@ -149,65 +153,64 @@ export default function RegisterScreen() {
             </View>
 
             <Input
-              label="Email"
-              placeholder="john@example.com"
+              label='Email'
+              placeholder='john@example.com'
               value={email}
               onChangeText={(text) => {
-                setEmail(text);
-                clearFieldError('email');
+                setEmail(text)
+                clearFieldError('email')
               }}
-              keyboardType="email-address"
-              autoCapitalize="none"
+              keyboardType='email-address'
+              autoCapitalize='none'
               autoCorrect={false}
               error={errors.email}
-              leftIcon={<Ionicons name="mail-outline" size={20} color={AppColors.gray400} />}
+              leftIcon='mail-outline'
             />
 
             <Input
-              label="Password"
-              placeholder="Create a strong password"
+              label='Password'
+              placeholder='Create a strong password'
               value={password}
               onChangeText={(text) => {
-                setPassword(text);
-                clearFieldError('password');
+                setPassword(text)
+                clearFieldError('password')
               }}
-              secureTextEntry={!showPassword}
+              secureTextEntry
               error={errors.password}
-              leftIcon={<Ionicons name="lock-closed-outline" size={20} color={AppColors.gray400} />}
-              rightIcon={
-                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                  <Ionicons
-                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                    size={20}
-                    color={AppColors.gray400}
-                  />
-                </TouchableOpacity>
-              }
+              leftIcon='lock-closed-outline'
             />
 
             <Input
-              label="Confirm Password"
-              placeholder="Confirm your password"
+              label='Confirm Password'
+              placeholder='Confirm your password'
               value={confirmPassword}
               onChangeText={(text) => {
-                setConfirmPassword(text);
-                clearFieldError('confirmPassword');
+                setConfirmPassword(text)
+                clearFieldError('confirmPassword')
               }}
-              secureTextEntry={!showPassword}
+              secureTextEntry
               error={errors.confirmPassword}
-              leftIcon={<Ionicons name="lock-closed-outline" size={20} color={AppColors.gray400} />}
+              leftIcon='lock-closed-outline'
             />
 
             {/* Terms Checkbox */}
             <TouchableOpacity
               style={styles.termsRow}
               onPress={() => {
-                setAcceptTerms(!acceptTerms);
-                clearFieldError('terms');
+                setAcceptTerms(!acceptTerms)
+                clearFieldError('terms')
               }}
             >
-              <View style={[styles.checkbox, acceptTerms && styles.checkboxChecked]}>
-                {acceptTerms && <Ionicons name="checkmark" size={14} color={AppColors.white} />}
+              <View
+                style={[styles.checkbox, acceptTerms && styles.checkboxChecked]}
+              >
+                {acceptTerms && (
+                  <Ionicons
+                    name='checkmark'
+                    size={14}
+                    color={AppColors.white}
+                  />
+                )}
               </View>
               <Text style={styles.termsText}>
                 I agree to the{' '}
@@ -215,17 +218,23 @@ export default function RegisterScreen() {
                 <Text style={styles.termsLink}>Privacy Policy</Text>
               </Text>
             </TouchableOpacity>
-            {errors.terms && <Text style={styles.termsError}>{errors.terms}</Text>}
+            {errors.terms && (
+              <Text style={styles.termsError}>{errors.terms}</Text>
+            )}
 
             {error && (
               <View style={styles.errorContainer}>
-                <Ionicons name="alert-circle" size={16} color={AppColors.error} />
+                <Ionicons
+                  name='alert-circle'
+                  size={16}
+                  color={AppColors.error}
+                />
                 <Text style={styles.errorText}>{error}</Text>
               </View>
             )}
 
             <Button
-              title="Create Account"
+              title='Create Account'
               onPress={handleRegister}
               loading={isLoading}
               style={styles.registerButton}
@@ -242,7 +251,7 @@ export default function RegisterScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
@@ -364,4 +373,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: AppColors.primary,
   },
-});
+})

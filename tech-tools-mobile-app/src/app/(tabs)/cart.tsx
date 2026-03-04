@@ -316,6 +316,7 @@ const styles = StyleSheet.create({
   },
   summaryContainer: {
     padding: AppSpacing.base,
+    paddingBottom: 100,
     backgroundColor: AppColors.white,
     borderTopWidth: 1,
     borderTopColor: AppColors.gray100,

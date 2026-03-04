@@ -125,13 +125,7 @@ export default function ForgotPasswordScreen() {
             autoCapitalize='none'
             autoCorrect={false}
             error={error}
-            leftIcon={
-              <Ionicons
-                name='mail-outline'
-                size={20}
-                color={AppColors.gray400}
-              />
-            }
+            leftIcon='mail-outline'
           />
 
           <Button

@@ -348,7 +348,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: AppSpacing.base,
   },
   lastSection: {
-    marginBottom: AppSpacing['3xl'],
+    marginBottom: 100,
   },
   sectionHeader: {
     flexDirection: 'row',

@@ -20,7 +20,7 @@ import {
 } from '@/constants/appTheme'
 
 const { width } = Dimensions.get('window')
-const CARD_WIDTH = (width - AppSpacing.base * 2.5) / 2
+const CARD_WIDTH = (width - AppSpacing.base * 2 - AppSpacing.sm) / 2
 
 interface PromoBannerProps {
   title: string
@@ -47,14 +47,20 @@ export default function PromoBanner({
       <LinearGradient
         colors={gradient as [string, string, ...string[]]}
         start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+        end={{ x: 1, y: 0 }}
         style={styles.gradient}
       >
         <View style={styles.iconContainer}>
-          <Ionicons name={icon as any} size={28} color={AppColors.white} />
+          <Ionicons name={icon as any} size={20} color={AppColors.white} />
         </View>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.subtitle}>{subtitle}</Text>
+        <View style={styles.textContainer}>
+          <Text style={styles.title} numberOfLines={1}>
+            {title}
+          </Text>
+          <Text style={styles.subtitle} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        </View>
       </LinearGradient>
     </TouchableOpacity>
   )
@@ -63,35 +69,36 @@ export default function PromoBanner({
 const styles = StyleSheet.create({
   container: {
     width: CARD_WIDTH,
-    borderRadius: AppBorderRadius.lg,
+    borderRadius: AppBorderRadius.md,
     overflow: 'hidden',
-    ...AppShadows.md,
+    ...AppShadows.sm,
   },
   gradient: {
-    padding: AppSpacing.base,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 120,
+    paddingVertical: AppSpacing.md,
+    paddingHorizontal: AppSpacing.sm,
   },
   iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.25)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: AppSpacing.sm,
+    marginRight: AppSpacing.sm,
+  },
+  textContainer: {
+    flex: 1,
   },
   title: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
     color: AppColors.white,
-    textAlign: 'center',
   },
   subtitle: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.9)',
-    textAlign: 'center',
-    marginTop: 2,
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.85)',
+    marginTop: 1,
   },
 })

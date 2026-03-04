@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
     marginTop: AppSpacing.lg,
   },
   lastSection: {
-    marginBottom: AppSpacing['3xl'],
+    marginBottom: 100,
   },
   horizontalList: {
     paddingHorizontal: AppSpacing.base,
@@ -278,7 +278,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     paddingHorizontal: AppSpacing.base,
-    gap: AppSpacing.md,
+    rowGap: AppSpacing.sm,
   },
   tabs: {
     flexDirection: 'row',

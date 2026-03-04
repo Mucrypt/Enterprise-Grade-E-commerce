@@ -531,7 +531,7 @@ const styles = StyleSheet.create({
   versionContainer: {
     alignItems: 'center',
     paddingVertical: AppSpacing.xl,
-    marginBottom: AppSpacing['3xl'],
+    marginBottom: 100,
   },
   versionText: {
     fontSize: 12,

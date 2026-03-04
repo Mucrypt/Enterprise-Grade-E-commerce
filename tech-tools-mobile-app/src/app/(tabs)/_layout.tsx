@@ -4,10 +4,11 @@
 
 import React from 'react'
 import { Tabs } from 'expo-router'
-import { View, Text, StyleSheet } from 'react-native'
+import { View, Text, StyleSheet, Platform } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { AppColors } from '@/constants/appTheme'
+import { AppColors, AppShadows } from '@/constants/appTheme'
 import { useCartStore } from '@/stores'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 interface TabBarIconProps {
   focused: boolean
@@ -18,8 +19,12 @@ interface TabBarIconProps {
 
 function TabBarIcon({ focused, color, name, badge }: TabBarIconProps) {
   return (
-    <View style={styles.iconContainer}>
-      <Ionicons name={name as any} size={24} color={color} />
+    <View style={styles.iconWrapper}>
+      <View
+        style={[styles.iconContainer, focused && styles.iconContainerActive]}
+      >
+        <Ionicons name={name as any} size={22} color={color} />
+      </View>
       {badge !== undefined && badge > 0 && (
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{badge > 9 ? '9+' : badge}</Text>
@@ -31,6 +36,10 @@ function TabBarIcon({ focused, color, name, badge }: TabBarIconProps) {
 
 export default function TabsLayout() {
   const cartCount = useCartStore((state) => state.itemCount())
+  const insets = useSafeAreaInsets()
+
+  // Calculate bottom padding: minimum 16px, or safe area + 8px
+  const bottomPadding = Math.max(16, insets.bottom + 8)
 
   return (
     <Tabs
@@ -38,8 +47,15 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarActiveTintColor: AppColors.primary,
         tabBarInactiveTintColor: AppColors.gray400,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: [
+          styles.tabBar,
+          {
+            height: 70 + bottomPadding,
+            paddingBottom: bottomPadding,
+          },
+        ],
         tabBarLabelStyle: styles.tabBarLabel,
+        tabBarItemStyle: styles.tabBarItem,
       }}
     >
       <Tabs.Screen
@@ -115,33 +131,65 @@ export default function TabsLayout() {
 const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: AppColors.white,
-    borderTopWidth: 1,
-    borderTopColor: AppColors.gray100,
-    height: 60,
-    paddingBottom: 8,
-    paddingTop: 8,
+    borderTopWidth: 0,
+    paddingTop: 12,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 16,
+      },
+    }),
   },
   tabBarLabel: {
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  tabBarItem: {
+    paddingTop: 4,
+  },
+  iconWrapper: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   iconContainer: {
-    position: 'relative',
+    width: 40,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 12,
+  },
+  iconContainerActive: {
+    backgroundColor: `${AppColors.primary}15`,
   },
   badge: {
     position: 'absolute',
-    top: -4,
-    right: -8,
-    backgroundColor: AppColors.primary,
+    top: -2,
+    right: -4,
+    backgroundColor: AppColors.error,
     borderRadius: 10,
     minWidth: 18,
     height: 18,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: AppColors.white,
   },
   badgeText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '700',
     color: AppColors.white,
   },
