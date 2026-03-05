@@ -449,6 +449,120 @@ export const ordersApi = {
 }
 
 // ============================================
+// Blog API
+// ============================================
+import type {
+  BlogPost,
+  BlogCategory,
+  BlogTag,
+  BlogAuthor,
+  BlogFilters,
+} from '../types'
+
+export const blogApi = {
+  // Get published posts with pagination
+  async getPosts(filters?: BlogFilters & { page?: number; limit?: number }) {
+    const params = new URLSearchParams()
+
+    if (filters?.page) params.append('page', String(filters.page))
+    if (filters?.limit) params.append('limit', String(filters.limit))
+    if (filters?.category) params.append('category', filters.category)
+    if (filters?.tag) params.append('tag', filters.tag)
+    if (filters?.author) params.append('author', filters.author)
+    if (filters?.search) params.append('search', filters.search)
+    if (filters?.featured) params.append('featured', String(filters.featured))
+
+    const response = await api.get<{
+      success: boolean
+      data: { posts: BlogPost[]; pagination: Pagination }
+    }>(`/blog/posts?${params.toString()}`)
+
+    return response.data.data
+  },
+
+  // Get single post by slug
+  async getPostBySlug(slug: string) {
+    const response = await api.get<{
+      success: boolean
+      data: { post: BlogPost }
+    }>(`/blog/posts/${slug}`)
+    return response.data.data.post
+  },
+
+  // Get featured posts
+  async getFeaturedPosts(limit = 5) {
+    const response = await api.get<{
+      success: boolean
+      data: { posts: BlogPost[] }
+    }>(`/blog/posts?featured=true&limit=${limit}`)
+    return response.data.data.posts
+  },
+
+  // Get categories
+  async getCategories() {
+    const response = await api.get<{
+      success: boolean
+      data: { categories: BlogCategory[] }
+    }>('/blog/categories')
+    return response.data.data.categories
+  },
+
+  // Get single category
+  async getCategoryBySlug(slug: string) {
+    const response = await api.get<{
+      success: boolean
+      data: { category: BlogCategory }
+    }>(`/blog/categories/${slug}`)
+    return response.data.data.category
+  },
+
+  // Get tags
+  async getTags() {
+    const response = await api.get<{
+      success: boolean
+      data: { tags: BlogTag[] }
+    }>('/blog/tags')
+    return response.data.data.tags
+  },
+
+  // Get authors
+  async getAuthors() {
+    const response = await api.get<{
+      success: boolean
+      data: { authors: BlogAuthor[] }
+    }>('/blog/authors')
+    return response.data.data.authors
+  },
+
+  // Get single author
+  async getAuthorBySlug(slug: string) {
+    const response = await api.get<{
+      success: boolean
+      data: { author: BlogAuthor; posts: BlogPost[] }
+    }>(`/blog/authors/${slug}`)
+    return response.data.data
+  },
+
+  // Search posts
+  async searchPosts(query: string, limit = 10) {
+    const response = await api.get<{
+      success: boolean
+      data: { posts: BlogPost[] }
+    }>(`/blog/posts?search=${encodeURIComponent(query)}&limit=${limit}`)
+    return response.data.data.posts
+  },
+
+  // Get related posts
+  async getRelatedPosts(postId: string, limit = 3) {
+    const response = await api.get<{
+      success: boolean
+      data: { posts: BlogPost[] }
+    }>(`/blog/posts/${postId}/related?limit=${limit}`)
+    return response.data.data.posts
+  },
+}
+
+// ============================================
 // Wishlist API
 // ============================================
 export const wishlistApi = {

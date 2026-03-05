@@ -28,6 +28,8 @@ import AboutPage from './pages/AboutPage'
 import CareersPage from './pages/CareersPage'
 import PressPage from './pages/PressPage'
 import AffiliatePage from './pages/AffiliatePage'
+import BlogPage from './pages/BlogPage'
+import BlogPostPage from './pages/BlogPostPage'
 
 // Create React Query client
 const queryClient = new QueryClient({
@@ -91,6 +93,10 @@ function App() {
             <Route path='careers' element={<CareersPage />} />
             <Route path='press' element={<PressPage />} />
             <Route path='affiliates' element={<AffiliatePage />} />
+
+            {/* Blog */}
+            <Route path='blog' element={<BlogPage />} />
+            <Route path='blog/:slug' element={<BlogPostPage />} />
 
             {/* 404 - Fallback to Home */}
             <Route path='*' element={<HomePage />} />

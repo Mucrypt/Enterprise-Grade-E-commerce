@@ -286,3 +286,73 @@ export interface HeroBanner {
   cta_link: string
   position: 'left' | 'center' | 'right'
 }
+
+// Blog Types
+export interface BlogAuthor {
+  id: string
+  display_name: string
+  slug: string
+  bio: string | null
+  avatar_url: string | null
+  role: 'author' | 'editor' | 'contributor' | 'guest'
+  post_count: number
+}
+
+export interface BlogCategory {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  image_url: string | null
+  post_count: number
+  is_active: boolean
+}
+
+export interface BlogTag {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  post_count: number
+}
+
+export interface BlogPost {
+  id: string
+  title: string
+  slug: string
+  excerpt: string | null
+  content: string
+  content_html: string | null
+  featured_image_url: string | null
+  featured_image_alt: string | null
+  featured_video_url: string | null
+  featured_video_type: string | null
+  author: BlogAuthor | null
+  author_id: string | null
+  category: BlogCategory | null
+  category_id: string | null
+  tags: BlogTag[]
+  status: 'draft' | 'pending' | 'published' | 'scheduled' | 'archived'
+  visibility: 'public' | 'private' | 'password_protected'
+  published_at: string | null
+  meta_title: string | null
+  meta_description: string | null
+  reading_time_minutes: number
+  word_count: number
+  view_count: number
+  like_count: number
+  comment_count: number
+  allow_comments: boolean
+  is_featured: boolean
+  is_pinned: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface BlogFilters {
+  category?: string
+  tag?: string
+  author?: string
+  search?: string
+  featured?: boolean
+}
