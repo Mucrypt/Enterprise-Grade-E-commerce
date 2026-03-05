@@ -19,6 +19,15 @@ import WishlistPage from './pages/WishlistPage'
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
 import TermsOfServicePage from './pages/TermsOfServicePage'
 import CookiePolicyPage from './pages/CookiePolicyPage'
+import ContactPage from './pages/ContactPage'
+import FAQPage from './pages/FAQPage'
+import ShippingInfoPage from './pages/ShippingInfoPage'
+import ReturnsPage from './pages/ReturnsPage'
+import TrackOrderPage from './pages/TrackOrderPage'
+import AboutPage from './pages/AboutPage'
+import CareersPage from './pages/CareersPage'
+import PressPage from './pages/PressPage'
+import AffiliatePage from './pages/AffiliatePage'
 
 // Create React Query client
 const queryClient = new QueryClient({
@@ -69,6 +78,19 @@ function App() {
             <Route path='privacy' element={<PrivacyPolicyPage />} />
             <Route path='terms' element={<TermsOfServicePage />} />
             <Route path='cookies' element={<CookiePolicyPage />} />
+
+            {/* Support Pages */}
+            <Route path='contact' element={<ContactPage />} />
+            <Route path='faq' element={<FAQPage />} />
+            <Route path='shipping' element={<ShippingInfoPage />} />
+            <Route path='returns' element={<ReturnsPage />} />
+            <Route path='track-order' element={<TrackOrderPage />} />
+
+            {/* Company Pages */}
+            <Route path='about' element={<AboutPage />} />
+            <Route path='careers' element={<CareersPage />} />
+            <Route path='press' element={<PressPage />} />
+            <Route path='affiliates' element={<AffiliatePage />} />
 
             {/* 404 - Fallback to Home */}
             <Route path='*' element={<HomePage />} />

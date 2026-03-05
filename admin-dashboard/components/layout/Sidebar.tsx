@@ -21,6 +21,9 @@ import {
   Truck,
   Ticket,
   Star,
+  FileText,
+  Hash,
+  UserCircle,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -74,6 +77,38 @@ const navigation: NavItem[] = [
     title: 'Media Library',
     href: '/dashboard/media',
     icon: Images,
+  },
+  {
+    title: 'Blog',
+    href: '/blog',
+    icon: FileText,
+    children: [
+      {
+        title: 'All Posts',
+        href: '/blog',
+        icon: FileText,
+      },
+      {
+        title: 'New Post',
+        href: '/blog/new',
+        icon: FileText,
+      },
+      {
+        title: 'Categories',
+        href: '/blog/categories',
+        icon: FolderTree,
+      },
+      {
+        title: 'Tags',
+        href: '/blog/tags',
+        icon: Hash,
+      },
+      {
+        title: 'Authors',
+        href: '/blog/authors',
+        icon: UserCircle,
+      },
+    ],
   },
   {
     title: 'Orders',

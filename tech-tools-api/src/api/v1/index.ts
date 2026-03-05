@@ -15,6 +15,7 @@ import supplierRoutes from './suppliers/supplier.routes'
 import shippingRoutes from './shipping/shipping.routes'
 import couponRoutes from './coupons/coupon.routes'
 import reviewRoutes from './reviews/review.routes'
+import { blogRoutes } from './blog'
 
 const router = Router()
 
@@ -45,6 +46,7 @@ router.use('/suppliers', supplierRoutes)
 router.use('/shipping', shippingRoutes)
 router.use('/coupons', couponRoutes)
 router.use('/reviews', reviewRoutes)
+router.use('/blog', blogRoutes)
 
 // Documentation route
 router.get('/docs', (_req, res) => {

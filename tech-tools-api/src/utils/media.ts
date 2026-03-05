@@ -213,6 +213,81 @@ export async function processCategoryImage(file: Express.Multer.File) {
   return result
 }
 
+/**
+ * Process blog image upload
+ */
+export async function processBlogImage(file: Express.Multer.File): Promise<{
+  imagePath: string
+  thumbnailPath: string
+  dimensions: { width: number; height: number }
+}> {
+  const imageId = uuidv4()
+  const filename = `${imageId}.webp`
+  const thumbnailFilename = `thumb-${imageId}.webp`
+  const imagesFolder = `${UPLOAD_DIR}/blog/images`
+  const thumbnailsFolder = `${UPLOAD_DIR}/blog/thumbnails`
+
+  await fs.mkdir(imagesFolder, { recursive: true })
+  await fs.mkdir(thumbnailsFolder, { recursive: true })
+
+  const imagePath = `${imagesFolder}/${filename}`
+  const thumbnailPath = `${thumbnailsFolder}/${thumbnailFilename}`
+
+  // Get original dimensions
+  const metadata = await sharp(file.path).metadata()
+  const dimensions = {
+    width: metadata.width || 0,
+    height: metadata.height || 0,
+  }
+
+  // Optimize main image
+  await sharp(file.path)
+    .resize(1920, 1080, { fit: 'inside', withoutEnlargement: true })
+    .webp({ quality: 85 })
+    .toFile(imagePath)
+
+  // Create thumbnail
+  await sharp(file.path)
+    .resize(400, 300, { fit: 'cover' })
+    .webp({ quality: 80 })
+    .toFile(thumbnailPath)
+
+  // Delete temp file
+  await fs.unlink(file.path)
+
+  return { imagePath, thumbnailPath, dimensions }
+}
+
+/**
+ * Process blog video upload
+ */
+export async function processBlogVideo(file: Express.Multer.File): Promise<{
+  url: string
+  thumbnailUrl: string
+  fileName: string
+  fileSize: number
+  format: string
+}> {
+  const videoId = uuidv4()
+  const ext = path.extname(file.originalname)
+  const fileName = `${videoId}${ext}`
+  const destinationFolder = `${UPLOAD_DIR}/blog/videos`
+  const videoPath = `${destinationFolder}/${fileName}`
+
+  await fs.mkdir(destinationFolder, { recursive: true })
+  await fs.rename(file.path, videoPath)
+
+  const stats = await fs.stat(videoPath)
+
+  return {
+    url: videoPath.replace(/^uploads/, '/media'),
+    thumbnailUrl: '', // Placeholder - would use FFmpeg in production
+    fileName,
+    fileSize: stats.size,
+    format: mime.extension(file.mimetype) || ext.replace('.', ''),
+  }
+}
+
 // =====================================================
 // VIDEO PROCESSING
 // =====================================================
