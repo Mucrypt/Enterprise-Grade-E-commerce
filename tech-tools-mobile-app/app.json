@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "techtools",
     "userInterfaceStyle": "automatic",
-    "owner": "mucrypt",
     "ios": {
       "bundleIdentifier": "com.mucrypt.techtools",
       "icon": "./assets/expo.icon",
@@ -52,14 +51,19 @@
     },
     "extra": {
       "eas": {
-        "projectId": "your-project-id"
-      }
+        "projectId": "ca65323f-0ec5-44b1-8fcd-c634f36efb70"
+      },
+      "router": {}
     },
     "updates": {
-      "url": "https://u.expo.dev/your-project-id"
+      "enabled": true,
+      "url": "https://u.expo.dev/ca65323f-0ec5-44b1-8fcd-c634f36efb70",
+      "fallbackToCacheTimeout": 0,
+      "checkAutomatically": "ON_LOAD"
     },
     "runtimeVersion": {
       "policy": "appVersion"
-    }
+    },
+    "owner": "yongsi"
   }
 }

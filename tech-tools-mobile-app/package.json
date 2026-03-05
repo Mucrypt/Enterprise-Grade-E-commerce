@@ -9,13 +9,19 @@
     "ios": "NODE_OPTIONS='--dns-result-order=ipv4first' expo start --ios",
     "web": "NODE_OPTIONS='--dns-result-order=ipv4first' expo start --web",
     "lint": "expo lint",
+    "typecheck": "tsc --noEmit",
     "build:dev": "eas build --profile development --platform android",
     "build:preview": "eas build --profile preview --platform android",
     "build:prod": "eas build --profile production --platform android",
     "build:local": "eas build --profile preview --platform android --local",
-    "submit:android": "eas submit --platform android",
-    "update": "eas update --branch production",
-    "credentials": "eas credentials"
+    "build:submit": "eas build --profile production --platform android --auto-submit",
+    "submit:android": "eas submit --platform android --profile production",
+    "update:preview": "eas update --branch preview",
+    "update:prod": "eas update --branch production",
+    "credentials": "eas credentials",
+    "release": "bash ./scripts/release.sh",
+    "deploy": "bash ./scripts/deploy.sh",
+    "test:ci": "bash ./scripts/test-ci.sh"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",

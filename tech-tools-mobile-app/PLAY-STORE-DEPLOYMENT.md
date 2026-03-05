@@ -314,3 +314,125 @@ Common reasons:
 | Store listing setup     | 1-2 hours     |
 | Google review (new app) | 1-7 days      |
 | Google review (updates) | 1-3 days      |
+
+---
+
+## CI/CD Pipeline Setup
+
+The project includes automated CI/CD using GitHub Actions for continuous deployment.
+
+### How It Works
+
+| Trigger                  | Action                                       |
+| ------------------------ | -------------------------------------------- |
+| Push to `develop`        | OTA Update (instant, no store review)        |
+| Push to `main`           | Production Build + Auto Submit to Play Store |
+| Manual workflow dispatch | Choose: update, preview, or production       |
+
+### GitHub Secrets Required
+
+Add these secrets to your GitHub repository:
+
+1. **EXPO_TOKEN** - Your Expo access token
+
+   ```bash
+   # Get your token from: https://expo.dev/accounts/[username]/settings/access-tokens
+   # Or generate via CLI:
+   eas whoami --token
+   ```
+
+2. **GOOGLE_SERVICE_ACCOUNT_JSON** - Google Play API credentials
+   - Go to Google Cloud Console → Service Accounts
+   - Download the JSON key for `play-store-deploy@native-projects.iam.gserviceaccount.com`
+   - Copy the entire JSON content as the secret value
+
+### Setting Up Secrets
+
+1. Go to your GitHub repo → **Settings** → **Secrets and variables** → **Actions**
+2. Click **"New repository secret"**
+3. Add each secret:
+   - Name: `EXPO_TOKEN`
+   - Value: Your Expo token
+4. Repeat for `GOOGLE_SERVICE_ACCOUNT_JSON`
+
+### Update Types
+
+#### 1. OTA Updates (Over-The-Air) - Instant!
+
+For JavaScript/TypeScript and asset changes only:
+
+```bash
+# Manual OTA update
+eas update --branch production --message "Bug fix for cart"
+
+# Or push to develop branch - CI/CD handles it automatically
+git push origin develop
+```
+
+**Benefits:**
+
+- No app store review required
+- Users get updates within seconds
+- Perfect for bug fixes and minor features
+
+**Limitations:**
+
+- Cannot change native code (permissions, native modules)
+- Cannot update app version displayed in store
+
+#### 2. Store Updates (Native Changes)
+
+For native code changes or version bumps:
+
+```bash
+# Manual production build + submit
+npm run build:prod
+npm run submit:android
+
+# Or push to main branch - CI/CD handles it automatically
+git push origin main
+```
+
+### Manual Commands
+
+```bash
+# OTA Update to preview channel
+eas update --branch preview --message "Testing new feature"
+
+# OTA Update to production channel
+eas update --branch production --message "Hotfix v1.0.1"
+
+# Build preview APK (for internal testing)
+eas build --profile preview --platform android
+
+# Build production AAB
+eas build --profile production --platform android
+
+# Submit to Play Store (internal track)
+eas submit --platform android --profile production
+
+# Build AND submit in one command
+eas build --profile production --platform android --auto-submit
+```
+
+### Workflow Files
+
+- `.github/workflows/mobile-app-ci-cd.yml` - Main CI/CD pipeline
+
+### Recommended Git Workflow
+
+```
+main (production)
+  ↑
+develop (staging/preview)
+  ↑
+feature/* (feature branches)
+```
+
+1. Create feature branch from `develop`
+2. Make changes, commit, push
+3. Create PR to `develop` → Triggers lint/type check
+4. Merge to `develop` → Triggers OTA update to preview channel
+5. Test on preview build
+6. Create PR from `develop` to `main`
+7. Merge to `main` → Triggers production build + Play Store submit
