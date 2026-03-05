@@ -405,6 +405,266 @@ EOF
     log_success "Category collections seeded!"
 }
 
+# Seed Blog Authors
+seed_blog_authors() {
+    log_info "Seeding blog authors..."
+    run_sql <<'EOF'
+-- First, ensure we have at least one admin user to reference
+INSERT INTO users (email, password_hash, first_name, last_name, user_type, email_verified, is_active)
+SELECT 'admin@techtools.com', '$2b$10$dummyhashforseeding', 'Admin', 'User', 'admin', true, true
+WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'admin@techtools.com');
+
+-- Create blog authors
+INSERT INTO blog_authors (user_id, display_name, slug, bio, role, is_active)
+SELECT u.id, 'Tech Tools Team', 'tech-tools-team',
+    'The official Tech Tools editorial team bringing you the latest in automotive accessories, reviews, and industry news.',
+    'author', true
+FROM users u WHERE u.email = 'admin@techtools.com'
+AND NOT EXISTS (SELECT 1 FROM blog_authors WHERE slug = 'tech-tools-team');
+
+INSERT INTO blog_authors (user_id, display_name, slug, bio, role, is_active)
+SELECT u.id, 'Mike Thompson', 'mike-thompson',
+    'Automotive enthusiast and professional mechanic with 15+ years of experience. Specializes in car audio and electronics.',
+    'author', true
+FROM users u WHERE u.email = 'admin@techtools.com'
+AND NOT EXISTS (SELECT 1 FROM blog_authors WHERE slug = 'mike-thompson');
+
+INSERT INTO blog_authors (user_id, display_name, slug, bio, role, is_active)
+SELECT u.id, 'Sarah Chen', 'sarah-chen',
+    'Product reviewer and tech journalist covering the latest gadgets and automotive innovations.',
+    'contributor', true
+FROM users u WHERE u.email = 'admin@techtools.com'
+AND NOT EXISTS (SELECT 1 FROM blog_authors WHERE slug = 'sarah-chen');
+EOF
+    log_success "Blog authors seeded!"
+}
+
+# Seed Blog Categories
+seed_blog_categories() {
+    log_info "Seeding blog categories..."
+    run_sql <<'EOF'
+INSERT INTO blog_categories (name, slug, description, is_active, display_order)
+SELECT * FROM (VALUES
+    ('Product Reviews', 'product-reviews', 'In-depth reviews of automotive accessories and tech products', true, 1),
+    ('How-To Guides', 'how-to-guides', 'Step-by-step installation and DIY tutorials', true, 2),
+    ('Industry News', 'industry-news', 'Latest news and updates from the automotive accessories industry', true, 3),
+    ('Tips & Tricks', 'tips-tricks', 'Expert tips for car maintenance and accessory usage', true, 4),
+    ('Buying Guides', 'buying-guides', 'Comprehensive guides to help you choose the right products', true, 5),
+    ('Company Updates', 'company-updates', 'News and announcements from Tech Tools', true, 6)
+) AS v(name, slug, description, is_active, display_order)
+WHERE NOT EXISTS (SELECT 1 FROM blog_categories WHERE slug = v.slug);
+EOF
+    log_success "Blog categories seeded!"
+}
+
+# Seed Blog Tags
+seed_blog_tags() {
+    log_info "Seeding blog tags..."
+    run_sql <<'EOF'
+INSERT INTO blog_tags (name, slug, description)
+SELECT * FROM (VALUES
+    ('LED Lighting', 'led-lighting', 'Articles about LED headlights, work lights, and accent lighting'),
+    ('Dash Cams', 'dash-cams', 'Coverage of dash cam products and technology'),
+    ('Car Audio', 'car-audio', 'Speakers, head units, and sound system content'),
+    ('Safety', 'safety', 'Vehicle safety products and tips'),
+    ('DIY', 'diy', 'Do-it-yourself installation and projects'),
+    ('Reviews', 'reviews', 'Product reviews and comparisons'),
+    ('Installation', 'installation', 'Installation guides and tutorials'),
+    ('Maintenance', 'maintenance', 'Car maintenance tips and guides'),
+    ('New Products', 'new-products', 'Announcements of new product arrivals'),
+    ('Deals', 'deals', 'Sales, discounts, and special offers')
+) AS v(name, slug, description)
+WHERE NOT EXISTS (SELECT 1 FROM blog_tags WHERE slug = v.slug);
+EOF
+    log_success "Blog tags seeded!"
+}
+
+# Seed Blog Posts
+seed_blog_posts() {
+    log_info "Seeding blog posts..."
+    run_sql <<'EOF'
+-- Blog Post 1: LED Headlight Guide
+INSERT INTO blog_posts (
+    title, slug, excerpt, content, content_html, 
+    author_id, category_id, status, visibility, published_at,
+    meta_title, meta_description, reading_time_minutes, word_count,
+    allow_comments, is_featured
+)
+SELECT 
+    'The Ultimate Guide to Upgrading Your Car''s LED Headlights',
+    'ultimate-guide-led-headlight-upgrade',
+    'Everything you need to know about upgrading to LED headlights - from choosing the right bulbs to installation tips.',
+    E'## Why Upgrade to LED Headlights?\n\nLED headlights offer significant advantages over traditional halogen bulbs:\n\n- **Brightness**: Up to 300% brighter than halogen\n- **Longevity**: 50,000+ hours lifespan vs 1,000 hours for halogen\n- **Efficiency**: Lower power consumption\n- **Instant On**: No warm-up time needed\n\n## Choosing the Right LED Bulbs\n\nBefore purchasing, you need to know:\n\n1. Your current bulb size (H11, H7, 9005, etc.)\n2. Your vehicle''s electrical requirements\n3. Housing compatibility\n\n## Installation Tips\n\nMost LED bulb upgrades are plug-and-play:\n\n1. Turn off your vehicle and open the hood\n2. Locate the headlight housing\n3. Remove the old bulb by turning counterclockwise\n4. Install the new LED bulb\n5. Connect the driver/ballast if included\n6. Test before reassembling\n\n## Our Top Picks\n\nCheck out our H11 LED Headlight Bulbs for a great starting point.',
+    '<h2>Why Upgrade to LED Headlights?</h2><p>LED headlights offer significant advantages over traditional halogen bulbs:</p><ul><li><strong>Brightness</strong>: Up to 300% brighter than halogen</li><li><strong>Longevity</strong>: 50,000+ hours lifespan vs 1,000 hours for halogen</li><li><strong>Efficiency</strong>: Lower power consumption</li><li><strong>Instant On</strong>: No warm-up time needed</li></ul><h2>Choosing the Right LED Bulbs</h2><p>Before purchasing, you need to know:</p><ol><li>Your current bulb size (H11, H7, 9005, etc.)</li><li>Your vehicle''s electrical requirements</li><li>Housing compatibility</li></ol><h2>Installation Tips</h2><p>Most LED bulb upgrades are plug-and-play:</p><ol><li>Turn off your vehicle and open the hood</li><li>Locate the headlight housing</li><li>Remove the old bulb by turning counterclockwise</li><li>Install the new LED bulb</li><li>Connect the driver/ballast if included</li><li>Test before reassembling</li></ol><h2>Our Top Picks</h2><p>Check out our H11 LED Headlight Bulbs for a great starting point.</p>',
+    a.id, c.id, 'published', 'public', NOW() - INTERVAL '5 days',
+    'Ultimate LED Headlight Upgrade Guide | Tech Tools',
+    'Complete guide to upgrading your car to LED headlights. Learn how to choose, install, and get the most from LED bulbs.',
+    8, 450, true, true
+FROM blog_authors a, blog_categories c 
+WHERE a.slug = 'mike-thompson' AND c.slug = 'how-to-guides'
+AND NOT EXISTS (SELECT 1 FROM blog_posts WHERE slug = 'ultimate-guide-led-headlight-upgrade');
+
+-- Blog Post 2: Dash Cam Review
+INSERT INTO blog_posts (
+    title, slug, excerpt, content, content_html,
+    author_id, category_id, status, visibility, published_at,
+    meta_title, meta_description, reading_time_minutes, word_count,
+    allow_comments, is_featured
+)
+SELECT
+    'Top 5 Dash Cams for 2024: Complete Buyer''s Guide',
+    'top-5-dash-cams-2024-buyers-guide',
+    'We tested the best dash cams on the market. Here are our top picks for every budget and need.',
+    E'## Why You Need a Dash Cam\n\nA dash cam is one of the smartest investments you can make for your vehicle:\n\n- **Evidence in accidents**: Protect yourself from false claims\n- **Insurance benefits**: Some insurers offer discounts\n- **Peace of mind**: 24/7 surveillance when parked\n- **Capture memories**: Record road trips and scenic drives\n\n## Our Testing Methodology\n\nWe tested each dash cam for:\n- Video quality (day and night)\n- Build quality and reliability\n- App functionality\n- Value for money\n\n## Top 5 Picks\n\n### 1. 4K Dual Dash Cam with Night Vision\nOur top pick for overall performance. The Sony STARVIS sensor delivers exceptional night footage.\n\n### 2. Budget Pick - 1080p Dash Cam\nGreat quality at an entry-level price point.\n\n### 3. Best for Rideshare - 3-Channel Dash Cam\nCovers front, interior, and rear for complete coverage.\n\n## Final Thoughts\n\nInvest in a quality dash cam today. The peace of mind is worth every penny.',
+    '<h2>Why You Need a Dash Cam</h2><p>A dash cam is one of the smartest investments you can make for your vehicle:</p><ul><li><strong>Evidence in accidents</strong>: Protect yourself from false claims</li><li><strong>Insurance benefits</strong>: Some insurers offer discounts</li><li><strong>Peace of mind</strong>: 24/7 surveillance when parked</li><li><strong>Capture memories</strong>: Record road trips and scenic drives</li></ul><h2>Our Testing Methodology</h2><p>We tested each dash cam for:</p><ul><li>Video quality (day and night)</li><li>Build quality and reliability</li><li>App functionality</li><li>Value for money</li></ul><h2>Top 5 Picks</h2><h3>1. 4K Dual Dash Cam with Night Vision</h3><p>Our top pick for overall performance. The Sony STARVIS sensor delivers exceptional night footage.</p><h3>2. Budget Pick - 1080p Dash Cam</h3><p>Great quality at an entry-level price point.</p><h3>3. Best for Rideshare - 3-Channel Dash Cam</h3><p>Covers front, interior, and rear for complete coverage.</p><h2>Final Thoughts</h2><p>Invest in a quality dash cam today. The peace of mind is worth every penny.</p>',
+    a.id, c.id, 'published', 'public', NOW() - INTERVAL '3 days',
+    'Top 5 Dash Cams 2024 - Expert Reviews | Tech Tools',
+    'Expert reviews of the best dash cams in 2024. Compare features, prices, and find the perfect dash cam for your needs.',
+    10, 520, true, true
+FROM blog_authors a, blog_categories c
+WHERE a.slug = 'sarah-chen' AND c.slug = 'product-reviews'
+AND NOT EXISTS (SELECT 1 FROM blog_posts WHERE slug = 'top-5-dash-cams-2024-buyers-guide');
+
+-- Blog Post 3: HandiBeam LED Glasses
+INSERT INTO blog_posts (
+    title, slug, excerpt, content, content_html,
+    author_id, category_id, status, visibility, published_at,
+    meta_title, meta_description, reading_time_minutes, word_count,
+    allow_comments, is_featured
+)
+SELECT
+    'HandiBeam LED Safety Glasses: A Game Changer for DIY Mechanics',
+    'handibeam-led-safety-glasses-review',
+    'Hands-free lighting meets eye protection. We review the innovative HandiBeam LED safety glasses.',
+    E'## The Problem with Traditional Work Lights\n\nEvery DIY mechanic knows the struggle:\n- Holding a flashlight while working\n- Headlamps that slip or get in the way\n- Poor lighting in tight engine bays\n\n## Enter the HandiBeam\n\nThe HandiBeam LED Safety Glasses solve all these problems by integrating LED lights directly into safety glasses.\n\n### Key Features\n\n- **3 Brightness Modes**: Low, medium, and high\n- **8+ Hour Battery**: USB-C rechargeable\n- **Anti-Fog Lenses**: UV protection included\n- **Lightweight**: Only 45g\n\n## Real-World Testing\n\nWe used the HandiBeam for:\n- Engine bay work\n- Under-dash wiring\n- Evening garage sessions\n\nThe light follows your line of sight perfectly. No more awkward flashlight angles!\n\n## Verdict\n\n⭐⭐⭐⭐⭐ 5/5 Stars\n\nA must-have for any home mechanic or professional.',
+    '<h2>The Problem with Traditional Work Lights</h2><p>Every DIY mechanic knows the struggle:</p><ul><li>Holding a flashlight while working</li><li>Headlamps that slip or get in the way</li><li>Poor lighting in tight engine bays</li></ul><h2>Enter the HandiBeam</h2><p>The HandiBeam LED Safety Glasses solve all these problems by integrating LED lights directly into safety glasses.</p><h3>Key Features</h3><ul><li><strong>3 Brightness Modes</strong>: Low, medium, and high</li><li><strong>8+ Hour Battery</strong>: USB-C rechargeable</li><li><strong>Anti-Fog Lenses</strong>: UV protection included</li><li><strong>Lightweight</strong>: Only 45g</li></ul><h2>Real-World Testing</h2><p>We used the HandiBeam for:</p><ul><li>Engine bay work</li><li>Under-dash wiring</li><li>Evening garage sessions</li></ul><p>The light follows your line of sight perfectly. No more awkward flashlight angles!</p><h2>Verdict</h2><p>⭐⭐⭐⭐⭐ 5/5 Stars</p><p>A must-have for any home mechanic or professional.</p>',
+    a.id, c.id, 'published', 'public', NOW() - INTERVAL '1 day',
+    'HandiBeam LED Safety Glasses Review | Tech Tools',
+    'Hands-free LED safety glasses review. Perfect for mechanics, DIY enthusiasts, and anyone who needs hands-free lighting.',
+    6, 380, true, true
+FROM blog_authors a, blog_categories c
+WHERE a.slug = 'mike-thompson' AND c.slug = 'product-reviews'
+AND NOT EXISTS (SELECT 1 FROM blog_posts WHERE slug = 'handibeam-led-safety-glasses-review');
+
+-- Blog Post 4: Car Audio Installation
+INSERT INTO blog_posts (
+    title, slug, excerpt, content, content_html,
+    author_id, category_id, status, visibility, published_at,
+    meta_title, meta_description, reading_time_minutes, word_count,
+    allow_comments, is_featured
+)
+SELECT
+    'How to Install a Touchscreen Car Stereo: Complete DIY Guide',
+    'install-touchscreen-car-stereo-diy-guide',
+    'Save hundreds on installation costs. Learn how to install a touchscreen car stereo yourself with our step-by-step guide.',
+    E'## Tools You''ll Need\n\n- Panel removal tools (plastic pry tools)\n- Wire strippers\n- Crimping tool\n- Electrical tape\n- Wiring harness adapter for your vehicle\n\n## Step 1: Gather Information\n\nBefore starting:\n1. Note your vehicle''s dash opening size (single or double DIN)\n2. Order the correct wiring harness adapter\n3. Check if you need an antenna adapter\n\n## Step 2: Disconnect Battery\n\n**Always disconnect the negative battery terminal first!**\n\nThis prevents electrical shorts and protects your new stereo.\n\n## Step 3: Remove Old Stereo\n\n1. Remove any trim panels around the stereo\n2. Unscrew the mounting brackets\n3. Disconnect the wiring harnesses\n4. Remove the old unit\n\n## Step 4: Connect Wiring\n\nUsing the wiring harness adapter:\n- Match wire colors (red to red, black to black, etc.)\n- Use crimp connectors or solder for secure connections\n- Test before final installation\n\n## Step 5: Install New Stereo\n\n1. Connect the new stereo to the harness\n2. Slide it into the dash opening\n3. Secure with mounting brackets\n4. Replace trim panels\n\n## Final Tips\n\n- Take photos before disconnecting anything\n- Label wires if needed\n- Don''t force panels - they have hidden clips',
+    '<h2>Tools You''ll Need</h2><ul><li>Panel removal tools (plastic pry tools)</li><li>Wire strippers</li><li>Crimping tool</li><li>Electrical tape</li><li>Wiring harness adapter for your vehicle</li></ul><h2>Step 1: Gather Information</h2><p>Before starting:</p><ol><li>Note your vehicle''s dash opening size (single or double DIN)</li><li>Order the correct wiring harness adapter</li><li>Check if you need an antenna adapter</li></ol><h2>Step 2: Disconnect Battery</h2><p><strong>Always disconnect the negative battery terminal first!</strong></p><p>This prevents electrical shorts and protects your new stereo.</p><h2>Step 3: Remove Old Stereo</h2><ol><li>Remove any trim panels around the stereo</li><li>Unscrew the mounting brackets</li><li>Disconnect the wiring harnesses</li><li>Remove the old unit</li></ol><h2>Step 4: Connect Wiring</h2><p>Using the wiring harness adapter:</p><ul><li>Match wire colors (red to red, black to black, etc.)</li><li>Use crimp connectors or solder for secure connections</li><li>Test before final installation</li></ul><h2>Step 5: Install New Stereo</h2><ol><li>Connect the new stereo to the harness</li><li>Slide it into the dash opening</li><li>Secure with mounting brackets</li><li>Replace trim panels</li></ol><h2>Final Tips</h2><ul><li>Take photos before disconnecting anything</li><li>Label wires if needed</li><li>Don''t force panels - they have hidden clips</li></ul>',
+    a.id, c.id, 'published', 'public', NOW() - INTERVAL '7 days',
+    'DIY Car Stereo Installation Guide | Tech Tools',
+    'Step-by-step guide to installing a touchscreen car stereo. Save money with this complete DIY installation tutorial.',
+    12, 620, true, false
+FROM blog_authors a, blog_categories c
+WHERE a.slug = 'mike-thompson' AND c.slug = 'how-to-guides'
+AND NOT EXISTS (SELECT 1 FROM blog_posts WHERE slug = 'install-touchscreen-car-stereo-diy-guide');
+
+-- Blog Post 5: Summer Car Care Tips
+INSERT INTO blog_posts (
+    title, slug, excerpt, content, content_html,
+    author_id, category_id, status, visibility, published_at,
+    meta_title, meta_description, reading_time_minutes, word_count,
+    allow_comments, is_featured
+)
+SELECT
+    '10 Essential Summer Car Care Tips Every Driver Should Know',
+    '10-essential-summer-car-care-tips',
+    'Keep your car running cool this summer with these essential maintenance tips and must-have accessories.',
+    E'## 1. Check Your Cooling System\n\nSummer heat puts extra strain on your cooling system:\n- Inspect coolant levels\n- Check for leaks\n- Consider a coolant flush if overdue\n\n## 2. Protect Your Interior\n\nUV rays can damage your dashboard and seats:\n- Use a sunshade\n- Apply UV protectant to plastic surfaces\n- Consider window tinting\n\n## 3. Monitor Tire Pressure\n\nHeat causes tire pressure to increase:\n- Check pressure when tires are cold\n- Don''t forget the spare!\n- Look for signs of wear\n\n## 4. Test Your A/C\n\nDon''t wait until it''s 100°F to find out your A/C isn''t working:\n- Run it before summer hits\n- Listen for unusual noises\n- Check for weak airflow\n\n## 5. Keep a Emergency Kit\n\nSummer breakdowns happen:\n- Jump starter\n- Tire inflator\n- Water bottles\n- First aid kit\n\n## 6-10: More Tips\n\n6. Replace wiper blades before summer storms\n7. Clean and wax your exterior\n8. Check battery health\n9. Inspect belts and hoses\n10. Keep your car clean to prevent heat buildup',
+    '<h2>1. Check Your Cooling System</h2><p>Summer heat puts extra strain on your cooling system:</p><ul><li>Inspect coolant levels</li><li>Check for leaks</li><li>Consider a coolant flush if overdue</li></ul><h2>2. Protect Your Interior</h2><p>UV rays can damage your dashboard and seats:</p><ul><li>Use a sunshade</li><li>Apply UV protectant to plastic surfaces</li><li>Consider window tinting</li></ul><h2>3. Monitor Tire Pressure</h2><p>Heat causes tire pressure to increase:</p><ul><li>Check pressure when tires are cold</li><li>Don''t forget the spare!</li><li>Look for signs of wear</li></ul><h2>4. Test Your A/C</h2><p>Don''t wait until it''s 100°F to find out your A/C isn''t working:</p><ul><li>Run it before summer hits</li><li>Listen for unusual noises</li><li>Check for weak airflow</li></ul><h2>5. Keep a Emergency Kit</h2><p>Summer breakdowns happen:</p><ul><li>Jump starter</li><li>Tire inflator</li><li>Water bottles</li><li>First aid kit</li></ul><h2>6-10: More Tips</h2><p>6. Replace wiper blades before summer storms<br>7. Clean and wax your exterior<br>8. Check battery health<br>9. Inspect belts and hoses<br>10. Keep your car clean to prevent heat buildup</p>',
+    a.id, c.id, 'published', 'public', NOW() - INTERVAL '10 days',
+    '10 Summer Car Care Tips | Tech Tools Blog',
+    'Essential summer car care tips to keep your vehicle running smoothly in hot weather. Expert advice from Tech Tools.',
+    7, 400, true, false
+FROM blog_authors a, blog_categories c
+WHERE a.slug = 'tech-tools-team' AND c.slug = 'tips-tricks'
+AND NOT EXISTS (SELECT 1 FROM blog_posts WHERE slug = '10-essential-summer-car-care-tips');
+
+-- Link posts to tags
+INSERT INTO blog_post_tags (post_id, tag_id)
+SELECT p.id, t.id FROM blog_posts p, blog_tags t
+WHERE p.slug = 'ultimate-guide-led-headlight-upgrade' AND t.slug = 'led-lighting'
+AND NOT EXISTS (SELECT 1 FROM blog_post_tags WHERE post_id = p.id AND tag_id = t.id);
+
+INSERT INTO blog_post_tags (post_id, tag_id)
+SELECT p.id, t.id FROM blog_posts p, blog_tags t
+WHERE p.slug = 'ultimate-guide-led-headlight-upgrade' AND t.slug = 'installation'
+AND NOT EXISTS (SELECT 1 FROM blog_post_tags WHERE post_id = p.id AND tag_id = t.id);
+
+INSERT INTO blog_post_tags (post_id, tag_id)
+SELECT p.id, t.id FROM blog_posts p, blog_tags t
+WHERE p.slug = 'ultimate-guide-led-headlight-upgrade' AND t.slug = 'diy'
+AND NOT EXISTS (SELECT 1 FROM blog_post_tags WHERE post_id = p.id AND tag_id = t.id);
+
+INSERT INTO blog_post_tags (post_id, tag_id)
+SELECT p.id, t.id FROM blog_posts p, blog_tags t
+WHERE p.slug = 'top-5-dash-cams-2024-buyers-guide' AND t.slug = 'dash-cams'
+AND NOT EXISTS (SELECT 1 FROM blog_post_tags WHERE post_id = p.id AND tag_id = t.id);
+
+INSERT INTO blog_post_tags (post_id, tag_id)
+SELECT p.id, t.id FROM blog_posts p, blog_tags t
+WHERE p.slug = 'top-5-dash-cams-2024-buyers-guide' AND t.slug = 'reviews'
+AND NOT EXISTS (SELECT 1 FROM blog_post_tags WHERE post_id = p.id AND tag_id = t.id);
+
+INSERT INTO blog_post_tags (post_id, tag_id)
+SELECT p.id, t.id FROM blog_posts p, blog_tags t
+WHERE p.slug = 'top-5-dash-cams-2024-buyers-guide' AND t.slug = 'safety'
+AND NOT EXISTS (SELECT 1 FROM blog_post_tags WHERE post_id = p.id AND tag_id = t.id);
+
+INSERT INTO blog_post_tags (post_id, tag_id)
+SELECT p.id, t.id FROM blog_posts p, blog_tags t
+WHERE p.slug = 'handibeam-led-safety-glasses-review' AND t.slug = 'led-lighting'
+AND NOT EXISTS (SELECT 1 FROM blog_post_tags WHERE post_id = p.id AND tag_id = t.id);
+
+INSERT INTO blog_post_tags (post_id, tag_id)
+SELECT p.id, t.id FROM blog_posts p, blog_tags t
+WHERE p.slug = 'handibeam-led-safety-glasses-review' AND t.slug = 'reviews'
+AND NOT EXISTS (SELECT 1 FROM blog_post_tags WHERE post_id = p.id AND tag_id = t.id);
+
+INSERT INTO blog_post_tags (post_id, tag_id)
+SELECT p.id, t.id FROM blog_posts p, blog_tags t
+WHERE p.slug = 'handibeam-led-safety-glasses-review' AND t.slug = 'safety'
+AND NOT EXISTS (SELECT 1 FROM blog_post_tags WHERE post_id = p.id AND tag_id = t.id);
+
+INSERT INTO blog_post_tags (post_id, tag_id)
+SELECT p.id, t.id FROM blog_posts p, blog_tags t
+WHERE p.slug = 'install-touchscreen-car-stereo-diy-guide' AND t.slug = 'car-audio'
+AND NOT EXISTS (SELECT 1 FROM blog_post_tags WHERE post_id = p.id AND tag_id = t.id);
+
+INSERT INTO blog_post_tags (post_id, tag_id)
+SELECT p.id, t.id FROM blog_posts p, blog_tags t
+WHERE p.slug = 'install-touchscreen-car-stereo-diy-guide' AND t.slug = 'installation'
+AND NOT EXISTS (SELECT 1 FROM blog_post_tags WHERE post_id = p.id AND tag_id = t.id);
+
+INSERT INTO blog_post_tags (post_id, tag_id)
+SELECT p.id, t.id FROM blog_posts p, blog_tags t
+WHERE p.slug = 'install-touchscreen-car-stereo-diy-guide' AND t.slug = 'diy'
+AND NOT EXISTS (SELECT 1 FROM blog_post_tags WHERE post_id = p.id AND tag_id = t.id);
+
+INSERT INTO blog_post_tags (post_id, tag_id)
+SELECT p.id, t.id FROM blog_posts p, blog_tags t
+WHERE p.slug = '10-essential-summer-car-care-tips' AND t.slug = 'maintenance'
+AND NOT EXISTS (SELECT 1 FROM blog_post_tags WHERE post_id = p.id AND tag_id = t.id);
+EOF
+    log_success "Blog posts seeded!"
+}
+
+# Seed all blog data
+seed_blog() {
+    seed_blog_authors
+    seed_blog_categories
+    seed_blog_tags
+    seed_blog_posts
+}
+
 # Main execution
 case $COMMAND in
     brands)
@@ -427,6 +687,21 @@ case $COMMAND in
     product-collections)
         seed_collections
         ;;
+    blog)
+        seed_blog
+        ;;
+    blog-authors)
+        seed_blog_authors
+        ;;
+    blog-categories)
+        seed_blog_categories
+        ;;
+    blog-tags)
+        seed_blog_tags
+        ;;
+    blog-posts)
+        seed_blog_posts
+        ;;
     all)
         seed_brands
         seed_categories
@@ -434,9 +709,10 @@ case $COMMAND in
         seed_inventory
         seed_collections
         seed_category_collections
+        seed_blog
         ;;
     *)
-        echo "Usage: $0 [all|brands|categories|products|collections|category-collections|product-collections]"
+        echo "Usage: $0 [all|brands|categories|products|collections|category-collections|product-collections|blog|blog-authors|blog-categories|blog-tags|blog-posts]"
         exit 1
         ;;
 esac

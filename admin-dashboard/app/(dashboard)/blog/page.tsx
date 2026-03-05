@@ -72,7 +72,11 @@ import { useDebounce } from '@/hooks/useDebounce'
 const STATUS_BADGES = {
   draft: { label: 'Draft', variant: 'secondary' as const, icon: Clock },
   pending: { label: 'Pending', variant: 'outline' as const, icon: Clock },
-  published: { label: 'Published', variant: 'default' as const, icon: CheckCircle },
+  published: {
+    label: 'Published',
+    variant: 'default' as const,
+    icon: CheckCircle,
+  },
   scheduled: { label: 'Scheduled', variant: 'outline' as const, icon: Clock },
   archived: { label: 'Archived', variant: 'secondary' as const, icon: XCircle },
 }
@@ -195,25 +199,32 @@ export default function BlogPostsPage() {
   const hasActiveFilters = search || status
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className='container mx-auto py-6 space-y-6'>
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className='flex items-center justify-between'>
         <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <FileText className="h-8 w-8" />
+          <h1 className='text-3xl font-bold tracking-tight flex items-center gap-2'>
+            <FileText className='h-8 w-8' />
             Blog Posts
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className='text-muted-foreground mt-1'>
             Manage your blog posts, articles, and content
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isFetching}>
-            <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
+        <div className='flex gap-2'>
+          <Button
+            variant='outline'
+            size='icon'
+            onClick={() => refetch()}
+            disabled={isFetching}
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`}
+            />
           </Button>
-          <Link href="/blog/new">
+          <Link href='/blog/new'>
             <Button>
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className='h-4 w-4 mr-2' />
               New Post
             </Button>
           </Link>
@@ -222,32 +233,35 @@ export default function BlogPostsPage() {
 
       {/* Filters */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <CardContent className='pt-6'>
+          <div className='flex flex-col sm:flex-row gap-4'>
+            <div className='relative flex-1'>
+              <Search className='absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground' />
               <Input
-                placeholder="Search posts..."
+                placeholder='Search posts...'
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-10"
+                className='pl-10'
               />
             </div>
-            <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="w-full sm:w-40">
-                <SelectValue placeholder="All Status" />
+            <Select
+              value={status || 'all'}
+              onValueChange={(value) => setStatus(value === 'all' ? '' : value)}
+            >
+              <SelectTrigger className='w-full sm:w-40'>
+                <SelectValue placeholder='All Status' />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Status</SelectItem>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="published">Published</SelectItem>
-                <SelectItem value="scheduled">Scheduled</SelectItem>
-                <SelectItem value="archived">Archived</SelectItem>
+                <SelectItem value='all'>All Status</SelectItem>
+                <SelectItem value='draft'>Draft</SelectItem>
+                <SelectItem value='pending'>Pending</SelectItem>
+                <SelectItem value='published'>Published</SelectItem>
+                <SelectItem value='scheduled'>Scheduled</SelectItem>
+                <SelectItem value='archived'>Archived</SelectItem>
               </SelectContent>
             </Select>
             {hasActiveFilters && (
-              <Button variant="ghost" onClick={clearFilters}>
+              <Button variant='ghost' onClick={clearFilters}>
                 Clear
               </Button>
             )}
@@ -265,24 +279,24 @@ export default function BlogPostsPage() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="space-y-4">
+            <div className='space-y-4'>
               {[...Array(5)].map((_, i) => (
-                <Skeleton key={i} className="h-16 w-full" />
+                <Skeleton key={i} className='h-16 w-full' />
               ))}
             </div>
           ) : posts.length === 0 ? (
-            <div className="text-center py-12">
-              <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold">No posts found</h3>
-              <p className="text-muted-foreground">
+            <div className='text-center py-12'>
+              <FileText className='h-12 w-12 mx-auto text-muted-foreground mb-4' />
+              <h3 className='text-lg font-semibold'>No posts found</h3>
+              <p className='text-muted-foreground'>
                 {hasActiveFilters
                   ? 'Try adjusting your filters'
                   : 'Create your first post to get started'}
               </p>
               {!hasActiveFilters && (
-                <Link href="/blog/new">
-                  <Button className="mt-4">
-                    <Plus className="h-4 w-4 mr-2" />
+                <Link href='/blog/new'>
+                  <Button className='mt-4'>
+                    <Plus className='h-4 w-4 mr-2' />
                     Create Post
                   </Button>
                 </Link>
@@ -293,84 +307,93 @@ export default function BlogPostsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-100">
+                    <TableHead className='w-100'>
                       <button
-                        className="flex items-center gap-1 hover:text-foreground"
+                        className='flex items-center gap-1 hover:text-foreground'
                         onClick={() => handleSort('title')}
                       >
                         Title
-                        <ArrowUpDown className="h-4 w-4" />
+                        <ArrowUpDown className='h-4 w-4' />
                       </button>
                     </TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead>Author</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="text-center">Views</TableHead>
+                    <TableHead className='text-center'>Views</TableHead>
                     <TableHead>
                       <button
-                        className="flex items-center gap-1 hover:text-foreground"
+                        className='flex items-center gap-1 hover:text-foreground'
                         onClick={() => handleSort('created_at')}
                       >
                         Created
-                        <ArrowUpDown className="h-4 w-4" />
+                        <ArrowUpDown className='h-4 w-4' />
                       </button>
                     </TableHead>
-                    <TableHead className="w-17.5"></TableHead>
+                    <TableHead className='w-17.5'></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {posts.map((post) => {
-                    const statusConfig = STATUS_BADGES[post.status] || STATUS_BADGES.draft
+                    const statusConfig =
+                      STATUS_BADGES[post.status] || STATUS_BADGES.draft
                     const StatusIcon = statusConfig.icon
-                    const VisibilityIcon = VISIBILITY_ICONS[post.visibility] || Globe
+                    const VisibilityIcon =
+                      VISIBILITY_ICONS[post.visibility] || Globe
 
                     return (
                       <TableRow key={post.id}>
                         <TableCell>
-                          <div className="flex flex-col gap-1">
-                            <div className="flex items-center gap-2">
+                          <div className='flex flex-col gap-1'>
+                            <div className='flex items-center gap-2'>
                               <Link
                                 href={`/blog/${post.id}`}
-                                className="font-medium hover:underline"
+                                className='font-medium hover:underline'
                               >
                                 {post.title}
                               </Link>
                               {post.is_featured && (
-                                <Badge variant="secondary" className="text-xs">
+                                <Badge variant='secondary' className='text-xs'>
                                   Featured
                                 </Badge>
                               )}
                               {post.is_pinned && (
-                                <Badge variant="outline" className="text-xs">
+                                <Badge variant='outline' className='text-xs'>
                                   Pinned
                                 </Badge>
                               )}
                             </div>
-                            <span className="text-sm text-muted-foreground line-clamp-1">
+                            <span className='text-sm text-muted-foreground line-clamp-1'>
                               {post.excerpt || 'No excerpt'}
                             </span>
                           </div>
                         </TableCell>
                         <TableCell>
                           {post.category?.name || (
-                            <span className="text-muted-foreground">Uncategorized</span>
+                            <span className='text-muted-foreground'>
+                              Uncategorized
+                            </span>
                           )}
                         </TableCell>
                         <TableCell>
                           {post.author?.display_name || (
-                            <span className="text-muted-foreground">Unknown</span>
+                            <span className='text-muted-foreground'>
+                              Unknown
+                            </span>
                           )}
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Badge variant={statusConfig.variant} className="gap-1">
-                              <StatusIcon className="h-3 w-3" />
+                          <div className='flex items-center gap-2'>
+                            <Badge
+                              variant={statusConfig.variant}
+                              className='gap-1'
+                            >
+                              <StatusIcon className='h-3 w-3' />
                               {statusConfig.label}
                             </Badge>
-                            <VisibilityIcon className="h-4 w-4 text-muted-foreground" />
+                            <VisibilityIcon className='h-4 w-4 text-muted-foreground' />
                           </div>
                         </TableCell>
-                        <TableCell className="text-center">
+                        <TableCell className='text-center'>
                           {post.view_count.toLocaleString()}
                         </TableCell>
                         <TableCell>
@@ -379,49 +402,53 @@ export default function BlogPostsPage() {
                         <TableCell>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
-                                <MoreHorizontal className="h-4 w-4" />
+                              <Button variant='ghost' size='icon'>
+                                <MoreHorizontal className='h-4 w-4' />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
+                            <DropdownMenuContent align='end'>
                               <DropdownMenuLabel>Actions</DropdownMenuLabel>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem asChild>
                                 <Link href={`/blog/${post.id}`}>
-                                  <Eye className="h-4 w-4 mr-2" />
+                                  <Eye className='h-4 w-4 mr-2' />
                                   View
                                 </Link>
                               </DropdownMenuItem>
                               <DropdownMenuItem asChild>
                                 <Link href={`/blog/${post.id}/edit`}>
-                                  <Edit className="h-4 w-4 mr-2" />
+                                  <Edit className='h-4 w-4 mr-2' />
                                   Edit
                                 </Link>
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               {post.status !== 'published' ? (
                                 <DropdownMenuItem
-                                  onClick={() => publishMutation.mutate(post.id)}
+                                  onClick={() =>
+                                    publishMutation.mutate(post.id)
+                                  }
                                   disabled={publishMutation.isPending}
                                 >
-                                  <CheckCircle className="h-4 w-4 mr-2" />
+                                  <CheckCircle className='h-4 w-4 mr-2' />
                                   Publish
                                 </DropdownMenuItem>
                               ) : (
                                 <DropdownMenuItem
-                                  onClick={() => unpublishMutation.mutate(post.id)}
+                                  onClick={() =>
+                                    unpublishMutation.mutate(post.id)
+                                  }
                                   disabled={unpublishMutation.isPending}
                                 >
-                                  <XCircle className="h-4 w-4 mr-2" />
+                                  <XCircle className='h-4 w-4 mr-2' />
                                   Unpublish
                                 </DropdownMenuItem>
                               )}
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
-                                className="text-destructive"
+                                className='text-destructive'
                                 onClick={() => handleDeleteClick(post)}
                               >
-                                <Trash2 className="h-4 w-4 mr-2" />
+                                <Trash2 className='h-4 w-4 mr-2' />
                                 Delete
                               </DropdownMenuItem>
                             </DropdownMenuContent>
@@ -435,22 +462,22 @@ export default function BlogPostsPage() {
 
               {/* Pagination */}
               {pagination && pagination.totalPages > 1 && (
-                <div className="flex items-center justify-between pt-4">
-                  <p className="text-sm text-muted-foreground">
+                <div className='flex items-center justify-between pt-4'>
+                  <p className='text-sm text-muted-foreground'>
                     Page {pagination.page} of {pagination.totalPages}
                   </p>
-                  <div className="flex gap-2">
+                  <div className='flex gap-2'>
                     <Button
-                      variant="outline"
-                      size="sm"
+                      variant='outline'
+                      size='sm'
                       onClick={() => setPage((p) => Math.max(1, p - 1))}
                       disabled={pagination.page <= 1}
                     >
                       Previous
                     </Button>
                     <Button
-                      variant="outline"
-                      size="sm"
+                      variant='outline'
+                      size='sm'
                       onClick={() => setPage((p) => p + 1)}
                       disabled={pagination.page >= pagination.totalPages}
                     >
@@ -470,15 +497,17 @@ export default function BlogPostsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Post</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{postToDelete?.title}"? This action cannot be
-              undone.
+              Are you sure you want to delete "{postToDelete?.title}"? This
+              action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => postToDelete && deleteMutation.mutate(postToDelete.id)}
+              className='bg-destructive text-destructive-foreground hover:bg-destructive/90'
+              onClick={() =>
+                postToDelete && deleteMutation.mutate(postToDelete.id)
+              }
             >
               Delete
             </AlertDialogAction>
