@@ -44,7 +44,7 @@ export default function SearchBar({
       } else if (onSearch) {
         onSearch(query.trim())
       } else {
-        router.push(`/search?q=${encodeURIComponent(query.trim())}`)
+        router.push(`/search?q=${encodeURIComponent(query.trim())}` as any)
       }
     }
   }

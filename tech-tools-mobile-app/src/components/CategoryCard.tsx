@@ -42,7 +42,7 @@ export default function CategoryCard({
     CategoryColors[category.slug.toLowerCase()] || CategoryColors.default
 
   const handlePress = () => {
-    router.push(`/category/${category.slug}`)
+    router.push(`/category/${category.slug}` as any)
   }
 
   const getCardSize = () => {
