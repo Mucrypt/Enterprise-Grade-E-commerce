@@ -484,9 +484,9 @@ export const blogApi = {
   async getPostBySlug(slug: string) {
     const response = await api.get<{
       success: boolean
-      data: { post: BlogPost }
+      data: BlogPost
     }>(`/blog/posts/${slug}`)
-    return response.data.data.post
+    return response.data.data
   },
 
   // Get featured posts
@@ -553,12 +553,12 @@ export const blogApi = {
   },
 
   // Get related posts
-  async getRelatedPosts(postId: string, limit = 3) {
+  async getRelatedPosts(slug: string, limit = 3) {
     const response = await api.get<{
       success: boolean
-      data: { posts: BlogPost[] }
-    }>(`/blog/posts/${postId}/related?limit=${limit}`)
-    return response.data.data.posts
+      data: BlogPost[]
+    }>(`/blog/posts/${slug}/related?limit=${limit}`)
+    return response.data.data || []
   },
 }
 

@@ -3,7 +3,7 @@
 // ============================================
 
 import { useState, useEffect } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import {
   Calendar,
   Clock,
@@ -236,7 +236,6 @@ function TableOfContents({ content }: { content: string }) {
 // Main Blog Post Page Component
 export default function BlogPostPage() {
   const { slug } = useParams<{ slug: string }>()
-  const navigate = useNavigate()
   const [post, setPost] = useState<BlogPost | null>(null)
   const [relatedPosts, setRelatedPosts] = useState<BlogPost[]>([])
   const [loading, setLoading] = useState(true)
@@ -262,21 +261,21 @@ export default function BlogPostPage() {
       setPost(postData)
 
       // Load related posts
-      if (postData?.id) {
+      if (postData?.slug) {
         try {
-          const related = await blogApi.getRelatedPosts(postData.id, 3)
+          const related = await blogApi.getRelatedPosts(postData.slug, 3)
           setRelatedPosts(related)
         } catch {
           // Fallback to recent posts if related endpoint doesn't exist
           const recent = await blogApi.getPosts({ limit: 3 })
           setRelatedPosts(
-            recent.posts.filter((p) => p.id !== postData.id).slice(0, 3),
+            (recent?.posts || []).filter((p) => p.id !== postData.id).slice(0, 3),
           )
         }
       }
     } catch (error) {
       console.error('Failed to load post:', error)
-      navigate('/blog')
+      setPost(null)
     } finally {
       setLoading(false)
     }
