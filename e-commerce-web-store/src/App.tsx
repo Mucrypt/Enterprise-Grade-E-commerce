@@ -16,6 +16,9 @@ import RegisterPage from './pages/RegisterPage'
 import ProfilePage from './pages/ProfilePage'
 import OrdersPage from './pages/OrdersPage'
 import WishlistPage from './pages/WishlistPage'
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
+import TermsOfServicePage from './pages/TermsOfServicePage'
+import CookiePolicyPage from './pages/CookiePolicyPage'
 
 // Create React Query client
 const queryClient = new QueryClient({
@@ -61,6 +64,11 @@ function App() {
             <Route path='profile' element={<ProfilePage />} />
             <Route path='orders' element={<OrdersPage />} />
             <Route path='wishlist' element={<WishlistPage />} />
+
+            {/* Legal Pages */}
+            <Route path='privacy' element={<PrivacyPolicyPage />} />
+            <Route path='terms' element={<TermsOfServicePage />} />
+            <Route path='cookies' element={<CookiePolicyPage />} />
 
             {/* 404 - Fallback to Home */}
             <Route path='*' element={<HomePage />} />
