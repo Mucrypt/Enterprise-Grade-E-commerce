@@ -348,10 +348,10 @@ export default function BlogPage() {
           blogApi.getFeaturedPosts(3),
           blogApi.getPosts({ limit: 5 }),
         ])
-      setCategories(categoriesData)
-      setTags(tagsData)
-      setFeaturedPosts(featuredData)
-      setRecentPosts(recentData.posts)
+      setCategories(categoriesData || [])
+      setTags(tagsData || [])
+      setFeaturedPosts(featuredData || [])
+      setRecentPosts(recentData?.posts || [])
     } catch (error) {
       console.error('Failed to load sidebar data:', error)
     }
@@ -365,8 +365,8 @@ export default function BlogPage() {
         page: currentPage,
         limit: 9,
       })
-      setPosts(result.posts)
-      setTotalPosts(result.pagination?.total || result.posts.length)
+      setPosts(result?.posts || [])
+      setTotalPosts(result?.pagination?.total || result?.posts?.length || 0)
     } catch (error) {
       console.error('Failed to load posts:', error)
       setPosts([])

@@ -502,9 +502,9 @@ export const blogApi = {
   async getCategories() {
     const response = await api.get<{
       success: boolean
-      data: { categories: BlogCategory[] }
+      data: BlogCategory[]
     }>('/blog/categories')
-    return response.data.data.categories
+    return response.data.data || []
   },
 
   // Get single category
@@ -520,18 +520,18 @@ export const blogApi = {
   async getTags() {
     const response = await api.get<{
       success: boolean
-      data: { tags: BlogTag[] }
+      data: BlogTag[]
     }>('/blog/tags')
-    return response.data.data.tags
+    return response.data.data || []
   },
 
   // Get authors
   async getAuthors() {
     const response = await api.get<{
       success: boolean
-      data: { authors: BlogAuthor[] }
+      data: BlogAuthor[]
     }>('/blog/authors')
-    return response.data.data.authors
+    return response.data.data || []
   },
 
   // Get single author
