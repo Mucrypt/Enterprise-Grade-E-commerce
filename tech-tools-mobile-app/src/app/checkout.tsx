@@ -288,9 +288,7 @@ export default function CheckoutScreen() {
           setPaymentForm({ ...paymentForm, cardNumber: text })
         }
         keyboardType='numeric'
-        leftIcon={
-          <Ionicons name='card-outline' size={20} color={AppColors.gray400} />
-        }
+        leftIcon='card-outline'
       />
 
       <Input
