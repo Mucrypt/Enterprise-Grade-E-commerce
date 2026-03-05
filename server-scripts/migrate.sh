@@ -109,10 +109,10 @@ migrate_up() {
     for file in $migration_files; do
         if echo "$executed" | grep -q "^${file}$"; then
             echo -e "  ${GREEN}✓${NC} $file (already executed)"
-            ((executed_count++))
+            executed_count=$((executed_count + 1))
         else
             echo -e "  ${YELLOW}⏳${NC} $file (pending)"
-            ((pending++))
+            pending=$((pending + 1))
         fi
     done
     
@@ -177,10 +177,10 @@ migrate_status() {
     echo "─────────────────────────────────────────"
     
     for file in $migration_files; do
-        ((total++))
+        total=$((total + 1))
         if echo "$executed" | grep -q "^${file}$"; then
             echo -e "  ${GREEN}✓${NC} $file"
-            ((done++))
+            done=$((done + 1))
         else
             echo -e "  ${YELLOW}○${NC} $file"
         fi
