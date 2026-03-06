@@ -19,6 +19,11 @@ import {
   ProductFilters,
   Pagination,
   ApiResponse,
+  BlogPost,
+  BlogCategory,
+  BlogTag,
+  BlogAuthor,
+  BlogFilters,
 } from '../types'
 
 // API Configuration
@@ -480,6 +485,106 @@ export const wishlistApi = {
 // Export token management for external use
 export { setTokens, clearTokens, getAccessToken }
 
+// ============================================
+// Blog API
+// ============================================
+export const blogApi = {
+  // Get published posts with pagination
+  getPosts: async (
+    filters?: BlogFilters & { page?: number; limit?: number },
+  ): Promise<{ posts: BlogPost[]; pagination: Pagination }> => {
+    const params = new URLSearchParams()
+
+    if (filters?.page) params.append('page', String(filters.page))
+    if (filters?.limit) params.append('limit', String(filters.limit))
+    if (filters?.category) params.append('category', filters.category)
+    if (filters?.tag) params.append('tag', filters.tag)
+    if (filters?.author) params.append('author', filters.author)
+    if (filters?.search) params.append('search', filters.search)
+    if (filters?.featured) params.append('featured', String(filters.featured))
+
+    const response = await apiClient.get(`/blog/posts?${params.toString()}`)
+    const data = response.data.data || response.data
+
+    return {
+      posts: data.posts || data,
+      pagination: data.pagination || {
+        page: 1,
+        limit: 10,
+        total: data.posts?.length || 0,
+        totalPages: 1,
+      },
+    }
+  },
+
+  // Get single post by slug
+  getPostBySlug: async (slug: string): Promise<BlogPost> => {
+    const response = await apiClient.get(`/blog/posts/${slug}`)
+    return response.data.data || response.data
+  },
+
+  // Get featured posts
+  getFeaturedPosts: async (limit = 5): Promise<BlogPost[]> => {
+    const response = await apiClient.get(
+      `/blog/posts?featured=true&limit=${limit}`,
+    )
+    const data = response.data.data || response.data
+    return data.posts || data
+  },
+
+  // Get categories
+  getCategories: async (): Promise<BlogCategory[]> => {
+    const response = await apiClient.get('/blog/categories')
+    const data = response.data.data || response.data
+    return data.categories || data
+  },
+
+  // Get tags
+  getTags: async (): Promise<BlogTag[]> => {
+    const response = await apiClient.get('/blog/tags')
+    const data = response.data.data || response.data
+    return data.tags || data
+  },
+
+  // Get authors
+  getAuthors: async (): Promise<BlogAuthor[]> => {
+    const response = await apiClient.get('/blog/authors')
+    const data = response.data.data || response.data
+    return data.authors || data
+  },
+
+  // Search posts
+  searchPosts: async (query: string, limit = 10): Promise<BlogPost[]> => {
+    const response = await apiClient.get(
+      `/blog/posts?search=${encodeURIComponent(query)}&limit=${limit}`,
+    )
+    const data = response.data.data || response.data
+    return data.posts || data
+  },
+
+  // Get related posts
+  getRelatedPosts: async (slug: string, limit = 3): Promise<BlogPost[]> => {
+    try {
+      const response = await apiClient.get(
+        `/blog/posts/${slug}/related?limit=${limit}`,
+      )
+      const data = response.data.data || response.data
+      return data || []
+    } catch {
+      return []
+    }
+  },
+
+  // Record post view
+  recordView: async (slug: string): Promise<void> => {
+    try {
+      await apiClient.post(`/blog/posts/${slug}/view`)
+    } catch {
+      // Ignore view recording errors
+    }
+  },
+}
+
 // Combined API object for convenience
 export const api = {
   auth: authApi,
@@ -490,4 +595,5 @@ export const api = {
   addresses: addressesApi,
   reviews: reviewsApi,
   wishlist: wishlistApi,
+  blog: blogApi,
 }

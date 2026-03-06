@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Dimensions,
+  Image,
 } from 'react-native'
 import { useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -26,8 +27,8 @@ import {
   PromoBanner,
 } from '@/components'
 import { AppColors, AppSpacing, PromoBanners } from '@/constants/appTheme'
-import { productsApi, categoriesApi, brandsApi } from '@/api'
-import { Product, Category, Brand } from '@/types'
+import { productsApi, categoriesApi, brandsApi, blogApi } from '@/api'
+import { Product, Category, Brand, BlogPost } from '@/types'
 
 const { width } = Dimensions.get('window')
 
@@ -42,26 +43,28 @@ export default function HomeTabScreen() {
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([])
   const [newArrivals, setNewArrivals] = useState<Product[]>([])
   const [brands, setBrands] = useState<Brand[]>([])
+  const [blogPosts, setBlogPosts] = useState<BlogPost[]>([])
   const [activeTab, setActiveTab] = useState<
     'featured' | 'bestsellers' | 'new'
   >('featured')
 
   const fetchData = async () => {
     try {
-      const [categoriesRes, featuredRes, newRes, brandsRes] = await Promise.all(
-        [
+      const [categoriesRes, featuredRes, newRes, brandsRes, blogRes] =
+        await Promise.all([
           categoriesApi.getAll(),
           productsApi.getFeatured(8),
           productsApi.getNewArrivals(8),
           brandsApi.getAll(),
-        ],
-      )
+          blogApi.getFeaturedPosts(4),
+        ])
 
       setCategories(categoriesRes.slice(0, 10))
       setFeaturedProducts(featuredRes)
       setFlashDeals(featuredRes.slice(0, 8))
       setNewArrivals(newRes)
       setBrands(brandsRes.slice(0, 8))
+      setBlogPosts(blogRes)
     } catch (error) {
       console.error('Error fetching home data:', error)
     } finally {
@@ -217,6 +220,74 @@ export default function HomeTabScreen() {
           </View>
         </View>
 
+        {/* Blog Section */}
+        {blogPosts.length > 0 && (
+          <View style={styles.section}>
+            <SectionHeader
+              title='From Our Blog'
+              icon='newspaper-outline'
+              onAction={() => router.push('/blog')}
+            />
+            <FlatList
+              horizontal
+              data={blogPosts}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.blogCard}
+                  onPress={() => router.push(`/blog/${item.slug}`)}
+                  activeOpacity={0.9}
+                >
+                  <View style={styles.blogImageContainer}>
+                    {item.featured_image_url ? (
+                      <Image
+                        source={{ uri: item.featured_image_url }}
+                        style={styles.blogImage}
+                        resizeMode='cover'
+                      />
+                    ) : (
+                      <View
+                        style={[styles.blogImage, styles.blogImagePlaceholder]}
+                      >
+                        <Ionicons
+                          name='document-text'
+                          size={24}
+                          color={AppColors.gray400}
+                        />
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.blogContent}>
+                    {item.category && (
+                      <Text style={styles.blogCategory}>
+                        {item.category.name}
+                      </Text>
+                    )}
+                    <Text style={styles.blogTitle} numberOfLines={2}>
+                      {item.title}
+                    </Text>
+                    <View style={styles.blogMeta}>
+                      <Ionicons
+                        name='time-outline'
+                        size={12}
+                        color={AppColors.gray400}
+                      />
+                      <Text style={styles.blogMetaText}>
+                        {item.reading_time_minutes} min read
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              )}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalList}
+              ItemSeparatorComponent={() => (
+                <View style={{ width: AppSpacing.md }} />
+              )}
+            />
+          </View>
+        )}
+
         {/* Brand Showcase */}
         <View style={[styles.section, styles.lastSection]}>
           <SectionHeader
@@ -337,5 +408,55 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: AppColors.gray700,
     textAlign: 'center',
+  },
+  blogCard: {
+    width: 200,
+    backgroundColor: AppColors.white,
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  blogImageContainer: {
+    width: '100%',
+    height: 110,
+  },
+  blogImage: {
+    width: '100%',
+    height: '100%',
+  },
+  blogImagePlaceholder: {
+    backgroundColor: AppColors.gray100,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  blogContent: {
+    padding: AppSpacing.md,
+  },
+  blogCategory: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: AppColors.primary,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  blogTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: AppColors.gray900,
+    lineHeight: 18,
+    marginBottom: AppSpacing.xs,
+  },
+  blogMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  blogMetaText: {
+    fontSize: 11,
+    color: AppColors.gray400,
   },
 })

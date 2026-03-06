@@ -62,6 +62,20 @@ export default function RootLayout() {
               }}
             />
             <Stack.Screen
+              name='blog/index'
+              options={{
+                headerShown: false,
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name='blog/[slug]'
+              options={{
+                headerShown: false,
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
               name='checkout'
               options={{
                 headerShown: false,
