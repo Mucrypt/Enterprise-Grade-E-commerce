@@ -416,27 +416,35 @@ export function EnhancedProductForm({
       }
 
       // Delete removed images (ones that were in initial set but not in current set)
-      const currentImageIds = images.map((img) => img.id).filter((id) => !id.startsWith('temp-'))
-      const removedImageIds = initialImageIds.filter((id) => !currentImageIds.includes(id))
-      
+      const currentImageIds = images
+        .map((img) => img.id)
+        .filter((id) => !id.startsWith('temp-'))
+      const removedImageIds = initialImageIds.filter(
+        (id) => !currentImageIds.includes(id),
+      )
+
       // Delete removed videos
-      const currentVideoIds = videos.map((vid) => vid.id).filter((id) => !id.startsWith('temp-'))
-      const removedVideoIds = initialVideoIds.filter((id) => !currentVideoIds.includes(id))
+      const currentVideoIds = videos
+        .map((vid) => vid.id)
+        .filter((id) => !id.startsWith('temp-'))
+      const removedVideoIds = initialVideoIds.filter(
+        (id) => !currentVideoIds.includes(id),
+      )
 
       // Delete removed media from server
       const deletePromises = [
-        ...removedImageIds.map((mediaId) => 
+        ...removedImageIds.map((mediaId) =>
           mediaService.deleteProductMedia(product.id, mediaId).catch((err) => {
             console.error(`Failed to delete image ${mediaId}:`, err)
-          })
+          }),
         ),
-        ...removedVideoIds.map((mediaId) => 
+        ...removedVideoIds.map((mediaId) =>
           mediaService.deleteProductMedia(product.id, mediaId).catch((err) => {
             console.error(`Failed to delete video ${mediaId}:`, err)
-          })
+          }),
         ),
       ]
-      
+
       if (deletePromises.length > 0) {
         await Promise.all(deletePromises)
       }
