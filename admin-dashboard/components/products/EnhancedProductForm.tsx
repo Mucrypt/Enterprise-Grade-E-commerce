@@ -461,14 +461,16 @@ export function EnhancedProductForm({
       // Update existing media positions and primary status
       const existingImages = images.filter((img) => !img.id.startsWith('temp-'))
       const existingVideos = videos.filter((vid) => !vid.id.startsWith('temp-'))
-      
+
       if (existingImages.length > 0 || existingVideos.length > 0) {
         // Find the primary image and set it
         const primaryImage = existingImages.find((img) => img.isPrimary)
         if (primaryImage) {
-          await mediaService.setPrimaryImage(productId, primaryImage.id).catch((err) => {
-            console.error('Failed to set primary image:', err)
-          })
+          await mediaService
+            .setPrimaryImage(productId, primaryImage.id)
+            .catch((err) => {
+              console.error('Failed to set primary image:', err)
+            })
         }
 
         // Reorder all existing media (images + videos)
@@ -483,9 +485,11 @@ export function EnhancedProductForm({
           })),
         ]
         if (mediaOrder.length > 0) {
-          await mediaService.reorderProductMedia(productId, mediaOrder).catch((err) => {
-            console.error('Failed to reorder media:', err)
-          })
+          await mediaService
+            .reorderProductMedia(productId, mediaOrder)
+            .catch((err) => {
+              console.error('Failed to reorder media:', err)
+            })
         }
       }
 

@@ -31,6 +31,14 @@ router.post(
 // Get all media for a product (public)
 router.get('/:productId/media', getProductMedia)
 
+// Reorder media items (must be before /:mediaId routes)
+router.put(
+  '/:productId/media/reorder',
+  authenticate,
+  authorize('admin', 'super_admin'),
+  reorderProductMedia,
+)
+
 // Get single media item (public)
 router.get('/:productId/media/:mediaId', getMediaById)
 
@@ -48,14 +56,6 @@ router.delete(
   authenticate,
   authorize('admin', 'super_admin'),
   deleteProductMedia,
-)
-
-// Reorder media items
-router.put(
-  '/:productId/media/reorder',
-  authenticate,
-  authorize('admin', 'super_admin'),
-  reorderProductMedia,
 )
 
 // Set primary image for product
