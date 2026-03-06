@@ -238,6 +238,14 @@ export function EnhancedProductForm({
     }
   }, [mode, product, mediaInitialized])
 
+  // Callback to handle image removal - tracks which images need to be deleted on save
+  const handleImageRemove = (imageId: string) => {
+    // Only track non-temp IDs (existing images from server)
+    if (!imageId.startsWith('temp-')) {
+      console.log('Tracking image removal:', imageId)
+    }
+  }
+
   // Fetch categories
   const { data: categoriesData } = useQuery({
     queryKey: ['categories'],
@@ -432,14 +440,15 @@ export function EnhancedProductForm({
       )
 
       // Delete removed media from server
+      const productId = product!.id
       const deletePromises = [
         ...removedImageIds.map((mediaId) =>
-          mediaService.deleteProductMedia(product.id, mediaId).catch((err) => {
+          mediaService.deleteProductMedia(productId, mediaId).catch((err) => {
             console.error(`Failed to delete image ${mediaId}:`, err)
           }),
         ),
         ...removedVideoIds.map((mediaId) =>
-          mediaService.deleteProductMedia(product.id, mediaId).catch((err) => {
+          mediaService.deleteProductMedia(productId, mediaId).catch((err) => {
             console.error(`Failed to delete video ${mediaId}:`, err)
           }),
         ),
