@@ -1051,7 +1051,9 @@ export function EnhancedProductForm({
                       min='0'
                       placeholder='0'
                       {...register('stockQuantity', { valueAsNumber: true })}
-                      className={errors.stockQuantity ? 'border-destructive' : ''}
+                      className={
+                        errors.stockQuantity ? 'border-destructive' : ''
+                      }
                     />
                     {errors.stockQuantity && (
                       <p className='text-sm text-destructive'>

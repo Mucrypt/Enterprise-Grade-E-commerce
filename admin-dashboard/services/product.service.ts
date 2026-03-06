@@ -58,9 +58,11 @@ export const productService = {
   /**
    * Get all products with filters
    */
-  async getProducts(filters?: ProductFilters): Promise<PaginatedResponse<Product>> {
+  async getProducts(
+    filters?: ProductFilters,
+  ): Promise<PaginatedResponse<Product>> {
     const params = new URLSearchParams()
-    
+
     if (filters) {
       Object.entries(filters).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
@@ -69,7 +71,9 @@ export const productService = {
       })
     }
 
-    return apiClient.get<PaginatedResponse<Product>>(`/products?${params.toString()}`)
+    return apiClient.get<PaginatedResponse<Product>>(
+      `/products?${params.toString()}`,
+    )
   },
 
   /**
@@ -82,14 +86,20 @@ export const productService = {
   /**
    * Create new product (JSON only, no media)
    */
-  async createProduct(data: CreateProductDTO): Promise<ApiResponse<{ product: Product }>> {
+  async createProduct(
+    data: CreateProductDTO,
+  ): Promise<ApiResponse<{ product: Product }>> {
     return apiClient.post<ApiResponse<{ product: Product }>>('/products', data)
   },
 
   /**
    * Create product with media in single request
    */
-  async createProductWithMedia(data: CreateProductDTO, images?: File[], videos?: File[]): Promise<ApiResponse<{ product: Product }>> {
+  async createProductWithMedia(
+    data: CreateProductDTO,
+    images?: File[],
+    videos?: File[],
+  ): Promise<ApiResponse<{ product: Product }>> {
     const formData = new FormData()
 
     // Add product data as form fields
@@ -113,20 +123,34 @@ export const productService = {
       })
     }
 
-    return apiClient.postFormData<ApiResponse<{ product: Product }>>('/products', formData)
+    return apiClient.postFormData<ApiResponse<{ product: Product }>>(
+      '/products',
+      formData,
+    )
   },
 
   /**
    * Update product
    */
-  async updateProduct(id: string, data: UpdateProductDTO): Promise<ApiResponse<{ product: Product }>> {
-    return apiClient.put<ApiResponse<{ product: Product }>>(`/products/${id}`, data)
+  async updateProduct(
+    id: string,
+    data: UpdateProductDTO,
+  ): Promise<ApiResponse<{ product: Product }>> {
+    return apiClient.put<ApiResponse<{ product: Product }>>(
+      `/products/${id}`,
+      data,
+    )
   },
 
   /**
    * Update product with media
    */
-  async updateProductWithMedia(id: string, data: UpdateProductDTO, images?: File[], videos?: File[]): Promise<ApiResponse<{ product: Product }>> {
+  async updateProductWithMedia(
+    id: string,
+    data: UpdateProductDTO,
+    images?: File[],
+    videos?: File[],
+  ): Promise<ApiResponse<{ product: Product }>> {
     const formData = new FormData()
 
     // Add product data as form fields
@@ -150,48 +174,78 @@ export const productService = {
       })
     }
 
-    return apiClient.putFormData<ApiResponse<{ product: Product }>>(`/products/${id}`, formData)
+    return apiClient.putFormData<ApiResponse<{ product: Product }>>(
+      `/products/${id}`,
+      formData,
+    )
   },
 
   /**
    * Delete product (soft delete by default)
    */
-  async deleteProduct(id: string, permanent: boolean = false): Promise<ApiResponse<{ productId: string; deletedAt?: string }>> {
+  async deleteProduct(
+    id: string,
+    permanent: boolean = false,
+  ): Promise<ApiResponse<{ productId: string; deletedAt?: string }>> {
     const query = permanent ? '?permanent=true' : ''
-    return apiClient.delete<ApiResponse<{ productId: string; deletedAt?: string }>>(`/products/${id}${query}`)
+    return apiClient.delete<
+      ApiResponse<{ productId: string; deletedAt?: string }>
+    >(`/products/${id}${query}`)
   },
 
   /**
    * Restore a soft-deleted product
    */
   async restoreProduct(id: string): Promise<ApiResponse<{ product: Product }>> {
-    return apiClient.post<ApiResponse<{ product: Product }>>(`/products/${id}/restore`)
+    return apiClient.post<ApiResponse<{ product: Product }>>(
+      `/products/${id}/restore`,
+    )
   },
 
   /**
    * Bulk delete products
    */
-  async bulkDeleteProducts(productIds: string[], permanent: boolean = false): Promise<ApiResponse<{ message: string }>> {
-    return apiClient.post<ApiResponse<{ message: string }>>('/products/bulk/delete', {
-      productIds,
-      permanent,
-    })
+  async bulkDeleteProducts(
+    productIds: string[],
+    permanent: boolean = false,
+  ): Promise<ApiResponse<{ message: string }>> {
+    return apiClient.post<ApiResponse<{ message: string }>>(
+      '/products/bulk/delete',
+      {
+        productIds,
+        permanent,
+      },
+    )
   },
 
   /**
    * Bulk update products
    */
-  async bulkUpdateProducts(productIds: string[], updates: BulkUpdateDTO): Promise<ApiResponse<{ message: string }>> {
-    return apiClient.post<ApiResponse<{ message: string }>>('/products/bulk/update', {
-      productIds,
-      updates,
-    })
+  async bulkUpdateProducts(
+    productIds: string[],
+    updates: BulkUpdateDTO,
+  ): Promise<ApiResponse<{ message: string }>> {
+    return apiClient.post<ApiResponse<{ message: string }>>(
+      '/products/bulk/update',
+      {
+        productIds,
+        updates,
+      },
+    )
   },
 
   /**
    * Search products
    */
-  async searchProducts(query: string, page: number = 1, limit: number = 20): Promise<PaginatedResponse<Product>> {
-    return apiClient.get<PaginatedResponse<Product>>(`/products/search?q=${encodeURIComponent(query)}&page=${page}&limit=${limit}`)
+  async searchProducts(
+    query: string,
+    page: number = 1,
+    limit: number = 20,
+  ): Promise<PaginatedResponse<Product>> {
+    return apiClient.get<PaginatedResponse<Product>>(
+      `/products/search?q=${encodeURIComponent(
+        query,
+      )}&page=${page}&limit=${limit}`,
+    )
   },
 }
