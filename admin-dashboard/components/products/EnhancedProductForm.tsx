@@ -458,6 +458,37 @@ export function EnhancedProductForm({
         await Promise.all(deletePromises)
       }
 
+      // Update existing media positions and primary status
+      const existingImages = images.filter((img) => !img.id.startsWith('temp-'))
+      const existingVideos = videos.filter((vid) => !vid.id.startsWith('temp-'))
+      
+      if (existingImages.length > 0 || existingVideos.length > 0) {
+        // Find the primary image and set it
+        const primaryImage = existingImages.find((img) => img.isPrimary)
+        if (primaryImage) {
+          await mediaService.setPrimaryImage(productId, primaryImage.id).catch((err) => {
+            console.error('Failed to set primary image:', err)
+          })
+        }
+
+        // Reorder all existing media (images + videos)
+        const mediaOrder = [
+          ...existingImages.map((img) => ({
+            mediaId: img.id,
+            position: img.position,
+          })),
+          ...existingVideos.map((vid) => ({
+            mediaId: vid.id,
+            position: vid.position + existingImages.length, // offset video positions
+          })),
+        ]
+        if (mediaOrder.length > 0) {
+          await mediaService.reorderProductMedia(productId, mediaOrder).catch((err) => {
+            console.error('Failed to reorder media:', err)
+          })
+        }
+      }
+
       // Get new files from media state (files with temp IDs are newly added)
       const imageFiles = images
         .filter((img) => img.file && !img.error && img.id.startsWith('temp-'))
@@ -469,14 +500,14 @@ export function EnhancedProductForm({
       // Use updateProductWithMedia if there are new files
       if (imageFiles.length > 0 || videoFiles.length > 0) {
         return productService.updateProductWithMedia(
-          product.id,
+          productId,
           productData,
           imageFiles.length > 0 ? imageFiles : undefined,
           videoFiles.length > 0 ? videoFiles : undefined,
         )
       }
 
-      return productService.updateProduct(product.id, productData)
+      return productService.updateProduct(productId, productData)
     },
     onSuccess: () => {
       toast.success('Product updated successfully!')
