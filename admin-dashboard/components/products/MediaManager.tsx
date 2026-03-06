@@ -40,6 +40,7 @@ interface MediaManagerProps {
   videos: MediaFile[]
   onImagesChange: (images: MediaFile[]) => void
   onVideosChange: (videos: MediaFile[]) => void
+  onImageRemove?: (id: string) => void
   maxImages?: number
   maxVideos?: number
   maxImageSize?: number // in bytes
@@ -52,6 +53,7 @@ export function MediaManager({
   videos,
   onImagesChange,
   onVideosChange,
+  onImageRemove,
   maxImages = 10,
   maxVideos = 3,
   maxImageSize = 5 * 1024 * 1024, // 5MB
@@ -161,6 +163,10 @@ export function MediaManager({
 
   // Remove image
   const removeImage = (id: string) => {
+    // Track removal for server deletion
+    if (onImageRemove) {
+      onImageRemove(id)
+    }
     const updated = images.filter((img) => img.id !== id)
     // Reassign positions
     const repositioned = updated.map((img, index) => ({

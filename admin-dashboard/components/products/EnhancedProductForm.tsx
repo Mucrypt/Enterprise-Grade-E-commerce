@@ -9,6 +9,7 @@ import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import { productService, CreateProductDTO } from '@/services/product.service'
 import { categoryService } from '@/services/category.service'
 import { brandService } from '@/services/brand.service'
+import { mediaService } from '@/services/media.service'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -186,6 +187,9 @@ export function EnhancedProductForm({
   const [autoSlug, setAutoSlug] = useState(mode === 'create')
   const [isBrandFormOpen, setIsBrandFormOpen] = useState(false)
   const [mediaInitialized, setMediaInitialized] = useState(false)
+  // Track initial media IDs to detect removals
+  const [initialImageIds, setInitialImageIds] = useState<string[]>([])
+  const [initialVideoIds, setInitialVideoIds] = useState<string[]>([])
 
   // Initialize existing media when editing a product
   useEffect(() => {
@@ -195,6 +199,8 @@ export function EnhancedProductForm({
       if (Array.isArray(productMedia)) {
         const existingImages: MediaFile[] = []
         const existingVideos: MediaFile[] = []
+        const imageIds: string[] = []
+        const videoIds: string[] = []
 
         productMedia.forEach((media: any) => {
           const mediaType = media.media_type || media.type
@@ -212,8 +218,10 @@ export function EnhancedProductForm({
 
           if (mediaType === 'video') {
             existingVideos.push(mediaFile)
+            videoIds.push(media.id)
           } else {
             existingImages.push(mediaFile)
+            imageIds.push(media.id)
           }
         })
 
@@ -223,6 +231,8 @@ export function EnhancedProductForm({
 
         setImages(existingImages)
         setVideos(existingVideos)
+        setInitialImageIds(imageIds)
+        setInitialVideoIds(videoIds)
       }
       setMediaInitialized(true)
     }
@@ -403,6 +413,32 @@ export function EnhancedProductForm({
         maxOrderQuantity: data.maxOrderQuantity || undefined,
         metaTitle: data.metaTitle || undefined,
         metaDescription: data.metaDescription || undefined,
+      }
+
+      // Delete removed images (ones that were in initial set but not in current set)
+      const currentImageIds = images.map((img) => img.id).filter((id) => !id.startsWith('temp-'))
+      const removedImageIds = initialImageIds.filter((id) => !currentImageIds.includes(id))
+      
+      // Delete removed videos
+      const currentVideoIds = videos.map((vid) => vid.id).filter((id) => !id.startsWith('temp-'))
+      const removedVideoIds = initialVideoIds.filter((id) => !currentVideoIds.includes(id))
+
+      // Delete removed media from server
+      const deletePromises = [
+        ...removedImageIds.map((mediaId) => 
+          mediaService.deleteProductMedia(product.id, mediaId).catch((err) => {
+            console.error(`Failed to delete image ${mediaId}:`, err)
+          })
+        ),
+        ...removedVideoIds.map((mediaId) => 
+          mediaService.deleteProductMedia(product.id, mediaId).catch((err) => {
+            console.error(`Failed to delete video ${mediaId}:`, err)
+          })
+        ),
+      ]
+      
+      if (deletePromises.length > 0) {
+        await Promise.all(deletePromises)
       }
 
       // Get new files from media state (files with temp IDs are newly added)
@@ -1156,6 +1192,7 @@ export function EnhancedProductForm({
                     videos={videos}
                     onImagesChange={setImages}
                     onVideosChange={setVideos}
+                    onImageRemove={handleImageRemove}
                     maxImages={10}
                     maxVideos={3}
                     disabled={isPending}
