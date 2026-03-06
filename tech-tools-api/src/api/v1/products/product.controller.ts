@@ -101,6 +101,7 @@ export const getProducts = async (req: Request, res: Response) => {
             json_agg(
               json_build_object(
                 'id', pm.id,
+                'url', pm.url,
                 'image_url', pm.url,
                 'alt_text', pm.alt_text,
                 'is_primary', pm.is_primary,
@@ -557,11 +558,33 @@ export const searchProducts = async (req: Request, res: Response) => {
         c.name as category_name,
         b.name as brand_name,
         (
-          SELECT image_url 
-          FROM product_images pi 
-          WHERE pi.product_id = p.id AND pi.is_primary = true 
-          LIMIT 1
-        ) as primary_image
+          SELECT COALESCE(
+            json_agg(
+              json_build_object(
+                'id', pm.id,
+                'url', pm.url,
+                'image_url', pm.url,
+                'alt_text', pm.alt_text,
+                'is_primary', pm.is_primary,
+                'display_order', pm.position,
+                'cdn_urls', pm.cdn_urls
+              ) ORDER BY pm.is_primary DESC, pm.position
+            ),
+            '[]'::json
+          )
+          FROM (
+            SELECT id, url, alt_text, is_primary, position, cdn_urls
+            FROM product_media
+            WHERE product_id = p.id AND type = 'image'
+            ORDER BY is_primary DESC, position
+            LIMIT 5
+          ) pm
+        ) as images,
+        (
+          SELECT COALESCE(SUM(i.available_stock), 0)
+          FROM inventory i
+          WHERE i.product_id = p.id
+        ) as total_stock
        FROM products p
        LEFT JOIN categories c ON p.category_id = c.id
        LEFT JOIN brands b ON p.brand_id = b.id
