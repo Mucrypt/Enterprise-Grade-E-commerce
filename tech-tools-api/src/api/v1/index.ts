@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import authRoutes from './auth/auth.routes'
 import adminRoutes from './admin/admin.routes'
+import customersRoutes from './admin/customers.routes'
 import userRoutes from './users/user.routes'
 import productRoutes from './products/product.routes'
 import productMediaRoutes from './products/product-media.routes'
@@ -32,6 +33,7 @@ router.get('/health', (_req, res) => {
 // API routes
 router.use('/auth', authRoutes)
 router.use('/admin', adminRoutes)
+router.use('/admin/customers', customersRoutes)
 router.use('/users', userRoutes)
 router.use('/products', productRoutes)
 router.use('/products', productMediaRoutes) // Product media endpoints
