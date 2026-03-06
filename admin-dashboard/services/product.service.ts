@@ -13,6 +13,7 @@ export interface CreateProductDTO {
   salePrice?: number
   costPrice?: number
   taxRate?: number
+  stockQuantity?: number
   weight?: number
   weightUnit?: string
   length?: number

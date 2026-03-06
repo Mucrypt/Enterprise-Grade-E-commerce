@@ -104,6 +104,11 @@ const productSchema = z.object({
     .string()
     .min(1, 'SKU is required')
     .max(100, 'SKU must be less than 100 characters'),
+  stockQuantity: z
+    .number()
+    .int()
+    .min(0, 'Stock quantity must be 0 or greater')
+    .default(0),
   minOrderQuantity: z
     .number()
     .int()
@@ -306,6 +311,7 @@ export function EnhancedProductForm({
       costPrice: parseNumber(product?.costPrice, null),
       taxRate: parseNumber(product?.taxRate, null),
       sku: product?.sku || '',
+      stockQuantity: parseNumber(product?.stockQuantity, 0),
       minOrderQuantity: parseNumber(product?.minOrderQuantity, 1),
       maxOrderQuantity: parseNumber(product?.maxOrderQuantity, null),
       isBackorderAllowed: product?.isBackorderAllowed || false,
@@ -350,6 +356,7 @@ export function EnhancedProductForm({
         salePrice: data.salePrice || undefined,
         costPrice: data.costPrice || undefined,
         taxRate: data.taxRate || undefined,
+        stockQuantity: data.stockQuantity ?? 0,
         weight: data.weight || undefined,
         weightUnit: data.weightUnit,
         length: data.length || undefined,
@@ -407,6 +414,7 @@ export function EnhancedProductForm({
         salePrice: data.salePrice || undefined,
         costPrice: data.costPrice || undefined,
         taxRate: data.taxRate || undefined,
+        stockQuantity: data.stockQuantity ?? 0,
         weight: data.weight || undefined,
         weightUnit: data.weightUnit,
         length: data.length || undefined,
@@ -1029,6 +1037,29 @@ export function EnhancedProductForm({
                     )}
                     <p className='text-xs text-muted-foreground'>
                       Stock Keeping Unit - unique identifier for this product
+                    </p>
+                  </div>
+
+                  {/* Stock Quantity */}
+                  <div className='space-y-2'>
+                    <Label htmlFor='stockQuantity'>
+                      Stock Quantity <span className='text-destructive'>*</span>
+                    </Label>
+                    <Input
+                      id='stockQuantity'
+                      type='number'
+                      min='0'
+                      placeholder='0'
+                      {...register('stockQuantity', { valueAsNumber: true })}
+                      className={errors.stockQuantity ? 'border-destructive' : ''}
+                    />
+                    {errors.stockQuantity && (
+                      <p className='text-sm text-destructive'>
+                        {errors.stockQuantity.message}
+                      </p>
+                    )}
+                    <p className='text-xs text-muted-foreground'>
+                      Number of items currently in stock
                     </p>
                   </div>
 

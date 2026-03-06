@@ -285,6 +285,7 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
       salePrice,
       costPrice,
       taxRate = 0,
+      stockQuantity = 0,
       weight,
       weightUnit = 'kg',
       length,
@@ -336,12 +337,12 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
       `INSERT INTO products (
         sku, name, slug, description, short_description,
         brand_id, category_id, base_price, sale_price, cost_price,
-        tax_rate, weight, weight_unit, length, width, height,
+        tax_rate, stock_quantity, weight, weight_unit, length, width, height,
         dimensions_unit, is_active, is_digital, is_featured,
         is_backorder_allowed, min_order_quantity, max_order_quantity,
         meta_title, meta_description
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-               $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+               $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
       RETURNING *`,
       [
         sku,
@@ -355,6 +356,7 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
         salePrice,
         costPrice,
         taxRate,
+        stockQuantity,
         weight,
         weightUnit,
         length,
@@ -652,6 +654,7 @@ export const updateProduct = async (req: AuthRequest, res: Response) => {
       salePrice,
       costPrice,
       taxRate,
+      stockQuantity,
       weight,
       weightUnit,
       length,
@@ -713,6 +716,7 @@ export const updateProduct = async (req: AuthRequest, res: Response) => {
       sale_price: salePrice,
       cost_price: costPrice,
       tax_rate: taxRate,
+      stock_quantity: stockQuantity,
       weight,
       weight_unit: weightUnit,
       length,

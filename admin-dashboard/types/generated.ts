@@ -558,6 +558,8 @@ export interface Products {
   costPrice?: number
   // Default: 0
   taxRate?: number
+  // Default: 0
+  stockQuantity?: number
   weight?: number
   // Default: 'kg'::character varying
   weightUnit?: string
