@@ -32,8 +32,8 @@ router.get('/health', (_req, res) => {
 
 // API routes
 router.use('/auth', authRoutes)
+router.use('/admin/customers', customersRoutes) // Must be before /admin to avoid /:adminId catching "customers"
 router.use('/admin', adminRoutes)
-router.use('/admin/customers', customersRoutes)
 router.use('/users', userRoutes)
 router.use('/products', productRoutes)
 router.use('/products', productMediaRoutes) // Product media endpoints
