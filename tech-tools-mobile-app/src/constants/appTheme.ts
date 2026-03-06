@@ -52,12 +52,12 @@ export const AppColors = {
 
 // Gradients (as arrays for LinearGradient)
 export const AppGradients = {
-  primary: ['#FF6B35', '#FF8A5B'] as const,
-  secondary: ['#6366F1', '#8B5CF6'] as const,
-  accent: ['#10B981', '#34D399'] as const,
-  dark: ['#1F2937', '#374151'] as const,
-  flashDeal: ['#FF6B35', '#FF8A5B', '#FFA07A'] as const,
-  hero: ['#FF6B35', '#E55A2B'] as const,
+  primary: ['#FF6B35', '#FF8A5B'] as [string, string],
+  secondary: ['#6366F1', '#8B5CF6'] as [string, string],
+  accent: ['#10B981', '#34D399'] as [string, string],
+  dark: ['#1F2937', '#374151'] as [string, string],
+  flashDeal: ['#FF6B35', '#FF8A5B', '#FFA07A'] as [string, string, string],
+  hero: ['#FF6B35', '#E55A2B'] as [string, string],
 }
 
 export const AppSpacing = {
