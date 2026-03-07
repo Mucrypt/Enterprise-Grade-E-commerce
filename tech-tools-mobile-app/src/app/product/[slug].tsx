@@ -2,7 +2,7 @@
 // TechTools Mobile App - Product Detail Screen
 // ============================================
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
   Dimensions,
   FlatList,
 } from 'react-native'
+import { Video, ResizeMode } from 'expo-av'
 import { Ionicons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -24,11 +25,11 @@ import {
   AppShadows,
 } from '@/constants/appTheme'
 import { productsApi } from '@/api'
-import { Product } from '@/types'
+import { Product, ProductMedia } from '@/types'
 import {
   formatPrice,
   calculateDiscount,
-  getProductImages,
+  getProductMedia,
   generateStarRating,
 } from '@/utils'
 import { useCartStore, useWishlistStore } from '@/stores'
@@ -96,7 +97,7 @@ export default function ProductDetailScreen() {
     )
   }
 
-  const images = getProductImages(product)
+  const images = getProductMedia(product)
   const basePrice = Number(product.base_price)
   const salePrice = product.sale_price ? Number(product.sale_price) : null
   const hasDiscount = salePrice !== null && salePrice < basePrice
@@ -105,6 +106,30 @@ export default function ProductDetailScreen() {
     : 0
   const inWishlist = isInWishlist(product.id)
   const stars = generateStarRating(product.average_rating || 0)
+
+  // Render media item (image or video)
+  const renderMediaItem = ({ item }: { item: ProductMedia }) => {
+    if (item.type === 'video') {
+      return (
+        <View style={styles.mediaContainer}>
+          <Video
+            source={{ uri: item.url }}
+            style={styles.mainImage}
+            useNativeControls
+            resizeMode={ResizeMode.CONTAIN}
+            isLooping={false}
+          />
+        </View>
+      )
+    }
+    return (
+      <Image
+        source={{ uri: item.url }}
+        style={styles.mainImage}
+        resizeMode='contain'
+      />
+    )
+  }
 
   const handleAddToCart = () => {
     addToCart(product, quantity)
@@ -152,20 +177,14 @@ export default function ProductDetailScreen() {
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false}>
-          {/* Image Gallery */}
+          {/* Image/Video Gallery */}
           <View style={styles.imageGallery}>
             <FlatList
               horizontal
               pagingEnabled
               data={images}
-              keyExtractor={(_, index) => index.toString()}
-              renderItem={({ item }) => (
-                <Image
-                  source={{ uri: item }}
-                  style={styles.mainImage}
-                  resizeMode='contain'
-                />
-              )}
+              keyExtractor={(item) => item.id}
+              renderItem={renderMediaItem}
               onMomentumScrollEnd={(e) => {
                 const index = Math.round(e.nativeEvent.contentOffset.x / width)
                 setActiveImageIndex(index)
@@ -173,16 +192,24 @@ export default function ProductDetailScreen() {
               showsHorizontalScrollIndicator={false}
             />
 
-            {/* Image indicators */}
+            {/* Media indicators */}
             <View style={styles.imageIndicators}>
-              {images.map((_, index) => (
+              {images.map((item, index) => (
                 <View
-                  key={index}
+                  key={item.id || index}
                   style={[
                     styles.indicator,
                     activeImageIndex === index && styles.activeIndicator,
                   ]}
-                />
+                >
+                  {item.type === 'video' && (
+                    <Ionicons
+                      name='play'
+                      size={6}
+                      color={activeImageIndex === index ? AppColors.white : AppColors.gray600}
+                    />
+                  )}
+                </View>
               ))}
             </View>
 
@@ -403,6 +430,13 @@ const styles = StyleSheet.create({
     width,
     height: width * 0.8,
   },
+  mediaContainer: {
+    width,
+    height: width * 0.8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: AppColors.gray100,
+  },
   imageIndicators: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -411,6 +445,12 @@ const styles = StyleSheet.create({
   },
   indicator: {
     width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: AppColors.gray300,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
     height: 8,
     borderRadius: 4,
     backgroundColor: AppColors.gray300,

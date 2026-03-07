@@ -2,7 +2,7 @@
 // TechTools Mobile App - Utilities
 // ============================================
 
-import { Product } from '../types'
+import { Product, ProductMedia } from '../types'
 
 // Image base URL
 const IMAGE_BASE_URL = 'https://nexusai.lt'
@@ -76,6 +76,37 @@ export const getProductImages = (product: Product): string[] => {
     }
     return img.url
   })
+}
+
+/**
+ * Get all product media (images and videos) with full URLs
+ */
+export const getProductMedia = (product: Product): ProductMedia[] => {
+  // Prefer media array which contains both images and videos
+  const mediaItems = product.media || product.images || []
+  if (!mediaItems || mediaItems.length === 0) {
+    return [{
+      id: 'placeholder',
+      url: getPlaceholderImage(),
+      alt_text: product.name || 'Product',
+      is_primary: true,
+      position: 0,
+      type: 'image',
+    }]
+  }
+
+  return mediaItems
+    .map((item) => ({
+      ...item,
+      type: (item.type || 'image') as 'image' | 'video',
+      url: item.url.startsWith('/') ? `${IMAGE_BASE_URL}${item.url}` : item.url,
+    }))
+    .sort((a, b) => {
+      // Primary items first, then by position
+      if (a.is_primary && !b.is_primary) return -1
+      if (!a.is_primary && b.is_primary) return 1
+      return (a.position || 0) - (b.position || 0)
+    })
 }
 
 /**
