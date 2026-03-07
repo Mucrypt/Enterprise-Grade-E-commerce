@@ -451,10 +451,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: AppColors.gray300,
-  },
   activeIndicator: {
     backgroundColor: AppColors.primary,
     width: 24,
