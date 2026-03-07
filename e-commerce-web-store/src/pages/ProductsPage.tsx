@@ -3,7 +3,7 @@
 // ============================================
 
 import { useState, useEffect, useMemo } from 'react'
-import { useSearchParams, Link } from 'react-router-dom'
+import { useSearchParams, useParams, useLocation, Link } from 'react-router-dom'
 import {
   Filter,
   SlidersHorizontal,
@@ -39,6 +39,8 @@ const priceRanges = [
 
 export default function ProductsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const { slug } = useParams<{ slug: string }>()
+  const location = useLocation()
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [brands, setBrands] = useState<Brand[]>([])
@@ -48,11 +50,16 @@ export default function ProductsPage() {
   const [showFilters, setShowFilters] = useState(false)
   const [gridView, setGridView] = useState<'grid' | 'large'>('grid')
 
-  // Get filters from URL
+  // Determine if we're on a category or brand route
+  const isCategoryRoute = location.pathname.startsWith('/category/')
+  const isBrandRoute = location.pathname.startsWith('/brand/')
+
+  // Get filters from URL - prioritize route params over search params
   const filters = useMemo(
     () => ({
-      category: searchParams.get('category') || '',
-      brand: searchParams.get('brand') || '',
+      category:
+        isCategoryRoute && slug ? slug : searchParams.get('category') || '',
+      brand: isBrandRoute && slug ? slug : searchParams.get('brand') || '',
       minPrice: searchParams.get('minPrice')
         ? Number(searchParams.get('minPrice'))
         : undefined,
@@ -63,12 +70,17 @@ export default function ProductsPage() {
       search: searchParams.get('search') || '',
       inStock: searchParams.get('inStock') === 'true',
     }),
-    [searchParams],
+    [searchParams, slug, isCategoryRoute, isBrandRoute],
   )
 
   useEffect(() => {
     loadData()
   }, [])
+
+  // Reset page when navigating to new category/brand
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [slug])
 
   useEffect(() => {
     loadProducts()
@@ -124,11 +136,36 @@ export default function ProductsPage() {
   }
 
   const activeFiltersCount = [
-    filters.category,
-    filters.brand,
+    // Don't count route-based category/brand as active filters (they're the main context)
+    !isCategoryRoute && filters.category,
+    !isBrandRoute && filters.brand,
     filters.minPrice,
     filters.inStock,
   ].filter(Boolean).length
+
+  // Get current category or brand name for display
+  const currentCategory =
+    isCategoryRoute && slug ? categories.find((c) => c.slug === slug) : null
+  const currentBrand =
+    isBrandRoute && slug ? brands.find((b) => b.slug === slug) : null
+
+  // Generate page title
+  const getPageTitle = () => {
+    if (filters.search) return `Results for "${filters.search}"`
+    if (currentCategory) return currentCategory.name
+    if (currentBrand) return currentBrand.name
+    if (isCategoryRoute && slug)
+      return slug
+        .split('-')
+        .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+        .join(' ')
+    if (isBrandRoute && slug)
+      return slug
+        .split('-')
+        .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+        .join(' ')
+    return 'All Products'
+  }
 
   return (
     <div className='min-h-screen bg-gray-50'>
@@ -140,7 +177,31 @@ export default function ProductsPage() {
               Home
             </Link>
             <span>/</span>
-            <span className='text-gray-900'>All Products</span>
+            {isCategoryRoute && (
+              <>
+                <Link to='/products' className='hover:text-orange-500'>
+                  Products
+                </Link>
+                <span>/</span>
+                <span className='text-gray-900'>
+                  {currentCategory?.name || slug}
+                </span>
+              </>
+            )}
+            {isBrandRoute && (
+              <>
+                <Link to='/products' className='hover:text-orange-500'>
+                  Products
+                </Link>
+                <span>/</span>
+                <span className='text-gray-900'>
+                  {currentBrand?.name || slug}
+                </span>
+              </>
+            )}
+            {!isCategoryRoute && !isBrandRoute && (
+              <span className='text-gray-900'>All Products</span>
+            )}
           </nav>
         </div>
       </div>
@@ -152,9 +213,7 @@ export default function ProductsPage() {
             {/* Title & Count */}
             <div>
               <h1 className='text-2xl font-bold text-gray-900'>
-                {filters.search
-                  ? `Results for "${filters.search}"`
-                  : 'All Products'}
+                {getPageTitle()}
               </h1>
               <p className='text-sm text-gray-500 mt-1'>
                 {totalProducts} products found
