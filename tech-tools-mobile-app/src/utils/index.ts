@@ -5,7 +5,7 @@
 import { Product, ProductMedia } from '../types'
 
 // Image base URL
-const IMAGE_BASE_URL = 'https://nexusai.lt'
+const IMAGE_BASE_URL = 'https://techtoolstore.com'
 
 /**
  * Format price with currency symbol

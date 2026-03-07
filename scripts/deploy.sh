@@ -41,7 +41,7 @@ SERVICE="${1:-all}"
 
 echo ""
 echo "=========================================="
-echo "  Production Deployment - nexusai.lt"
+echo "  Production Deployment - techtoolstore.com"
 echo "=========================================="
 echo ""
 
@@ -60,8 +60,8 @@ case "$SERVICE" in
     admin)
         log_info "Building admin dashboard with API URL..."
         ssh_cmd "cd $REMOTE_DIR && docker build --no-cache \
-            --build-arg NEXT_PUBLIC_API_URL=https://nexusai.lt/api/v1 \
-            --build-arg NEXT_PUBLIC_MEDIA_URL=https://nexusai.lt/media \
+            --build-arg NEXT_PUBLIC_API_URL=https://techtoolstore.com/api/v1 \
+            --build-arg NEXT_PUBLIC_MEDIA_URL=https://techtoolstore.com/media \
             --build-arg NEXT_PUBLIC_BASE_PATH=/admin \
             -t infrastructure-admin-dashboard:latest \
             -f admin-dashboard/Dockerfile admin-dashboard/"
@@ -92,8 +92,8 @@ case "$SERVICE" in
         
         # Build admin dashboard with build args
         ssh_cmd "cd $REMOTE_DIR && docker build --no-cache \
-            --build-arg NEXT_PUBLIC_API_URL=https://nexusai.lt/api/v1 \
-            --build-arg NEXT_PUBLIC_MEDIA_URL=https://nexusai.lt/media \
+            --build-arg NEXT_PUBLIC_API_URL=https://techtoolstore.com/api/v1 \
+            --build-arg NEXT_PUBLIC_MEDIA_URL=https://techtoolstore.com/media \
             --build-arg NEXT_PUBLIC_BASE_PATH=/admin \
             -t infrastructure-admin-dashboard:latest \
             -f admin-dashboard/Dockerfile admin-dashboard/"
@@ -122,7 +122,7 @@ echo ""
 log_success "Deployment complete!"
 echo ""
 echo "URLs:"
-echo "  - Store: https://nexusai.lt"
-echo "  - Admin: https://nexusai.lt/admin/"
-echo "  - API:   https://nexusai.lt/api/v1/health"
+echo "  - Store: https://techtoolstore.com"
+echo "  - Admin: https://techtoolstore.com/admin/"
+echo "  - API:   https://techtoolstore.com/api/v1/health"
 echo ""

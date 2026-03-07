@@ -15,7 +15,7 @@ export function getAbsoluteMediaUrl(
   if (!path) return null
 
   const mediaBase =
-    process.env.NEXT_PUBLIC_MEDIA_URL || 'https://nexusai.lt/media'
+    process.env.NEXT_PUBLIC_MEDIA_URL || 'https://techtoolstore.com/media'
 
   // Remove leading /media/ or / to normalize
   const cleanPath = path.startsWith('/media/')

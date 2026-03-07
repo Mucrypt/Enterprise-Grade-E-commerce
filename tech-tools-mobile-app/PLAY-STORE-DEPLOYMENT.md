@@ -162,7 +162,7 @@ Run the app in emulator and capture:
 ### Privacy Policy (Required)
 
 Host a privacy policy at your domain, e.g.:
-`https://nexusai.lt/privacy-policy`
+`https://techtoolstore.com/privacy-policy`
 
 ### Content Rating
 

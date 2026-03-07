@@ -26,8 +26,8 @@ case "$SERVICE" in
     admin)
         log_info "Building admin dashboard..."
         docker build --no-cache \
-            --build-arg NEXT_PUBLIC_API_URL=https://nexusai.lt/api/v1 \
-            --build-arg NEXT_PUBLIC_MEDIA_URL=https://nexusai.lt/media \
+            --build-arg NEXT_PUBLIC_API_URL=https://techtoolstore.com/api/v1 \
+            --build-arg NEXT_PUBLIC_MEDIA_URL=https://techtoolstore.com/media \
             --build-arg NEXT_PUBLIC_BASE_PATH=/admin \
             -t infrastructure-admin-dashboard:latest \
             -f admin-dashboard/Dockerfile admin-dashboard/
@@ -52,8 +52,8 @@ case "$SERVICE" in
         log_info "Building all services..."
         
         docker build --no-cache \
-            --build-arg NEXT_PUBLIC_API_URL=https://nexusai.lt/api/v1 \
-            --build-arg NEXT_PUBLIC_MEDIA_URL=https://nexusai.lt/media \
+            --build-arg NEXT_PUBLIC_API_URL=https://techtoolstore.com/api/v1 \
+            --build-arg NEXT_PUBLIC_MEDIA_URL=https://techtoolstore.com/media \
             --build-arg NEXT_PUBLIC_BASE_PATH=/admin \
             -t infrastructure-admin-dashboard:latest \
             -f admin-dashboard/Dockerfile admin-dashboard/

@@ -30,6 +30,7 @@ openssl rand -base64 32  # DB_PASSWORD / REDIS_PASSWORD (or use 64)
 ```
 
 Update the repo root `.env` on the server:
+
 ```env
 # Strong passwords
 DB_PASSWORD=<64-char-random-string>
@@ -38,12 +39,12 @@ JWT_SECRET=<64-char-random-string>
 JWT_REFRESH_SECRET=<64-char-random-string>
 
 # Production URLs
-CORS_ORIGIN=https://nexusai.lt,https://www.nexusai.lt
-NEXT_PUBLIC_API_URL=https://nexusai.lt/api/v1
-NEXT_PUBLIC_MEDIA_URL=https://nexusai.lt/media
+CORS_ORIGIN=https://techtoolstore.com,https://www.techtoolstore.com
+NEXT_PUBLIC_API_URL=https://techtoolstore.com/api/v1
+NEXT_PUBLIC_MEDIA_URL=https://techtoolstore.com/media
 NEXT_PUBLIC_BASE_PATH=/admin
-VITE_API_URL=https://nexusai.lt/api/v1
-VITE_MEDIA_URL=https://nexusai.lt/media
+VITE_API_URL=https://techtoolstore.com/api/v1
+VITE_MEDIA_URL=https://techtoolstore.com/media
 
 # Notes
 # - Admin dashboard is behind /admin (basePath)
@@ -55,7 +56,7 @@ VITE_MEDIA_URL=https://nexusai.lt/media
 Recommended for "only me can access admin": Cloudflare Zero Trust Access.
 
 - Cloudflare Zero Trust → Access → Applications → Add Application → Self-hosted
-  - Domain: `nexusai.lt`
+  - Domain: `techtoolstore.com`
   - Path: `/admin/*`
   - Policy: Allow → Emails → `romeomukulah@gmail.com`
   - Login method: Google + require MFA
@@ -71,7 +72,7 @@ Important: Cloudflare Access only works if traffic goes through Cloudflare. To p
 
 docker compose --env-file .env -f infrastructure/docker-compose.prod.yml \
   run --rm certbot certonly --webroot -w /var/www/certbot \
-  -d nexusai.lt -d www.nexusai.lt \
+  -d techtoolstore.com -d www.techtoolstore.com \
   --email <YOUR_EMAIL> --agree-tos --no-eff-email
 
 docker compose --env-file .env -f infrastructure/docker-compose.prod.yml \
@@ -174,8 +175,8 @@ docker exec -it techtools-postgres-prod psql -U techtools_user -d techtools
 Point your domain to your server IPv4 (example shown):
 
 ```
-A    nexusai.lt        → 46.225.126.93
-A    www.nexusai.lt    → 46.225.126.93
+A    techtoolstore.com        → 46.225.126.93
+A    www.techtoolstore.com    → 46.225.126.93
 ```
 
 ## Monitoring
@@ -279,6 +280,7 @@ docker compose -f infrastructure/docker-compose.prod.yml restart web-store
 ### Nginx
 
 Edit `infrastructure/nginx/nginx.prod.conf`:
+
 - Adjust `worker_connections` based on concurrent users
 - Configure caching for static assets
 - Enable HTTP/2
@@ -327,6 +329,7 @@ maxmemory-policy allkeys-lru
 ### Common Issues
 
 **Services fail to start**
+
 ```bash
 # Check logs
 docker compose -f infrastructure/docker-compose.prod.yml logs
@@ -336,6 +339,7 @@ docker stats
 ```
 
 **Database connection errors**
+
 ```bash
 # Check Postgres is running
 docker logs techtools-postgres-prod
@@ -345,6 +349,7 @@ docker exec -it techtools-api-prod node -e "const pg=require('pg'); new pg.Pool(
 ```
 
 **Nginx 502 errors**
+
 - Check backend services are running
 - Verify upstream definitions in nginx config
 - Check logs: `docker logs techtools-nginx-prod`
@@ -352,6 +357,7 @@ docker exec -it techtools-api-prod node -e "const pg=require('pg'); new pg.Pool(
 ## 🔍 Monitoring Tools
 
 Consider integrating:
+
 - **Prometheus** - Metrics collection
 - **Grafana** - Visualization
 - **Sentry** - Error tracking

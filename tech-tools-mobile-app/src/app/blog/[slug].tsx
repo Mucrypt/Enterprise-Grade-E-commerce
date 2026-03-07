@@ -144,7 +144,7 @@ export default function BlogPostDetailScreen() {
       await Share.share({
         title: post.title,
         message: `Check out this article: ${post.title}`,
-        url: `https://nexusai.lt/blog/${post.slug}`,
+        url: `https://techtoolstore.com/blog/${post.slug}`,
       })
     } catch (error) {
       console.error('Error sharing:', error)

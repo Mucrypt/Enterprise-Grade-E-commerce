@@ -17,7 +17,7 @@ NC='\033[0m'
 
 echo ""
 echo "=========================================="
-echo "  Production Status - nexusai.lt"
+echo "  Production Status - techtoolstore.com"
 echo "=========================================="
 echo ""
 
@@ -40,7 +40,7 @@ echo ""
 echo -e "${BLUE}Health Checks:${NC}"
 
 # Check API
-API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://nexusai.lt/api/v1/health 2>/dev/null || echo "000")
+API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://techtoolstore.com/api/v1/health 2>/dev/null || echo "000")
 if [ "$API_STATUS" = "200" ]; then
     echo -e "  API:   ${GREEN}✓ Healthy${NC}"
 else
@@ -48,7 +48,7 @@ else
 fi
 
 # Check Admin
-ADMIN_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://nexusai.lt/admin/ 2>/dev/null || echo "000")
+ADMIN_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://techtoolstore.com/admin/ 2>/dev/null || echo "000")
 if [ "$ADMIN_STATUS" = "200" ] || [ "$ADMIN_STATUS" = "302" ] || [ "$ADMIN_STATUS" = "307" ]; then
     echo -e "  Admin: ${GREEN}✓ Accessible${NC}"
 else
@@ -56,7 +56,7 @@ else
 fi
 
 # Check Store
-STORE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://nexusai.lt/ 2>/dev/null || echo "000")
+STORE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://techtoolstore.com/ 2>/dev/null || echo "000")
 if [ "$STORE_STATUS" = "200" ]; then
     echo -e "  Store: ${GREEN}✓ Accessible${NC}"
 else

@@ -27,7 +27,7 @@ import {
 } from '../types'
 
 // API Configuration
-const API_BASE_URL = 'https://nexusai.lt/api/v1'
+const API_BASE_URL = 'https://techtoolstore.com/api/v1'
 
 // Create axios instance
 const apiClient: AxiosInstance = axios.create({

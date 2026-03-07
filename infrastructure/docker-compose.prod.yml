@@ -64,7 +64,7 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       JWT_ACCESS_EXPIRY: ${JWT_ACCESS_EXPIRY:-15m}
       JWT_REFRESH_EXPIRY: ${JWT_REFRESH_EXPIRY:-7d}
-      CORS_ORIGIN: ${CORS_ORIGIN:-https://nexusai.lt,https://www.nexusai.lt}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://techtoolstore.com,https://www.techtoolstore.com}
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT}
       SMTP_USER: ${SMTP_USER}
@@ -188,14 +188,14 @@ services:
     command: >
       /bin/sh -c '
         set -e;
-        if [ ! -f /etc/letsencrypt/live/nexusai.lt/fullchain.pem ]; then
-          echo "[nginx] No LetsEncrypt cert found for nexusai.lt; creating temporary self-signed cert";
+        if [ ! -f /etc/letsencrypt/live/techtoolstore.com/fullchain.pem ]; then
+          echo "[nginx] No LetsEncrypt cert found for techtoolstore.com; creating temporary self-signed cert";
           apk add --no-cache openssl >/dev/null;
-          mkdir -p /etc/letsencrypt/live/nexusai.lt;
+          mkdir -p /etc/letsencrypt/live/techtoolstore.com;
           openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
-            -keyout /etc/letsencrypt/live/nexusai.lt/privkey.pem \
-            -out /etc/letsencrypt/live/nexusai.lt/fullchain.pem \
-            -subj "/CN=nexusai.lt";
+            -keyout /etc/letsencrypt/live/techtoolstore.com/privkey.pem \
+            -out /etc/letsencrypt/live/techtoolstore.com/fullchain.pem \
+            -subj "/CN=techtoolstore.com";
         fi;
         while :; do sleep 6h & wait $${!}; nginx -s reload; done &
         nginx -g "daemon off;"'
@@ -204,7 +204,7 @@ services:
     image: dpage/pgadmin4:latest
     container_name: techtools-pgadmin-prod
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@nexusai.lt}
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@techtoolstore.com}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-ChangeMe123!}
       PGADMIN_CONFIG_CONSOLE_LOG_LEVEL: 10
       SCRIPT_NAME: /pgadmin

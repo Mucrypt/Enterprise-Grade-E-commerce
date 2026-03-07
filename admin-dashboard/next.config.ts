@@ -24,12 +24,12 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: 'https',
-        hostname: 'nexusai.lt',
+        hostname: 'techtoolstore.com',
         pathname: '/media/**',
       },
       {
         protocol: 'https',
-        hostname: '*.nexusai.lt',
+        hostname: '*.techtoolstore.com',
         pathname: '/media/**',
       },
     ],
