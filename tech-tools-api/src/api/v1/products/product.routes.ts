@@ -2,6 +2,7 @@ import { Router } from 'express'
 import {
   getProducts,
   getProductById,
+  getRelatedProducts,
   createProduct,
   updateProduct,
   deleteProduct,
@@ -25,6 +26,7 @@ const router = Router()
 router.get('/', getProducts)
 router.get('/search', searchProducts)
 router.get('/:id', getProductById)
+router.get('/:id/related', getRelatedProducts)
 router.get('/:id/variations', getProductVariations)
 
 // Protected routes (admin only)

@@ -17,12 +17,15 @@ export const getProducts = async (req: Request, res: Response) => {
       limit = 20,
       categoryId,
       brandId,
+      category, // Support slug-based filtering
+      brand, // Support slug-based filtering
       minPrice,
       maxPrice,
       sortBy = 'created_at',
       sortOrder = 'desc',
       featured,
       inStock,
+      search,
     } = req.query
 
     const offset = (Number(page) - 1) * Number(limit)
@@ -31,16 +34,34 @@ export const getProducts = async (req: Request, res: Response) => {
     const queryParams: any[] = []
     let paramCount = 1
 
-    // Build filters
+    // Build filters - support both ID and slug for category
     if (categoryId) {
       whereClause += ` AND p.category_id = $${paramCount}`
       queryParams.push(categoryId)
       paramCount++
+    } else if (category) {
+      // Look up category by slug
+      whereClause += ` AND p.category_id IN (SELECT id FROM categories WHERE slug = $${paramCount})`
+      queryParams.push(category)
+      paramCount++
     }
 
+    // Support both ID and slug for brand
     if (brandId) {
       whereClause += ` AND p.brand_id = $${paramCount}`
       queryParams.push(brandId)
+      paramCount++
+    } else if (brand) {
+      // Look up brand by slug
+      whereClause += ` AND p.brand_id IN (SELECT id FROM brands WHERE slug = $${paramCount})`
+      queryParams.push(brand)
+      paramCount++
+    }
+
+    // Search filter
+    if (search) {
+      whereClause += ` AND (p.name ILIKE $${paramCount} OR p.description ILIKE $${paramCount} OR p.sku ILIKE $${paramCount})`
+      queryParams.push(`%${search}%`)
       paramCount++
     }
 
@@ -621,6 +642,91 @@ export const searchProducts = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Search failed',
+    })
+  }
+}
+
+// Get related products by category and brand
+export const getRelatedProducts = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+    const { limit = 8 } = req.query
+
+    // First get the product to find its category and brand
+    const productResult = await query(
+      'SELECT id, category_id, brand_id FROM products WHERE id = $1 AND deleted_at IS NULL',
+      [id],
+    )
+
+    if (productResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Product not found',
+      })
+    }
+
+    const product = productResult.rows[0]
+
+    // Get related products by same category or brand, excluding current product
+    const result = await query(
+      `SELECT 
+        p.id,
+        p.name,
+        p.slug,
+        p.base_price,
+        p.sale_price,
+        p.is_featured,
+        c.name as category_name,
+        c.slug as category_slug,
+        b.name as brand_name,
+        b.slug as brand_slug,
+        (
+          SELECT json_agg(
+            json_build_object(
+              'id', pm.id,
+              'url', pm.url,
+              'image_url', pm.url,
+              'alt_text', pm.alt_text,
+              'is_primary', pm.is_primary
+            ) ORDER BY pm.is_primary DESC, pm.position
+          )
+          FROM product_media pm
+          WHERE pm.product_id = p.id AND pm.type = 'image'
+          LIMIT 3
+        ) as images
+      FROM products p
+      LEFT JOIN categories c ON p.category_id = c.id
+      LEFT JOIN brands b ON p.brand_id = b.id
+      WHERE p.is_active = true 
+        AND p.deleted_at IS NULL
+        AND p.id != $1
+        AND (p.category_id = $2 OR p.brand_id = $3)
+      ORDER BY 
+        CASE WHEN p.category_id = $2 AND p.brand_id = $3 THEN 1
+             WHEN p.category_id = $2 THEN 2
+             WHEN p.brand_id = $3 THEN 3
+             ELSE 4
+        END,
+        p.is_featured DESC,
+        p.created_at DESC
+      LIMIT $4`,
+      [id, product.category_id, product.brand_id, limit],
+    )
+
+    res.json({
+      success: true,
+      data: {
+        products: result.rows.map((row) => ({
+          ...row,
+          images: row.images || [],
+        })),
+      },
+    })
+  } catch (error) {
+    logger.error('Get related products error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch related products',
     })
   }
 }
