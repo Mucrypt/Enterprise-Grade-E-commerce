@@ -31,7 +31,8 @@ export interface Product extends BaseEntity {
   is_featured: boolean
   total_stock: number
   images: ProductImage[] | null
-  media?: ProductImage[] | null
+  videos?: ProductVideo[] | null
+  media?: ProductMedia[] | null
   specifications?: ProductSpecification[] | null
   inventory?: ProductInventory[]
   average_rating?: number | string
@@ -63,6 +64,31 @@ export interface ProductImage {
   alt_text: string
   is_primary: boolean
   display_order: number
+  type?: 'image'
+  position?: number
+  cdn_urls?: Record<string, string>
+}
+
+export interface ProductVideo {
+  id: string
+  url: string
+  alt_text: string
+  is_primary: boolean
+  position: number
+  type: 'video'
+  cdn_urls?: Record<string, string>
+  thumbnail_url?: string
+  duration?: number
+}
+
+export interface ProductMedia {
+  id: string
+  url: string
+  alt_text: string
+  is_primary: boolean
+  position: number
+  type: 'image' | 'video'
+  cdn_urls?: Record<string, string>
 }
 
 export interface ProductVariant {

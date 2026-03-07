@@ -22,8 +22,9 @@ import {
   Award,
   MessageSquare,
   ThumbsUp,
+  Play,
 } from 'lucide-react'
-import type { Product } from '../types'
+import type { Product, ProductMedia } from '../types'
 import { productsApi } from '../api'
 import { useCartStore, useWishlistStore } from '../stores'
 import { cn, formatPrice, calculateDiscount, getProductImage } from '../utils'
@@ -125,17 +126,30 @@ export default function ProductDetailPage() {
     product.sale_price || 0,
   )
   const inWishlist = isInWishlist(product.id)
-  const images = product.images?.length
-    ? product.images
-    : [
-        {
-          url: getProductImage(product),
-          is_primary: true,
-          id: '1',
-          alt_text: product.name,
-          display_order: 0,
-        },
-      ]
+  
+  // Build gallery items from media (includes both images and videos)
+  const galleryItems: ProductMedia[] = product.media?.length
+    ? product.media.sort((a, b) => {
+        // Primary items first, then by position
+        if (a.is_primary && !b.is_primary) return -1
+        if (!a.is_primary && b.is_primary) return 1
+        return (a.position || 0) - (b.position || 0)
+      })
+    : product.images?.length
+      ? product.images.map(img => ({ ...img, type: 'image' as const, position: img.display_order || 0 }))
+      : [
+          {
+            url: getProductImage(product),
+            is_primary: true,
+            id: '1',
+            alt_text: product.name,
+            position: 0,
+            type: 'image' as const,
+          },
+        ]
+  
+  // For backwards compatibility
+  const images = galleryItems
 
   return (
     <div className='min-h-screen bg-gray-50'>
@@ -172,15 +186,26 @@ export default function ProductDetailPage() {
       {/* Main Content */}
       <div className='max-w-7xl mx-auto px-4 py-8'>
         <div className='grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12'>
-          {/* Image Gallery */}
+          {/* Image/Video Gallery */}
           <div className='space-y-4'>
-            {/* Main Image */}
+            {/* Main Image or Video */}
             <div className='relative aspect-square bg-white rounded-2xl overflow-hidden shadow-sm'>
-              <img
-                src={images[selectedImage]?.url || getProductImage(product)}
-                alt={product.name}
-                className='w-full h-full object-contain p-6'
-              />
+              {galleryItems[selectedImage]?.type === 'video' ? (
+                <video
+                  src={galleryItems[selectedImage]?.url}
+                  controls
+                  className='w-full h-full object-contain p-6'
+                  poster={galleryItems[selectedImage]?.cdn_urls?.thumbnail}
+                >
+                  Your browser does not support the video tag.
+                </video>
+              ) : (
+                <img
+                  src={galleryItems[selectedImage]?.url || getProductImage(product)}
+                  alt={product.name}
+                  className='w-full h-full object-contain p-6'
+                />
+              )}
 
               {/* Navigation */}
               {images.length > 1 && (
@@ -242,24 +267,37 @@ export default function ProductDetailPage() {
             </div>
 
             {/* Thumbnails */}
-            {images.length > 1 && (
+            {galleryItems.length > 1 && (
               <div className='flex gap-3 overflow-x-auto pb-2'>
-                {images.map((image, index) => (
+                {galleryItems.map((item, index) => (
                   <button
-                    key={image.id || index}
+                    key={item.id || index}
                     onClick={() => setSelectedImage(index)}
                     className={cn(
-                      'shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 transition-all',
+                      'relative shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 transition-all',
                       selectedImage === index
                         ? 'border-orange-500'
                         : 'border-transparent hover:border-gray-300',
                     )}
                   >
-                    <img
-                      src={image.url}
-                      alt={image.alt_text || `${product.name} ${index + 1}`}
-                      className='w-full h-full object-cover'
-                    />
+                    {item.type === 'video' ? (
+                      <>
+                        <video
+                          src={item.url}
+                          className='w-full h-full object-cover'
+                          muted
+                        />
+                        <div className='absolute inset-0 bg-black/30 flex items-center justify-center'>
+                          <Play className='w-6 h-6 text-white fill-white' />
+                        </div>
+                      </>
+                    ) : (
+                      <img
+                        src={item.url}
+                        alt={item.alt_text || `${product.name} ${index + 1}`}
+                        className='w-full h-full object-cover'
+                      />
+                    )}
                   </button>
                 ))}
               </div>
