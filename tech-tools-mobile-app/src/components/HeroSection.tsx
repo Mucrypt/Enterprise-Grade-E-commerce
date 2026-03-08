@@ -2,24 +2,32 @@
 // TechTools Mobile App - Hero Section Component
 // ============================================
 
-import React from 'react';
+import React from 'react'
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   Dimensions,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { AppColors, AppBorderRadius, AppSpacing, AppGradients } from '@/constants/appTheme';
-import SearchBar from './SearchBar';
+} from 'react-native'
+import { LinearGradient } from 'expo-linear-gradient'
+import { Ionicons } from '@expo/vector-icons'
+import { useRouter } from 'expo-router'
+import {
+  AppColors,
+  AppBorderRadius,
+  AppSpacing,
+  AppGradients,
+} from '@/constants/appTheme'
+import { useWishlistStore, useCartStore } from '@/stores'
+import SearchBar from './SearchBar'
 
-const { width } = Dimensions.get('window');
+const { width } = Dimensions.get('window')
 
 export default function HeroSection() {
-  const router = useRouter();
+  const router = useRouter()
+  const wishlistCount = useWishlistStore((state) => state.items.length)
+  const cartCount = useCartStore((state) => state.itemCount())
 
   return (
     <LinearGradient
@@ -34,17 +42,41 @@ export default function HeroSection() {
           <Text style={styles.welcome}>Welcome to</Text>
           <Text style={styles.brand}>TechTools</Text>
         </View>
-        <TouchableOpacity
-          style={styles.cartButton}
-          onPress={() => router.push('/cart')}
-        >
-          <Ionicons name="cart-outline" size={24} color={AppColors.white} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          {/* Wishlist Button */}
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={() => router.push('/wishlist')}
+          >
+            <Ionicons name='heart-outline' size={24} color={AppColors.white} />
+            {wishlistCount > 0 && (
+              <View style={styles.headerBadge}>
+                <Text style={styles.headerBadgeText}>
+                  {wishlistCount > 9 ? '9+' : wishlistCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          {/* Cart Button */}
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={() => router.push('/cart')}
+          >
+            <Ionicons name='cart-outline' size={24} color={AppColors.white} />
+            {cartCount > 0 && (
+              <View style={styles.headerBadge}>
+                <Text style={styles.headerBadgeText}>
+                  {cartCount > 9 ? '9+' : cartCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Search Bar */}
       <View style={styles.searchContainer}>
-        <SearchBar placeholder="Search for products, brands..." />
+        <SearchBar placeholder='Search for products, brands...' />
       </View>
 
       {/* Promo Banner */}
@@ -54,21 +86,31 @@ export default function HeroSection() {
             <Text style={styles.promoTagText}>NEW ARRIVALS</Text>
           </View>
           <Text style={styles.promoTitle}>Tech Essentials</Text>
-          <Text style={styles.promoSubtitle}>Up to 40% off on latest gadgets</Text>
+          <Text style={styles.promoSubtitle}>
+            Up to 40% off on latest gadgets
+          </Text>
           <TouchableOpacity
             style={styles.shopButton}
             onPress={() => router.push('/products')}
           >
             <Text style={styles.shopButtonText}>Shop Now</Text>
-            <Ionicons name="arrow-forward" size={16} color={AppColors.primary} />
+            <Ionicons
+              name='arrow-forward'
+              size={16}
+              color={AppColors.primary}
+            />
           </TouchableOpacity>
         </View>
         <View style={styles.promoDecoration}>
-          <Ionicons name="hardware-chip" size={80} color="rgba(255,255,255,0.2)" />
+          <Ionicons
+            name='hardware-chip'
+            size={80}
+            color='rgba(255,255,255,0.2)'
+          />
         </View>
       </View>
     </LinearGradient>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
@@ -94,13 +136,38 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: AppColors.white,
   },
-  cartButton: {
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
     backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
+  },
+  headerBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: AppColors.error,
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  headerBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: AppColors.white,
   },
   searchContainer: {
     marginBottom: AppSpacing.lg,
@@ -160,4 +227,4 @@ const styles = StyleSheet.create({
     bottom: -20,
     opacity: 0.5,
   },
-});
+})

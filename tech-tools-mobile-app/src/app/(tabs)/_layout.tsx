@@ -6,7 +6,8 @@ import React from 'react'
 import { Tabs } from 'expo-router'
 import { View, Text, StyleSheet, Platform } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { AppColors, AppShadows } from '@/constants/appTheme'
+import { LinearGradient } from 'expo-linear-gradient'
+import { AppColors, AppGradients } from '@/constants/appTheme'
 import { useCartStore } from '@/stores'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -30,6 +31,30 @@ function TabBarIcon({ focused, color, name, badge }: TabBarIconProps) {
           <Text style={styles.badgeText}>{badge > 9 ? '9+' : badge}</Text>
         </View>
       )}
+    </View>
+  )
+}
+
+// Special center tab icon with beautiful floating design
+function CenterTabIcon({ focused }: { focused: boolean }) {
+  return (
+    <View style={styles.centerTabWrapper}>
+      <View style={styles.centerTabOuter}>
+        <LinearGradient
+          colors={
+            focused ? [AppColors.primary, '#FF8F6B'] : ['#FFE5DB', '#FFF0EB']
+          }
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.centerTabGradient}
+        >
+          <Ionicons
+            name={focused ? 'stats-chart' : 'stats-chart-outline'}
+            size={20}
+            color={focused ? AppColors.white : AppColors.primary}
+          />
+        </LinearGradient>
+      </View>
     </View>
   )
 }
@@ -88,13 +113,18 @@ export default function TabsLayout() {
         name='trending'
         options={{
           title: 'Trending',
-          tabBarIcon: ({ focused, color }) => (
-            <TabBarIcon
-              focused={focused}
-              color={color}
-              name={focused ? 'trending-up' : 'trending-up-outline'}
-            />
+          tabBarLabel: ({ focused }) => (
+            <Text
+              style={[
+                styles.centerTabLabel,
+                focused && styles.centerTabLabelActive,
+              ]}
+            >
+              Trending
+            </Text>
           ),
+          tabBarIcon: ({ focused }) => <CenterTabIcon focused={focused} />,
+          tabBarItemStyle: styles.centerTabItem,
         }}
       />
       <Tabs.Screen
@@ -111,17 +141,11 @@ export default function TabsLayout() {
           ),
         }}
       />
+      {/* Hide wishlist from tabs - accessible from header */}
       <Tabs.Screen
         name='wishlist'
         options={{
-          title: 'Wishlist',
-          tabBarIcon: ({ focused, color }) => (
-            <TabBarIcon
-              focused={focused}
-              color={color}
-              name={focused ? 'heart' : 'heart-outline'}
-            />
-          ),
+          href: null, // Hides from tab bar but keeps route accessible
         }}
       />
       <Tabs.Screen
@@ -205,5 +229,47 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '700',
     color: AppColors.white,
+  },
+  // Center Tab (Trending) - Beautiful floating design
+  centerTabWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    marginTop: -12,
+  },
+  centerTabOuter: {
+    ...Platform.select({
+      ios: {
+        shadowColor: AppColors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.25,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
+  },
+  centerTabGradient: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: AppColors.white,
+  },
+  centerTabLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: AppColors.gray400,
+    marginTop: 6,
+  },
+  centerTabLabelActive: {
+    color: AppColors.primary,
+    fontWeight: '700',
+  },
+  centerTabItem: {
+    paddingTop: 4,
   },
 })

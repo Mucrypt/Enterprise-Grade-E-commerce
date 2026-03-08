@@ -14,9 +14,11 @@ import {
   TouchableOpacity,
   Dimensions,
   Image,
+  Platform,
 } from 'react-native'
 import { useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import {
   HeroSection,
@@ -29,6 +31,18 @@ import {
 import { AppColors, AppSpacing, PromoBanners } from '@/constants/appTheme'
 import { productsApi, categoriesApi, brandsApi, blogApi } from '@/api'
 import { Product, Category, Brand, BlogPost } from '@/types'
+
+// Premium brand gradients
+const BRAND_GRADIENTS: [string, string][] = [
+  ['#FF6B35', '#FF8F6B'],
+  ['#6366F1', '#8B5CF6'],
+  ['#10B981', '#34D399'],
+  ['#F59E0B', '#FBBF24'],
+  ['#EC4899', '#F472B6'],
+  ['#3B82F6', '#60A5FA'],
+  ['#8B5CF6', '#A78BFA'],
+  ['#14B8A6', '#2DD4BF'],
+]
 
 const { width } = Dimensions.get('window')
 
@@ -288,7 +302,7 @@ export default function HomeTabScreen() {
           </View>
         )}
 
-        {/* Brand Showcase */}
+        {/* Brand Showcase - Premium Design */}
         <View style={[styles.section, styles.lastSection]}>
           <SectionHeader
             title='Top Brands'
@@ -299,17 +313,48 @@ export default function HomeTabScreen() {
             horizontal
             data={brands}
             keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
+            renderItem={({ item, index }) => (
               <TouchableOpacity
-                style={styles.brandCard}
+                style={styles.premiumBrandCard}
                 onPress={() => router.push(`/products?brand=${item.slug}`)}
+                activeOpacity={0.9}
               >
-                <View style={styles.brandLogo}>
-                  <Text style={styles.brandInitial}>{item.name.charAt(0)}</Text>
-                </View>
-                <Text style={styles.brandName} numberOfLines={1}>
-                  {item.name}
-                </Text>
+                <LinearGradient
+                  colors={BRAND_GRADIENTS[index % BRAND_GRADIENTS.length]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.premiumBrandGradient}
+                >
+                  {item.logo_url ? (
+                    <View style={styles.premiumBrandLogoContainer}>
+                      <Image
+                        source={{ uri: item.logo_url }}
+                        style={styles.premiumBrandLogo}
+                        resizeMode='contain'
+                      />
+                    </View>
+                  ) : (
+                    <View style={styles.premiumBrandInitialContainer}>
+                      <Text style={styles.premiumBrandInitial}>
+                        {item.name.charAt(0)}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.premiumBrandInfo}>
+                    <Text style={styles.premiumBrandName} numberOfLines={1}>
+                      {item.name}
+                    </Text>
+                    <View style={styles.premiumBrandArrow}>
+                      <Ionicons
+                        name='arrow-forward'
+                        size={12}
+                        color='rgba(255,255,255,0.8)'
+                      />
+                    </View>
+                  </View>
+                  {/* Decorative element */}
+                  <View style={styles.premiumBrandDecor} />
+                </LinearGradient>
               </TouchableOpacity>
             )}
             showsHorizontalScrollIndicator={false}
@@ -380,34 +425,85 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: AppSpacing.base,
   },
-  brandCard: {
-    alignItems: 'center',
-    width: 80,
+  // Premium Brand Card Styles
+  premiumBrandCard: {
+    width: 140,
+    height: 90,
+    borderRadius: 16,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
   },
-  brandLogo: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+  premiumBrandGradient: {
+    flex: 1,
+    padding: AppSpacing.md,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  premiumBrandLogoContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: AppColors.white,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 6,
     marginBottom: AppSpacing.xs,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
   },
-  brandInitial: {
-    fontSize: 24,
+  premiumBrandLogo: {
+    width: '100%',
+    height: '100%',
+  },
+  premiumBrandInitialContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: AppSpacing.xs,
+  },
+  premiumBrandInitial: {
+    fontSize: 16,
     fontWeight: '700',
-    color: AppColors.primary,
+    color: AppColors.white,
   },
-  brandName: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: AppColors.gray700,
-    textAlign: 'center',
+  premiumBrandInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  premiumBrandName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: AppColors.white,
+    flex: 1,
+  },
+  premiumBrandArrow: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  premiumBrandDecor: {
+    position: 'absolute',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    bottom: -15,
+    right: -15,
   },
   blogCard: {
     width: 200,

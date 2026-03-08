@@ -64,6 +64,7 @@ export interface ProductMedia {
   position: number
   type: 'image' | 'video'
   cdn_urls?: Record<string, string>
+  thumbnail_url?: string
 }
 
 export interface ProductSpecification {
