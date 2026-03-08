@@ -118,6 +118,8 @@ export default function ProductDetailScreen() {
             useNativeControls
             resizeMode={ResizeMode.CONTAIN}
             isLooping={false}
+            posterSource={{ uri: item.thumbnail_url || '' }}
+            usePoster={!!item.thumbnail_url}
           />
         </View>
       )
@@ -206,7 +208,11 @@ export default function ProductDetailScreen() {
                     <Ionicons
                       name='play'
                       size={6}
-                      color={activeImageIndex === index ? AppColors.white : AppColors.gray600}
+                      color={
+                        activeImageIndex === index
+                          ? AppColors.white
+                          : AppColors.gray600
+                      }
                     />
                   )}
                 </View>
