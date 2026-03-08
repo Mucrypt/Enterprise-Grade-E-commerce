@@ -184,11 +184,14 @@ export const getProductCollectionById = async (req: Request, res: Response) => {
     const { includeProducts = 'true' } = req.query
 
     // Determine if collectionId is a UUID or slug
-    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(collectionId)
-    
+    const isUUID =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        collectionId,
+      )
+
     // Get collection details - support both ID and slug lookup
     const collectionResult = await dbQuery(
-      isUUID 
+      isUUID
         ? 'SELECT * FROM product_collections WHERE id = $1'
         : 'SELECT * FROM product_collections WHERE slug = $1',
       [collectionId],
