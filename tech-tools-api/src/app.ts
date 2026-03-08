@@ -16,7 +16,8 @@ import logger from './utils/logger'
 const app: Application = express()
 
 // Trust proxy for rate limiting behind nginx/cloudflare
-app.set('trust proxy', true)
+// Using 1 instead of true to specify exactly one proxy (nginx) in front
+app.set('trust proxy', 1)
 
 // Swagger documentation (disabled for now)
 // const swaggerDocument = YAML.load('./swagger.yaml')
@@ -52,6 +53,7 @@ const limiter = rateLimit({
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false, // Disable validation warnings in production
 })
 app.use('/api/', limiter)
 
