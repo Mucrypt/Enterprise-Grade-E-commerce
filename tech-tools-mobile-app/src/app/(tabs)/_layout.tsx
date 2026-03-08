@@ -85,6 +85,19 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name='trending'
+        options={{
+          title: 'Trending',
+          tabBarIcon: ({ focused, color }) => (
+            <TabBarIcon
+              focused={focused}
+              color={color}
+              name={focused ? 'trending-up' : 'trending-up-outline'}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name='cart'
         options={{
           title: 'Cart',

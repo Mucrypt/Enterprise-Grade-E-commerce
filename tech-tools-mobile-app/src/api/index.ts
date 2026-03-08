@@ -24,6 +24,7 @@ import {
   BlogTag,
   BlogAuthor,
   BlogFilters,
+  ProductCollection,
 } from '../types'
 
 // API Configuration
@@ -585,6 +586,148 @@ export const blogApi = {
   },
 }
 
+// ============================================
+// Collections API
+// ============================================
+export const collectionsApi = {
+  // Get all product collections
+  getAll: async (filters?: {
+    featured?: boolean
+    active?: boolean
+    limit?: number
+    page?: number
+  }): Promise<{ collections: ProductCollection[]; pagination: Pagination }> => {
+    const params = new URLSearchParams()
+
+    if (filters?.featured) params.append('featured', 'true')
+    if (filters?.active !== false) params.append('active', 'true')
+    if (filters?.limit) params.append('limit', String(filters.limit))
+    if (filters?.page) params.append('page', String(filters.page))
+
+    const response = await apiClient.get(
+      `/collections/products?${params.toString()}`,
+    )
+    const data = response.data.data || response.data
+
+    return {
+      collections: data.collections || data,
+      pagination: data.pagination || {
+        page: 1,
+        limit: 20,
+        total: data.collections?.length || 0,
+        totalPages: 1,
+      },
+    }
+  },
+
+  // Get featured collections
+  getFeatured: async (limit = 10): Promise<ProductCollection[]> => {
+    const result = await collectionsApi.getAll({ featured: true, limit })
+    return result.collections
+  },
+
+  // Get collection by ID or slug
+  getById: async (id: string): Promise<ProductCollection> => {
+    const response = await apiClient.get(`/collections/products/${id}`)
+    const data = response.data.data || response.data
+    return data.collection || data
+  },
+
+  // Get products in a collection
+  getProducts: async (
+    collectionId: string,
+    filters?: ProductFilters & { page?: number; limit?: number },
+  ): Promise<{ products: Product[]; pagination: Pagination }> => {
+    const params = new URLSearchParams()
+
+    if (filters?.page) params.append('page', String(filters.page))
+    if (filters?.limit) params.append('limit', String(filters.limit))
+    if (filters?.sortBy) params.append('sortBy', filters.sortBy)
+
+    const response = await apiClient.get(
+      `/collections/products/${collectionId}?${params.toString()}`,
+    )
+    const data = response.data.data || response.data
+
+    return {
+      products: data.products || [],
+      pagination: data.pagination || {
+        page: 1,
+        limit: 20,
+        total: data.products?.length || 0,
+        totalPages: 1,
+      },
+    }
+  },
+}
+
+// ============================================
+// Trending API (combines collections, brands, categories)
+// ============================================
+export const trendingApi = {
+  // Get trending data for the trending screen
+  getTrendingData: async (): Promise<{
+    collections: ProductCollection[]
+    featuredBrands: Brand[]
+    trendingCategories: Category[]
+  }> => {
+    const [collectionsRes, brandsRes, categoriesRes] = await Promise.all([
+      collectionsApi.getFeatured(10),
+      brandsApi.getAll(),
+      categoriesApi.getAll(),
+    ])
+
+    return {
+      collections: collectionsRes,
+      featuredBrands: brandsRes.slice(0, 10),
+      trendingCategories: categoriesRes.slice(0, 10),
+    }
+  },
+
+  // Get brands with products for store section
+  getBrandWithProducts: async (
+    brandSlug: string,
+    limit = 4,
+  ): Promise<{ brand: Brand; products: Product[] }> => {
+    const [brand, productsRes] = await Promise.all([
+      brandsApi.getBySlug(brandSlug),
+      brandsApi.getProducts(brandSlug, { limit }),
+    ])
+
+    return {
+      brand,
+      products: productsRes.products.slice(0, limit),
+    }
+  },
+
+  // Get multiple brands with their products
+  getBrandsWithProducts: async (
+    limit = 5,
+    productsPerBrand = 4,
+  ): Promise<Array<{ brand: Brand; products: Product[] }>> => {
+    const brands = await brandsApi.getAll()
+    const topBrands = brands.slice(0, limit)
+
+    const brandsWithProducts = await Promise.all(
+      topBrands.map(async (brand) => {
+        try {
+          const productsRes = await brandsApi.getProducts(brand.slug, {
+            limit: productsPerBrand,
+          })
+          return {
+            brand,
+            products: productsRes.products.slice(0, productsPerBrand),
+          }
+        } catch {
+          return { brand, products: [] }
+        }
+      }),
+    )
+
+    return brandsWithProducts.filter((b) => b.products.length > 0)
+  },
+}
+
 // Combined API object for convenience
 export const api = {
   auth: authApi,
@@ -596,4 +739,6 @@ export const api = {
   reviews: reviewsApi,
   wishlist: wishlistApi,
   blog: blogApi,
+  collections: collectionsApi,
+  trending: trendingApi,
 }

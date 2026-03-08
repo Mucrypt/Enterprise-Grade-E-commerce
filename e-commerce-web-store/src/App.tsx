@@ -31,6 +31,7 @@ import PressPage from './pages/PressPage'
 import AffiliatePage from './pages/AffiliatePage'
 import BlogPage from './pages/BlogPage'
 import BlogPostPage from './pages/BlogPostPage'
+import TrendingPage from './pages/TrendingPage'
 
 // Create React Query client
 const queryClient = new QueryClient({
@@ -59,6 +60,7 @@ function App() {
             <Route path='brand/:slug' element={<ProductsPage />} />
             <Route path='sale' element={<ProductsPage />} />
             <Route path='new-arrivals' element={<ProductsPage />} />
+            <Route path='trending' element={<TrendingPage />} />
             <Route path='search' element={<ProductsPage />} />
 
             {/* Cart & Checkout */}

@@ -207,6 +207,8 @@ export interface ProductFilters {
   featured?: boolean
   sortBy?: string
   search?: string
+  page?: number
+  limit?: number
 }
 
 export interface Pagination {
@@ -309,4 +311,62 @@ export interface BlogFilters {
   author?: string
   search?: string
   featured?: boolean
+}
+
+// ============================================
+// Trending & Collections Types
+// ============================================
+
+export interface ProductCollection {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  short_description: string | null
+  image_url: string | null
+  banner_url: string | null
+  is_active: boolean
+  is_featured: boolean
+  visibility: 'public' | 'private' | 'hidden'
+  position: number
+  display_order: 'manual' | 'newest' | 'popular' | 'price_asc' | 'price_desc'
+  items_count: number
+  meta_title: string | null
+  meta_description: string | null
+  starts_at: string | null
+  ends_at: string | null
+  created_at: string
+  updated_at: string
+  products?: Product[]
+}
+
+export interface TrendingBrand extends Brand {
+  follower_count: number
+  products_sold: number
+  new_products_count: number
+  is_following?: boolean
+  featured_products?: Product[]
+}
+
+export interface TrendingHashtag {
+  id: string
+  name: string
+  slug: string
+  product_count: number
+  image_url: string | null
+  is_trending: boolean
+}
+
+export interface TrendingSection {
+  id: string
+  title: string
+  type: 'hashtag' | 'brand' | 'collection' | 'category'
+  items: ProductCollection[] | TrendingBrand[] | TrendingHashtag[]
+}
+
+export interface CollectionFilters {
+  featured?: boolean
+  active?: boolean
+  limit?: number
+  page?: number
 }

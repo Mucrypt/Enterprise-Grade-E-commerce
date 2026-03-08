@@ -24,6 +24,7 @@ import {
   FileText,
   Hash,
   UserCircle,
+  TrendingUp,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -109,6 +110,12 @@ const navigation: NavItem[] = [
         icon: UserCircle,
       },
     ],
+  },
+  {
+    title: 'Trending',
+    href: '/trending',
+    icon: TrendingUp,
+    badge: 'New',
   },
   {
     title: 'Orders',
