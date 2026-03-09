@@ -2,9 +2,9 @@
 // Source: https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2
 
 export interface Country {
-  code: string;
-  name: string;
-  region: string;
+  code: string
+  name: string
+  region: string
 }
 
 export const countries: Country[] = [
@@ -77,7 +77,11 @@ export const countries: Country[] = [
   { code: 'PA', name: 'Panama', region: 'North America' },
   { code: 'KN', name: 'Saint Kitts and Nevis', region: 'North America' },
   { code: 'LC', name: 'Saint Lucia', region: 'North America' },
-  { code: 'VC', name: 'Saint Vincent and the Grenadines', region: 'North America' },
+  {
+    code: 'VC',
+    name: 'Saint Vincent and the Grenadines',
+    region: 'North America',
+  },
   { code: 'TT', name: 'Trinidad and Tobago', region: 'North America' },
   { code: 'US', name: 'United States', region: 'North America' },
 
@@ -218,46 +222,97 @@ export const countries: Country[] = [
   { code: 'TO', name: 'Tonga', region: 'Oceania' },
   { code: 'TV', name: 'Tuvalu', region: 'Oceania' },
   { code: 'VU', name: 'Vanuatu', region: 'Oceania' },
-];
+]
 
 // Sorted alphabetically by name for dropdown usage
 export const countriesSortedByName = [...countries].sort((a, b) =>
-  a.name.localeCompare(b.name)
-);
+  a.name.localeCompare(b.name),
+)
 
 // Group countries by region
-export const countriesByRegion = countries.reduce(
-  (acc, country) => {
-    if (!acc[country.region]) {
-      acc[country.region] = [];
-    }
-    acc[country.region].push(country);
-    return acc;
-  },
-  {} as Record<string, Country[]>
-);
+export const countriesByRegion = countries.reduce((acc, country) => {
+  if (!acc[country.region]) {
+    acc[country.region] = []
+  }
+  acc[country.region].push(country)
+  return acc
+}, {} as Record<string, Country[]>)
 
 // Get country by code
 export const getCountryByCode = (code: string): Country | undefined => {
-  return countries.find((c) => c.code === code);
-};
+  return countries.find((c) => c.code === code)
+}
 
 // Get country name by code
 export const getCountryName = (code: string): string => {
-  const country = getCountryByCode(code);
-  return country?.name ?? code;
-};
+  const country = getCountryByCode(code)
+  return country?.name ?? code
+}
 
 // Stripe supported countries for payments
 export const stripePaymentCountries = countries.filter((c) =>
   [
     // Major Stripe supported regions
-    'US', 'CA', 'GB', 'AU', 'NZ', 'IE', 'FR', 'DE', 'AT', 'BE', 'NL', 'LU',
-    'IT', 'ES', 'PT', 'DK', 'FI', 'NO', 'SE', 'CH', 'PL', 'CZ', 'SK', 'HU',
-    'RO', 'BG', 'HR', 'SI', 'EE', 'LV', 'LT', 'MT', 'CY', 'GR', 'JP', 'SG',
-    'HK', 'MY', 'TH', 'ID', 'PH', 'VN', 'IN', 'AE', 'SA', 'IL', 'BR', 'MX',
-    'AR', 'CL', 'CO', 'PE', 'ZA', 'NG', 'EG', 'KE', 'GH', 'TW', 'KR'
-  ].includes(c.code)
-);
+    'US',
+    'CA',
+    'GB',
+    'AU',
+    'NZ',
+    'IE',
+    'FR',
+    'DE',
+    'AT',
+    'BE',
+    'NL',
+    'LU',
+    'IT',
+    'ES',
+    'PT',
+    'DK',
+    'FI',
+    'NO',
+    'SE',
+    'CH',
+    'PL',
+    'CZ',
+    'SK',
+    'HU',
+    'RO',
+    'BG',
+    'HR',
+    'SI',
+    'EE',
+    'LV',
+    'LT',
+    'MT',
+    'CY',
+    'GR',
+    'JP',
+    'SG',
+    'HK',
+    'MY',
+    'TH',
+    'ID',
+    'PH',
+    'VN',
+    'IN',
+    'AE',
+    'SA',
+    'IL',
+    'BR',
+    'MX',
+    'AR',
+    'CL',
+    'CO',
+    'PE',
+    'ZA',
+    'NG',
+    'EG',
+    'KE',
+    'GH',
+    'TW',
+    'KR',
+  ].includes(c.code),
+)
 
-export default countries;
+export default countries
