@@ -228,11 +228,24 @@ export default function CheckoutPage() {
           email: shipping.email,
         },
       })
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Failed to create order:', err)
-      setError(
-        'Payment successful but failed to create order. Please contact support.',
-      )
+      // Extract the actual error message from the API response
+      let errorMessage =
+        'Payment successful but failed to create order. Please contact support.'
+      if (err && typeof err === 'object' && 'response' in err) {
+        const axiosError = err as {
+          response?: { data?: { error?: string; message?: string } }
+        }
+        const apiError =
+          axiosError.response?.data?.error ||
+          axiosError.response?.data?.message
+        if (apiError) {
+          errorMessage = `Payment successful but order creation failed: ${apiError}`
+          console.error('API Error Details:', axiosError.response?.data)
+        }
+      }
+      setError(errorMessage)
     } finally {
       setIsProcessing(false)
     }
