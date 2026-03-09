@@ -22,6 +22,7 @@ import { formatPrice, getProductImage, cn } from '../utils'
 import { paymentsApi, ordersApiNew } from '../api'
 import { StripeElementsWrapper } from '../contexts/StripeContext'
 import StripePaymentForm from '../components/checkout/StripePaymentForm'
+import { countriesSortedByName } from '../data/countries'
 
 // Step types
 type CheckoutStep = 'shipping' | 'payment' | 'review'
@@ -450,59 +451,11 @@ export default function CheckoutPage() {
                       className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent'
                     >
                       <option value=''>Select Country</option>
-                      {/* Europe */}
-                      <option value='AT'>Austria</option>
-                      <option value='BE'>Belgium</option>
-                      <option value='BG'>Bulgaria</option>
-                      <option value='HR'>Croatia</option>
-                      <option value='CY'>Cyprus</option>
-                      <option value='CZ'>Czech Republic</option>
-                      <option value='DK'>Denmark</option>
-                      <option value='EE'>Estonia</option>
-                      <option value='FI'>Finland</option>
-                      <option value='FR'>France</option>
-                      <option value='DE'>Germany</option>
-                      <option value='GR'>Greece</option>
-                      <option value='HU'>Hungary</option>
-                      <option value='IE'>Ireland</option>
-                      <option value='IT'>Italy</option>
-                      <option value='LV'>Latvia</option>
-                      <option value='LT'>Lithuania</option>
-                      <option value='LU'>Luxembourg</option>
-                      <option value='MT'>Malta</option>
-                      <option value='NL'>Netherlands</option>
-                      <option value='NO'>Norway</option>
-                      <option value='PL'>Poland</option>
-                      <option value='PT'>Portugal</option>
-                      <option value='RO'>Romania</option>
-                      <option value='SK'>Slovakia</option>
-                      <option value='SI'>Slovenia</option>
-                      <option value='ES'>Spain</option>
-                      <option value='SE'>Sweden</option>
-                      <option value='CH'>Switzerland</option>
-                      <option value='GB'>United Kingdom</option>
-                      {/* North America */}
-                      <option value='US'>United States</option>
-                      <option value='CA'>Canada</option>
-                      <option value='MX'>Mexico</option>
-                      {/* Oceania */}
-                      <option value='AU'>Australia</option>
-                      <option value='NZ'>New Zealand</option>
-                      {/* Asia */}
-                      <option value='JP'>Japan</option>
-                      <option value='KR'>South Korea</option>
-                      <option value='SG'>Singapore</option>
-                      <option value='HK'>Hong Kong</option>
-                      <option value='TW'>Taiwan</option>
-                      {/* Middle East */}
-                      <option value='AE'>United Arab Emirates</option>
-                      <option value='IL'>Israel</option>
-                      <option value='SA'>Saudi Arabia</option>
-                      {/* South America */}
-                      <option value='BR'>Brazil</option>
-                      <option value='AR'>Argentina</option>
-                      <option value='CL'>Chile</option>
-                      <option value='CO'>Colombia</option>
+                      {countriesSortedByName.map((country) => (
+                        <option key={country.code} value={country.code}>
+                          {country.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>
