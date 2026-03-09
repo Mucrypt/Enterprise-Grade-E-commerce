@@ -728,7 +728,9 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       }
 
       // Use sale_price if available, otherwise base_price
-      const effectivePrice = parseFloat(product.sale_price || product.base_price)
+      const effectivePrice = parseFloat(
+        product.sale_price || product.base_price,
+      )
       const itemTotal = effectivePrice * item.quantity
       totalAmount += itemTotal
 
