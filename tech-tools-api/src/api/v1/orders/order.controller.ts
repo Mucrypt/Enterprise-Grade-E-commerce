@@ -811,10 +811,9 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
         ],
       )
 
-      // Reduce stock from inventory table
+      // Reserve stock in inventory (available_stock is auto-calculated as current_stock - reserved_stock)
       await query(
         `UPDATE inventory SET 
-          available_stock = available_stock - $1,
           reserved_stock = reserved_stock + $1,
           updated_at = NOW()
          WHERE product_id = $2`,
