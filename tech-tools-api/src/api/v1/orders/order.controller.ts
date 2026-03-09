@@ -795,11 +795,12 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
 
     // Create order items
     for (const item of orderItems) {
+      // Note: total_price is a generated column (unit_price * quantity - discount_amount)
       await query(
         `INSERT INTO order_items (
           order_id, product_id, sku, product_name,
-          quantity, unit_price, total_price
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          quantity, unit_price
+        ) VALUES ($1, $2, $3, $4, $5, $6)`,
         [
           order.id,
           item.productId,
@@ -807,7 +808,6 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
           item.productName,
           item.quantity,
           item.unitPrice,
-          item.totalPrice,
         ],
       )
 
@@ -854,9 +854,16 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
     })
   } catch (error) {
     logger.error('Create order error:', error)
+    // In development/debugging, include more details
+    const errorMessage =
+      error instanceof Error ? error.message : 'Failed to create order'
     res.status(500).json({
       success: false,
-      error: 'Failed to create order',
+      error: errorMessage,
+      details:
+        process.env.NODE_ENV !== 'production' && error instanceof Error
+          ? error.stack
+          : undefined,
     })
   }
 }
