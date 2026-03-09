@@ -675,16 +675,172 @@ export const getOrderById = async (req: AuthRequest, res: Response) => {
 export const createOrder = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId
-    const { items, shippingAddressId, billingAddressId } = req.body
+    const {
+      items,
+      shippingAddress,
+      billingAddress,
+      customerNotes,
+      paymentIntentId,
+      paymentMethod = 'card',
+    } = req.body
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Order items are required',
+      })
+    }
+
+    if (!shippingAddress) {
+      return res.status(400).json({
+        success: false,
+        error: 'Shipping address is required',
+      })
+    }
+
+    // Calculate totals
+    let totalAmount = 0
+    const orderItems = []
+
+    for (const item of items) {
+      // Verify product exists and get current price
+      const productResult = await query(
+        `SELECT id, name, sku, price, compare_at_price, stock_quantity 
+         FROM products WHERE id = $1 AND is_active = true`,
+        [item.productId],
+      )
+
+      if (!productResult.rows[0]) {
+        return res.status(400).json({
+          success: false,
+          error: `Product not found: ${item.productId}`,
+        })
+      }
+
+      const product = productResult.rows[0]
+
+      // Check stock
+      if (product.stock_quantity < item.quantity) {
+        return res.status(400).json({
+          success: false,
+          error: `Insufficient stock for ${product.name}. Available: ${product.stock_quantity}`,
+        })
+      }
+
+      const itemTotal = parseFloat(product.price) * item.quantity
+      totalAmount += itemTotal
+
+      orderItems.push({
+        productId: product.id,
+        sku: product.sku,
+        productName: product.name,
+        quantity: item.quantity,
+        unitPrice: parseFloat(product.price),
+        totalPrice: itemTotal,
+      })
+    }
+
+    // Calculate tax and shipping
+    const taxRate = 0.08 // 8% tax - can be configurable
+    const taxAmount = totalAmount * taxRate
+    const shippingAmount = totalAmount >= 50 ? 0 : 5.99
+    const grandTotal = totalAmount + taxAmount + shippingAmount
+
+    // Generate order number
+    const orderNumber = `TT-${Date.now().toString().slice(-8)}-${Math.random()
+      .toString(36)
+      .substr(2, 4)
+      .toUpperCase()}`
+
+    // Create order
+    const orderResult = await query(
+      `INSERT INTO orders (
+        order_number, user_id, order_status, payment_status,
+        total_amount, tax_amount, shipping_amount, grand_total,
+        shipping_address, billing_address, customer_notes,
+        payment_method, payment_gateway, transaction_id,
+        estimated_delivery_date
+      ) VALUES (
+        $1, $2, 'pending', 'pending',
+        $3, $4, $5, $6,
+        $7, $8, $9,
+        $10, 'stripe', $11,
+        CURRENT_DATE + INTERVAL '5 days'
+      ) RETURNING *`,
+      [
+        orderNumber,
+        userId || null,
+        totalAmount,
+        taxAmount,
+        shippingAmount,
+        grandTotal,
+        JSON.stringify(shippingAddress),
+        billingAddress
+          ? JSON.stringify(billingAddress)
+          : JSON.stringify(shippingAddress),
+        customerNotes || null,
+        paymentMethod,
+        paymentIntentId || null,
+      ],
+    )
+
+    const order = orderResult.rows[0]
+
+    // Create order items
+    for (const item of orderItems) {
+      await query(
+        `INSERT INTO order_items (
+          order_id, product_id, sku, product_name,
+          quantity, unit_price, total_price
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          order.id,
+          item.productId,
+          item.sku,
+          item.productName,
+          item.quantity,
+          item.unitPrice,
+          item.totalPrice,
+        ],
+      )
+
+      // Reduce stock
+      await query(
+        `UPDATE products SET stock_quantity = stock_quantity - $1, updated_at = NOW()
+         WHERE id = $2`,
+        [item.quantity, item.productId],
+      )
+    }
+
+    // If payment intent ID provided, update it with order ID
+    if (paymentIntentId) {
+      try {
+        const stripeService = (await import('../../../services/stripe.service'))
+          .default
+        await stripeService.updatePaymentIntent(paymentIntentId, {
+          metadata: {
+            orderId: order.id,
+            orderNumber: order.order_number,
+          },
+        })
+      } catch (error) {
+        logger.warn('Failed to update payment intent with order ID:', error)
+      }
+    }
+
+    // Get created order items
+    const itemsResult = await query(
+      'SELECT * FROM order_items WHERE order_id = $1',
+      [order.id],
+    )
 
     res.status(201).json({
       success: true,
-      message: 'Create order - Not yet fully implemented',
       data: {
-        userId,
-        items,
-        shippingAddressId,
-        billingAddressId,
+        order: {
+          ...order,
+          items: itemsResult.rows,
+        },
       },
     })
   } catch (error) {
@@ -722,13 +878,86 @@ export const cancelOrder = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId
     const { id } = req.params
+    const { reason } = req.body
+
+    // Verify order belongs to user
+    const orderResult = await query(
+      `SELECT o.*, p.transaction_id, p.amount as payment_amount, p.status as payment_status
+       FROM orders o
+       LEFT JOIN payments p ON o.id = p.order_id AND p.status = 'completed'
+       WHERE o.id = $1 AND o.user_id = $2`,
+      [id, userId],
+    )
+
+    if (orderResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Order not found',
+      })
+    }
+
+    const order = orderResult.rows[0]
+
+    // Check if order can be cancelled
+    const nonCancellableStatuses = [
+      'shipped',
+      'delivered',
+      'cancelled',
+      'refunded',
+    ]
+    if (nonCancellableStatuses.includes(order.order_status)) {
+      return res.status(400).json({
+        success: false,
+        error: `Order cannot be cancelled. Current status: ${order.order_status}`,
+      })
+    }
+
+    // If payment was made, initiate refund
+    if (order.transaction_id && order.payment_status === 'completed') {
+      try {
+        const stripeService = (await import('../../../services/stripe.service'))
+          .default
+        await stripeService.createRefund(
+          order.transaction_id,
+          undefined, // Full refund
+          'requested_by_customer',
+        )
+      } catch (error) {
+        logger.error('Failed to create refund:', error)
+        // Continue with cancellation even if refund fails
+        // Admin can handle manually
+      }
+    }
+
+    // Restore stock
+    const itemsResult = await query(
+      'SELECT product_id, quantity FROM order_items WHERE order_id = $1',
+      [id],
+    )
+
+    for (const item of itemsResult.rows) {
+      await query(
+        `UPDATE products SET stock_quantity = stock_quantity + $1, updated_at = NOW()
+         WHERE id = $2`,
+        [item.quantity, item.product_id],
+      )
+    }
+
+    // Update order status
+    const updateResult = await query(
+      `UPDATE orders SET 
+        order_status = 'cancelled',
+        cancelled_at = NOW(),
+        cancelled_reason = $1,
+        updated_at = NOW()
+       WHERE id = $2 RETURNING *`,
+      [reason || 'Cancelled by customer', id],
+    )
 
     res.json({
       success: true,
-      message: 'Cancel order - Not yet fully implemented',
       data: {
-        orderId: id,
-        userId,
+        order: updateResult.rows[0],
       },
     })
   } catch (error) {

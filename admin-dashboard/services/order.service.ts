@@ -258,6 +258,22 @@ class OrderService {
       `/orders/admin/export?${params.toString()}`,
     )
   }
+
+  // Create refund for an order (Stripe integration)
+  async createRefund(
+    orderId: string,
+    amount?: number,
+    reason?: string,
+  ): Promise<ApiResponse<{ refundId: string; amount: number; status: string }>> {
+    return apiClient.post<ApiResponse<{ refundId: string; amount: number; status: string }>>(
+      '/payments/refund',
+      {
+        orderId,
+        amount,
+        reason,
+      },
+    )
+  }
 }
 
 export const orderService = new OrderService()

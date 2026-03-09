@@ -3,7 +3,12 @@
 // ============================================
 
 import { useEffect, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from 'react-router-dom'
 import {
   CheckCircle,
   Package,
@@ -21,6 +26,7 @@ import confetti from 'canvas-confetti'
 
 interface OrderState {
   orderNumber: string
+  orderId?: string
   total: number
   email: string
 }
@@ -28,9 +34,23 @@ interface OrderState {
 export default function OrderConfirmationPage() {
   const location = useLocation()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [copied, setCopied] = useState(false)
 
-  const orderData = location.state as OrderState | null
+  // Support both navigation state and Stripe redirect params
+  const paymentIntent = searchParams.get('payment_intent')
+  const redirectStatus = searchParams.get('redirect_status')
+
+  const orderData =
+    (location.state as OrderState | null) ||
+    (paymentIntent && redirectStatus === 'succeeded'
+      ? {
+          orderNumber: `TT-${paymentIntent.slice(-8).toUpperCase()}`,
+          orderId: paymentIntent,
+          total: 0, // Would need to fetch from API in production
+          email: '',
+        }
+      : null)
 
   // Redirect if no order data
   useEffect(() => {

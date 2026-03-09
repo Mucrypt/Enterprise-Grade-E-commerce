@@ -4,6 +4,7 @@
 
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { StripeProvider } from './contexts/StripeContext'
 import Layout from './components/layout/Layout'
 import ScrollToTop from './components/common/ScrollToTop'
 import HomePage from './pages/HomePage'
@@ -46,10 +47,11 @@ const queryClient = new QueryClient({
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <ScrollToTop />
-        <Routes>
-          <Route path='/' element={<Layout />}>
+      <StripeProvider>
+        <BrowserRouter>
+          <ScrollToTop />
+          <Routes>
+            <Route path='/' element={<Layout />}>
             {/* Home */}
             <Route index element={<HomePage />} />
 
@@ -107,6 +109,7 @@ function App() {
           </Route>
         </Routes>
       </BrowserRouter>
+      </StripeProvider>
     </QueryClientProvider>
   )
 }

@@ -681,6 +681,269 @@ export const cartApi = {
   },
 }
 
+// ============================================
+// Payments API (Stripe Integration)
+// ============================================
+export const paymentsApi = {
+  // Get Stripe publishable key
+  async getConfig() {
+    const response = await api.get<{
+      success: boolean
+      data: { publishableKey: string }
+    }>('/payments/config')
+    return response.data.data
+  },
+
+  // Create payment intent
+  async createPaymentIntent(data: {
+    items: { productId: string; price: number; quantity: number }[]
+    shippingAddress?: {
+      name: string
+      address: string
+      apartment?: string
+      city: string
+      state: string
+      postalCode: string
+      country: string
+    }
+    currency?: string
+    savePaymentMethod?: boolean
+  }) {
+    const response = await api.post<{
+      success: boolean
+      data: {
+        clientSecret: string
+        paymentIntentId: string
+        amount: number
+        currency: string
+      }
+    }>('/payments/intent', data)
+    return response.data.data
+  },
+
+  // Update payment intent (when cart changes)
+  async updatePaymentIntent(data: {
+    paymentIntentId: string
+    items?: { productId: string; price: number; quantity: number }[]
+    shippingAddress?: {
+      name: string
+      address: string
+      apartment?: string
+      city: string
+      state: string
+      postalCode: string
+      country: string
+    }
+  }) {
+    const response = await api.put<{
+      success: boolean
+      data: {
+        clientSecret: string
+        paymentIntentId: string
+        amount: number
+      }
+    }>('/payments/intent', data)
+    return response.data.data
+  },
+
+  // Get payment intent status
+  async getPaymentStatus(paymentIntentId: string) {
+    const response = await api.get<{
+      success: boolean
+      data: {
+        id: string
+        status: string
+        amount: number
+        currency: string
+      }
+    }>(`/payments/intent/${paymentIntentId}`)
+    return response.data.data
+  },
+
+  // Create setup intent for saving cards
+  async createSetupIntent() {
+    const response = await api.post<{
+      success: boolean
+      data: {
+        clientSecret: string
+        customerId: string
+      }
+    }>('/payments/methods/setup')
+    return response.data.data
+  },
+
+  // Get saved payment methods
+  async getPaymentMethods() {
+    const response = await api.get<{
+      success: boolean
+      data: {
+        paymentMethods: Array<{
+          id: string
+          type: string
+          brand?: string
+          last4?: string
+          expMonth?: number
+          expYear?: number
+          isDefault: boolean
+        }>
+      }
+    }>('/payments/methods')
+    return response.data.data.paymentMethods
+  },
+
+  // Remove payment method
+  async removePaymentMethod(methodId: string) {
+    await api.delete(`/payments/methods/${methodId}`)
+  },
+
+  // Set default payment method
+  async setDefaultPaymentMethod(paymentMethodId: string) {
+    const response = await api.put<{
+      success: boolean
+      message: string
+    }>('/payments/methods/default', { paymentMethodId })
+    return response.data
+  },
+
+  // Get payment history
+  async getPaymentHistory(page = 1, limit = 10) {
+    const response = await api.get<{
+      success: boolean
+      data: {
+        payments: Array<{
+          id: string
+          orderId: string
+          orderNumber: string
+          amount: number
+          currency: string
+          status: string
+          paidAt: string
+          createdAt: string
+        }>
+        pagination: Pagination
+      }
+    }>(`/payments/history?page=${page}&limit=${limit}`)
+    return response.data.data
+  },
+}
+
+// ============================================
+// Orders API (Updated with Stripe integration)
+// ============================================
+export const ordersApiNew = {
+  // Create order with Stripe payment
+  async create(data: {
+    items: { productId: string; quantity: number }[]
+    shippingAddress: {
+      firstName: string
+      lastName: string
+      email: string
+      phone?: string
+      address: string
+      apartment?: string
+      city: string
+      state: string
+      postalCode: string
+      country: string
+    }
+    billingAddress?: {
+      firstName: string
+      lastName: string
+      address: string
+      apartment?: string
+      city: string
+      state: string
+      postalCode: string
+      country: string
+    }
+    paymentIntentId: string
+    paymentMethod?: string
+    customerNotes?: string
+  }) {
+    const response = await api.post<{
+      success: boolean
+      data: {
+        order: {
+          id: string
+          order_number: string
+          order_status: string
+          payment_status: string
+          grand_total: number
+          shipping_address: object
+          items: Array<{
+            id: string
+            product_name: string
+            quantity: number
+            unit_price: number
+            total_price: number
+          }>
+          created_at: string
+        }
+      }
+    }>('/orders', data)
+    return response.data.data.order
+  },
+
+  // Get user orders
+  async getAll(page = 1, limit = 10) {
+    const response = await api.get<{
+      success: boolean
+      data: {
+        orders: Array<{
+          id: string
+          order_number: string
+          order_status: string
+          payment_status: string
+          grand_total: number
+          created_at: string
+          item_count: number
+        }>
+        pagination: Pagination
+      }
+    }>(`/orders?page=${page}&limit=${limit}`)
+    return response.data.data
+  },
+
+  // Get single order
+  async getById(id: string) {
+    const response = await api.get<{
+      success: boolean
+      data: {
+        order: {
+          id: string
+          order_number: string
+          order_status: string
+          payment_status: string
+          total_amount: number
+          tax_amount: number
+          shipping_amount: number
+          grand_total: number
+          shipping_address: object
+          items: Array<{
+            id: string
+            product_id: string
+            product_name: string
+            quantity: number
+            unit_price: number
+            total_price: number
+          }>
+          created_at: string
+        }
+      }
+    }>(`/orders/${id}`)
+    return response.data.data.order
+  },
+
+  // Cancel order
+  async cancel(id: string, reason?: string) {
+    const response = await api.put<{
+      success: boolean
+      data: { order: object }
+    }>(`/orders/${id}/cancel`, { reason })
+    return response.data.data.order
+  },
+}
+
 // Export the axios instance for custom requests
 export { api }
 export default api

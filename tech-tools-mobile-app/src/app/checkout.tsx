@@ -1,8 +1,9 @@
 // ============================================
-// TechTools Mobile App - Checkout Screen
+// TechTools Mobile App - Checkout Screen with Stripe
+// Enterprise-grade payment integration
 // ============================================
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   View,
   Text,
@@ -10,11 +11,18 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
+import {
+  StripeProvider,
+  useStripe,
+  CardField,
+  CardFieldInput,
+} from '@stripe/stripe-react-native'
 import { Input, Button } from '@/components'
 import {
   AppColors,
@@ -25,8 +33,22 @@ import {
 } from '@/constants/appTheme'
 import { useCartStore, useAuthStore } from '@/stores'
 import { formatPrice } from '@/utils'
+import { paymentsApi, ordersApiNew } from '@/api'
 
 type CheckoutStep = 'shipping' | 'payment' | 'review'
+
+interface ShippingForm {
+  firstName: string
+  lastName: string
+  email: string
+  phone: string
+  address: string
+  apartment: string
+  city: string
+  state: string
+  postalCode: string
+  country: string
+}
 
 export default function CheckoutScreen() {
   const router = useRouter()
@@ -35,26 +57,24 @@ export default function CheckoutScreen() {
 
   const [step, setStep] = useState<CheckoutStep>('shipping')
   const [loading, setLoading] = useState(false)
+  const [stripePublishableKey, setStripePublishableKey] = useState<string>('')
+  const [clientSecret, setClientSecret] = useState<string | null>(null)
+  const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [cardComplete, setCardComplete] = useState(false)
 
   // Shipping form
-  const [shippingForm, setShippingForm] = useState({
+  const [shippingForm, setShippingForm] = useState<ShippingForm>({
     firstName: user?.first_name || '',
     lastName: user?.last_name || '',
     email: user?.email || '',
     phone: '',
     address: '',
+    apartment: '',
     city: '',
     state: '',
     postalCode: '',
-    country: 'United States',
-  })
-
-  // Payment form
-  const [paymentForm, setPaymentForm] = useState({
-    cardNumber: '',
-    cardName: '',
-    expiry: '',
-    cvv: '',
+    country: 'US',
   })
 
   const total = subtotal()
@@ -65,66 +85,273 @@ export default function CheckoutScreen() {
   const steps: { key: CheckoutStep; label: string; icon: string }[] = [
     { key: 'shipping', label: 'Shipping', icon: 'location-outline' },
     { key: 'payment', label: 'Payment', icon: 'card-outline' },
-    { key: 'review', label: 'Review', icon: 'checkmark-circle-outline' },
+    { key: 'review', label: 'Confirm', icon: 'checkmark-circle-outline' },
   ]
 
   const currentStepIndex = steps.findIndex((s) => s.key === step)
 
-  const handleContinue = () => {
+  // Initialize Stripe
+  useEffect(() => {
+    const initStripe = async () => {
+      try {
+        const config = await paymentsApi.getConfig()
+        setStripePublishableKey(config.publishableKey)
+      } catch (err) {
+        console.error('Failed to get Stripe config:', err)
+        setError('Payment service unavailable. Please try again later.')
+      }
+    }
+    initStripe()
+  }, [])
+
+  // Update user info when authenticated
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      setShippingForm((prev) => ({
+        ...prev,
+        firstName: user.first_name || prev.firstName,
+        lastName: user.last_name || prev.lastName,
+        email: user.email || prev.email,
+      }))
+    }
+  }, [isAuthenticated, user])
+
+  // Create payment intent when moving to payment step
+  const createPaymentIntent = useCallback(async () => {
+    try {
+      setError(null)
+      setLoading(true)
+
+      const paymentItems = items.map((item) => ({
+        productId: item.product.id,
+        price: Number(item.product.sale_price || item.product.base_price),
+        quantity: item.quantity,
+      }))
+
+      const result = await paymentsApi.createPaymentIntent({
+        items: paymentItems,
+        shippingAddress: {
+          name: `${shippingForm.firstName} ${shippingForm.lastName}`,
+          address: shippingForm.address,
+          apartment: shippingForm.apartment,
+          city: shippingForm.city,
+          state: shippingForm.state,
+          postalCode: shippingForm.postalCode,
+          country: shippingForm.country,
+        },
+        currency: 'usd',
+      })
+
+      setClientSecret(result.clientSecret)
+      setPaymentIntentId(result.paymentIntentId)
+      return true
+    } catch (err) {
+      console.error('Failed to create payment intent:', err)
+      setError('Failed to initialize payment. Please try again.')
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }, [items, shippingForm])
+
+  const validateShipping = (): boolean => {
+    if (
+      !shippingForm.firstName ||
+      !shippingForm.lastName ||
+      !shippingForm.email ||
+      !shippingForm.address ||
+      !shippingForm.city ||
+      !shippingForm.postalCode
+    ) {
+      Alert.alert(
+        'Missing Information',
+        'Please fill in all required fields.',
+      )
+      return false
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(shippingForm.email)) {
+      Alert.alert('Invalid Email', 'Please enter a valid email address.')
+      return false
+    }
+
+    return true
+  }
+
+  const handleContinue = async () => {
+    setError(null)
+
     if (step === 'shipping') {
-      // Validate shipping
-      if (
-        !shippingForm.firstName ||
-        !shippingForm.lastName ||
-        !shippingForm.address ||
-        !shippingForm.city
-      ) {
-        Alert.alert(
-          'Missing Information',
-          'Please fill in all required fields.',
-        )
-        return
+      if (!validateShipping()) return
+
+      const success = await createPaymentIntent()
+      if (success) {
+        setStep('payment')
       }
-      setStep('payment')
-    } else if (step === 'payment') {
-      // Validate payment
-      if (
-        !paymentForm.cardNumber ||
-        !paymentForm.cardName ||
-        !paymentForm.expiry ||
-        !paymentForm.cvv
-      ) {
-        Alert.alert(
-          'Missing Information',
-          'Please fill in all payment details.',
-        )
-        return
-      }
-      setStep('review')
     }
   }
 
+  if (!stripePublishableKey) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size='large' color={AppColors.primary} />
+          <Text style={styles.loadingText}>Initializing payment...</Text>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  return (
+    <StripeProvider publishableKey={stripePublishableKey}>
+      <CheckoutContent
+        step={step}
+        setStep={setStep}
+        steps={steps}
+        currentStepIndex={currentStepIndex}
+        shippingForm={shippingForm}
+        setShippingForm={setShippingForm}
+        total={total}
+        shipping={shipping}
+        tax={tax}
+        grandTotal={grandTotal}
+        items={items}
+        loading={loading}
+        setLoading={setLoading}
+        error={error}
+        setError={setError}
+        clientSecret={clientSecret}
+        paymentIntentId={paymentIntentId}
+        cardComplete={cardComplete}
+        setCardComplete={setCardComplete}
+        handleContinue={handleContinue}
+        clearCart={clearCart}
+        router={router}
+      />
+    </StripeProvider>
+  )
+}
+
+// Separate component to use Stripe hooks
+function CheckoutContent({
+  step,
+  setStep,
+  steps,
+  currentStepIndex,
+  shippingForm,
+  setShippingForm,
+  total,
+  shipping,
+  tax,
+  grandTotal,
+  items,
+  loading,
+  setLoading,
+  error,
+  setError,
+  clientSecret,
+  paymentIntentId,
+  cardComplete,
+  setCardComplete,
+  handleContinue,
+  clearCart,
+  router,
+}: any) {
+  const { confirmPayment } = useStripe()
+
   const handlePlaceOrder = async () => {
+    if (!clientSecret || !paymentIntentId) {
+      Alert.alert('Error', 'Payment not initialized. Please try again.')
+      return
+    }
+
+    if (!cardComplete) {
+      Alert.alert('Incomplete', 'Please fill in your card details.')
+      return
+    }
+
     setLoading(true)
+    setError(null)
 
     try {
-      // Simulate order placement
-      await new Promise((resolve) => setTimeout(resolve, 2000))
-
-      clearCart()
-
-      Alert.alert(
-        'Order Placed!',
-        'Your order has been successfully placed. You will receive a confirmation email shortly.',
-        [
-          {
-            text: 'Continue Shopping',
-            onPress: () => router.replace('/'),
+      // Confirm the payment with Stripe
+      const { error: stripeError, paymentIntent } = await confirmPayment(
+        clientSecret,
+        {
+          paymentMethodType: 'Card',
+          paymentMethodData: {
+            billingDetails: {
+              name: `${shippingForm.firstName} ${shippingForm.lastName}`,
+              email: shippingForm.email,
+              phone: shippingForm.phone,
+              address: {
+                line1: shippingForm.address,
+                line2: shippingForm.apartment,
+                city: shippingForm.city,
+                state: shippingForm.state,
+                postalCode: shippingForm.postalCode,
+                country: shippingForm.country,
+              },
+            },
           },
-        ],
+        },
       )
-    } catch (error) {
-      Alert.alert('Error', 'Failed to place order. Please try again.')
+
+      if (stripeError) {
+        setError(stripeError.message || 'Payment failed')
+        Alert.alert('Payment Error', stripeError.message || 'Payment failed')
+        return
+      }
+
+      if (paymentIntent?.status === 'Succeeded') {
+        // Create the order in our backend
+        const order = await ordersApiNew.create({
+          items: items.map((item: any) => ({
+            productId: item.product.id,
+            quantity: item.quantity,
+          })),
+          shippingAddress: {
+            firstName: shippingForm.firstName,
+            lastName: shippingForm.lastName,
+            email: shippingForm.email,
+            phone: shippingForm.phone,
+            address: shippingForm.address,
+            apartment: shippingForm.apartment,
+            city: shippingForm.city,
+            state: shippingForm.state,
+            postalCode: shippingForm.postalCode,
+            country: shippingForm.country,
+          },
+          paymentIntentId: paymentIntent.id,
+          paymentMethod: 'card',
+        })
+
+        clearCart()
+
+        Alert.alert(
+          'Order Placed!',
+          `Order #${order.order_number} has been successfully placed. You will receive a confirmation email at ${shippingForm.email}.`,
+          [
+            {
+              text: 'Continue Shopping',
+              onPress: () => router.replace('/'),
+            },
+          ],
+        )
+      } else {
+        setError(`Payment status: ${paymentIntent?.status}`)
+        Alert.alert('Payment Issue', `Payment status: ${paymentIntent?.status}`)
+      }
+    } catch (err: any) {
+      console.error('Order error:', err)
+      const errorMessage =
+        err?.response?.data?.error ||
+        err?.message ||
+        'Failed to complete order'
+      setError(errorMessage)
+      Alert.alert('Error', errorMessage)
     } finally {
       setLoading(false)
     }
@@ -132,34 +359,36 @@ export default function CheckoutScreen() {
 
   const renderStepIndicator = () => (
     <View style={styles.stepIndicator}>
-      {steps.map((s, index) => (
-        <React.Fragment key={s.key}>
-          <TouchableOpacity
-            style={[
-              styles.stepDot,
-              index <= currentStepIndex && styles.stepDotActive,
-            ]}
-            onPress={() => index < currentStepIndex && setStep(s.key)}
-            disabled={index > currentStepIndex}
-          >
-            <Ionicons
-              name={s.icon as any}
-              size={18}
-              color={
-                index <= currentStepIndex ? AppColors.white : AppColors.gray400
-              }
-            />
-          </TouchableOpacity>
-          {index < steps.length - 1 && (
-            <View
+      {steps.map(
+        (s: { key: CheckoutStep; label: string; icon: string }, index: number) => (
+          <React.Fragment key={s.key}>
+            <TouchableOpacity
               style={[
-                styles.stepLine,
-                index < currentStepIndex && styles.stepLineActive,
+                styles.stepDot,
+                index <= currentStepIndex && styles.stepDotActive,
               ]}
-            />
-          )}
-        </React.Fragment>
-      ))}
+              onPress={() => index < currentStepIndex && setStep(s.key)}
+              disabled={index > currentStepIndex}
+            >
+              <Ionicons
+                name={s.icon as any}
+                size={18}
+                color={
+                  index <= currentStepIndex ? AppColors.white : AppColors.gray400
+                }
+              />
+            </TouchableOpacity>
+            {index < steps.length - 1 && (
+              <View
+                style={[
+                  styles.stepLine,
+                  index < currentStepIndex && styles.stepLineActive,
+                ]}
+              />
+            )}
+          </React.Fragment>
+        ),
+      )}
     </View>
   )
 
@@ -170,20 +399,20 @@ export default function CheckoutScreen() {
       <View style={styles.formRow}>
         <View style={styles.formHalf}>
           <Input
-            label='First Name'
+            label='First Name *'
             placeholder='John'
             value={shippingForm.firstName}
-            onChangeText={(text) =>
+            onChangeText={(text: string) =>
               setShippingForm({ ...shippingForm, firstName: text })
             }
           />
         </View>
         <View style={styles.formHalf}>
           <Input
-            label='Last Name'
+            label='Last Name *'
             placeholder='Doe'
             value={shippingForm.lastName}
-            onChangeText={(text) =>
+            onChangeText={(text: string) =>
               setShippingForm({ ...shippingForm, lastName: text })
             }
           />
@@ -191,51 +420,61 @@ export default function CheckoutScreen() {
       </View>
 
       <Input
-        label='Email'
+        label='Email *'
         placeholder='john@example.com'
         value={shippingForm.email}
-        onChangeText={(text) =>
+        onChangeText={(text: string) =>
           setShippingForm({ ...shippingForm, email: text })
         }
         keyboardType='email-address'
+        autoCapitalize='none'
       />
 
       <Input
         label='Phone'
         placeholder='+1 (555) 000-0000'
         value={shippingForm.phone}
-        onChangeText={(text) =>
+        onChangeText={(text: string) =>
           setShippingForm({ ...shippingForm, phone: text })
         }
         keyboardType='phone-pad'
       />
 
       <Input
-        label='Street Address'
+        label='Street Address *'
         placeholder='123 Main St'
         value={shippingForm.address}
-        onChangeText={(text) =>
+        onChangeText={(text: string) =>
           setShippingForm({ ...shippingForm, address: text })
+        }
+      />
+
+      <Input
+        label='Apartment, suite, etc. (optional)'
+        placeholder='Apt 4B'
+        value={shippingForm.apartment}
+        onChangeText={(text: string) =>
+          setShippingForm({ ...shippingForm, apartment: text })
         }
       />
 
       <View style={styles.formRow}>
         <View style={styles.formHalf}>
           <Input
-            label='City'
+            label='City *'
             placeholder='New York'
             value={shippingForm.city}
-            onChangeText={(text) =>
+            onChangeText={(text: string) =>
               setShippingForm({ ...shippingForm, city: text })
             }
           />
         </View>
         <View style={styles.formHalf}>
           <Input
-            label='State'
+            label='State / Region'
             placeholder='NY'
             value={shippingForm.state}
-            onChangeText={(text) =>
+            onChangeText={(text: string) =>
               setShippingForm({ ...shippingForm, state: text })
             }
           />
@@ -245,10 +484,10 @@ export default function CheckoutScreen() {
       <View style={styles.formRow}>
         <View style={styles.formHalf}>
           <Input
-            label='Postal Code'
+            label='Postal Code *'
             placeholder='10001'
             value={shippingForm.postalCode}
-            onChangeText={(text) =>
+            onChangeText={(text: string) =>
               setShippingForm({ ...shippingForm, postalCode: text })
             }
             keyboardType='numeric'
@@ -257,12 +496,29 @@ export default function CheckoutScreen() {
         <View style={styles.formHalf}>
           <Input
             label='Country'
-            placeholder='United States'
+            placeholder='US'
             value={shippingForm.country}
-            onChangeText={(text) =>
+            onChangeText={(text: string) =>
               setShippingForm({ ...shippingForm, country: text })
             }
           />
+        </View>
+      </View>
+
+      {/* Shipping Method */}
+      <View style={styles.shippingMethod}>
+        <Text style={styles.shippingMethodTitle}>Shipping Method</Text>
+        <View style={styles.shippingOption}>
+          <View style={styles.shippingOptionLeft}>
+            <Ionicons name='car-outline' size={24} color={AppColors.primary} />
+            <View style={styles.shippingOptionInfo}>
+              <Text style={styles.shippingOptionName}>Standard Shipping</Text>
+              <Text style={styles.shippingOptionTime}>3-5 business days</Text>
+            </View>
+          </View>
+          <Text style={styles.shippingOptionPrice}>
+            {shipping === 0 ? 'FREE' : formatPrice(shipping)}
+          </Text>
         </View>
       </View>
     </View>
@@ -272,64 +528,95 @@ export default function CheckoutScreen() {
     <View style={styles.stepContent}>
       <Text style={styles.stepTitle}>Payment Details</Text>
 
-      <View style={styles.cardIcons}>
-        <Ionicons name='card' size={32} color={AppColors.gray400} />
-        <Text style={styles.secureText}>
-          <Ionicons name='lock-closed' size={12} color={AppColors.accent} />{' '}
-          Secure Payment
+      {/* Security Badge */}
+      <View style={styles.securityBadge}>
+        <Ionicons name='shield-checkmark' size={20} color={AppColors.accent} />
+        <Text style={styles.securityText}>
+          256-bit SSL encrypted payment
         </Text>
       </View>
 
-      <Input
-        label='Card Number'
-        placeholder='1234 5678 9012 3456'
-        value={paymentForm.cardNumber}
-        onChangeText={(text) =>
-          setPaymentForm({ ...paymentForm, cardNumber: text })
-        }
-        keyboardType='numeric'
-        leftIcon='card-outline'
-      />
-
-      <Input
-        label='Cardholder Name'
-        placeholder='John Doe'
-        value={paymentForm.cardName}
-        onChangeText={(text) =>
-          setPaymentForm({ ...paymentForm, cardName: text })
-        }
-      />
-
-      <View style={styles.formRow}>
-        <View style={styles.formHalf}>
-          <Input
-            label='Expiry Date'
-            placeholder='MM/YY'
-            value={paymentForm.expiry}
-            onChangeText={(text) =>
-              setPaymentForm({ ...paymentForm, expiry: text })
-            }
-          />
+      {/* Shipping Summary */}
+      <View style={styles.summaryBox}>
+        <View style={styles.summaryHeader}>
+          <Text style={styles.summaryTitle}>Shipping to</Text>
+          <TouchableOpacity onPress={() => setStep('shipping')}>
+            <Text style={styles.changeText}>Change</Text>
+          </TouchableOpacity>
         </View>
-        <View style={styles.formHalf}>
-          <Input
-            label='CVV'
-            placeholder='123'
-            value={paymentForm.cvv}
-            onChangeText={(text) =>
-              setPaymentForm({ ...paymentForm, cvv: text })
-            }
-            keyboardType='numeric'
-            secureTextEntry
-          />
+        <Text style={styles.summaryText}>
+          {shippingForm.firstName} {shippingForm.lastName}
+        </Text>
+        <Text style={styles.summaryText}>
+          {shippingForm.address}
+          {shippingForm.apartment && `, ${shippingForm.apartment}`}
+        </Text>
+        <Text style={styles.summaryText}>
+          {shippingForm.city}, {shippingForm.state} {shippingForm.postalCode}
+        </Text>
+      </View>
+
+      {/* Stripe Card Field */}
+      <View style={styles.cardContainer}>
+        <Text style={styles.cardLabel}>Card Information</Text>
+        <CardField
+          postalCodeEnabled={false}
+          placeholders={{
+            number: '4242 4242 4242 4242',
+          }}
+          cardStyle={{
+            backgroundColor: '#FFFFFF',
+            textColor: '#1f2937',
+            borderColor: '#e5e7eb',
+            borderWidth: 1,
+            borderRadius: 8,
+            fontSize: 16,
+          }}
+          style={styles.cardField}
+          onCardChange={(cardDetails: CardFieldInput.Details) => {
+            setCardComplete(cardDetails.complete)
+          }}
+        />
+      </View>
+
+      {/* Accepted Cards */}
+      <View style={styles.acceptedCards}>
+        <Text style={styles.acceptedCardsLabel}>Accepted cards:</Text>
+        <View style={styles.cardLogos}>
+          <View style={styles.cardLogo}>
+            <Text style={styles.cardLogoText}>Visa</Text>
+          </View>
+          <View style={styles.cardLogo}>
+            <Text style={styles.cardLogoText}>MC</Text>
+          </View>
+          <View style={styles.cardLogo}>
+            <Text style={styles.cardLogoText}>Amex</Text>
+          </View>
+          <View style={styles.cardLogo}>
+            <Text style={styles.cardLogoText}>Discover</Text>
+          </View>
         </View>
       </View>
+
+      {/* Error Message */}
+      {error && (
+        <View style={styles.errorBox}>
+          <Ionicons name='alert-circle' size={20} color={AppColors.error} />
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      )}
     </View>
   )
 
   const renderReviewStep = () => (
     <View style={styles.stepContent}>
       <Text style={styles.stepTitle}>Order Review</Text>
+
+      {/* Success indicator */}
+      <View style={styles.successBox}>
+        <Ionicons name='checkmark-circle' size={24} color={AppColors.accent} />
+        <Text style={styles.successText}>Ready to place your order</Text>
+      </View>
 
       {/* Shipping Summary */}
       <View style={styles.reviewSection}>
@@ -356,22 +643,56 @@ export default function CheckoutScreen() {
             <Text style={styles.editText}>Edit</Text>
           </TouchableOpacity>
         </View>
-        <Text style={styles.reviewText}>
-          •••• •••• •••• {paymentForm.cardNumber.slice(-4)}
-        </Text>
+        <View style={styles.paymentSummary}>
+          <Ionicons name='card' size={20} color={AppColors.gray600} />
+          <Text style={styles.reviewText}>Card ending in ****</Text>
+        </View>
       </View>
 
       {/* Items Summary */}
       <View style={styles.reviewSection}>
         <Text style={styles.reviewSectionTitle}>Items ({items.length})</Text>
-        {items.map((item) => (
+        {items.map((item: any) => (
           <View key={item.id} style={styles.reviewItem}>
             <Text style={styles.reviewItemName} numberOfLines={1}>
               {item.product.name}
             </Text>
             <Text style={styles.reviewItemQty}>x{item.quantity}</Text>
+            <Text style={styles.reviewItemPrice}>
+              {formatPrice(
+                (item.product.sale_price || item.product.base_price) *
+                  item.quantity,
+              )}
+            </Text>
           </View>
         ))}
+      </View>
+
+      {/* Price Breakdown */}
+      <View style={styles.priceBreakdown}>
+        <View style={styles.priceRow}>
+          <Text style={styles.priceLabel}>Subtotal</Text>
+          <Text style={styles.priceValue}>{formatPrice(total)}</Text>
+        </View>
+        <View style={styles.priceRow}>
+          <Text style={styles.priceLabel}>Shipping</Text>
+          <Text
+            style={[
+              styles.priceValue,
+              shipping === 0 && styles.freeShipping,
+            ]}
+          >
+            {shipping === 0 ? 'FREE' : formatPrice(shipping)}
+          </Text>
+        </View>
+        <View style={styles.priceRow}>
+          <Text style={styles.priceLabel}>Tax (8%)</Text>
+          <Text style={styles.priceValue}>{formatPrice(tax)}</Text>
+        </View>
+        <View style={[styles.priceRow, styles.totalRowInner]}>
+          <Text style={styles.totalLabelInner}>Total</Text>
+          <Text style={styles.totalValueInner}>{formatPrice(grandTotal)}</Text>
+        </View>
       </View>
     </View>
   )
@@ -403,12 +724,67 @@ export default function CheckoutScreen() {
 
       {/* Footer */}
       <View style={styles.footer}>
-        <View style={styles.totalRow}>
-          <Text style={styles.totalLabel}>Total</Text>
-          <Text style={styles.totalValue}>{formatPrice(grandTotal)}</Text>
+        <View style={styles.footerTotal}>
+          <Text style={styles.footerTotalLabel}>Total</Text>
+          <Text style={styles.footerTotalValue}>{formatPrice(grandTotal)}</Text>
         </View>
 
-        {step === 'review' ? (
+        {step === 'shipping' && (
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={handleContinue}
+            disabled={loading}
+          >
+            <LinearGradient
+              colors={AppGradients.primary as [string, string, ...string[]]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={[styles.continueButton, loading && styles.buttonDisabled]}
+            >
+              {loading ? (
+                <ActivityIndicator size='small' color={AppColors.white} />
+              ) : (
+                <>
+                  <Text style={styles.continueButtonText}>
+                    Continue to Payment
+                  </Text>
+                  <Ionicons
+                    name='arrow-forward'
+                    size={20}
+                    color={AppColors.white}
+                  />
+                </>
+              )}
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
+
+        {step === 'payment' && (
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => setStep('review')}
+            disabled={!cardComplete}
+          >
+            <LinearGradient
+              colors={AppGradients.primary as [string, string, ...string[]]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={[
+                styles.continueButton,
+                !cardComplete && styles.buttonDisabled,
+              ]}
+            >
+              <Text style={styles.continueButtonText}>Review Order</Text>
+              <Ionicons
+                name='arrow-forward'
+                size={20}
+                color={AppColors.white}
+              />
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
+
+        {step === 'review' && (
           <TouchableOpacity
             activeOpacity={0.9}
             onPress={handlePlaceOrder}
@@ -420,31 +796,43 @@ export default function CheckoutScreen() {
               end={{ x: 1, y: 0 }}
               style={[styles.continueButton, loading && styles.buttonDisabled]}
             >
-              <Text style={styles.continueButtonText}>
-                {loading ? 'Processing...' : 'Place Order'}
-              </Text>
-              {!loading && (
-                <Ionicons name='checkmark' size={20} color={AppColors.white} />
+              {loading ? (
+                <>
+                  <ActivityIndicator size='small' color={AppColors.white} />
+                  <Text style={styles.continueButtonText}>Processing...</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name='lock-closed' size={18} color={AppColors.white} />
+                  <Text style={styles.continueButtonText}>
+                    Pay {formatPrice(grandTotal)}
+                  </Text>
+                </>
               )}
             </LinearGradient>
           </TouchableOpacity>
-        ) : (
-          <TouchableOpacity activeOpacity={0.9} onPress={handleContinue}>
-            <LinearGradient
-              colors={AppGradients.primary as [string, string, ...string[]]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.continueButton}
-            >
-              <Text style={styles.continueButtonText}>Continue</Text>
-              <Ionicons
-                name='arrow-forward'
-                size={20}
-                color={AppColors.white}
-              />
-            </LinearGradient>
+        )}
+
+        {/* Back button for payment and review steps */}
+        {step !== 'shipping' && (
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() =>
+              setStep(step === 'payment' ? 'shipping' : 'payment')
+            }
+          >
+            <Ionicons name='arrow-back' size={18} color={AppColors.gray600} />
+            <Text style={styles.backButtonText}>
+              Back to {step === 'payment' ? 'Shipping' : 'Payment'}
+            </Text>
           </TouchableOpacity>
         )}
+
+        {/* Powered by Stripe */}
+        <View style={styles.poweredBy}>
+          <Ionicons name='shield-checkmark' size={14} color={AppColors.gray400} />
+          <Text style={styles.poweredByText}>Secured by Stripe</Text>
+        </View>
       </View>
     </SafeAreaView>
   )
@@ -454,6 +842,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: AppColors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: AppSpacing.md,
+    fontSize: 14,
+    color: AppColors.gray600,
   },
   header: {
     flexDirection: 'row',
@@ -501,7 +899,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: AppSpacing.base,
-    paddingBottom: 180,
+    paddingBottom: 220,
   },
   stepContent: {
     backgroundColor: AppColors.white,
@@ -522,17 +920,153 @@ const styles = StyleSheet.create({
   formHalf: {
     flex: 1,
   },
-  cardIcons: {
+  shippingMethod: {
+    marginTop: AppSpacing.lg,
+    paddingTop: AppSpacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: AppColors.gray100,
+  },
+  shippingMethodTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: AppColors.gray900,
+    marginBottom: AppSpacing.md,
+  },
+  shippingOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: AppSpacing.base,
+    backgroundColor: AppColors.gray50,
+    borderRadius: AppBorderRadius.md,
+    borderWidth: 2,
+    borderColor: AppColors.primary,
+  },
+  shippingOptionLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: AppSpacing.md,
+  },
+  shippingOptionInfo: {
+    gap: 2,
+  },
+  shippingOptionName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: AppColors.gray900,
+  },
+  shippingOptionTime: {
+    fontSize: 12,
+    color: AppColors.gray500,
+  },
+  shippingOptionPrice: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: AppColors.primary,
+  },
+  securityBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: AppSpacing.sm,
+    padding: AppSpacing.md,
+    backgroundColor: '#ecfdf5',
+    borderRadius: AppBorderRadius.md,
     marginBottom: AppSpacing.lg,
+  },
+  securityText: {
+    fontSize: 13,
+    color: AppColors.accent,
+    fontWeight: '500',
+  },
+  summaryBox: {
     padding: AppSpacing.md,
     backgroundColor: AppColors.gray50,
     borderRadius: AppBorderRadius.md,
+    marginBottom: AppSpacing.lg,
   },
-  secureText: {
+  summaryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: AppSpacing.sm,
+  },
+  summaryTitle: {
     fontSize: 12,
+    fontWeight: '500',
+    color: AppColors.gray500,
+    textTransform: 'uppercase',
+  },
+  changeText: {
+    fontSize: 13,
+    color: AppColors.primary,
+    fontWeight: '500',
+  },
+  summaryText: {
+    fontSize: 14,
+    color: AppColors.gray700,
+    marginBottom: 2,
+  },
+  cardContainer: {
+    marginBottom: AppSpacing.lg,
+  },
+  cardLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: AppColors.gray700,
+    marginBottom: AppSpacing.sm,
+  },
+  cardField: {
+    width: '100%',
+    height: 50,
+  },
+  acceptedCards: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: AppSpacing.sm,
+  },
+  acceptedCardsLabel: {
+    fontSize: 12,
+    color: AppColors.gray500,
+  },
+  cardLogos: {
+    flexDirection: 'row',
+    gap: AppSpacing.xs,
+  },
+  cardLogo: {
+    paddingHorizontal: AppSpacing.sm,
+    paddingVertical: 4,
+    backgroundColor: AppColors.gray100,
+    borderRadius: 4,
+  },
+  cardLogoText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: AppColors.gray600,
+  },
+  errorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: AppSpacing.sm,
+    padding: AppSpacing.md,
+    backgroundColor: '#fef2f2',
+    borderRadius: AppBorderRadius.md,
+    marginTop: AppSpacing.lg,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#dc2626',
+  },
+  successBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: AppSpacing.sm,
+    padding: AppSpacing.md,
+    backgroundColor: '#ecfdf5',
+    borderRadius: AppBorderRadius.md,
+    marginBottom: AppSpacing.lg,
+  },
+  successText: {
+    fontSize: 14,
     color: AppColors.accent,
     fontWeight: '500',
   },
@@ -561,9 +1095,14 @@ const styles = StyleSheet.create({
     color: AppColors.gray600,
     marginBottom: 2,
   },
+  paymentSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: AppSpacing.sm,
+  },
   reviewItem: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingVertical: AppSpacing.xs,
   },
   reviewItemName: {
@@ -574,7 +1113,51 @@ const styles = StyleSheet.create({
   reviewItemQty: {
     fontSize: 14,
     color: AppColors.gray500,
-    marginLeft: AppSpacing.sm,
+    marginHorizontal: AppSpacing.sm,
+  },
+  reviewItemPrice: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: AppColors.gray700,
+  },
+  priceBreakdown: {
+    marginTop: AppSpacing.lg,
+    paddingTop: AppSpacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: AppColors.gray100,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: AppSpacing.sm,
+  },
+  priceLabel: {
+    fontSize: 14,
+    color: AppColors.gray600,
+  },
+  priceValue: {
+    fontSize: 14,
+    color: AppColors.gray700,
+  },
+  freeShipping: {
+    color: AppColors.accent,
+    fontWeight: '500',
+  },
+  totalRowInner: {
+    marginTop: AppSpacing.sm,
+    paddingTop: AppSpacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: AppColors.gray200,
+  },
+  totalLabelInner: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: AppColors.gray900,
+  },
+  totalValueInner: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: AppColors.primary,
   },
   footer: {
     position: 'absolute',
@@ -584,22 +1167,21 @@ const styles = StyleSheet.create({
     backgroundColor: AppColors.white,
     borderTopLeftRadius: AppBorderRadius.xl,
     borderTopRightRadius: AppBorderRadius.xl,
-    padding: AppSpacing.lg,
+    padding: AppSpacing.base,
     paddingBottom: AppSpacing['2xl'],
     ...AppShadows.lg,
   },
-  totalRow: {
+  footerTotal: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: AppSpacing.base,
+    marginBottom: AppSpacing.md,
   },
-  totalLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: AppColors.gray900,
+  footerTotalLabel: {
+    fontSize: 14,
+    color: AppColors.gray600,
   },
-  totalValue: {
-    fontSize: 20,
+  footerTotalValue: {
+    fontSize: 18,
     fontWeight: '700',
     color: AppColors.primary,
   },
@@ -617,6 +1199,28 @@ const styles = StyleSheet.create({
     color: AppColors.white,
   },
   buttonDisabled: {
-    opacity: 0.7,
+    opacity: 0.6,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: AppSpacing.md,
+    gap: AppSpacing.xs,
+  },
+  backButtonText: {
+    fontSize: 14,
+    color: AppColors.gray600,
+  },
+  poweredBy: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: AppSpacing.md,
+    gap: AppSpacing.xs,
+  },
+  poweredByText: {
+    fontSize: 12,
+    color: AppColors.gray400,
   },
 })

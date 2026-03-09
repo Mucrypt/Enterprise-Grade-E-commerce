@@ -728,6 +728,228 @@ export const trendingApi = {
   },
 }
 
+// ============================================
+// Payments API (Stripe Integration)
+// ============================================
+export interface PaymentIntentResponse {
+  clientSecret: string
+  paymentIntentId: string
+  amount: number
+  currency: string
+}
+
+export interface PaymentMethod {
+  id: string
+  type: string
+  brand?: string
+  last4?: string
+  expMonth?: number
+  expYear?: number
+  isDefault: boolean
+}
+
+export const paymentsApi = {
+  // Get Stripe publishable key
+  getConfig: async (): Promise<{ publishableKey: string }> => {
+    const response = await apiClient.get('/payments/config')
+    return response.data.data || response.data
+  },
+
+  // Create payment intent
+  createPaymentIntent: async (data: {
+    items: { productId: string; price: number; quantity: number }[]
+    shippingAddress?: {
+      name: string
+      address: string
+      apartment?: string
+      city: string
+      state: string
+      postalCode: string
+      country: string
+    }
+    currency?: string
+    savePaymentMethod?: boolean
+  }): Promise<PaymentIntentResponse> => {
+    const response = await apiClient.post('/payments/intent', data)
+    return response.data.data || response.data
+  },
+
+  // Update payment intent (when cart changes)
+  updatePaymentIntent: async (data: {
+    paymentIntentId: string
+    items?: { productId: string; price: number; quantity: number }[]
+    shippingAddress?: {
+      name: string
+      address: string
+      apartment?: string
+      city: string
+      state: string
+      postalCode: string
+      country: string
+    }
+  }): Promise<PaymentIntentResponse> => {
+    const response = await apiClient.put('/payments/intent', data)
+    return response.data.data || response.data
+  },
+
+  // Get payment intent status
+  getPaymentStatus: async (
+    paymentIntentId: string,
+  ): Promise<{
+    id: string
+    status: string
+    amount: number
+    currency: string
+  }> => {
+    const response = await apiClient.get(`/payments/intent/${paymentIntentId}`)
+    return response.data.data || response.data
+  },
+
+  // Create setup intent for saving cards
+  createSetupIntent: async (): Promise<{
+    clientSecret: string
+    customerId: string
+  }> => {
+    const response = await apiClient.post('/payments/methods/setup')
+    return response.data.data || response.data
+  },
+
+  // Get saved payment methods
+  getPaymentMethods: async (): Promise<PaymentMethod[]> => {
+    const response = await apiClient.get('/payments/methods')
+    const data = response.data.data || response.data
+    return data.paymentMethods || data
+  },
+
+  // Remove payment method
+  removePaymentMethod: async (methodId: string): Promise<void> => {
+    await apiClient.delete(`/payments/methods/${methodId}`)
+  },
+
+  // Set default payment method
+  setDefaultPaymentMethod: async (paymentMethodId: string): Promise<void> => {
+    await apiClient.put('/payments/methods/default', { paymentMethodId })
+  },
+}
+
+// ============================================
+// Orders API (Updated with Stripe integration)
+// ============================================
+export const ordersApiNew = {
+  // Create order with Stripe payment
+  create: async (data: {
+    items: { productId: string; quantity: number }[]
+    shippingAddress: {
+      firstName: string
+      lastName: string
+      email: string
+      phone?: string
+      address: string
+      apartment?: string
+      city: string
+      state: string
+      postalCode: string
+      country: string
+    }
+    billingAddress?: {
+      firstName: string
+      lastName: string
+      address: string
+      apartment?: string
+      city: string
+      state: string
+      postalCode: string
+      country: string
+    }
+    paymentIntentId: string
+    paymentMethod?: string
+    customerNotes?: string
+  }): Promise<{
+    id: string
+    order_number: string
+    order_status: string
+    payment_status: string
+    grand_total: number
+    shipping_address: object
+    items: Array<{
+      id: string
+      product_name: string
+      quantity: number
+      unit_price: number
+      total_price: number
+    }>
+    created_at: string
+  }> => {
+    const response = await apiClient.post('/orders', data)
+    const result = response.data.data || response.data
+    return result.order || result
+  },
+
+  // Get user orders
+  getAll: async (
+    page = 1,
+    limit = 10,
+  ): Promise<{
+    orders: Array<{
+      id: string
+      order_number: string
+      order_status: string
+      payment_status: string
+      grand_total: number
+      created_at: string
+      item_count: number
+    }>
+    pagination: Pagination
+  }> => {
+    const response = await apiClient.get(`/orders?page=${page}&limit=${limit}`)
+    const data = response.data.data || response.data
+    return {
+      orders: data.orders || data,
+      pagination: data.pagination || {
+        page: 1,
+        limit: 10,
+        total: data.orders?.length || 0,
+        totalPages: 1,
+      },
+    }
+  },
+
+  // Get single order
+  getById: async (
+    id: string,
+  ): Promise<{
+    id: string
+    order_number: string
+    order_status: string
+    payment_status: string
+    total_amount: number
+    tax_amount: number
+    shipping_amount: number
+    grand_total: number
+    shipping_address: object
+    items: Array<{
+      id: string
+      product_id: string
+      product_name: string
+      quantity: number
+      unit_price: number
+      total_price: number
+    }>
+    created_at: string
+  }> => {
+    const response = await apiClient.get(`/orders/${id}`)
+    const data = response.data.data || response.data
+    return data.order || data
+  },
+
+  // Cancel order
+  cancel: async (id: string, reason?: string): Promise<object> => {
+    const response = await apiClient.put(`/orders/${id}/cancel`, { reason })
+    const data = response.data.data || response.data
+    return data.order || data
+  },
+}
+
 // Combined API object for convenience
 export const api = {
   auth: authApi,
@@ -735,10 +957,12 @@ export const api = {
   categories: categoriesApi,
   brands: brandsApi,
   orders: ordersApi,
+  ordersNew: ordersApiNew,
   addresses: addressesApi,
   reviews: reviewsApi,
   wishlist: wishlistApi,
   blog: blogApi,
   collections: collectionsApi,
   trending: trendingApi,
+  payments: paymentsApi,
 }

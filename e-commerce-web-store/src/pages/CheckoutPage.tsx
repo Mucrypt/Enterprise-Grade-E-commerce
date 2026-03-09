@@ -1,9 +1,10 @@
 // ============================================
-// Checkout Page - Multi-Step Checkout Flow
+// Checkout Page - Multi-Step Checkout with Stripe
+// Enterprise-grade payment integration
 // ============================================
 
-import { useState, useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   ChevronRight,
   ChevronLeft,
@@ -18,6 +19,9 @@ import {
 } from 'lucide-react'
 import { useCartStore, useAuthStore } from '../stores'
 import { formatPrice, getProductImage, cn } from '../utils'
+import { paymentsApi, ordersApiNew } from '../api'
+import { StripeElementsWrapper } from '../contexts/StripeContext'
+import StripePaymentForm from '../components/checkout/StripePaymentForm'
 
 // Step types
 type CheckoutStep = 'shipping' | 'payment' | 'review'
@@ -35,15 +39,6 @@ interface ShippingAddress {
   country: string
 }
 
-interface PaymentInfo {
-  method: 'card' | 'paypal' | 'bank'
-  cardNumber: string
-  cardName: string
-  expiry: string
-  cvv: string
-  saveCard: boolean
-}
-
 const initialShipping: ShippingAddress = {
   firstName: '',
   lastName: '',
@@ -54,16 +49,7 @@ const initialShipping: ShippingAddress = {
   city: '',
   state: '',
   postalCode: '',
-  country: 'LT',
-}
-
-const initialPayment: PaymentInfo = {
-  method: 'card',
-  cardNumber: '',
-  cardName: '',
-  expiry: '',
-  cvv: '',
-  saveCard: false,
+  country: 'US',
 }
 
 const steps: {
@@ -73,7 +59,7 @@ const steps: {
 }[] = [
   { id: 'shipping', label: 'Shipping', icon: MapPin },
   { id: 'payment', label: 'Payment', icon: CreditCard },
-  { id: 'review', label: 'Review', icon: Package },
+  { id: 'review', label: 'Confirm', icon: Package },
 ]
 
 export default function CheckoutPage() {
@@ -83,21 +69,25 @@ export default function CheckoutPage() {
 
   const [currentStep, setCurrentStep] = useState<CheckoutStep>('shipping')
   const [shipping, setShipping] = useState<ShippingAddress>(initialShipping)
-  const [payment, setPayment] = useState<PaymentInfo>(initialPayment)
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Stripe state
+  const [clientSecret, setClientSecret] = useState<string | null>(null)
+  const [_paymentIntentId, setPaymentIntentId] = useState<string | null>(null)
+  const [paymentComplete, setPaymentComplete] = useState(false)
+
   const subtotal = getSubtotal()
   const shippingCost = subtotal >= 50 ? 0 : 5.99
-  const tax = subtotal * 0.21
+  const tax = subtotal * 0.08 // 8% tax
   const total = subtotal + shippingCost + tax
 
   // Redirect if cart is empty
   useEffect(() => {
-    if (items.length === 0) {
+    if (items.length === 0 && !paymentComplete) {
       navigate('/cart')
     }
-  }, [items.length, navigate])
+  }, [items.length, navigate, paymentComplete])
 
   // Pre-fill user data if authenticated
   useEffect(() => {
@@ -112,6 +102,39 @@ export default function CheckoutPage() {
     }
   }, [isAuthenticated, user])
 
+  // Create payment intent when moving to payment step
+  const createPaymentIntent = useCallback(async () => {
+    try {
+      setError(null)
+
+      const paymentItems = items.map((item) => ({
+        productId: item.product.id,
+        price: Number(item.product.sale_price || item.product.base_price),
+        quantity: item.quantity,
+      }))
+
+      const result = await paymentsApi.createPaymentIntent({
+        items: paymentItems,
+        shippingAddress: {
+          name: `${shipping.firstName} ${shipping.lastName}`,
+          address: shipping.address,
+          apartment: shipping.apartment,
+          city: shipping.city,
+          state: shipping.state,
+          postalCode: shipping.postalCode,
+          country: shipping.country,
+        },
+        currency: 'usd',
+      })
+
+      setClientSecret(result.clientSecret)
+      setPaymentIntentId(result.paymentIntentId)
+    } catch (err) {
+      console.error('Failed to create payment intent:', err)
+      setError('Failed to initialize payment. Please try again.')
+    }
+  }, [items, shipping])
+
   const currentStepIndex = steps.findIndex((s) => s.id === currentStep)
 
   const goToStep = (step: CheckoutStep) => {
@@ -121,36 +144,41 @@ export default function CheckoutPage() {
     }
   }
 
-  const nextStep = () => {
+  const validateShipping = (): boolean => {
+    if (
+      !shipping.firstName ||
+      !shipping.lastName ||
+      !shipping.email ||
+      !shipping.address ||
+      !shipping.city ||
+      !shipping.postalCode
+    ) {
+      setError('Please fill in all required fields')
+      return false
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(shipping.email)) {
+      setError('Please enter a valid email address')
+      return false
+    }
+
+    return true
+  }
+
+  const nextStep = async () => {
+    setError(null)
+
     if (currentStep === 'shipping') {
-      // Validate shipping
-      if (
-        !shipping.firstName ||
-        !shipping.lastName ||
-        !shipping.email ||
-        !shipping.address ||
-        !shipping.city ||
-        !shipping.postalCode
-      ) {
-        setError('Please fill in all required fields')
-        return
-      }
-      setError(null)
+      if (!validateShipping()) return
+
+      // Create payment intent before moving to payment step
+      await createPaymentIntent()
       setCurrentStep('payment')
     } else if (currentStep === 'payment') {
-      // Validate payment
-      if (
-        payment.method === 'card' &&
-        (!payment.cardNumber ||
-          !payment.cardName ||
-          !payment.expiry ||
-          !payment.cvv)
-      ) {
-        setError('Please fill in all card details')
-        return
-      }
-      setError(null)
-      setCurrentStep('review')
+      // Payment step is handled by Stripe form
+      // This button won't be shown in payment step
     }
   }
 
@@ -159,28 +187,59 @@ export default function CheckoutPage() {
     else if (currentStep === 'review') setCurrentStep('payment')
   }
 
-  const handlePlaceOrder = async () => {
+  // Handle successful payment
+  const handlePaymentSuccess = async (completedPaymentIntentId: string) => {
     setIsProcessing(true)
     setError(null)
 
     try {
-      // Simulate order processing
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      // Create the order
+      const order = await ordersApiNew.create({
+        items: items.map((item) => ({
+          productId: item.product.id,
+          quantity: item.quantity,
+        })),
+        shippingAddress: {
+          firstName: shipping.firstName,
+          lastName: shipping.lastName,
+          email: shipping.email,
+          phone: shipping.phone,
+          address: shipping.address,
+          apartment: shipping.apartment,
+          city: shipping.city,
+          state: shipping.state,
+          postalCode: shipping.postalCode,
+          country: shipping.country,
+        },
+        paymentIntentId: completedPaymentIntentId,
+        paymentMethod: 'card',
+      })
+
+      setPaymentComplete(true)
 
       // Clear cart and redirect to success
       clearCart()
       navigate('/order-confirmation', {
         state: {
-          orderNumber: `TT-${Date.now().toString().slice(-8)}`,
-          total,
+          orderNumber: order.order_number,
+          orderId: order.id,
+          total: order.grand_total,
           email: shipping.email,
         },
       })
     } catch (err) {
-      setError('Failed to process order. Please try again.')
+      console.error('Failed to create order:', err)
+      setError(
+        'Payment successful but failed to create order. Please contact support.',
+      )
     } finally {
       setIsProcessing(false)
     }
+  }
+
+  const handlePaymentError = (errorMessage: string) => {
+    setError(errorMessage)
+    setIsProcessing(false)
   }
 
   return (
@@ -207,7 +266,7 @@ export default function CheckoutPage() {
                     disabled={index > currentStepIndex}
                     className={cn(
                       'flex items-center gap-2 px-4 py-2 rounded-full transition-all',
-                      isActive && 'bg-orange-500 text-white',
+                      isActive && 'bg-blue-600 text-white',
                       isCompleted && 'bg-green-500 text-white cursor-pointer',
                       !isActive && !isCompleted && 'bg-gray-200 text-gray-500',
                     )}
@@ -250,7 +309,7 @@ export default function CheckoutPage() {
             {currentStep === 'shipping' && (
               <div className='bg-white rounded-xl p-6 shadow-sm'>
                 <h2 className='text-xl font-bold text-gray-900 mb-6 flex items-center gap-2'>
-                  <MapPin className='w-5 h-5 text-orange-500' />
+                  <MapPin className='w-5 h-5 text-blue-600' />
                   Shipping Address
                 </h2>
 
@@ -265,7 +324,7 @@ export default function CheckoutPage() {
                       onChange={(e) =>
                         setShipping({ ...shipping, firstName: e.target.value })
                       }
-                      className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent'
+                      className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent'
                       required
                     />
                   </div>
@@ -279,7 +338,7 @@ export default function CheckoutPage() {
                       onChange={(e) =>
                         setShipping({ ...shipping, lastName: e.target.value })
                       }
-                      className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent'
+                      className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent'
                       required
                     />
                   </div>
@@ -293,13 +352,13 @@ export default function CheckoutPage() {
                       onChange={(e) =>
                         setShipping({ ...shipping, email: e.target.value })
                       }
-                      className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent'
+                      className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent'
                       required
                     />
                   </div>
                   <div>
                     <label className='block text-sm font-medium text-gray-700 mb-1'>
-                      Phone Number *
+                      Phone Number
                     </label>
                     <input
                       type='tel'
@@ -307,7 +366,7 @@ export default function CheckoutPage() {
                       onChange={(e) =>
                         setShipping({ ...shipping, phone: e.target.value })
                       }
-                      className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent'
+                      className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent'
                     />
                   </div>
                   <div className='sm:col-span-2'>
@@ -320,7 +379,7 @@ export default function CheckoutPage() {
                       onChange={(e) =>
                         setShipping({ ...shipping, address: e.target.value })
                       }
-                      className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent'
+                      className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent'
                       placeholder='123 Main St'
                       required
                     />
@@ -335,7 +394,7 @@ export default function CheckoutPage() {
                       onChange={(e) =>
                         setShipping({ ...shipping, apartment: e.target.value })
                       }
-                      className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent'
+                      className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent'
                     />
                   </div>
                   <div>
@@ -348,7 +407,7 @@ export default function CheckoutPage() {
                       onChange={(e) =>
                         setShipping({ ...shipping, city: e.target.value })
                       }
-                      className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent'
+                      className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent'
                       required
                     />
                   </div>
@@ -362,7 +421,7 @@ export default function CheckoutPage() {
                       onChange={(e) =>
                         setShipping({ ...shipping, state: e.target.value })
                       }
-                      className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent'
+                      className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent'
                     />
                   </div>
                   <div>
@@ -375,7 +434,7 @@ export default function CheckoutPage() {
                       onChange={(e) =>
                         setShipping({ ...shipping, postalCode: e.target.value })
                       }
-                      className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent'
+                      className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent'
                       required
                     />
                   </div>
@@ -388,15 +447,18 @@ export default function CheckoutPage() {
                       onChange={(e) =>
                         setShipping({ ...shipping, country: e.target.value })
                       }
-                      className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent'
+                      className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent'
                     >
+                      <option value='US'>United States</option>
+                      <option value='CA'>Canada</option>
+                      <option value='GB'>United Kingdom</option>
+                      <option value='DE'>Germany</option>
+                      <option value='FR'>France</option>
+                      <option value='AU'>Australia</option>
                       <option value='LT'>Lithuania</option>
                       <option value='LV'>Latvia</option>
                       <option value='EE'>Estonia</option>
                       <option value='PL'>Poland</option>
-                      <option value='DE'>Germany</option>
-                      <option value='FR'>France</option>
-                      <option value='GB'>United Kingdom</option>
                     </select>
                   </div>
                 </div>
@@ -407,12 +469,12 @@ export default function CheckoutPage() {
                     Shipping Method
                   </h3>
                   <div className='space-y-3'>
-                    <label className='flex items-center p-4 border border-orange-500 bg-orange-50 rounded-lg cursor-pointer'>
+                    <label className='flex items-center p-4 border border-blue-500 bg-blue-50 rounded-lg cursor-pointer'>
                       <input
                         type='radio'
                         name='shipping'
                         defaultChecked
-                        className='text-orange-500'
+                        className='text-blue-600'
                       />
                       <div className='ml-3 flex-1'>
                         <p className='font-medium text-gray-900'>
@@ -432,7 +494,7 @@ export default function CheckoutPage() {
                       <input
                         type='radio'
                         name='shipping'
-                        className='text-orange-500'
+                        className='text-blue-600'
                       />
                       <div className='ml-3 flex-1'>
                         <p className='font-medium text-gray-900'>
@@ -448,6 +510,17 @@ export default function CheckoutPage() {
                     </label>
                   </div>
                 </div>
+
+                {/* Continue Button */}
+                <div className='mt-8 flex justify-end'>
+                  <button
+                    onClick={nextStep}
+                    className='flex items-center gap-2 px-8 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors'
+                  >
+                    Continue to Payment
+                    <ChevronRight className='w-5 h-5' />
+                  </button>
+                </div>
               </div>
             )}
 
@@ -455,360 +528,95 @@ export default function CheckoutPage() {
             {currentStep === 'payment' && (
               <div className='bg-white rounded-xl p-6 shadow-sm'>
                 <h2 className='text-xl font-bold text-gray-900 mb-6 flex items-center gap-2'>
-                  <CreditCard className='w-5 h-5 text-orange-500' />
-                  Payment Method
+                  <CreditCard className='w-5 h-5 text-blue-600' />
+                  Payment
                 </h2>
 
-                {/* Payment Methods */}
-                <div className='space-y-3 mb-6'>
-                  <label
-                    className={cn(
-                      'flex items-center p-4 border rounded-lg cursor-pointer transition-all',
-                      payment.method === 'card'
-                        ? 'border-orange-500 bg-orange-50'
-                        : 'border-gray-300 hover:border-gray-400',
-                    )}
-                  >
-                    <input
-                      type='radio'
-                      name='payment'
-                      checked={payment.method === 'card'}
-                      onChange={() =>
-                        setPayment({ ...payment, method: 'card' })
-                      }
-                      className='text-orange-500'
-                    />
-                    <div className='ml-3 flex-1'>
-                      <p className='font-medium text-gray-900'>
-                        Credit / Debit Card
-                      </p>
-                      <p className='text-sm text-gray-500'>
-                        Visa, Mastercard, American Express
-                      </p>
-                    </div>
-                    <div className='flex gap-2'>
-                      <div className='w-10 h-6 bg-blue-600 rounded text-white text-xs flex items-center justify-center font-bold'>
-                        VISA
-                      </div>
-                      <div className='w-10 h-6 bg-red-500 rounded text-white text-xs flex items-center justify-center font-bold'>
-                        MC
-                      </div>
-                    </div>
-                  </label>
-
-                  <label
-                    className={cn(
-                      'flex items-center p-4 border rounded-lg cursor-pointer transition-all',
-                      payment.method === 'paypal'
-                        ? 'border-orange-500 bg-orange-50'
-                        : 'border-gray-300 hover:border-gray-400',
-                    )}
-                  >
-                    <input
-                      type='radio'
-                      name='payment'
-                      checked={payment.method === 'paypal'}
-                      onChange={() =>
-                        setPayment({ ...payment, method: 'paypal' })
-                      }
-                      className='text-orange-500'
-                    />
-                    <div className='ml-3 flex-1'>
-                      <p className='font-medium text-gray-900'>PayPal</p>
-                      <p className='text-sm text-gray-500'>
-                        Fast and secure payment
-                      </p>
-                    </div>
-                    <div className='w-16 h-6 bg-blue-700 rounded text-white text-xs flex items-center justify-center font-bold'>
-                      PayPal
-                    </div>
-                  </label>
-
-                  <label
-                    className={cn(
-                      'flex items-center p-4 border rounded-lg cursor-pointer transition-all',
-                      payment.method === 'bank'
-                        ? 'border-orange-500 bg-orange-50'
-                        : 'border-gray-300 hover:border-gray-400',
-                    )}
-                  >
-                    <input
-                      type='radio'
-                      name='payment'
-                      checked={payment.method === 'bank'}
-                      onChange={() =>
-                        setPayment({ ...payment, method: 'bank' })
-                      }
-                      className='text-orange-500'
-                    />
-                    <div className='ml-3 flex-1'>
-                      <p className='font-medium text-gray-900'>Bank Transfer</p>
-                      <p className='text-sm text-gray-500'>
-                        Direct bank payment
-                      </p>
-                    </div>
-                  </label>
-                </div>
-
-                {/* Card Details */}
-                {payment.method === 'card' && (
-                  <div className='space-y-4 p-4 bg-gray-50 rounded-lg'>
-                    <div>
-                      <label className='block text-sm font-medium text-gray-700 mb-1'>
-                        Card Number
-                      </label>
-                      <input
-                        type='text'
-                        value={payment.cardNumber}
-                        onChange={(e) =>
-                          setPayment({ ...payment, cardNumber: e.target.value })
-                        }
-                        placeholder='1234 5678 9012 3456'
-                        className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent'
-                        maxLength={19}
-                      />
-                    </div>
-                    <div>
-                      <label className='block text-sm font-medium text-gray-700 mb-1'>
-                        Name on Card
-                      </label>
-                      <input
-                        type='text'
-                        value={payment.cardName}
-                        onChange={(e) =>
-                          setPayment({ ...payment, cardName: e.target.value })
-                        }
-                        placeholder='John Doe'
-                        className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent'
-                      />
-                    </div>
-                    <div className='grid grid-cols-2 gap-4'>
-                      <div>
-                        <label className='block text-sm font-medium text-gray-700 mb-1'>
-                          Expiry Date
-                        </label>
-                        <input
-                          type='text'
-                          value={payment.expiry}
-                          onChange={(e) =>
-                            setPayment({ ...payment, expiry: e.target.value })
-                          }
-                          placeholder='MM/YY'
-                          className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent'
-                          maxLength={5}
-                        />
-                      </div>
-                      <div>
-                        <label className='block text-sm font-medium text-gray-700 mb-1'>
-                          CVV
-                        </label>
-                        <input
-                          type='text'
-                          value={payment.cvv}
-                          onChange={(e) =>
-                            setPayment({ ...payment, cvv: e.target.value })
-                          }
-                          placeholder='123'
-                          className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent'
-                          maxLength={4}
-                        />
-                      </div>
-                    </div>
-                    <label className='flex items-center gap-2 cursor-pointer'>
-                      <input
-                        type='checkbox'
-                        checked={payment.saveCard}
-                        onChange={(e) =>
-                          setPayment({ ...payment, saveCard: e.target.checked })
-                        }
-                        className='rounded text-orange-500'
-                      />
-                      <span className='text-sm text-gray-600'>
-                        Save card for future purchases
-                      </span>
-                    </label>
-                  </div>
-                )}
-
-                {/* PayPal */}
-                {payment.method === 'paypal' && (
-                  <div className='p-6 bg-gray-50 rounded-lg text-center'>
-                    <p className='text-gray-600 mb-4'>
-                      You will be redirected to PayPal to complete your payment.
-                    </p>
-                    <div className='w-32 h-10 bg-blue-700 rounded mx-auto text-white flex items-center justify-center font-bold'>
-                      PayPal
-                    </div>
-                  </div>
-                )}
-
-                {/* Bank Transfer */}
-                {payment.method === 'bank' && (
-                  <div className='p-6 bg-gray-50 rounded-lg'>
-                    <p className='text-gray-600 mb-4'>
-                      Bank transfer details will be provided after order
-                      placement.
-                    </p>
-                    <div className='text-sm text-gray-500'>
-                      <p>
-                        • Order will be processed after payment confirmation
-                      </p>
-                      <p>• Payment must be made within 48 hours</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Review Step */}
-            {currentStep === 'review' && (
-              <div className='space-y-6'>
                 {/* Shipping Summary */}
-                <div className='bg-white rounded-xl p-6 shadow-sm'>
-                  <div className='flex items-center justify-between mb-4'>
-                    <h3 className='text-lg font-semibold text-gray-900 flex items-center gap-2'>
-                      <MapPin className='w-5 h-5 text-orange-500' />
-                      Shipping Address
-                    </h3>
+                <div className='mb-6 p-4 bg-gray-50 rounded-lg'>
+                  <div className='flex items-center justify-between'>
+                    <div>
+                      <p className='text-sm text-gray-500'>Shipping to</p>
+                      <p className='font-medium text-gray-900'>
+                        {shipping.firstName} {shipping.lastName}
+                      </p>
+                      <p className='text-sm text-gray-600'>
+                        {shipping.address}, {shipping.city},{' '}
+                        {shipping.postalCode}
+                      </p>
+                    </div>
                     <button
                       onClick={() => setCurrentStep('shipping')}
-                      className='text-orange-500 hover:text-orange-600 text-sm font-medium'
+                      className='text-blue-600 hover:text-blue-700 text-sm font-medium'
                     >
-                      Edit
+                      Change
                     </button>
-                  </div>
-                  <div className='text-gray-600'>
-                    <p className='font-medium text-gray-900'>
-                      {shipping.firstName} {shipping.lastName}
-                    </p>
-                    <p>
-                      {shipping.address}
-                      {shipping.apartment && `, ${shipping.apartment}`}
-                    </p>
-                    <p>
-                      {shipping.city}, {shipping.state} {shipping.postalCode}
-                    </p>
-                    <p>{shipping.country}</p>
-                    <p className='mt-2'>{shipping.email}</p>
-                    <p>{shipping.phone}</p>
                   </div>
                 </div>
 
-                {/* Payment Summary */}
-                <div className='bg-white rounded-xl p-6 shadow-sm'>
-                  <div className='flex items-center justify-between mb-4'>
-                    <h3 className='text-lg font-semibold text-gray-900 flex items-center gap-2'>
-                      <CreditCard className='w-5 h-5 text-orange-500' />
-                      Payment Method
-                    </h3>
-                    <button
-                      onClick={() => setCurrentStep('payment')}
-                      className='text-orange-500 hover:text-orange-600 text-sm font-medium'
-                    >
-                      Edit
-                    </button>
+                {/* Stripe Payment Form */}
+                {clientSecret ? (
+                  <StripeElementsWrapper clientSecret={clientSecret}>
+                    <StripePaymentForm
+                      onSuccess={handlePaymentSuccess}
+                      onError={handlePaymentError}
+                      isProcessing={isProcessing}
+                      setIsProcessing={setIsProcessing}
+                      returnUrl={`${window.location.origin}/order-confirmation`}
+                      billingDetails={{
+                        name: `${shipping.firstName} ${shipping.lastName}`,
+                        email: shipping.email,
+                        address: {
+                          line1: shipping.address,
+                          line2: shipping.apartment,
+                          city: shipping.city,
+                          state: shipping.state,
+                          postal_code: shipping.postalCode,
+                          country: shipping.country,
+                        },
+                      }}
+                    />
+                  </StripeElementsWrapper>
+                ) : (
+                  <div className='flex items-center justify-center py-12'>
+                    <div className='animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600'></div>
+                    <span className='ml-3 text-gray-600'>
+                      Loading payment form...
+                    </span>
                   </div>
-                  <div className='text-gray-600'>
-                    {payment.method === 'card' && (
-                      <p>
-                        Credit Card ending in {payment.cardNumber.slice(-4)}
-                      </p>
-                    )}
-                    {payment.method === 'paypal' && <p>PayPal</p>}
-                    {payment.method === 'bank' && <p>Bank Transfer</p>}
-                  </div>
-                </div>
+                )}
 
-                {/* Order Items */}
-                <div className='bg-white rounded-xl p-6 shadow-sm'>
-                  <h3 className='text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2'>
-                    <Package className='w-5 h-5 text-orange-500' />
-                    Order Items ({items.length})
-                  </h3>
-                  <div className='space-y-4'>
-                    {items.map((item) => (
-                      <div key={item.id} className='flex gap-4'>
-                        <img
-                          src={getProductImage(item.product, { w: 64, h: 64 })}
-                          alt={item.product.name}
-                          className='w-16 h-16 object-cover rounded-lg'
-                        />
-                        <div className='flex-1'>
-                          <p className='font-medium text-gray-900 line-clamp-1'>
-                            {item.product.name}
-                          </p>
-                          <p className='text-sm text-gray-500'>
-                            Qty: {item.quantity}
-                          </p>
-                        </div>
-                        <p className='font-medium text-gray-900'>
-                          {formatPrice(
-                            Number(
-                              item.product.sale_price ||
-                                item.product.base_price,
-                            ) * item.quantity,
-                          )}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
+                {/* Back Button */}
+                <div className='mt-6 pt-6 border-t'>
+                  <button
+                    onClick={prevStep}
+                    className='flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors'
+                  >
+                    <ChevronLeft className='w-5 h-5' />
+                    Back to Shipping
+                  </button>
                 </div>
               </div>
             )}
 
-            {/* Navigation Buttons */}
-            <div className='mt-6 flex items-center justify-between'>
-              {currentStep !== 'shipping' ? (
-                <button
-                  onClick={prevStep}
-                  className='flex items-center gap-2 px-6 py-3 text-gray-600 hover:text-gray-900 transition-colors'
-                >
-                  <ChevronLeft className='w-5 h-5' />
-                  Back
-                </button>
-              ) : (
-                <Link
-                  to='/cart'
-                  className='flex items-center gap-2 px-6 py-3 text-gray-600 hover:text-gray-900 transition-colors'
-                >
-                  <ChevronLeft className='w-5 h-5' />
-                  Back to Cart
-                </Link>
-              )}
-
-              {currentStep !== 'review' ? (
-                <button
-                  onClick={nextStep}
-                  className='flex items-center gap-2 px-8 py-3 bg-orange-500 text-white font-semibold rounded-xl hover:bg-orange-600 transition-colors'
-                >
-                  Continue
-                  <ChevronRight className='w-5 h-5' />
-                </button>
-              ) : (
-                <button
-                  onClick={handlePlaceOrder}
-                  disabled={isProcessing}
-                  className={cn(
-                    'flex items-center gap-2 px-8 py-3 bg-green-600 text-white font-semibold rounded-xl transition-colors',
-                    isProcessing
-                      ? 'opacity-70 cursor-not-allowed'
-                      : 'hover:bg-green-700',
-                  )}
-                >
-                  {isProcessing ? (
-                    <>
-                      <div className='w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin' />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <Lock className='w-5 h-5' />
-                      Place Order - {formatPrice(total)}
-                    </>
-                  )}
-                </button>
-              )}
-            </div>
+            {/* Review Step (shown after successful payment) */}
+            {currentStep === 'review' && (
+              <div className='space-y-6'>
+                <div className='bg-green-50 border border-green-200 rounded-xl p-6'>
+                  <div className='flex items-center gap-3'>
+                    <CheckCircle className='w-8 h-8 text-green-600' />
+                    <div>
+                      <h3 className='text-lg font-semibold text-green-800'>
+                        Payment Successful!
+                      </h3>
+                      <p className='text-green-700'>
+                        Your order is being processed.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Order Summary Sidebar */}
@@ -828,7 +636,7 @@ export default function CheckoutPage() {
                         alt={item.product.name}
                         className='w-full h-full object-cover rounded-lg'
                       />
-                      <span className='absolute -top-2 -right-2 w-5 h-5 bg-orange-500 text-white text-xs font-bold rounded-full flex items-center justify-center'>
+                      <span className='absolute -top-2 -right-2 w-5 h-5 bg-blue-600 text-white text-xs font-bold rounded-full flex items-center justify-center'>
                         {item.quantity}
                       </span>
                     </div>
@@ -869,7 +677,7 @@ export default function CheckoutPage() {
                   </span>
                 </div>
                 <div className='flex justify-between'>
-                  <span className='text-gray-600'>VAT (21%)</span>
+                  <span className='text-gray-600'>Tax (8%)</span>
                   <span className='font-medium'>{formatPrice(tax)}</span>
                 </div>
                 <div className='border-t pt-3 mt-3'>
@@ -877,7 +685,7 @@ export default function CheckoutPage() {
                     <span className='text-lg font-bold text-gray-900'>
                       Total
                     </span>
-                    <span className='text-lg font-bold text-orange-500'>
+                    <span className='text-lg font-bold text-blue-600'>
                       {formatPrice(total)}
                     </span>
                   </div>
@@ -891,7 +699,11 @@ export default function CheckoutPage() {
                   <span>Secure SSL Encryption</span>
                 </div>
                 <div className='flex items-center gap-2 text-sm text-gray-600'>
-                  <Truck className='w-5 h-5 text-blue-600' />
+                  <Lock className='w-5 h-5 text-blue-600' />
+                  <span>Powered by Stripe</span>
+                </div>
+                <div className='flex items-center gap-2 text-sm text-gray-600'>
+                  <Truck className='w-5 h-5 text-gray-600' />
                   <span>Estimated delivery: 3-5 days</span>
                 </div>
               </div>
