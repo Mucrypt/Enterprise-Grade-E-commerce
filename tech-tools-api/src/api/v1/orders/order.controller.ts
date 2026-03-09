@@ -705,7 +705,7 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
     for (const item of items) {
       // Verify product exists and get current price
       const productResult = await query(
-        `SELECT id, name, sku, price, compare_at_price, stock_quantity 
+        `SELECT id, name, sku, base_price, sale_price, stock_quantity 
          FROM products WHERE id = $1 AND is_active = true`,
         [item.productId],
       )
@@ -727,7 +727,9 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
         })
       }
 
-      const itemTotal = parseFloat(product.price) * item.quantity
+      // Use sale_price if available, otherwise base_price
+      const effectivePrice = parseFloat(product.sale_price || product.base_price)
+      const itemTotal = effectivePrice * item.quantity
       totalAmount += itemTotal
 
       orderItems.push({
@@ -735,7 +737,7 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
         sku: product.sku,
         productName: product.name,
         quantity: item.quantity,
-        unitPrice: parseFloat(product.price),
+        unitPrice: effectivePrice,
         totalPrice: itemTotal,
       })
     }

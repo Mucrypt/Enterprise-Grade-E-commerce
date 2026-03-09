@@ -13,6 +13,7 @@ import ProductDetailPage from './pages/ProductDetailPage'
 import CartPage from './pages/CartPage'
 import CheckoutPage from './pages/CheckoutPage'
 import OrderConfirmationPage from './pages/OrderConfirmationPage'
+import PaymentCancelPage from './pages/PaymentCancelPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import ProfilePage from './pages/ProfilePage'
@@ -71,6 +72,10 @@ function App() {
             <Route
               path='order-confirmation'
               element={<OrderConfirmationPage />}
+            />
+            <Route
+              path='payment-cancelled'
+              element={<PaymentCancelPage />}
             />
 
             {/* Auth */}
