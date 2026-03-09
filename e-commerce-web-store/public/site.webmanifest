@@ -1,0 +1,25 @@
+{
+  "name": "TechTools - Premium Automotive Tools & Accessories",
+  "short_name": "TechTools",
+  "description": "Shop premium automotive tools, LED work lights, safety equipment & car accessories. Free shipping on orders over €50.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#FF6B35",
+  "orientation": "portrait-primary",
+  "categories": ["shopping", "automotive", "tools"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

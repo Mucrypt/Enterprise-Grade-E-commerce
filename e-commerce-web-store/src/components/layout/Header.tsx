@@ -217,11 +217,13 @@ export default function Header() {
             </button>
 
             {/* Logo */}
-            <Link to='/' className='flex items-center gap-2'>
-              <div className='w-10 h-10 bg-linear-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center'>
-                <span className='text-white font-bold text-xl'>T</span>
+            <Link to='/' className='flex items-center gap-1.5 sm:gap-2'>
+              <div className='w-8 h-8 sm:w-10 sm:h-10 bg-linear-to-br from-orange-500 to-red-600 rounded-lg sm:rounded-xl flex items-center justify-center'>
+                <span className='text-white font-bold text-lg sm:text-xl'>
+                  T
+                </span>
               </div>
-              <span className='hidden sm:block text-2xl font-bold bg-linear-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent'>
+              <span className='text-lg sm:text-2xl font-bold bg-linear-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent'>
                 TechTools
               </span>
             </Link>
