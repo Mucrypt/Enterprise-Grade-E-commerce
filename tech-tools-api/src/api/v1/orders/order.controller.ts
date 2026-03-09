@@ -703,10 +703,12 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
     const orderItems = []
 
     for (const item of items) {
-      // Verify product exists and get current price
+      // Verify product exists and get current price + stock from inventory
       const productResult = await query(
-        `SELECT id, name, sku, base_price, sale_price, stock_quantity 
-         FROM products WHERE id = $1 AND is_active = true`,
+        `SELECT p.id, p.name, p.sku, p.base_price, p.sale_price, 
+                COALESCE((SELECT SUM(i.available_stock) FROM inventory i WHERE i.product_id = p.id), 0) as total_stock
+         FROM products p 
+         WHERE p.id = $1 AND p.is_active = true`,
         [item.productId],
       )
 
@@ -719,11 +721,12 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
 
       const product = productResult.rows[0]
 
-      // Check stock
-      if (product.stock_quantity < item.quantity) {
+      // Check stock from inventory table
+      const availableStock = parseInt(product.total_stock, 10)
+      if (availableStock < item.quantity) {
         return res.status(400).json({
           success: false,
-          error: `Insufficient stock for ${product.name}. Available: ${product.stock_quantity}`,
+          error: `Insufficient stock for ${product.name}. Available: ${availableStock}`,
         })
       }
 
@@ -808,10 +811,13 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
         ],
       )
 
-      // Reduce stock
+      // Reduce stock from inventory table
       await query(
-        `UPDATE products SET stock_quantity = stock_quantity - $1, updated_at = NOW()
-         WHERE id = $2`,
+        `UPDATE inventory SET 
+          available_stock = available_stock - $1,
+          reserved_stock = reserved_stock + $1,
+          updated_at = NOW()
+         WHERE product_id = $2`,
         [item.quantity, item.productId],
       )
     }

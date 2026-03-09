@@ -238,8 +238,7 @@ export default function CheckoutPage() {
           response?: { data?: { error?: string; message?: string } }
         }
         const apiError =
-          axiosError.response?.data?.error ||
-          axiosError.response?.data?.message
+          axiosError.response?.data?.error || axiosError.response?.data?.message
         if (apiError) {
           errorMessage = `Payment successful but order creation failed: ${apiError}`
           console.error('API Error Details:', axiosError.response?.data)
