@@ -6,7 +6,7 @@
   "build": {
     "base": {
       "env": {
-        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_test_your_key"
+        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_test_51OmeWZKQ56fnaANWbio1w6BK3GICK2OT1PqTh3WPx1ReDwYyjCT8klTvPiZUBsvF6xqvs7R2JnvdqQ3m1UNh41yR00Dp1LuhDc"
       }
     },
     "development": {
@@ -32,7 +32,7 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_live_your_key"
+        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_live_51OmeWZKQ56fnaANWRRrfMRUaVlFqcQNzjPc8b15g3JvTs2LgIHItreq6fuKFzndwt7N3dNtKJwYlAoVN2tof2Cab00lAQDEBFs"
       }
     }
   },
