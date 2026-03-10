@@ -7,7 +7,8 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install ALL dependencies (including dev dependencies for build)
-RUN npm ci
+# Using npm install instead of npm ci for workspace compatibility
+RUN npm install --legacy-peer-deps
 
 # Copy source code
 COPY . .
@@ -38,7 +39,7 @@ RUN mkdir -p /app/uploads/products/images /app/uploads/products/videos /app/uplo
 COPY --chown=nodejs:nodejs package*.json ./
 
 # Install only production dependencies
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm install --omit=dev --legacy-peer-deps && npm cache clean --force
 
 # Copy built artifacts from builder
 COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
