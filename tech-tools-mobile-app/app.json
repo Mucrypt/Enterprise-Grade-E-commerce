@@ -35,6 +35,13 @@
       "expo-router",
       "expo-secure-store",
       [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.com.mucrypt.techtools",
+          "enableGooglePay": true
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#FF6B35",
