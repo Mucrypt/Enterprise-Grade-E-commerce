@@ -39,7 +39,8 @@
         {
           "merchantIdentifier": "merchant.com.mucrypt.techtools",
           "enableGooglePay": true,
-          "urlScheme": "techtools"
+          "urlScheme": "techtools",
+          "enableApplePay": false
         }
       ],
       [
