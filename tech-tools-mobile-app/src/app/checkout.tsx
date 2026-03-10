@@ -90,6 +90,35 @@ export default function CheckoutScreen() {
 
   const currentStepIndex = steps.findIndex((s) => s.key === step)
 
+  // Require authentication for checkout
+  useEffect(() => {
+    if (!isAuthenticated) {
+      Alert.alert('Login Required', 'Please login to continue with checkout.', [
+        {
+          text: 'Login',
+          onPress: () => router.replace('/login'),
+        },
+        {
+          text: 'Cancel',
+          onPress: () => router.back(),
+          style: 'cancel',
+        },
+      ])
+    }
+  }, [isAuthenticated, router])
+
+  // Redirect if not authenticated (guard)
+  if (!isAuthenticated) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size='large' color={AppColors.primary} />
+          <Text style={styles.loadingText}>Checking authentication...</Text>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
   // Initialize Stripe
   useEffect(() => {
     const initStripe = async () => {
@@ -122,6 +151,13 @@ export default function CheckoutScreen() {
       setError(null)
       setLoading(true)
 
+      // Double check authentication
+      if (!isAuthenticated) {
+        setError('Please login to continue.')
+        router.replace('/login')
+        return false
+      }
+
       const paymentItems = items.map((item) => ({
         productId: item.product.id,
         price: Number(item.product.sale_price || item.product.base_price),
@@ -145,14 +181,24 @@ export default function CheckoutScreen() {
       setClientSecret(result.clientSecret)
       setPaymentIntentId(result.paymentIntentId)
       return true
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to create payment intent:', err)
-      setError('Failed to initialize payment. Please try again.')
+      
+      // Handle specific error types
+      if (err?.response?.status === 401) {
+        setError('Session expired. Please login again.')
+        Alert.alert('Session Expired', 'Please login again to continue.', [
+          { text: 'Login', onPress: () => router.replace('/login') }
+        ])
+      } else {
+        const errorMsg = err?.response?.data?.error || err?.message || 'Failed to initialize payment.'
+        setError(errorMsg)
+      }
       return false
     } finally {
       setLoading(false)
     }
-  }, [items, shippingForm])
+  }, [items, shippingForm, isAuthenticated, router])
 
   const validateShipping = (): boolean => {
     if (
@@ -163,10 +209,7 @@ export default function CheckoutScreen() {
       !shippingForm.city ||
       !shippingForm.postalCode
     ) {
-      Alert.alert(
-        'Missing Information',
-        'Please fill in all required fields.',
-      )
+      Alert.alert('Missing Information', 'Please fill in all required fields.')
       return false
     }
 
@@ -347,9 +390,7 @@ function CheckoutContent({
     } catch (err: any) {
       console.error('Order error:', err)
       const errorMessage =
-        err?.response?.data?.error ||
-        err?.message ||
-        'Failed to complete order'
+        err?.response?.data?.error || err?.message || 'Failed to complete order'
       setError(errorMessage)
       Alert.alert('Error', errorMessage)
     } finally {
@@ -360,7 +401,10 @@ function CheckoutContent({
   const renderStepIndicator = () => (
     <View style={styles.stepIndicator}>
       {steps.map(
-        (s: { key: CheckoutStep; label: string; icon: string }, index: number) => (
+        (
+          s: { key: CheckoutStep; label: string; icon: string },
+          index: number,
+        ) => (
           <React.Fragment key={s.key}>
             <TouchableOpacity
               style={[
@@ -374,7 +418,9 @@ function CheckoutContent({
                 name={s.icon as any}
                 size={18}
                 color={
-                  index <= currentStepIndex ? AppColors.white : AppColors.gray400
+                  index <= currentStepIndex
+                    ? AppColors.white
+                    : AppColors.gray400
                 }
               />
             </TouchableOpacity>
@@ -531,9 +577,7 @@ function CheckoutContent({
       {/* Security Badge */}
       <View style={styles.securityBadge}>
         <Ionicons name='shield-checkmark' size={20} color={AppColors.accent} />
-        <Text style={styles.securityText}>
-          256-bit SSL encrypted payment
-        </Text>
+        <Text style={styles.securityText}>256-bit SSL encrypted payment</Text>
       </View>
 
       {/* Shipping Summary */}
@@ -677,10 +721,7 @@ function CheckoutContent({
         <View style={styles.priceRow}>
           <Text style={styles.priceLabel}>Shipping</Text>
           <Text
-            style={[
-              styles.priceValue,
-              shipping === 0 && styles.freeShipping,
-            ]}
+            style={[styles.priceValue, shipping === 0 && styles.freeShipping]}
           >
             {shipping === 0 ? 'FREE' : formatPrice(shipping)}
           </Text>
@@ -803,7 +844,11 @@ function CheckoutContent({
                 </>
               ) : (
                 <>
-                  <Ionicons name='lock-closed' size={18} color={AppColors.white} />
+                  <Ionicons
+                    name='lock-closed'
+                    size={18}
+                    color={AppColors.white}
+                  />
                   <Text style={styles.continueButtonText}>
                     Pay {formatPrice(grandTotal)}
                   </Text>
@@ -817,9 +862,7 @@ function CheckoutContent({
         {step !== 'shipping' && (
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() =>
-              setStep(step === 'payment' ? 'shipping' : 'payment')
-            }
+            onPress={() => setStep(step === 'payment' ? 'shipping' : 'payment')}
           >
             <Ionicons name='arrow-back' size={18} color={AppColors.gray600} />
             <Text style={styles.backButtonText}>
@@ -830,7 +873,11 @@ function CheckoutContent({
 
         {/* Powered by Stripe */}
         <View style={styles.poweredBy}>
-          <Ionicons name='shield-checkmark' size={14} color={AppColors.gray400} />
+          <Ionicons
+            name='shield-checkmark'
+            size={14}
+            color={AppColors.gray400}
+          />
           <Text style={styles.poweredByText}>Secured by Stripe</Text>
         </View>
       </View>
