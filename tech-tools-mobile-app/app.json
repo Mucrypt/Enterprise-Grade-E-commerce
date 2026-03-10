@@ -38,7 +38,8 @@
         "@stripe/stripe-react-native",
         {
           "merchantIdentifier": "merchant.com.mucrypt.techtools",
-          "enableGooglePay": true
+          "enableGooglePay": true,
+          "urlScheme": "techtools"
         }
       ],
       [

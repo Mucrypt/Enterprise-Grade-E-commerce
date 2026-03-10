@@ -4,6 +4,11 @@
     "appVersionSource": "remote"
   },
   "build": {
+    "base": {
+      "env": {
+        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_test_your_key"
+      }
+    },
     "development": {
       "developmentClient": true,
       "distribution": "internal",
@@ -25,6 +30,9 @@
       "channel": "production",
       "android": {
         "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_live_your_key"
       }
     }
   },
