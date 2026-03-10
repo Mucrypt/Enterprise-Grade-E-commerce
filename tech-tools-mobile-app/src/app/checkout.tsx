@@ -3,7 +3,7 @@
 // Enterprise-grade payment integration
 // ============================================
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -12,6 +12,9 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Modal,
+  FlatList,
+  TextInput,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
@@ -24,6 +27,11 @@ import {
   CardFieldInput,
 } from '@stripe/stripe-react-native'
 import { Input, Button } from '@/components'
+import {
+  countriesSortedByName,
+  getCountryByCode,
+  Country,
+} from '@/data/countries'
 import {
   AppColors,
   AppSpacing,
@@ -62,6 +70,7 @@ export default function CheckoutScreen() {
   const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [cardComplete, setCardComplete] = useState(false)
+  const cardValidatedRef = useRef(false) // Track if card was validated before moving to review
 
   // Shipping form
   const [shippingForm, setShippingForm] = useState<ShippingForm>({
@@ -183,15 +192,18 @@ export default function CheckoutScreen() {
       return true
     } catch (err: any) {
       console.error('Failed to create payment intent:', err)
-      
+
       // Handle specific error types
       if (err?.response?.status === 401) {
         setError('Session expired. Please login again.')
         Alert.alert('Session Expired', 'Please login again to continue.', [
-          { text: 'Login', onPress: () => router.replace('/login') }
+          { text: 'Login', onPress: () => router.replace('/login') },
         ])
       } else {
-        const errorMsg = err?.response?.data?.error || err?.message || 'Failed to initialize payment.'
+        const errorMsg =
+          err?.response?.data?.error ||
+          err?.message ||
+          'Failed to initialize payment.'
         setError(errorMsg)
       }
       return false
@@ -269,6 +281,7 @@ export default function CheckoutScreen() {
         paymentIntentId={paymentIntentId}
         cardComplete={cardComplete}
         setCardComplete={setCardComplete}
+        cardValidatedRef={cardValidatedRef}
         handleContinue={handleContinue}
         clearCart={clearCart}
         router={router}
@@ -298,11 +311,25 @@ function CheckoutContent({
   paymentIntentId,
   cardComplete,
   setCardComplete,
+  cardValidatedRef,
   handleContinue,
   clearCart,
   router,
 }: any) {
   const { confirmPayment } = useStripe()
+  const [countryPickerVisible, setCountryPickerVisible] = useState(false)
+  const [countrySearch, setCountrySearch] = useState('')
+
+  // Filter countries based on search
+  const filteredCountries = countrySearch
+    ? countriesSortedByName.filter(
+        (c) =>
+          c.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+          c.code.toLowerCase().includes(countrySearch.toLowerCase()),
+      )
+    : countriesSortedByName
+
+  const selectedCountry = getCountryByCode(shippingForm.country)
 
   const handlePlaceOrder = async () => {
     if (!clientSecret || !paymentIntentId) {
@@ -310,10 +337,8 @@ function CheckoutContent({
       return
     }
 
-    if (!cardComplete) {
-      Alert.alert('Incomplete', 'Please fill in your card details.')
-      return
-    }
+    // CardField stays mounted, so we can proceed directly
+    // The card data is retained because we keep the CardField mounted during review step
 
     setLoading(true)
     setError(null)
@@ -540,14 +565,19 @@ function CheckoutContent({
           />
         </View>
         <View style={styles.formHalf}>
-          <Input
-            label='Country'
-            placeholder='US'
-            value={shippingForm.country}
-            onChangeText={(text: string) =>
-              setShippingForm({ ...shippingForm, country: text })
-            }
-          />
+          <Text style={styles.inputLabel}>Country *</Text>
+          <TouchableOpacity
+            style={styles.countryPicker}
+            onPress={() => setCountryPickerVisible(true)}
+          >
+            <Text style={styles.countryFlag}>
+              {selectedCountry?.flag || '🌍'}
+            </Text>
+            <Text style={styles.countryName} numberOfLines={1}>
+              {selectedCountry?.name || 'Select country'}
+            </Text>
+            <Ionicons name='chevron-down' size={18} color={AppColors.gray500} />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -607,6 +637,8 @@ function CheckoutContent({
           postalCodeEnabled={false}
           placeholders={{
             number: '4242 4242 4242 4242',
+            expiration: 'MM/YY',
+            cvc: 'CVC',
           }}
           cardStyle={{
             backgroundColor: '#FFFFFF',
@@ -615,12 +647,16 @@ function CheckoutContent({
             borderWidth: 1,
             borderRadius: 8,
             fontSize: 16,
+            placeholderColor: '#9ca3af',
           }}
           style={styles.cardField}
           onCardChange={(cardDetails: CardFieldInput.Details) => {
             setCardComplete(cardDetails.complete)
           }}
         />
+        <Text style={styles.cardHint}>
+          Enter your card number, expiry date (MM/YY), and CVC
+        </Text>
       </View>
 
       {/* Accepted Cards */}
@@ -683,7 +719,12 @@ function CheckoutContent({
       <View style={styles.reviewSection}>
         <View style={styles.reviewHeader}>
           <Text style={styles.reviewSectionTitle}>Payment Method</Text>
-          <TouchableOpacity onPress={() => setStep('payment')}>
+          <TouchableOpacity
+            onPress={() => {
+              cardValidatedRef.current = false // Reset validation when editing payment
+              setStep('payment')
+            }}
+          >
             <Text style={styles.editText}>Edit</Text>
           </TouchableOpacity>
         </View>
@@ -759,7 +800,14 @@ function CheckoutContent({
         keyboardShouldPersistTaps='handled'
       >
         {step === 'shipping' && renderShippingStep()}
-        {step === 'payment' && renderPaymentStep()}
+
+        {/* Payment step - always render CardField when past shipping step to retain data */}
+        {(step === 'payment' || step === 'review') && (
+          <View style={step === 'review' ? styles.hiddenView : undefined}>
+            {renderPaymentStep()}
+          </View>
+        )}
+
         {step === 'review' && renderReviewStep()}
       </ScrollView>
 
@@ -803,7 +851,10 @@ function CheckoutContent({
         {step === 'payment' && (
           <TouchableOpacity
             activeOpacity={0.9}
-            onPress={() => setStep('review')}
+            onPress={() => {
+              cardValidatedRef.current = true // Mark card as validated before moving to review
+              setStep('review')
+            }}
             disabled={!cardComplete}
           >
             <LinearGradient
@@ -881,6 +932,84 @@ function CheckoutContent({
           <Text style={styles.poweredByText}>Secured by Stripe</Text>
         </View>
       </View>
+
+      {/* Country Picker Modal */}
+      <Modal
+        visible={countryPickerVisible}
+        animationType='slide'
+        transparent={true}
+        onRequestClose={() => setCountryPickerVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Country</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setCountryPickerVisible(false)
+                  setCountrySearch('')
+                }}
+              >
+                <Ionicons name='close' size={24} color={AppColors.gray600} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Search Input */}
+            <View style={styles.searchContainer}>
+              <Ionicons name='search' size={20} color={AppColors.gray400} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder='Search countries...'
+                placeholderTextColor={AppColors.gray400}
+                value={countrySearch}
+                onChangeText={setCountrySearch}
+                autoCorrect={false}
+              />
+              {countrySearch.length > 0 && (
+                <TouchableOpacity onPress={() => setCountrySearch('')}>
+                  <Ionicons
+                    name='close-circle'
+                    size={20}
+                    color={AppColors.gray400}
+                  />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Country List */}
+            <FlatList
+              data={filteredCountries}
+              keyExtractor={(item) => item.code}
+              renderItem={({ item }: { item: Country }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.countryItem,
+                    shippingForm.country === item.code &&
+                      styles.countryItemSelected,
+                  ]}
+                  onPress={() => {
+                    setShippingForm({ ...shippingForm, country: item.code })
+                    setCountryPickerVisible(false)
+                    setCountrySearch('')
+                  }}
+                >
+                  <Text style={styles.countryItemFlag}>{item.flag}</Text>
+                  <Text style={styles.countryItemName}>{item.name}</Text>
+                  {shippingForm.country === item.code && (
+                    <Ionicons
+                      name='checkmark'
+                      size={20}
+                      color={AppColors.primary}
+                    />
+                  )}
+                </TouchableOpacity>
+              )}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.countryList}
+            />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   )
 }
@@ -1269,5 +1398,108 @@ const styles = StyleSheet.create({
   poweredByText: {
     fontSize: 12,
     color: AppColors.gray400,
+  },
+  // Country Picker Styles
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: AppColors.gray700,
+    marginBottom: AppSpacing.sm,
+  },
+  countryPicker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: AppColors.white,
+    borderWidth: 1,
+    borderColor: AppColors.gray200,
+    borderRadius: AppBorderRadius.md,
+    paddingHorizontal: AppSpacing.md,
+    paddingVertical: AppSpacing.base,
+    gap: AppSpacing.sm,
+  },
+  countryFlag: {
+    fontSize: 20,
+  },
+  countryName: {
+    flex: 1,
+    fontSize: 16,
+    color: AppColors.gray700,
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: AppColors.white,
+    borderTopLeftRadius: AppBorderRadius.xl,
+    borderTopRightRadius: AppBorderRadius.xl,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: AppSpacing.base,
+    borderBottomWidth: 1,
+    borderBottomColor: AppColors.gray100,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: AppColors.gray900,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: AppColors.gray50,
+    margin: AppSpacing.base,
+    paddingHorizontal: AppSpacing.md,
+    paddingVertical: AppSpacing.sm,
+    borderRadius: AppBorderRadius.md,
+    gap: AppSpacing.sm,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: AppColors.gray700,
+    paddingVertical: AppSpacing.sm,
+  },
+  countryList: {
+    paddingBottom: AppSpacing['2xl'],
+  },
+  countryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: AppSpacing.base,
+    borderBottomWidth: 1,
+    borderBottomColor: AppColors.gray50,
+  },
+  countryItemSelected: {
+    backgroundColor: AppColors.primaryLight || 'rgba(37, 99, 235, 0.05)',
+  },
+  countryItemFlag: {
+    fontSize: 24,
+    marginRight: AppSpacing.md,
+  },
+  countryItemName: {
+    flex: 1,
+    fontSize: 16,
+    color: AppColors.gray700,
+  },
+  // Card Hint
+  cardHint: {
+    fontSize: 12,
+    color: AppColors.gray500,
+    marginTop: AppSpacing.sm,
+  },
+  // Hidden view for keeping CardField mounted on review step
+  hiddenView: {
+    position: 'absolute',
+    height: 0,
+    width: 0,
+    overflow: 'hidden',
+    opacity: 0,
   },
 })

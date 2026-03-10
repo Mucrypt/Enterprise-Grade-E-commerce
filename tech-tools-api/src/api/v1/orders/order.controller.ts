@@ -2,6 +2,7 @@ import { Response } from 'express'
 import { AuthRequest } from '../../../middleware/auth'
 import { query } from '../../../database/connection'
 import logger from '../../../utils/logger'
+import { sendOrderConfirmationEmail, OrderDetails } from '../../../utils/email'
 
 // =====================================================
 // Admin Order Management
@@ -842,6 +843,57 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       'SELECT * FROM order_items WHERE order_id = $1',
       [order.id],
     )
+
+    // Send order confirmation email
+    try {
+      const emailDetails: OrderDetails = {
+        orderNumber: order.order_number,
+        customerName:
+          `${shippingAddress.firstName || ''} ${
+            shippingAddress.lastName || ''
+          }`.trim() || 'Customer',
+        customerEmail: shippingAddress.email,
+        items: orderItems.map((item) => ({
+          productName: item.productName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.totalPrice,
+        })),
+        subtotal: totalAmount,
+        taxAmount: taxAmount,
+        shippingAmount: shippingAmount,
+        grandTotal: grandTotal,
+        shippingAddress: {
+          firstName: shippingAddress.firstName,
+          lastName: shippingAddress.lastName,
+          address: shippingAddress.address,
+          city: shippingAddress.city,
+          state: shippingAddress.state,
+          postalCode: shippingAddress.postalCode,
+          country: shippingAddress.country,
+        },
+        estimatedDelivery: order.estimated_delivery_date
+          ? new Date(order.estimated_delivery_date).toLocaleDateString(
+              'en-US',
+              {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+              },
+            )
+          : undefined,
+      }
+
+      await sendOrderConfirmationEmail(shippingAddress.email, emailDetails)
+      logger.info('Order confirmation email sent:', {
+        orderNumber: order.order_number,
+        email: shippingAddress.email,
+      })
+    } catch (emailError) {
+      // Don't fail the order if email fails
+      logger.error('Failed to send order confirmation email:', emailError)
+    }
 
     res.status(201).json({
       success: true,
