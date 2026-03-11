@@ -3,6 +3,7 @@ import { AuthRequest } from '../../../middleware/auth'
 import { query } from '../../../database/connection'
 import logger from '../../../utils/logger'
 import { sendOrderConfirmationEmail, OrderDetails } from '../../../utils/email'
+import { sendOrderConfirmationWhatsApp, OrderDetails as WhatsAppOrderDetails } from '../../../services/whatsapp.service'
 
 // =====================================================
 // Admin Order Management
@@ -893,6 +894,51 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
     } catch (emailError) {
       // Don't fail the order if email fails
       logger.error('Failed to send order confirmation email:', emailError)
+    }
+
+    // Send WhatsApp notification (if phone number provided and WhatsApp is configured)
+    try {
+      const customerPhone = shippingAddress.phone
+      if (customerPhone) {
+        const whatsappDetails: WhatsAppOrderDetails = {
+          orderNumber: order.order_number,
+          customerName:
+            `${shippingAddress.firstName || ''} ${
+              shippingAddress.lastName || ''
+            }`.trim() || 'Customer',
+          customerPhone,
+          items: orderItems.map((item) => ({
+            productName: item.productName,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            totalPrice: item.totalPrice,
+          })),
+          subtotal: totalAmount,
+          taxAmount: taxAmount,
+          shippingAmount: shippingAmount,
+          grandTotal: grandTotal,
+          estimatedDelivery: order.estimated_delivery_date
+            ? new Date(order.estimated_delivery_date).toLocaleDateString(
+                'en-US',
+                {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                },
+              )
+            : undefined,
+        }
+
+        await sendOrderConfirmationWhatsApp(whatsappDetails)
+        logger.info('Order confirmation WhatsApp sent:', {
+          orderNumber: order.order_number,
+          phone: customerPhone,
+        })
+      }
+    } catch (whatsappError) {
+      // Don't fail the order if WhatsApp fails
+      logger.error('Failed to send order confirmation WhatsApp:', whatsappError)
     }
 
     res.status(201).json({

@@ -25,6 +25,7 @@ import {
   Hash,
   UserCircle,
   TrendingUp,
+  MessageSquare,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -121,6 +122,12 @@ const navigation: NavItem[] = [
     title: 'Orders',
     href: '/dashboard/orders',
     icon: ShoppingCart,
+    badge: 'New',
+  },
+  {
+    title: 'WhatsApp',
+    href: '/whatsapp',
+    icon: MessageSquare,
     badge: 'New',
   },
   {
