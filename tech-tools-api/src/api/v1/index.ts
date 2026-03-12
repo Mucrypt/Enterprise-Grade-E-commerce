@@ -17,6 +17,7 @@ import shippingRoutes from './shipping/shipping.routes'
 import couponRoutes from './coupons/coupon.routes'
 import reviewRoutes from './reviews/review.routes'
 import whatsappRoutes from './whatsapp/whatsapp.routes'
+import emailRoutes from './emails/email.routes'
 import { blogRoutes } from './blog'
 
 const router = Router()
@@ -50,6 +51,7 @@ router.use('/shipping', shippingRoutes)
 router.use('/coupons', couponRoutes)
 router.use('/reviews', reviewRoutes)
 router.use('/whatsapp', whatsappRoutes)
+router.use('/emails', emailRoutes)
 router.use('/blog', blogRoutes)
 
 // Documentation route
