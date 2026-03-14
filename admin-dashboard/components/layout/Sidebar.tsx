@@ -29,6 +29,8 @@ import {
   Mail,
   Newspaper,
   Inbox,
+  Send,
+  Megaphone,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -122,43 +124,71 @@ const navigation: NavItem[] = [
     badge: 'New',
   },
   {
-    title: 'Orders',
+    title: 'Sales',
     href: '/dashboard/orders',
     icon: ShoppingCart,
-    badge: 'New',
+    children: [
+      {
+        title: 'Orders',
+        href: '/dashboard/orders',
+        icon: ShoppingCart,
+      },
+      {
+        title: 'Customers',
+        href: '/dashboard/customers',
+        icon: Users,
+      },
+      {
+        title: 'Shipping',
+        href: '/dashboard/shipping',
+        icon: Truck,
+      },
+    ],
   },
   {
-    title: 'WhatsApp',
-    href: '/whatsapp',
-    icon: MessageSquare,
-    badge: 'New',
-  },
-  {
-    title: 'Email',
+    title: 'Communication',
     href: '/email',
-    icon: Mail,
+    icon: Send,
     badge: 'New',
+    children: [
+      {
+        title: 'Email',
+        href: '/email',
+        icon: Mail,
+      },
+      {
+        title: 'WhatsApp',
+        href: '/whatsapp',
+        icon: MessageSquare,
+      },
+      {
+        title: 'Newsletter',
+        href: '/newsletter',
+        icon: Newspaper,
+      },
+      {
+        title: 'Contact Messages',
+        href: '/contact',
+        icon: Inbox,
+      },
+    ],
   },
   {
-    title: 'Newsletter',
-    href: '/newsletter',
-    icon: Newspaper,
-    badge: 'New',
-  },
-  {
-    title: 'Contact Messages',
-    href: '/contact',
-    icon: Inbox,
-  },
-  {
-    title: 'Shipping',
-    href: '/dashboard/shipping',
-    icon: Truck,
-  },
-  {
-    title: 'Customers',
-    href: '/dashboard/customers',
-    icon: Users,
+    title: 'Marketing',
+    href: '/dashboard/marketing',
+    icon: Megaphone,
+    children: [
+      {
+        title: 'Promotions',
+        href: '/dashboard/promotions',
+        icon: Ticket,
+      },
+      {
+        title: 'Coupons',
+        href: '/dashboard/coupons',
+        icon: Tag,
+      },
+    ],
   },
   {
     title: 'Analytics',
@@ -246,6 +276,11 @@ export function Sidebar() {
                   <div className='flex items-center space-x-3'>
                     <item.icon className='h-5 w-5' />
                     <span>{item.title}</span>
+                    {item.badge && (
+                      <span className='rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground'>
+                        {item.badge}
+                      </span>
+                    )}
                   </div>
                   <ChevronDown
                     className={cn(
