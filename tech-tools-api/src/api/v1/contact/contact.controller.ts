@@ -9,10 +9,17 @@ const createTransporter = () => {
     return null
   }
 
+  const port = parseInt(process.env.SMTP_PORT || '465')
+  // Port 465 uses implicit TLS (secure: true)
+  // Port 587 uses STARTTLS (secure: false)
+  const secure = process.env.SMTP_SECURE 
+    ? process.env.SMTP_SECURE === 'true'
+    : port === 465
+
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST || 'smtp.hostinger.com',
-    port: parseInt(process.env.SMTP_PORT || '465'),
-    secure: process.env.SMTP_SECURE !== 'false', // true for 465
+    port,
+    secure,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
@@ -321,30 +328,37 @@ export const submitContactForm = async (req: Request, res: Response) => {
       })
     }
 
-    // Send email to support team
-    await emailTransporter.sendMail({
-      from: `"TechTools Contact Form" <${
-        process.env.SMTP_USER || 'noreply@techtoolstore.com'
-      }>`,
-      to: recipientEmail,
-      replyTo: email,
-      subject: `[${subjectLabel}] New Contact Form - ${ticketNumber}`,
-      html: supportEmailHtml,
-    })
+    // Try to send emails (but don't fail the request if emails fail)
+    let emailsSent = false
+    try {
+      // Send email to support team
+      await emailTransporter.sendMail({
+        from: `"TechTools Contact Form" <${
+          process.env.SMTP_USER || 'noreply@techtoolstore.com'
+        }>`,
+        to: recipientEmail,
+        replyTo: email,
+        subject: `[${subjectLabel}] New Contact Form - ${ticketNumber}`,
+        html: supportEmailHtml,
+      })
 
-    logger.info(`Contact form email sent to support: ${recipientEmail}`)
+      logger.info(`Contact form email sent to support: ${recipientEmail}`)
 
-    // Send confirmation email to customer
-    await emailTransporter.sendMail({
-      from: `"TechTools" <${
-        process.env.SMTP_USER || 'noreply@techtoolstore.com'
-      }>`,
-      to: email,
-      subject: `We received your message - Ticket #${ticketNumber}`,
-      html: customerEmailHtml,
-    })
+      // Send confirmation email to customer
+      await emailTransporter.sendMail({
+        from: `"TechTools" <${
+          process.env.SMTP_USER || 'noreply@techtoolstore.com'
+        }>`,
+        to: email,
+        subject: `We received your message - Ticket #${ticketNumber}`,
+        html: customerEmailHtml,
+      })
 
-    logger.info(`Contact form confirmation sent to customer: ${email}`)
+      logger.info(`Contact form confirmation sent to customer: ${email}`)
+      emailsSent = true
+    } catch (emailError) {
+      logger.warn('Failed to send contact form emails, but submission was saved:', emailError)
+    }
 
     // Log the contact submission
     await logContactSubmission({
@@ -355,13 +369,14 @@ export const submitContactForm = async (req: Request, res: Response) => {
       subject: subjectLabel,
       orderNumber,
       message,
-      status: 'sent',
+      status: emailsSent ? 'sent' : 'pending',
     })
 
     res.status(200).json({
       success: true,
-      message:
-        'Your message has been sent successfully. Check your email for confirmation.',
+      message: emailsSent
+        ? 'Your message has been sent successfully. Check your email for confirmation.'
+        : 'Your message has been received. We will get back to you soon.',
       ticketNumber,
     })
   } catch (error) {

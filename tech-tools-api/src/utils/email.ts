@@ -7,11 +7,18 @@ import logger from './logger'
 
 // Create reusable transporter
 const createTransporter = () => {
+  const port = parseInt(process.env.SMTP_PORT || '465')
+  // Port 465 uses implicit TLS (secure: true)
+  // Port 587 uses STARTTLS (secure: false)
+  const secure = process.env.SMTP_SECURE 
+    ? process.env.SMTP_SECURE === 'true'
+    : port === 465
+
   // Use environment variables for SMTP config
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST || 'smtp.hostinger.com',
-    port: parseInt(process.env.SMTP_PORT || '465'),
-    secure: process.env.SMTP_SECURE !== 'false', // true for 465, false for other ports
+    port,
+    secure,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,

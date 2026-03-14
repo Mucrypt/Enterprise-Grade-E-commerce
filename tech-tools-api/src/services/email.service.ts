@@ -81,10 +81,17 @@ class EmailService {
   }
 
   private loadConfig() {
+    const port = parseInt(process.env.SMTP_PORT || '465')
+    // Port 465 uses implicit TLS (secure: true)
+    // Port 587 uses STARTTLS (secure: false)
+    const secure = process.env.SMTP_SECURE 
+      ? process.env.SMTP_SECURE === 'true'
+      : port === 465
+
     this.defaultConfig = {
       host: process.env.SMTP_HOST || 'smtp.hostinger.com',
-      port: parseInt(process.env.SMTP_PORT || '465'),
-      secure: process.env.SMTP_SECURE !== 'false',
+      port,
+      secure,
       user: process.env.SMTP_USER || '',
       pass: process.env.SMTP_PASS || '',
       fromEmail: process.env.SMTP_FROM || process.env.SMTP_USER || '',
