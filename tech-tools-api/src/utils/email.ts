@@ -10,7 +10,7 @@ const createTransporter = () => {
   const port = parseInt(process.env.SMTP_PORT || '465')
   // Port 465 uses implicit TLS (secure: true)
   // Port 587 uses STARTTLS (secure: false)
-  const secure = process.env.SMTP_SECURE 
+  const secure = process.env.SMTP_SECURE
     ? process.env.SMTP_SECURE === 'true'
     : port === 465
 

@@ -12,7 +12,7 @@ const createTransporter = () => {
   const port = parseInt(process.env.SMTP_PORT || '465')
   // Port 465 uses implicit TLS (secure: true)
   // Port 587 uses STARTTLS (secure: false)
-  const secure = process.env.SMTP_SECURE 
+  const secure = process.env.SMTP_SECURE
     ? process.env.SMTP_SECURE === 'true'
     : port === 465
 
@@ -357,7 +357,10 @@ export const submitContactForm = async (req: Request, res: Response) => {
       logger.info(`Contact form confirmation sent to customer: ${email}`)
       emailsSent = true
     } catch (emailError) {
-      logger.warn('Failed to send contact form emails, but submission was saved:', emailError)
+      logger.warn(
+        'Failed to send contact form emails, but submission was saved:',
+        emailError,
+      )
     }
 
     // Log the contact submission

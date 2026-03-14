@@ -28,6 +28,7 @@ import {
   MessageSquare,
   Mail,
   Newspaper,
+  Inbox,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -143,6 +144,11 @@ const navigation: NavItem[] = [
     href: '/newsletter',
     icon: Newspaper,
     badge: 'New',
+  },
+  {
+    title: 'Contact Messages',
+    href: '/contact',
+    icon: Inbox,
   },
   {
     title: 'Shipping',
