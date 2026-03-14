@@ -27,6 +27,7 @@ import {
   TrendingUp,
   MessageSquare,
   Mail,
+  Newspaper,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -135,6 +136,12 @@ const navigation: NavItem[] = [
     title: 'Email',
     href: '/email',
     icon: Mail,
+    badge: 'New',
+  },
+  {
+    title: 'Newsletter',
+    href: '/newsletter',
+    icon: Newspaper,
     badge: 'New',
   },
   {

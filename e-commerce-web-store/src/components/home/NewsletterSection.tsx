@@ -3,24 +3,41 @@
 // ============================================
 
 import { useState } from 'react'
-import { Mail, CheckCircle, Gift, Percent } from 'lucide-react'
+import { Mail, CheckCircle, Gift, Percent, AlertCircle } from 'lucide-react'
 import { cn } from '../../utils'
+import { newsletterApi } from '../../api'
 
 export default function NewsletterSection() {
   const [email, setEmail] = useState('')
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    setError('')
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    try {
+      const response = await newsletterApi.subscribe({
+        email,
+        source: 'footer',
+      })
 
-    setIsLoading(false)
-    setIsSubmitted(true)
-    setEmail('')
+      setIsSubmitted(true)
+      setMessage(response.message || 'Thanks for subscribing!')
+      setEmail('')
+    } catch (err: unknown) {
+      const errorMessage =
+        err instanceof Error
+          ? err.message
+          : (err as { response?: { data?: { error?: string } } })?.response
+              ?.data?.error || 'Failed to subscribe. Please try again.'
+      setError(errorMessage)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -57,9 +74,7 @@ export default function NewsletterSection() {
         {isSubmitted ? (
           <div className='flex items-center justify-center gap-3 bg-white/20 backdrop-blur-sm rounded-full py-4 px-6 max-w-md mx-auto'>
             <CheckCircle className='w-6 h-6 text-white' />
-            <span className='text-white font-semibold'>
-              Thanks for subscribing! Check your email for 10% off.
-            </span>
+            <span className='text-white font-semibold'>{message}</span>
           </div>
         ) : (
           <form
@@ -95,6 +110,14 @@ export default function NewsletterSection() {
               )}
             </button>
           </form>
+        )}
+
+        {/* Error message */}
+        {error && (
+          <div className='flex items-center justify-center gap-2 mt-4 text-white'>
+            <AlertCircle className='w-5 h-5' />
+            <span>{error}</span>
+          </div>
         )}
 
         <p className='text-white/70 text-xs mt-4'>

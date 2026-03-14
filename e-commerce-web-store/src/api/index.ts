@@ -944,6 +944,31 @@ export const ordersApiNew = {
   },
 }
 
+// ============================================
+// Newsletter API
+// ============================================
+export const newsletterApi = {
+  // Subscribe to newsletter
+  async subscribe(data: { email: string; name?: string; source?: string }) {
+    const response = await api.post<{
+      success: boolean
+      message: string
+      alreadySubscribed?: boolean
+      resubscribed?: boolean
+    }>('/newsletter/subscribe', data)
+    return response.data
+  },
+
+  // Unsubscribe from newsletter
+  async unsubscribe(email: string) {
+    const response = await api.post<{
+      success: boolean
+      message: string
+    }>('/newsletter/unsubscribe', { email })
+    return response.data
+  },
+}
+
 // Export the axios instance for custom requests
 export { api }
 export default api
