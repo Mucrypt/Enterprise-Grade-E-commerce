@@ -157,6 +157,7 @@ export default function RegisterPage() {
                     value={formData.firstName}
                     onChange={(e) => handleChange('firstName', e.target.value)}
                     placeholder='John'
+                    autoComplete='given-name'
                     className={cn(
                       'w-full pl-12 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-2 transition-all',
                       validationErrors.firstName
@@ -182,6 +183,7 @@ export default function RegisterPage() {
                     value={formData.lastName}
                     onChange={(e) => handleChange('lastName', e.target.value)}
                     placeholder='Doe'
+                    autoComplete='family-name'
                     className={cn(
                       'w-full pl-12 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-2 transition-all',
                       validationErrors.lastName
@@ -210,6 +212,7 @@ export default function RegisterPage() {
                   value={formData.email}
                   onChange={(e) => handleChange('email', e.target.value)}
                   placeholder='john@example.com'
+                  autoComplete='email'
                   className={cn(
                     'w-full pl-12 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-2 transition-all',
                     validationErrors.email
@@ -237,6 +240,7 @@ export default function RegisterPage() {
                   value={formData.phone}
                   onChange={(e) => handleChange('phone', e.target.value)}
                   placeholder='+370 600 00000'
+                  autoComplete='tel'
                   className='w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-orange-500 transition-all'
                 />
               </div>
@@ -254,6 +258,7 @@ export default function RegisterPage() {
                   value={formData.password}
                   onChange={(e) => handleChange('password', e.target.value)}
                   placeholder='Create a strong password'
+                  autoComplete='new-password'
                   className={cn(
                     'w-full pl-12 pr-12 py-3 border rounded-xl focus:outline-none focus:ring-2 transition-all',
                     validationErrors.password
@@ -316,6 +321,7 @@ export default function RegisterPage() {
                     handleChange('confirmPassword', e.target.value)
                   }
                   placeholder='Confirm your password'
+                  autoComplete='new-password'
                   className={cn(
                     'w-full pl-12 pr-12 py-3 border rounded-xl focus:outline-none focus:ring-2 transition-all',
                     validationErrors.confirmPassword

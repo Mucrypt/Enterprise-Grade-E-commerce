@@ -106,6 +106,7 @@ export default function LoginPage() {
                 <input
                   type='email'
                   value={email}
+                  autoComplete='email'
                   onChange={(e) => {
                     setEmail(e.target.value)
                     if (validationErrors.email) {
@@ -141,6 +142,7 @@ export default function LoginPage() {
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
+                  autoComplete='current-password'
                   onChange={(e) => {
                     setPassword(e.target.value)
                     if (validationErrors.password) {
