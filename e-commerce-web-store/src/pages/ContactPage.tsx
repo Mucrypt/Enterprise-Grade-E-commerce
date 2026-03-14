@@ -3,6 +3,7 @@
 // ============================================
 
 import { useState } from 'react'
+import axios from 'axios'
 import {
   Mail,
   Phone,
@@ -15,25 +16,30 @@ import {
   Package,
   CreditCard,
   RotateCcw,
+  AlertCircle,
+  Copy,
 } from 'lucide-react'
+
+const API_URL =
+  import.meta.env.VITE_API_URL || 'https://techtoolstore.com/api/v1'
 
 const contactMethods = [
   {
     icon: Phone,
     title: 'Phone Support',
     description: 'Speak directly with our support team',
-    contact: '+1 (234) 567-890',
-    availability: 'Mon-Fri: 9AM-6PM EST',
-    action: 'tel:+1234567890',
+    contact: '+27 12 345 6789',
+    availability: 'Mon-Fri: 9AM-6PM SAST',
+    action: 'tel:+27123456789',
     actionLabel: 'Call Now',
   },
   {
     icon: Mail,
     title: 'Email Support',
     description: 'Get a response within 24 hours',
-    contact: 'support@techtools.com',
+    contact: 'support@techtoolstore.com',
     availability: '24/7 Support',
-    action: 'mailto:support@techtools.com',
+    action: 'mailto:support@techtoolstore.com',
     actionLabel: 'Send Email',
   },
   {
@@ -41,7 +47,7 @@ const contactMethods = [
     title: 'Live Chat',
     description: 'Chat with us in real-time',
     contact: 'Available on website',
-    availability: 'Mon-Sat: 8AM-10PM EST',
+    availability: 'Mon-Sat: 8AM-10PM SAST',
     action: '#',
     actionLabel: 'Start Chat',
   },
@@ -51,50 +57,50 @@ const departments = [
   {
     icon: Headphones,
     name: 'General Support',
-    email: 'support@techtools.com',
+    email: 'support@techtoolstore.com',
     description: 'For general inquiries and assistance',
   },
   {
     icon: Package,
     name: 'Order Support',
-    email: 'orders@techtools.com',
+    email: 'orders@techtoolstore.com',
     description: 'Questions about orders and shipping',
   },
   {
     icon: CreditCard,
     name: 'Billing & Payments',
-    email: 'billing@techtools.com',
+    email: 'billing@techtoolstore.com',
     description: 'Payment issues and invoice requests',
   },
   {
     icon: RotateCcw,
     name: 'Returns & Refunds',
-    email: 'returns@techtools.com',
+    email: 'returns@techtoolstore.com',
     description: 'Return requests and refund inquiries',
   },
 ]
 
 const officeLocations = [
   {
-    city: 'San Francisco',
-    country: 'USA (Headquarters)',
-    address: '123 Tech Street, San Francisco, CA 94102',
-    phone: '+1 (234) 567-890',
-    email: 'sf@techtools.com',
+    city: 'Johannesburg',
+    country: 'South Africa (Headquarters)',
+    address: '123 Tech Street, Sandton, Johannesburg 2196',
+    phone: '+27 11 234 5678',
+    email: 'info@techtoolstore.com',
   },
   {
-    city: 'London',
-    country: 'United Kingdom',
-    address: '456 Commerce Lane, London EC2A 4BX',
-    phone: '+44 20 7123 4567',
-    email: 'uk@techtools.com',
+    city: 'Cape Town',
+    country: 'South Africa',
+    address: '456 Commerce Lane, V&A Waterfront, Cape Town 8001',
+    phone: '+27 21 123 4567',
+    email: 'capetown@techtoolstore.com',
   },
   {
-    city: 'Berlin',
-    country: 'Germany',
-    address: 'Techstraße 78, 10115 Berlin',
-    phone: '+49 30 1234 5678',
-    email: 'de@techtools.com',
+    city: 'Durban',
+    country: 'South Africa',
+    address: '78 Marine Parade, Durban 4001',
+    phone: '+27 31 987 6543',
+    email: 'durban@techtoolstore.com',
   },
 ]
 
@@ -109,24 +115,46 @@ export default function ContactPage() {
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [ticketNumber, setTicketNumber] = useState('')
+  const [error, setError] = useState('')
+  const [copied, setCopied] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
+    setError('')
 
-    // Simulate form submission
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    try {
+      const response = await axios.post(`${API_URL}/contact`, formData)
 
-    setIsSubmitting(false)
-    setIsSubmitted(true)
-    setFormData({
-      name: '',
-      email: '',
-      phone: '',
-      subject: '',
-      orderNumber: '',
-      message: '',
-    })
+      if (response.data.success) {
+        setTicketNumber(response.data.ticketNumber)
+        setIsSubmitted(true)
+        setFormData({
+          name: '',
+          email: '',
+          phone: '',
+          subject: '',
+          orderNumber: '',
+          message: '',
+        })
+      } else {
+        setError(response.data.error || 'Failed to send message')
+      }
+    } catch (err: any) {
+      setError(
+        err.response?.data?.error ||
+          'Unable to send your message. Please try again or email us directly.',
+      )
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const copyTicketNumber = () => {
+    navigator.clipboard.writeText(ticketNumber)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   const handleChange = (
@@ -221,12 +249,45 @@ export default function ContactPage() {
                     <h3 className='text-xl font-semibold text-gray-900 mb-2'>
                       Message Sent!
                     </h3>
-                    <p className='text-gray-600 mb-6'>
+                    <p className='text-gray-600 mb-4'>
                       Thank you for reaching out. We'll respond to your inquiry
                       within 24 hours.
                     </p>
+                    {ticketNumber && (
+                      <div className='bg-orange-50 rounded-xl p-4 mb-6 max-w-xs mx-auto'>
+                        <p className='text-xs text-gray-500 mb-1'>
+                          Your Ticket Number
+                        </p>
+                        <div className='flex items-center justify-center gap-2'>
+                          <span className='font-mono text-lg font-bold text-orange-600'>
+                            {ticketNumber}
+                          </span>
+                          <button
+                            onClick={copyTicketNumber}
+                            className='p-1 hover:bg-orange-100 rounded transition-colors'
+                            title='Copy ticket number'
+                          >
+                            <Copy
+                              className={`w-4 h-4 ${
+                                copied ? 'text-green-600' : 'text-gray-400'
+                              }`}
+                            />
+                          </button>
+                        </div>
+                        {copied && (
+                          <p className='text-xs text-green-600 mt-1'>Copied!</p>
+                        )}
+                      </div>
+                    )}
+                    <p className='text-sm text-gray-500 mb-6'>
+                      Check your email for a confirmation with your ticket
+                      details.
+                    </p>
                     <button
-                      onClick={() => setIsSubmitted(false)}
+                      onClick={() => {
+                        setIsSubmitted(false)
+                        setTicketNumber('')
+                      }}
                       className='text-orange-600 font-medium hover:text-orange-700'
                     >
                       Send Another Message
@@ -234,6 +295,27 @@ export default function ContactPage() {
                   </div>
                 ) : (
                   <form onSubmit={handleSubmit} className='space-y-6'>
+                    {/* Error Display */}
+                    {error && (
+                      <div className='flex items-start gap-3 p-4 bg-red-50 border border-red-100 rounded-lg'>
+                        <AlertCircle className='w-5 h-5 text-red-500 shrink-0 mt-0.5' />
+                        <div>
+                          <p className='text-sm font-medium text-red-800'>
+                            {error}
+                          </p>
+                          <p className='text-xs text-red-600 mt-1'>
+                            You can also email us directly at{' '}
+                            <a
+                              href='mailto:support@techtoolstore.com'
+                              className='underline'
+                            >
+                              support@techtoolstore.com
+                            </a>
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
                     <div className='grid md:grid-cols-2 gap-6'>
                       <div>
                         <label

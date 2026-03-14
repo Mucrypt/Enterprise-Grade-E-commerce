@@ -9,9 +9,9 @@ import logger from './logger'
 const createTransporter = () => {
   // Use environment variables for SMTP config
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT || '587'),
-    secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+    host: process.env.SMTP_HOST || 'smtp.hostinger.com',
+    port: parseInt(process.env.SMTP_PORT || '465'),
+    secure: process.env.SMTP_SECURE !== 'false', // true for 465, false for other ports
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
@@ -93,7 +93,11 @@ const sendEmail = async (
     }
 
     const info = await transporter.sendMail(mailOptions)
-    logger.info('Email sent successfully:', { to, subject, messageId: info.messageId })
+    logger.info('Email sent successfully:', {
+      to,
+      subject,
+      messageId: info.messageId,
+    })
     return true
   } catch (error) {
     logger.error('Failed to send email:', { to, subject, error })
@@ -126,7 +130,11 @@ export const sendVerificationEmail = async (
     </p>
   `
 
-  await sendEmail(email, `Verify Your Email - ${COMPANY_NAME}`, getBaseTemplate(content))
+  await sendEmail(
+    email,
+    `Verify Your Email - ${COMPANY_NAME}`,
+    getBaseTemplate(content),
+  )
 }
 
 export const sendPasswordResetEmail = async (
@@ -150,7 +158,11 @@ export const sendPasswordResetEmail = async (
     </p>
   `
 
-  await sendEmail(email, `Reset Your Password - ${COMPANY_NAME}`, getBaseTemplate(content))
+  await sendEmail(
+    email,
+    `Reset Your Password - ${COMPANY_NAME}`,
+    getBaseTemplate(content),
+  )
 }
 
 export interface OrderItem {
@@ -192,7 +204,9 @@ export const sendOrderConfirmationEmail = async (
       (item) => `
       <tr>
         <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">
-          <span style="color: #1f2937; font-weight: 500;">${item.productName}</span>
+          <span style="color: #1f2937; font-weight: 500;">${
+            item.productName
+          }</span>
         </td>
         <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: center; color: #6b7280;">
           x${item.quantity}
@@ -220,7 +234,9 @@ export const sendOrderConfirmationEmail = async (
 
     <div style="background: #f9fafb; border-radius: 8px; padding: 20px; margin-bottom: 25px;">
       <p style="margin: 0; color: #6b7280; font-size: 14px;">Order Number</p>
-      <p style="margin: 5px 0 0 0; color: #1f2937; font-size: 20px; font-weight: bold;">${orderDetails.orderNumber}</p>
+      <p style="margin: 5px 0 0 0; color: #1f2937; font-size: 20px; font-weight: bold;">${
+        orderDetails.orderNumber
+      }</p>
     </div>
 
     <h3 style="color: #1f2937; margin: 0 0 15px 0; font-size: 16px;">Order Summary</h3>
@@ -240,21 +256,33 @@ export const sendOrderConfirmationEmail = async (
     <div style="border-top: 2px solid #e5e7eb; padding-top: 15px;">
       <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
         <span style="color: #6b7280;">Subtotal</span>
-        <span style="color: #1f2937;">${formatCurrency(orderDetails.subtotal)}</span>
+        <span style="color: #1f2937;">${formatCurrency(
+          orderDetails.subtotal,
+        )}</span>
       </div>
       <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
         <span style="color: #6b7280;">Shipping</span>
-        <span style="color: ${orderDetails.shippingAmount === 0 ? '#16a34a' : '#1f2937'};">
-          ${orderDetails.shippingAmount === 0 ? 'FREE' : formatCurrency(orderDetails.shippingAmount)}
+        <span style="color: ${
+          orderDetails.shippingAmount === 0 ? '#16a34a' : '#1f2937'
+        };">
+          ${
+            orderDetails.shippingAmount === 0
+              ? 'FREE'
+              : formatCurrency(orderDetails.shippingAmount)
+          }
         </span>
       </div>
       <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
         <span style="color: #6b7280;">Tax</span>
-        <span style="color: #1f2937;">${formatCurrency(orderDetails.taxAmount)}</span>
+        <span style="color: #1f2937;">${formatCurrency(
+          orderDetails.taxAmount,
+        )}</span>
       </div>
       <div style="display: flex; justify-content: space-between; padding-top: 15px; border-top: 2px solid #1f2937;">
         <span style="color: #1f2937; font-weight: bold; font-size: 18px;">Total</span>
-        <span style="color: #f97316; font-weight: bold; font-size: 18px;">${formatCurrency(orderDetails.grandTotal)}</span>
+        <span style="color: #f97316; font-weight: bold; font-size: 18px;">${formatCurrency(
+          orderDetails.grandTotal,
+        )}</span>
       </div>
     </div>
 
@@ -263,18 +291,24 @@ export const sendOrderConfirmationEmail = async (
       <p style="color: #4b5563; margin: 0; line-height: 1.6;">
         ${shippingAddr.firstName || ''} ${shippingAddr.lastName || ''}<br>
         ${shippingAddr.address}<br>
-        ${shippingAddr.city}${shippingAddr.state ? `, ${shippingAddr.state}` : ''} ${shippingAddr.postalCode}<br>
+        ${shippingAddr.city}${
+    shippingAddr.state ? `, ${shippingAddr.state}` : ''
+  } ${shippingAddr.postalCode}<br>
         ${shippingAddr.country}
       </p>
     </div>
 
-    ${orderDetails.estimatedDelivery ? `
+    ${
+      orderDetails.estimatedDelivery
+        ? `
     <div style="margin-top: 20px; text-align: center;">
       <p style="color: #6b7280; margin: 0;">
         📦 Estimated Delivery: <strong style="color: #1f2937;">${orderDetails.estimatedDelivery}</strong>
       </p>
     </div>
-    ` : ''}
+    `
+        : ''
+    }
 
     <div style="text-align: center; margin-top: 30px;">
       <a href="${COMPANY_WEBSITE}/orders" style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); color: white; padding: 14px 30px; text-decoration: none; border-radius: 8px; font-weight: 600; display: inline-block;">
@@ -310,7 +344,11 @@ export const sendWelcomeEmail = async (
     </div>
   `
 
-  await sendEmail(email, `Welcome to ${COMPANY_NAME}!`, getBaseTemplate(content))
+  await sendEmail(
+    email,
+    `Welcome to ${COMPANY_NAME}!`,
+    getBaseTemplate(content),
+  )
 }
 
 export const sendAdminInvitationEmail = async (
@@ -318,7 +356,9 @@ export const sendAdminInvitationEmail = async (
   token: string,
   role: string,
 ): Promise<void> => {
-  const invitationLink = `${process.env.ADMIN_DASHBOARD_URL || COMPANY_WEBSITE}/admin/accept-invitation?token=${token}`
+  const invitationLink = `${
+    process.env.ADMIN_DASHBOARD_URL || COMPANY_WEBSITE
+  }/admin/accept-invitation?token=${token}`
 
   const content = `
     <h2 style="color: #1f2937; margin: 0 0 20px 0;">You've Been Invited! 🎉</h2>
@@ -338,7 +378,11 @@ export const sendAdminInvitationEmail = async (
     </p>
   `
 
-  await sendEmail(email, `You're Invited to ${COMPANY_NAME}`, getBaseTemplate(content))
+  await sendEmail(
+    email,
+    `You're Invited to ${COMPANY_NAME}`,
+    getBaseTemplate(content),
+  )
 }
 
 export const sendOrderStatusUpdateEmail = async (
@@ -366,7 +410,9 @@ export const sendOrderStatusUpdateEmail = async (
 
   const content = `
     <div style="text-align: center; margin-bottom: 30px;">
-      <div style="font-size: 50px; margin-bottom: 15px;">${statusEmoji[newStatus] || '📋'}</div>
+      <div style="font-size: 50px; margin-bottom: 15px;">${
+        statusEmoji[newStatus] || '📋'
+      }</div>
       <h2 style="color: #1f2937; margin: 0 0 10px 0;">Order Status Update</h2>
     </div>
 
@@ -375,11 +421,21 @@ export const sendOrderStatusUpdateEmail = async (
       Your order <strong>#${orderNumber}</strong> has been updated:
     </p>
 
-    <div style="background: ${statusColor[newStatus] || '#6b7280'}15; border-left: 4px solid ${statusColor[newStatus] || '#6b7280'}; padding: 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
-      <p style="margin: 0; color: ${statusColor[newStatus] || '#6b7280'}; font-weight: bold; font-size: 18px; text-transform: capitalize;">
+    <div style="background: ${
+      statusColor[newStatus] || '#6b7280'
+    }15; border-left: 4px solid ${
+    statusColor[newStatus] || '#6b7280'
+  }; padding: 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+      <p style="margin: 0; color: ${
+        statusColor[newStatus] || '#6b7280'
+      }; font-weight: bold; font-size: 18px; text-transform: capitalize;">
         ${newStatus}
       </p>
-      ${message ? `<p style="margin: 10px 0 0 0; color: #4b5563;">${message}</p>` : ''}
+      ${
+        message
+          ? `<p style="margin: 10px 0 0 0; color: #4b5563;">${message}</p>`
+          : ''
+      }
     </div>
 
     <div style="text-align: center; margin-top: 30px;">
@@ -391,7 +447,9 @@ export const sendOrderStatusUpdateEmail = async (
 
   return await sendEmail(
     email,
-    `Order #${orderNumber} - ${newStatus.charAt(0).toUpperCase() + newStatus.slice(1)}`,
+    `Order #${orderNumber} - ${
+      newStatus.charAt(0).toUpperCase() + newStatus.slice(1)
+    }`,
     getBaseTemplate(content),
   )
 }
