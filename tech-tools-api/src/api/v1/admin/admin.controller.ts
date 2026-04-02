@@ -9,6 +9,18 @@ import { sendAdminInvitationEmail } from '../../../utils/email'
 // Admin Invitation System
 // =====================================================
 
+/**
+ * Invite a new admin user
+ * 
+ * Only super_admin can invite admins
+ * 
+ * @param {Request} req - Express request object
+ * @param {Response} res - Express response object
+ * 
+ * @returns {Promise<Response>} - Express response object with JSON response
+ * 
+ * @throws {Error} - Any error encountered during the process
+ */
 export const inviteAdmin = async (req: Request, res: Response) => {
   try {
     const { email, role } = req.body
