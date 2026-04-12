@@ -1310,7 +1310,9 @@ export default function OrdersPage() {
                               />
                             )}
                             <div className='flex-1'>
-                              <p className='font-semibold text-base'>{item.product_name}</p>
+                              <p className='font-semibold text-base'>
+                                {item.product_name}
+                              </p>
                               {item.sku && (
                                 <p className='text-xs text-muted-foreground mt-1'>
                                   SKU: {item.sku}
@@ -1319,11 +1321,15 @@ export default function OrdersPage() {
                               <div className='flex justify-between items-start mt-3'>
                                 <div className='text-sm space-y-1'>
                                   <div className='flex gap-3 text-muted-foreground'>
-                                    <span className='font-medium text-foreground'>Qty:</span>
+                                    <span className='font-medium text-foreground'>
+                                      Qty:
+                                    </span>
                                     <span>{item.quantity}</span>
                                   </div>
                                   <div className='flex gap-3 text-muted-foreground'>
-                                    <span className='font-medium text-foreground'>Price:</span>
+                                    <span className='font-medium text-foreground'>
+                                      Price:
+                                    </span>
                                     <span>
                                       {formatCurrency(
                                         item.unit_price,
