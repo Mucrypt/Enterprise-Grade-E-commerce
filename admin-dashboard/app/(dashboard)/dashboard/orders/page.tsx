@@ -1288,6 +1288,77 @@ export default function OrdersPage() {
 
                 <Separator />
 
+                {/* Order Items - PROMINENT at top */}
+                {selectedOrder.items && selectedOrder.items.length > 0 && (
+                  <>
+                    <div>
+                      <h3 className='font-semibold mb-4 text-lg flex items-center gap-2'>
+                        <ShoppingCart className='h-5 w-5 text-orange-500' />
+                        Products Ordered ({selectedOrder.items.length})
+                      </h3>
+                      <div className='space-y-4 bg-orange-50 dark:bg-orange-950/20 p-4 rounded-lg border-2 border-orange-200 dark:border-orange-900'>
+                        {selectedOrder.items.map((item: any, index: number) => (
+                          <div
+                            key={item.id || index}
+                            className='flex gap-4 pb-4 last:pb-0 last:border-0 border-b border-orange-100 dark:border-orange-900'
+                          >
+                            {item.product_image && (
+                              <img
+                                src={item.product_image}
+                                alt={item.product_name}
+                                className='w-20 h-20 object-cover rounded border border-orange-200'
+                              />
+                            )}
+                            <div className='flex-1'>
+                              <p className='font-semibold text-base'>{item.product_name}</p>
+                              {item.sku && (
+                                <p className='text-xs text-muted-foreground mt-1'>
+                                  SKU: {item.sku}
+                                </p>
+                              )}
+                              <div className='flex justify-between items-start mt-3'>
+                                <div className='text-sm space-y-1'>
+                                  <div className='flex gap-3 text-muted-foreground'>
+                                    <span className='font-medium text-foreground'>Qty:</span>
+                                    <span>{item.quantity}</span>
+                                  </div>
+                                  <div className='flex gap-3 text-muted-foreground'>
+                                    <span className='font-medium text-foreground'>Price:</span>
+                                    <span>
+                                      {formatCurrency(
+                                        item.unit_price,
+                                        selectedOrder.currency,
+                                      )}{' '}
+                                      each
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className='text-right'>
+                                  <p className='font-bold text-lg text-orange-600'>
+                                    {formatCurrency(
+                                      item.total_price,
+                                      selectedOrder.currency,
+                                    )}
+                                  </p>
+                                  {item.item_status && (
+                                    <Badge
+                                      variant='outline'
+                                      className='text-xs capitalize mt-2'
+                                    >
+                                      {item.item_status}
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <Separator />
+                  </>
+                )}
+
                 {/* Customer Info */}
                 <div>
                   <h3 className='font-semibold mb-3 flex items-center gap-2'>
@@ -1334,76 +1405,6 @@ export default function OrdersPage() {
                 </div>
 
                 <Separator />
-
-                {/* Order Items */}
-                {selectedOrder.items && selectedOrder.items.length > 0 && (
-                  <>
-                    <div>
-                      <h3 className='font-semibold mb-3 flex items-center gap-2'>
-                        <ShoppingCart className='h-4 w-4' />
-                        Order Items ({selectedOrder.items.length})
-                      </h3>
-                      <div className='space-y-3'>
-                        {selectedOrder.items.map((item: any, index: number) => (
-                          <div
-                            key={item.id || index}
-                            className='flex gap-4 p-3 bg-muted rounded-lg'
-                          >
-                            {item.product_image && (
-                              <img
-                                src={item.product_image}
-                                alt={item.product_name}
-                                className='w-16 h-16 object-cover rounded'
-                              />
-                            )}
-                            <div className='flex-1'>
-                              <p className='font-medium'>{item.product_name}</p>
-                              {item.sku && (
-                                <p className='text-xs text-muted-foreground'>
-                                  SKU: {item.sku}
-                                </p>
-                              )}
-                              <div className='flex justify-between items-center mt-2'>
-                                <div className='text-sm'>
-                                  <span className='text-muted-foreground'>
-                                    Qty: {item.quantity}
-                                  </span>
-                                  <span className='mx-2 text-muted-foreground'>
-                                    •
-                                  </span>
-                                  <span className='text-muted-foreground'>
-                                    {formatCurrency(
-                                      item.unit_price,
-                                      selectedOrder.currency,
-                                    )}{' '}
-                                    each
-                                  </span>
-                                </div>
-                                <div className='font-medium'>
-                                  {formatCurrency(
-                                    item.total_price,
-                                    selectedOrder.currency,
-                                  )}
-                                </div>
-                              </div>
-                              {item.item_status && (
-                                <div className='mt-2'>
-                                  <Badge
-                                    variant='outline'
-                                    className='text-xs capitalize'
-                                  >
-                                    {item.item_status}
-                                  </Badge>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <Separator />
-                  </>
-                )}
 
                 {/* Order Summary */}
                 <div>
