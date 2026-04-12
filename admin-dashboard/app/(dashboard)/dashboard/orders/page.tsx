@@ -378,17 +378,29 @@ export default function OrdersPage() {
     [sortBy],
   )
 
+  // Open order details
+  const openOrderDetails = useCallback(async (order: Order) => {
+    try {
+      // Fetch full order details including items
+      const result = await orderService.getOrder(order.id)
+      if (result.data?.order) {
+        setSelectedOrder(result.data.order)
+      }
+      setIsOrderDetailsOpen(true)
+    } catch (error) {
+      console.error('Failed to fetch order details:', error)
+      // Fallback to the order from list if fetch fails
+      setSelectedOrder(order)
+      setIsOrderDetailsOpen(true)
+      toast.error('Failed to load full order details')
+    }
+  }, [])
+
   // Open status change dialog
   const openStatusDialog = useCallback((order: Order) => {
     setSelectedOrder(order)
     setNewStatus(order.order_status)
     setIsStatusDialogOpen(true)
-  }, [])
-
-  // Open order details
-  const openOrderDetails = useCallback((order: Order) => {
-    setSelectedOrder(order)
-    setIsOrderDetailsOpen(true)
   }, [])
 
   // Export handler
@@ -1322,6 +1334,76 @@ export default function OrdersPage() {
                 </div>
 
                 <Separator />
+
+                {/* Order Items */}
+                {selectedOrder.items && selectedOrder.items.length > 0 && (
+                  <>
+                    <div>
+                      <h3 className='font-semibold mb-3 flex items-center gap-2'>
+                        <ShoppingCart className='h-4 w-4' />
+                        Order Items ({selectedOrder.items.length})
+                      </h3>
+                      <div className='space-y-3'>
+                        {selectedOrder.items.map((item: any, index: number) => (
+                          <div
+                            key={item.id || index}
+                            className='flex gap-4 p-3 bg-muted rounded-lg'
+                          >
+                            {item.product_image && (
+                              <img
+                                src={item.product_image}
+                                alt={item.product_name}
+                                className='w-16 h-16 object-cover rounded'
+                              />
+                            )}
+                            <div className='flex-1'>
+                              <p className='font-medium'>{item.product_name}</p>
+                              {item.sku && (
+                                <p className='text-xs text-muted-foreground'>
+                                  SKU: {item.sku}
+                                </p>
+                              )}
+                              <div className='flex justify-between items-center mt-2'>
+                                <div className='text-sm'>
+                                  <span className='text-muted-foreground'>
+                                    Qty: {item.quantity}
+                                  </span>
+                                  <span className='mx-2 text-muted-foreground'>
+                                    •
+                                  </span>
+                                  <span className='text-muted-foreground'>
+                                    {formatCurrency(
+                                      item.unit_price,
+                                      selectedOrder.currency,
+                                    )}{' '}
+                                    each
+                                  </span>
+                                </div>
+                                <div className='font-medium'>
+                                  {formatCurrency(
+                                    item.total_price,
+                                    selectedOrder.currency,
+                                  )}
+                                </div>
+                              </div>
+                              {item.item_status && (
+                                <div className='mt-2'>
+                                  <Badge
+                                    variant='outline'
+                                    className='text-xs capitalize'
+                                  >
+                                    {item.item_status}
+                                  </Badge>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <Separator />
+                  </>
+                )}
 
                 {/* Order Summary */}
                 <div>
