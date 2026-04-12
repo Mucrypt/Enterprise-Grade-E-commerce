@@ -195,6 +195,17 @@ export const getAdminOrderById = async (req: AuthRequest, res: Response) => {
       [id],
     )
 
+    // Log item details for debugging
+    if (itemsResult.rows.length > 0) {
+      itemsResult.rows.forEach((item, idx) => {
+        logger.info(
+          `Item ${idx + 1}: product_id=${item.product_id}, product_image=${
+            item.product_image ? 'FOUND' : 'NULL'
+          }`,
+        )
+      })
+    }
+
     logger.debug('Executing payments query...')
     // Get payments for this order
     const paymentsResult = await query(
