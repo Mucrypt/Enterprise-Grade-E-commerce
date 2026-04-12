@@ -9,7 +9,8 @@ const dbConfig: PoolConfig = {
   password: process.env.DB_PASSWORD || 'ChangeMe123!',
   max: 20, // Maximum number of clients in the pool
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 10000, // Increased from 2s to 10s
+  statement_timeout: 30000, // Add 30s query timeout
 }
 
 const pool = new Pool(dbConfig)

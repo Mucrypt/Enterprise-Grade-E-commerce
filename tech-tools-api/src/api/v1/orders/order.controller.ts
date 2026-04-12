@@ -3,7 +3,10 @@ import { AuthRequest } from '../../../middleware/auth'
 import { query } from '../../../database/connection'
 import logger from '../../../utils/logger'
 import { sendOrderConfirmationEmail, OrderDetails } from '../../../utils/email'
-import { sendOrderConfirmationWhatsApp, OrderDetails as WhatsAppOrderDetails } from '../../../services/whatsapp.service'
+import {
+  sendOrderConfirmationWhatsApp,
+  OrderDetails as WhatsAppOrderDetails,
+} from '../../../services/whatsapp.service'
 
 // =====================================================
 // Admin Order Management
@@ -150,8 +153,10 @@ export const getAdminOrders = async (req: AuthRequest, res: Response) => {
 export const getAdminOrderById = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params
+    logger.info(`Fetching order details for ID: ${id}`)
 
     // Get order with customer info
+    logger.debug('Executing order query...')
     const orderResult = await query(
       `SELECT 
         o.*,
@@ -166,12 +171,14 @@ export const getAdminOrderById = async (req: AuthRequest, res: Response) => {
     )
 
     if (orderResult.rows.length === 0) {
+      logger.warn(`Order not found: ${id}`)
       return res.status(404).json({
         success: false,
         error: 'Order not found',
       })
     }
 
+    logger.debug('Executing order items query...')
     // Get order items with product info
     const itemsResult = await query(
       `SELECT 
@@ -184,12 +191,16 @@ export const getAdminOrderById = async (req: AuthRequest, res: Response) => {
       [id],
     )
 
+    logger.debug('Executing payments query...')
     // Get payments for this order
     const paymentsResult = await query(
       `SELECT * FROM payments WHERE order_id = $1 ORDER BY created_at`,
       [id],
     )
 
+    logger.info(
+      `Successfully fetched order ${id} with ${itemsResult.rows.length} items and ${paymentsResult.rows.length} payments`,
+    )
     res.json({
       success: true,
       data: {
@@ -201,7 +212,11 @@ export const getAdminOrderById = async (req: AuthRequest, res: Response) => {
       },
     })
   } catch (error) {
-    logger.error('Get admin order error:', error)
+    logger.error('Get admin order error:', {
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+      orderId: req.params.id,
+    })
     res.status(500).json({
       success: false,
       error: 'Failed to get order',
