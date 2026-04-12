@@ -208,6 +208,7 @@ export default function OrdersPage() {
   const [isOrderDetailsOpen, setIsOrderDetailsOpen] = useState(false)
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
+  const [isLoadingOrderDetails, setIsLoadingOrderDetails] = useState(false)
   const [newStatus, setNewStatus] = useState('')
   const [statusNote, setStatusNote] = useState('')
 
@@ -381,18 +382,29 @@ export default function OrdersPage() {
   // Open order details
   const openOrderDetails = useCallback(async (order: Order) => {
     try {
-      // Fetch full order details including items
-      const result = await orderService.getOrder(order.id)
-      if (result.data?.order) {
-        setSelectedOrder(result.data.order)
-      }
-      setIsOrderDetailsOpen(true)
-    } catch (error) {
-      console.error('Failed to fetch order details:', error)
-      // Fallback to the order from list if fetch fails
+      // First set the order from the list (fallback)
       setSelectedOrder(order)
       setIsOrderDetailsOpen(true)
+      setIsLoadingOrderDetails(true)
+
+      // Then fetch full order details including items
+      console.log(`Fetching order details for order ID: ${order.id}`)
+      const result = await orderService.getOrder(order.id)
+      console.log('Order details API response:', result)
+
+      if (result.success && result.data?.order) {
+        console.log('Order items from API:', result.data.order.items)
+        console.log('Order items count:', result.data.order.items?.length || 0)
+        setSelectedOrder(result.data.order)
+      } else {
+        console.warn('Unexpected response structure:', result)
+        toast.warning('Could not load full order details')
+      }
+    } catch (error) {
+      console.error('Failed to fetch order details:', error)
       toast.error('Failed to load full order details')
+    } finally {
+      setIsLoadingOrderDetails(false)
     }
   }, [])
 
@@ -1288,6 +1300,23 @@ export default function OrdersPage() {
 
                 <Separator />
 
+                {/* Order Items Loading State */}
+                {isLoadingOrderDetails && (
+                  <div className='mb-4'>
+                    <h3 className='font-semibold mb-3 flex items-center gap-2'>
+                      <ShoppingCart className='h-5 w-5 text-orange-500' />
+                      Products Ordered
+                    </h3>
+                    <div className='flex items-center justify-center py-8'>
+                      <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500'></div>
+                      <span className='ml-3 text-sm text-muted-foreground'>
+                        Loading items...
+                      </span>
+                    </div>
+                    <Separator />
+                  </div>
+                )}
+
                 {/* Order Items - PROMINENT at top */}
                 {selectedOrder.items && selectedOrder.items.length > 0 && (
                   <>
@@ -1363,6 +1392,20 @@ export default function OrdersPage() {
                     </div>
                     <Separator />
                   </>
+                )}
+
+                {/* No Items Fallback */}
+                {(!selectedOrder.items || selectedOrder.items.length === 0) && (
+                  <div className='mb-4'>
+                    <h3 className='font-semibold mb-3 flex items-center gap-2'>
+                      <ShoppingCart className='h-4 w-4' />
+                      Products Ordered
+                    </h3>
+                    <div className='text-center py-8 text-muted-foreground'>
+                      <p className='text-sm'>No items found for this order</p>
+                    </div>
+                    <Separator />
+                  </div>
                 )}
 
                 {/* Customer Info */}
