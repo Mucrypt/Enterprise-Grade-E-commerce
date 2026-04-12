@@ -1331,12 +1331,16 @@ export default function OrdersPage() {
                             key={item.id || index}
                             className='flex gap-4 pb-4 last:pb-0 last:border-0 border-b border-orange-100 dark:border-orange-900'
                           >
-                            {item.product_image && (
+                            {item.product_image ? (
                               <img
                                 src={item.product_image}
                                 alt={item.product_name}
                                 className='w-20 h-20 object-cover rounded border border-orange-200'
                               />
+                            ) : (
+                              <div className='w-20 h-20 rounded border border-orange-200 bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center'>
+                                <Package className='h-10 w-10 text-orange-400' />
+                              </div>
                             )}
                             <div className='flex-1'>
                               <p className='font-semibold text-base'>

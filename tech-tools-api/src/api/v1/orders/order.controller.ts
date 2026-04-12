@@ -179,15 +179,17 @@ export const getAdminOrderById = async (req: AuthRequest, res: Response) => {
     }
 
     logger.debug('Executing order items query...')
-    // Get order items with product info and primary image
+    // Get order items with product info and image (prefer primary, fallback to first image)
     const itemsResult = await query(
       `SELECT 
         oi.*,
         p.name as product_title,
-        pi.image_url as product_image
+        (SELECT image_url FROM product_images 
+         WHERE product_id = oi.product_id 
+         ORDER BY is_primary DESC, display_order ASC, created_at ASC 
+         LIMIT 1) as product_image
       FROM order_items oi
       LEFT JOIN products p ON oi.product_id = p.id
-      LEFT JOIN product_images pi ON p.id = pi.product_id AND pi.is_primary = TRUE
       WHERE oi.order_id = $1
       ORDER BY oi.created_at`,
       [id],
