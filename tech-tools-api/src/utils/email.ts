@@ -460,3 +460,17 @@ export const sendOrderStatusUpdateEmail = async (
     getBaseTemplate(content),
   )
 }
+
+// ============================================
+// Export email service
+// ============================================
+
+export default {
+  send: async (options: {
+    to: string
+    subject: string
+    html: string
+  }): Promise<boolean> => {
+    return await sendEmail(options.to, options.subject, options.html)
+  },
+}

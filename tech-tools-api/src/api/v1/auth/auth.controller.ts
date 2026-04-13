@@ -11,6 +11,7 @@ import {
   sendPasswordResetEmail,
 } from '../../../utils/email'
 import type { AuthRequest } from '../../../middleware/auth'
+import NotificationEvents from '../../../services/notification.events'
 
 export const register = async (req: Request, res: Response) => {
   try {
