@@ -20,9 +20,9 @@ export function useNotifications() {
   const queryClient = useQueryClient()
 
   const { data, isLoading } = useQuery({
-    queryKey: ['notifications'],
+    queryKey: ['notifications', localStorage.getItem('auth_token')],
     queryFn: async () => {
-      const token = localStorage.getItem('accessToken')
+      const token = localStorage.getItem('auth_token')
       if (!token) return { data: { notifications: [], unreadCount: 0 } }
 
       const response = await fetch('/api/v1/notifications?limit=20', {
@@ -42,7 +42,7 @@ export function useNotifications() {
       await fetch(`/api/v1/notifications/${notificationId}/read`, {
         method: 'PUT',
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
+          Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
         },
       })
       queryClient.invalidateQueries({ queryKey: ['notifications'] })
@@ -56,7 +56,7 @@ export function useNotifications() {
       await fetch(`/api/v1/notifications/${notificationId}`, {
         method: 'DELETE',
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
+          Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
         },
       })
       queryClient.invalidateQueries({ queryKey: ['notifications'] })

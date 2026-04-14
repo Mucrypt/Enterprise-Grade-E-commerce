@@ -19,11 +19,11 @@ export function NotificationToast() {
 
   // Fetch notifications
   const { data: notificationsData } = useQuery({
-    queryKey: ['user-notifications'],
+    queryKey: ['user-notifications', localStorage.getItem('auth_token')],
     queryFn: async () => {
       const response = await fetch('/api/v1/notifications?limit=5', {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
+          Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
         },
       })
       if (!response.ok) throw new Error('Failed to fetch')

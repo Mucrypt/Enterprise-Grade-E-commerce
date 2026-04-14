@@ -2,13 +2,7 @@
 
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  Bell,
-  X,
-  AlertCircle,
-  ShoppingCart,
-  Mail,
-} from 'lucide-react'
+import { Bell, X, AlertCircle, ShoppingCart, Mail } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 
 export interface Notification {
@@ -30,9 +24,9 @@ export function NotificationBell() {
 
   // Fetch notifications
   const { data: notificationsData, isLoading } = useQuery({
-    queryKey: ['notifications'],
+    queryKey: ['notifications', localStorage.getItem('auth_token')],
     queryFn: async () => {
-      const token = localStorage.getItem('accessToken')
+      const token = localStorage.getItem('auth_token')
       if (!token) return { data: { notifications: [], unreadCount: 0 } }
 
       const response = await fetch('/api/v1/notifications?limit=10', {
@@ -52,7 +46,7 @@ export function NotificationBell() {
       await fetch(`/api/v1/notifications/${notificationId}/read`, {
         method: 'PUT',
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
+          Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
         },
       })
       queryClient.invalidateQueries({ queryKey: ['notifications'] })
@@ -66,7 +60,7 @@ export function NotificationBell() {
       await fetch(`/api/v1/notifications/${notificationId}`, {
         method: 'DELETE',
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
+          Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
         },
       })
       queryClient.invalidateQueries({ queryKey: ['notifications'] })
