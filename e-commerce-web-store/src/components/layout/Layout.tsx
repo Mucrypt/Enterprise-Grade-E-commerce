@@ -5,6 +5,7 @@
 import { Outlet } from 'react-router-dom'
 import Header from './Header'
 import Footer from './Footer'
+import { DriftChat } from './DriftChat'
 import { useEffect } from 'react'
 import { useAuthStore } from '../../stores'
 import { NotificationToast } from '../notifications/NotificationToast'
@@ -25,6 +26,7 @@ export default function Layout() {
       </main>
       <Footer />
       <NotificationToast />
+      <DriftChat />
     </div>
   )
 }

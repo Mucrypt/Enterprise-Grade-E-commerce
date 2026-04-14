@@ -196,6 +196,7 @@ export interface OrderDetails {
     state?: string
     postalCode: string
     country: string
+    phone?: string
   }
   estimatedDelivery?: string
 }

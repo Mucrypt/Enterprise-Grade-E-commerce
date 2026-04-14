@@ -72,6 +72,8 @@ export default function CheckoutPage() {
   const [shipping, setShipping] = useState<ShippingAddress>(initialShipping)
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isGuestCheckout, setIsGuestCheckout] = useState(!isAuthenticated)
+  const [guestEmail, setGuestEmail] = useState('')
 
   // Stripe state
   const [clientSecret, setClientSecret] = useState<string | null>(null)
@@ -194,27 +196,54 @@ export default function CheckoutPage() {
     setError(null)
 
     try {
-      // Create the order
-      const order = await ordersApiNew.create({
-        items: items.map((item) => ({
-          productId: item.product.id,
-          quantity: item.quantity,
-        })),
-        shippingAddress: {
-          firstName: shipping.firstName,
-          lastName: shipping.lastName,
-          email: shipping.email,
-          phone: shipping.phone,
-          address: shipping.address,
-          apartment: shipping.apartment,
-          city: shipping.city,
-          state: shipping.state,
-          postalCode: shipping.postalCode,
-          country: shipping.country,
-        },
-        paymentIntentId: completedPaymentIntentId,
-        paymentMethod: 'card',
-      })
+      let order
+
+      if (isGuestCheckout) {
+        // Guest checkout - call guest order endpoint
+        const api = (await import('../api')).ordersApiNew
+        order = await (api as any).createGuestOrder({
+          items: items.map((item) => ({
+            productId: item.product.id,
+            quantity: item.quantity,
+          })),
+          shippingAddress: {
+            firstName: shipping.firstName,
+            lastName: shipping.lastName,
+            address: shipping.address,
+            apartment: shipping.apartment,
+            city: shipping.city,
+            state: shipping.state,
+            postalCode: shipping.postalCode,
+            country: shipping.country,
+          },
+          guestEmail: guestEmail || shipping.email,
+          guestPhone: shipping.phone,
+          paymentIntentId: completedPaymentIntentId,
+          paymentMethod: 'card',
+        })
+      } else {
+        // Authenticated checkout
+        order = await ordersApiNew.create({
+          items: items.map((item) => ({
+            productId: item.product.id,
+            quantity: item.quantity,
+          })),
+          shippingAddress: {
+            firstName: shipping.firstName,
+            lastName: shipping.lastName,
+            email: shipping.email,
+            phone: shipping.phone,
+            address: shipping.address,
+            apartment: shipping.apartment,
+            city: shipping.city,
+            state: shipping.state,
+            postalCode: shipping.postalCode,
+            country: shipping.country,
+          },
+          paymentIntentId: completedPaymentIntentId,
+          paymentMethod: 'card',
+        })
+      }
 
       setPaymentComplete(true)
 
@@ -225,7 +254,9 @@ export default function CheckoutPage() {
           orderNumber: order.order_number,
           orderId: order.id,
           total: order.grand_total,
-          email: shipping.email,
+          email: guestEmail || shipping.email,
+          checkoutToken: order.checkoutToken,
+          isGuest: isGuestCheckout,
         },
       })
     } catch (err: unknown) {
@@ -321,12 +352,62 @@ export default function CheckoutPage() {
             {/* Shipping Step */}
             {currentStep === 'shipping' && (
               <div className='bg-white rounded-xl p-6 shadow-sm'>
+                {/* Guest vs Login Toggle */}
+                {!isAuthenticated && (
+                  <div className='mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg'>
+                    <div className='flex items-center justify-between'>
+                      <div>
+                        <p className='font-medium text-gray-900'>
+                          {isGuestCheckout
+                            ? 'Guest Checkout'
+                            : 'Have an Account?'}
+                        </p>
+                        <p className='text-sm text-gray-600 mt-1'>
+                          {isGuestCheckout
+                            ? 'Checkout as a guest - no account needed'
+                            : 'Sign in to your account to access saved addresses'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (isGuestCheckout) {
+                            // Switch to login
+                            setIsGuestCheckout(false)
+                          } else {
+                            // Switch to guest
+                            setIsGuestCheckout(true)
+                            setGuestEmail('')
+                          }
+                        }}
+                        className='px-4 py-2 text-blue-600 hover:text-blue-700 font-medium border border-blue-600 rounded-lg hover:bg-blue-50 transition'
+                      >
+                        {isGuestCheckout ? 'Sign In' : 'Guest Checkout'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <h2 className='text-xl font-bold text-gray-900 mb-6 flex items-center gap-2'>
                   <MapPin className='w-5 h-5 text-blue-600' />
                   Shipping Address
                 </h2>
 
                 <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
+                  {isGuestCheckout && (
+                    <div className='sm:col-span-2'>
+                      <label className='block text-sm font-medium text-gray-700 mb-1'>
+                        Email Address * (for order updates)
+                      </label>
+                      <input
+                        type='email'
+                        value={guestEmail}
+                        onChange={(e) => setGuestEmail(e.target.value)}
+                        className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                        placeholder='your.email@example.com'
+                        required
+                      />
+                    </div>
+                  )}
                   <div>
                     <label className='block text-sm font-medium text-gray-700 mb-1'>
                       First Name *

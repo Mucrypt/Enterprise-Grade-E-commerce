@@ -1133,3 +1133,315 @@ export const getOrderItems = async (req: AuthRequest, res: Response) => {
     })
   }
 }
+
+// =====================================================
+// Guest Checkout
+// =====================================================
+
+/**
+ * Create guest order (no authentication required)
+ */
+export const createGuestOrder = async (req: any, res: Response) => {
+  try {
+    const {
+      items,
+      shippingAddress,
+      billingAddress,
+      customerNotes,
+      paymentIntentId,
+      paymentMethod = 'card',
+      guestEmail,
+      guestPhone,
+    } = req.body
+
+    // Validate required fields
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Order items are required',
+      })
+    }
+
+    if (!shippingAddress) {
+      return res.status(400).json({
+        success: false,
+        error: 'Shipping address is required',
+      })
+    }
+
+    if (!guestEmail) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email address is required',
+      })
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(guestEmail)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid email address',
+      })
+    }
+
+    // Check if email is already registered
+    const userCheck = await query('SELECT id FROM users WHERE email = $1', [
+      guestEmail,
+    ])
+    if (userCheck.rows.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email already registered. Please login instead.',
+      })
+    }
+
+    // Calculate totals
+    let totalAmount = 0
+    const orderItems = []
+
+    for (const item of items) {
+      const productResult = await query(
+        `SELECT p.id, p.name, p.sku, p.base_price, p.sale_price, 
+                COALESCE((SELECT SUM(i.available_stock) FROM inventory i WHERE i.product_id = p.id), 0) as total_stock
+         FROM products p 
+         WHERE p.id = $1 AND p.is_active = true`,
+        [item.productId],
+      )
+
+      if (!productResult.rows[0]) {
+        return res.status(400).json({
+          success: false,
+          error: `Product not found: ${item.productId}`,
+        })
+      }
+
+      const product = productResult.rows[0]
+      const availableStock = parseInt(product.total_stock, 10)
+
+      if (availableStock < item.quantity) {
+        return res.status(400).json({
+          success: false,
+          error: `Insufficient stock for ${product.name}. Available: ${availableStock}`,
+        })
+      }
+
+      const effectivePrice = parseFloat(
+        product.sale_price || product.base_price,
+      )
+      const itemTotal = effectivePrice * item.quantity
+      totalAmount += itemTotal
+
+      orderItems.push({
+        productId: product.id,
+        sku: product.sku,
+        productName: product.name,
+        quantity: item.quantity,
+        unitPrice: effectivePrice,
+        totalPrice: itemTotal,
+      })
+    }
+
+    // Calculate tax and shipping
+    const taxRate = 0.08
+    const taxAmount = totalAmount * taxRate
+    const shippingAmount = totalAmount >= 50 ? 0 : 5.99
+    const grandTotal = totalAmount + taxAmount + shippingAmount
+
+    // Generate order number
+    const orderNumber = `TT-${Date.now().toString().slice(-8)}-${Math.random()
+      .toString(36)
+      .substr(2, 4)
+      .toUpperCase()}`
+
+    // Create order with NULL user_id for guest
+    const orderResult = await query(
+      `INSERT INTO orders (
+        order_number, user_id, guest_email, guest_first_name, guest_last_name, guest_phone,
+        order_status, payment_status,
+        total_amount, tax_amount, shipping_amount, grand_total,
+        shipping_address, billing_address, customer_notes,
+        payment_method, payment_gateway, transaction_id,
+        estimated_delivery_date
+      ) VALUES (
+        $1, NULL, $2, $3, $4, $5,
+        'pending', 'pending',
+        $6, $7, $8, $9,
+        $10, $11, $12,
+        $13, 'stripe', $14,
+        CURRENT_DATE + INTERVAL '5 days'
+      ) RETURNING *`,
+      [
+        orderNumber,
+        guestEmail,
+        shippingAddress.firstName || '',
+        shippingAddress.lastName || '',
+        guestPhone || null,
+        totalAmount,
+        taxAmount,
+        shippingAmount,
+        grandTotal,
+        JSON.stringify(shippingAddress),
+        billingAddress
+          ? JSON.stringify(billingAddress)
+          : JSON.stringify(shippingAddress),
+        customerNotes || null,
+        paymentMethod,
+        paymentIntentId || null,
+      ],
+    )
+
+    const order = orderResult.rows[0]
+
+    // Create order items
+    for (const item of orderItems) {
+      await query(
+        `INSERT INTO order_items (
+          order_id, product_id, sku, product_name,
+          quantity, unit_price
+        ) VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          order.id,
+          item.productId,
+          item.sku,
+          item.productName,
+          item.quantity,
+          item.unitPrice,
+        ],
+      )
+
+      // Reserve stock
+      await query(
+        `UPDATE inventory SET 
+          reserved_stock = reserved_stock + $1,
+          updated_at = NOW()
+         WHERE product_id = $2`,
+        [item.quantity, item.productId],
+      )
+    }
+
+    // Create guest checkout session
+    const guestCheckoutService = await import(
+      '../../../services/guest-checkout.service'
+    ).then((m) => m)
+    const checkoutToken = guestCheckoutService.generateCheckoutToken()
+    await query(
+      `INSERT INTO guest_checkouts (email, order_id, checkout_token, created_by_ip)
+       VALUES ($1, $2, $3, $4)`,
+      [guestEmail, order.id, checkoutToken, req.ip || null],
+    )
+
+    // Send confirmation email
+    try {
+      await sendOrderConfirmationEmail(guestEmail, {
+        orderNumber: order.order_number,
+        customerName:
+          `${shippingAddress.firstName || ''} ${
+            shippingAddress.lastName || ''
+          }`.trim() || 'Valued Customer',
+        customerEmail: guestEmail,
+        items: orderItems.map((item) => ({
+          productName: item.productName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.totalPrice,
+        })),
+        subtotal: totalAmount,
+        taxAmount: taxAmount,
+        shippingAmount: shippingAmount,
+        grandTotal: grandTotal,
+        shippingAddress: {
+          firstName: shippingAddress.firstName,
+          lastName: shippingAddress.lastName,
+          address: shippingAddress.address,
+          city: shippingAddress.city,
+          state: shippingAddress.state,
+          postalCode: shippingAddress.postalCode,
+          country: shippingAddress.country,
+          phone: guestPhone,
+        },
+      })
+    } catch (emailError) {
+      logger.warn('Failed to send order confirmation email:', emailError)
+    }
+
+    res.status(201).json({
+      success: true,
+      data: {
+        orderId: order.id,
+        orderNumber: order.order_number,
+        checkoutToken: checkoutToken,
+        email: guestEmail,
+        grandTotal: grandTotal,
+      },
+    })
+  } catch (error) {
+    logger.error('Create guest order error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create guest order',
+    })
+  }
+}
+
+/**
+ * Get guest order by token (no authentication required)
+ */
+export const getGuestOrder = async (req: any, res: Response) => {
+  try {
+    const { email, token } = req.query
+
+    if (!email || !token) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email and token are required',
+      })
+    }
+
+    // Get order by email and token
+    const orderResult = await query(
+      `SELECT o.* FROM orders o
+       JOIN guest_checkouts gc ON o.id = gc.order_id
+       WHERE gc.email = $1 AND gc.checkout_token = $2 AND gc.expires_at > NOW()`,
+      [email, token],
+    )
+
+    if (!orderResult.rows[0]) {
+      return res.status(404).json({
+        success: false,
+        error: 'Order not found or token expired',
+      })
+    }
+
+    const order = orderResult.rows[0]
+
+    // Get order items
+    const itemsResult = await query(
+      `SELECT oi.*, p.name, p.image_url, p.sku FROM order_items oi
+       LEFT JOIN products p ON oi.product_id = p.id
+       WHERE oi.order_id = $1`,
+      [order.id],
+    )
+
+    res.json({
+      success: true,
+      data: {
+        orderNumber: order.order_number,
+        status: order.order_status,
+        paymentStatus: order.payment_status,
+        grandTotal: order.grand_total,
+        items: itemsResult.rows,
+        shippingAddress: order.shipping_address,
+        billingAddress: order.billing_address,
+        createdAt: order.created_at,
+        estimatedDelivery: order.estimated_delivery_date,
+      },
+    })
+  } catch (error) {
+    logger.error('Get guest order error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve order',
+    })
+  }
+}

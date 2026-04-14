@@ -13,12 +13,18 @@ import {
   bulkUpdateOrderStatus,
   updateOrderShipping,
   exportOrders,
+  createGuestOrder,
+  getGuestOrder,
 } from './order.controller'
 import { authenticate, authorize } from '../../../middleware/auth'
 
 const router = Router()
 
-// All order routes require authentication
+// Guest checkout routes (NO authentication required)
+router.post('/guest/create', createGuestOrder)
+router.get('/guest/retrieve', getGuestOrder)
+
+// All other order routes require authentication
 router.use(authenticate)
 
 // Admin routes (must be before :id routes)

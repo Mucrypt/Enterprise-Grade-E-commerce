@@ -942,6 +942,66 @@ export const ordersApiNew = {
     }>(`/orders/${id}/cancel`, { reason })
     return response.data.data.order
   },
+
+  // Create guest order (no authentication required)
+  async createGuestOrder(data: {
+    items: { productId: string; quantity: number }[]
+    shippingAddress: any
+    guestEmail: string
+    guestPhone?: string
+    paymentIntentId: string
+    paymentMethod?: string
+    customerNotes?: string
+  }) {
+    // Create a new axios instance without auth header for guest checkout
+    const guestApi = axios.create({
+      baseURL: API_URL,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      timeout: 15000,
+    })
+
+    const response = await guestApi.post<{
+      success: boolean
+      data: {
+        orderId: string
+        orderNumber: string
+        checkoutToken: string
+        email: string
+        grandTotal: number
+      }
+    }>('/orders/guest/create', data)
+
+    return {
+      id: response.data.data.orderId,
+      order_number: response.data.data.orderNumber,
+      grand_total: response.data.data.grandTotal,
+      checkoutToken: response.data.data.checkoutToken,
+    }
+  },
+
+  // Get guest order (no authentication required)
+  async getGuestOrder(email: string, token: string) {
+    const guestApi = axios.create({
+      baseURL: API_URL,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      timeout: 15000,
+    })
+
+    const response = await guestApi.get<{
+      success: boolean
+      data: any
+    }>(
+      `/orders/guest/retrieve?email=${encodeURIComponent(
+        email,
+      )}&token=${token}`,
+    )
+
+    return response.data.data
+  },
 }
 
 // ============================================
