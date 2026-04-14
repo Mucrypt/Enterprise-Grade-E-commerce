@@ -16,6 +16,7 @@ import supplierRoutes from './suppliers/supplier.routes'
 import shippingRoutes from './shipping/shipping.routes'
 import couponRoutes from './coupons/coupon.routes'
 import reviewRoutes from './reviews/review.routes'
+import notificationRoutes from './notifications/notification.routes'
 import whatsappRoutes from './whatsapp/whatsapp.routes'
 import emailRoutes from './emails/email.routes'
 import contactRoutes from './contact/contact.routes'
@@ -52,6 +53,7 @@ router.use('/suppliers', supplierRoutes)
 router.use('/shipping', shippingRoutes)
 router.use('/coupons', couponRoutes)
 router.use('/reviews', reviewRoutes)
+router.use('/notifications', notificationRoutes)
 router.use('/whatsapp', whatsappRoutes)
 router.use('/emails', emailRoutes)
 router.use('/contact', contactRoutes)

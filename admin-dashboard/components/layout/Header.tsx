@@ -2,9 +2,10 @@
 
 import React from 'react'
 import { usePathname } from 'next/navigation'
-import { Bell, Search, Menu } from 'lucide-react'
+import { Search, Menu } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { NotificationBell } from '@/components/notifications/NotificationBell'
 
 interface HeaderProps {
   onMenuClick?: () => void
@@ -53,10 +54,7 @@ export function Header({ onMenuClick }: HeaderProps) {
       {/* Right Side Actions */}
       <div className='ml-auto flex items-center space-x-2'>
         {/* Notifications */}
-        <Button variant='ghost' size='icon' className='relative'>
-          <Bell className='h-5 w-5' />
-          <span className='absolute right-1 top-1 h-2 w-2 rounded-full bg-destructive' />
-        </Button>
+        <NotificationBell />
       </div>
     </header>
   )

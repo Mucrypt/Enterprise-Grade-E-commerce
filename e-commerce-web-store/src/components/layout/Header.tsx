@@ -29,6 +29,7 @@ import SearchOverlay from './SearchOverlay'
 import MegaMenu from './MegaMenu'
 import MobileMenu from './MobileMenu'
 import CartDrawer from '../cart/CartDrawer'
+import { NotificationBell } from '../notifications/NotificationBell'
 
 // Navigation Categories Data
 const navigationCategories = [
@@ -253,6 +254,9 @@ export default function Header() {
               >
                 <Search className='w-6 h-6' />
               </button>
+
+              {/* Notifications */}
+              <NotificationBell />
 
               {/* User Account */}
               <Link
