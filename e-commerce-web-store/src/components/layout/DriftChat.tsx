@@ -1,70 +1,54 @@
 import { useEffect } from 'react'
 
 /**
- * Drift Live Chat Widget for React
- * Initializes Drift chat for customer support in e-commerce store
+ * Tawk.to Live Chat Widget for React
+ * Initializes Tawk.to chat for customer support in e-commerce store
  */
 export function DriftChat() {
   useEffect(() => {
-    // Check if Drift is already loaded
-    if (window.drift) {
+    // Get Tawk.to Site ID from environment variable
+    const tawkSiteId = import.meta.env.VITE_TAWK_SITE_ID
+
+    // Skip if no Tawk Site ID configured
+    if (!tawkSiteId || tawkSiteId === 'YOUR_TAWK_SITE_ID') {
+      console.warn(
+        'Tawk.to chat not configured. Set VITE_TAWK_SITE_ID environment variable.',
+      )
       return
     }
 
-    // Load Drift script dynamically
-    const script = document.createElement('script')
-    script.src = 'https://js.driftt.com/js/drift.js'
-    script.async = true
-
-    script.onload = () => {
-      // Initialize Drift with your App ID
-      // Get your App ID from https://dash.driftt.com/
-      if (window.drift) {
-        window.drift.load('APPLICATION_ID')
-
-        // Optional: Set user attributes if authenticated
-        // window.drift.identify({
-        //   userId: 'user-id',
-        //   email: 'user@example.com',
-        //   attributes: {
-        //     firstName: 'User',
-        //     lastName: 'Name'
-        //   }
-        // })
-
-        // Optional: Set custom callbacks
-        // window.drift.on('ready', () => {
-        //   console.log('Drift chat is ready')
-        // })
-      }
+    // Check if Tawk is already loaded
+    if (window.Tawk_API) {
+      return
     }
 
+    // Load Tawk.to script
+    const script = document.createElement('script')
+    script.async = true
+    script.src = `https://embed.tawk.to/${tawkSiteId}/1234567890`
+    script.charset = 'UTF-8'
+    script.setAttribute('crossorigin', '*')
+
     script.onerror = () => {
-      console.warn('Failed to load Drift chat widget')
+      console.warn('Failed to load Tawk.to chat widget')
     }
 
     document.body.appendChild(script)
 
     return () => {
-      // Cleanup is handled by Drift
+      // Cleanup is handled by Tawk
     }
   }, [])
 
   return null
 }
 
-// Extend Window type to include Drift
+// Extend Window type to include Tawk
 declare global {
   interface Window {
-    drift?: {
-      load: (id: string) => void
-      identify: (userId: {
-        userId?: string
-        email?: string
-        [key: string]: any
-      }) => void
-      on: (event: string, callback: () => void) => void
+    Tawk_API?: {
       [key: string]: any
     }
+    Tawk_LoadStart?: Date
   }
 }
