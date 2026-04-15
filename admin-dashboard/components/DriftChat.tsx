@@ -27,7 +27,7 @@ export function DriftChat() {
     // Load Tawk.to script
     const script = document.createElement('script')
     script.async = true
-    script.src = `https://embed.tawk.to/${tawkSiteId}/1234567890`
+    script.src = `https://embed.tawk.to/${tawkSiteId}/1`
     script.charset = 'UTF-8'
     script.setAttribute('crossorigin', '*')
     script.onerror = () => {
