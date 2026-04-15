@@ -2,6 +2,8 @@ import { Request, Response } from 'express'
 import nodemailer from 'nodemailer'
 import logger from '../../../utils/logger'
 import { query } from '../../../database/connection'
+import type { AuthRequest } from '../../../middleware/auth'
+import emailService from '../../../services/email.service'
 
 // Create email transporter
 const createTransporter = () => {
@@ -37,6 +39,11 @@ interface ContactFormData {
   message: string
 }
 
+interface ReplySubmissionData {
+  body: string
+  subject?: string
+}
+
 // Subject to department email mapping
 const subjectEmailMap: Record<string, string> = {
   order: 'orders@techtoolstore.com',
@@ -64,6 +71,79 @@ const subjectLabels: Record<string, string> = {
   technical: 'Technical Support',
   feedback: 'Feedback/Suggestion',
   other: 'General Inquiry',
+}
+
+const supportQuickLinkBase = '/contact'
+
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+
+const buildSupportRequestLink = (subject: string, message: string) => {
+  const params = new URLSearchParams({ subject, message })
+  return `${supportQuickLinkBase}?${params.toString()}`
+}
+
+const getLoyaltySnapshot = (totalSpent: number) => {
+  const points = Math.floor(totalSpent)
+  const tiers = [
+    { name: 'Bronze', minimum: 0 },
+    { name: 'Silver', minimum: 500 },
+    { name: 'Gold', minimum: 1500 },
+    { name: 'Platinum', minimum: 3000 },
+  ]
+
+  const currentTier =
+    [...tiers].reverse().find((tier) => points >= tier.minimum) || tiers[0]
+  const nextTier = tiers.find((tier) => tier.minimum > points) || null
+
+  return {
+    points,
+    tier: currentTier.name,
+    nextTier: nextTier?.name || 'Top tier reached',
+    pointsToNextTier: nextTier ? nextTier.minimum - points : 0,
+  }
+}
+
+const buildReplyEmailHtml = (recipientName: string, body: string) => {
+  const escapedBody = escapeHtml(body).replace(/\n/g, '<br />')
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reply from TechTools Support</title>
+</head>
+<body style="margin:0;padding:0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background-color:#f8fafc;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;margin:0 auto;background:#ffffff;">
+    <tr>
+      <td style="background:linear-gradient(135deg,#f97316 0%,#ea580c 100%);padding:32px 40px;color:#ffffff;">
+        <h1 style="margin:0;font-size:24px;font-weight:700;">TechTools Support</h1>
+        <p style="margin:8px 0 0;font-size:14px;color:rgba(255,255,255,0.9);">Personalized support from the TechTools team</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:32px 40px;">
+        <p style="margin:0 0 16px;color:#0f172a;font-size:16px;">Hi ${escapeHtml(
+          recipientName || 'there',
+        )},</p>
+        <div style="margin:0 0 24px;color:#334155;font-size:14px;line-height:1.8;">${escapedBody}</div>
+        <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:16px 18px;margin-bottom:24px;">
+          <p style="margin:0 0 8px;color:#9a3412;font-weight:600;font-size:13px;">Need more help?</p>
+          <p style="margin:0;color:#7c2d12;font-size:13px;line-height:1.7;">Reply directly to this email, open live chat on TechTools, or visit the support center for order tracking, returns, and expert product guidance.</p>
+        </div>
+        <p style="margin:0;color:#475569;font-size:14px;">Best regards,<br />TechTools Support Team</p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
 }
 
 /**
@@ -471,6 +551,327 @@ export const getContactSubmissions = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Failed to get contact submissions',
+    })
+  }
+}
+
+export const replyToContactSubmission = async (
+  req: AuthRequest,
+  res: Response,
+) => {
+  try {
+    const { id } = req.params
+    const { body, subject } = req.body as ReplySubmissionData
+
+    if (!body?.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Reply body is required',
+      })
+    }
+
+    const submissionResult = await query(
+      `SELECT * FROM email_messages
+       WHERE id = $1 AND email_type = 'contact_form'
+       LIMIT 1`,
+      [id],
+    )
+
+    const submission = submissionResult.rows[0]
+
+    if (!submission) {
+      return res.status(404).json({
+        success: false,
+        error: 'Contact submission not found',
+      })
+    }
+
+    const metadata =
+      typeof submission.metadata === 'string'
+        ? JSON.parse(submission.metadata)
+        : submission.metadata || {}
+    const ticketNumber = metadata.ticketNumber || 'Support Request'
+    const replySubject =
+      subject?.trim() || `Re: ${submission.subject} - ${ticketNumber}`
+
+    const sendResult = await emailService.sendEmail({
+      to: submission.recipient_email,
+      toName: submission.recipient_name,
+      subject: replySubject,
+      html: buildReplyEmailHtml(submission.recipient_name, body.trim()),
+      text: body.trim(),
+      emailType: 'support_reply',
+      replyTo: getRecipientEmail('technical'),
+    })
+
+    if (!sendResult.success) {
+      return res.status(500).json({
+        success: false,
+        error: sendResult.error || 'Failed to send reply',
+      })
+    }
+
+    const nextMetadata = {
+      ...metadata,
+      lastReplyPreview: body.trim().slice(0, 200),
+      lastReplySubject: replySubject,
+      lastRepliedAt: new Date().toISOString(),
+      lastRepliedBy: req.user?.email || 'admin',
+    }
+
+    await query(
+      `UPDATE email_messages
+       SET status = 'sent',
+           metadata = $2,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [id, JSON.stringify(nextMetadata)],
+    )
+
+    res.json({
+      success: true,
+      message: 'Reply sent successfully',
+    })
+  } catch (error) {
+    logger.error('Reply to contact submission error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to send reply',
+    })
+  }
+}
+
+export const getSupportProfile = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.userId
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required',
+      })
+    }
+
+    const [userResult, orderSummaryResult, recentOrderResult, reviewsResult] =
+      await Promise.all([
+        query(
+          `SELECT id, email, first_name, last_name, created_at, email_verified
+           FROM users WHERE id = $1 LIMIT 1`,
+          [userId],
+        ),
+        query(
+          `SELECT
+             COUNT(*)::int as total_orders,
+             COALESCE(SUM(total), 0)::numeric as total_spent,
+             COUNT(*) FILTER (WHERE status IN ('pending', 'confirmed', 'processing', 'shipped'))::int as active_orders,
+             MAX(created_at) as last_order_at
+           FROM orders
+           WHERE user_id = $1`,
+          [userId],
+        ),
+        query(
+          `SELECT id, order_number, status, total, created_at
+           FROM orders
+           WHERE user_id = $1
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [userId],
+        ),
+        query(
+          `SELECT r.id,
+                  p.id as product_id,
+                  p.name as product_name,
+                  p.slug as product_slug,
+                  r.rating,
+                  r.title,
+                  r.comment,
+                  r.is_verified_purchase,
+                  r.created_at
+           FROM reviews r
+           JOIN products p ON p.id = r.product_id
+           WHERE r.user_id = $1 AND r.status = 'approved'
+           ORDER BY r.created_at DESC
+           LIMIT 3`,
+          [userId],
+        ),
+      ])
+
+    const user = userResult.rows[0]
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found',
+      })
+    }
+
+    const recommendationResult = await query(
+      `WITH purchased_products AS (
+         SELECT DISTINCT oi.product_id
+         FROM orders o
+         JOIN order_items oi ON oi.order_id = o.id
+         WHERE o.user_id = $1
+       ),
+       favorite_categories AS (
+         SELECT p.category_id, COUNT(*) as score
+         FROM orders o
+         JOIN order_items oi ON oi.order_id = o.id
+         JOIN products p ON p.id = oi.product_id
+         WHERE o.user_id = $1
+         GROUP BY p.category_id
+         ORDER BY score DESC
+         LIMIT 2
+       )
+       SELECT p.id,
+              p.name,
+              p.slug,
+              p.base_price,
+              p.sale_price,
+              c.name as category_name,
+              (
+                SELECT pm.url
+                FROM product_media pm
+                WHERE pm.product_id = p.id AND pm.is_primary = true
+                ORDER BY pm.position ASC NULLS LAST
+                LIMIT 1
+              ) as primary_image
+       FROM products p
+       LEFT JOIN categories c ON c.id = p.category_id
+       WHERE p.is_active = true
+         AND p.id NOT IN (SELECT product_id FROM purchased_products)
+         AND (
+           p.is_featured = true
+           OR p.category_id IN (SELECT category_id FROM favorite_categories)
+         )
+       ORDER BY p.is_featured DESC, p.created_at DESC
+       LIMIT 4`,
+      [userId],
+    )
+
+    const orderSummary = orderSummaryResult.rows[0] || {
+      total_orders: 0,
+      total_spent: 0,
+      active_orders: 0,
+      last_order_at: null,
+    }
+
+    const totalSpent = Number(orderSummary.total_spent || 0)
+    const totalOrders = Number(orderSummary.total_orders || 0)
+    const loyalty = getLoyaltySnapshot(totalSpent)
+    const recentOrder = recentOrderResult.rows[0] || null
+    const smartSuggestions = [
+      totalOrders > 0
+        ? `Welcome back ${user.first_name}. You have ${
+            orderSummary.active_orders
+          } active order${
+            orderSummary.active_orders === 1 ? '' : 's'
+          } and ${totalOrders} total purchases.`
+        : `Welcome ${user.first_name}. Chat with us for buying advice, installation help, or tailored product recommendations.`,
+      recentOrder
+        ? `Latest order ${recentOrder.order_number} is ${recentOrder.status}. Open chat if you need shipping help or a faster resolution.`
+        : 'Need help deciding? Our concierge can recommend accessories based on your interests and current deals.',
+      reviewsResult.rows.length > 0
+        ? `You already have ${reviewsResult.rows.length} approved review${
+            reviewsResult.rows.length === 1 ? '' : 's'
+          }. We can surface verified proof points while you chat.`
+        : 'After purchase, support can help you leave verified reviews and unlock reward perks.',
+      loyalty.points > 0
+        ? `You currently have ${loyalty.points} TechTools reward points and ${loyalty.pointsToNextTier} points to ${loyalty.nextTier}.`
+        : 'Your first purchase starts your TechTools rewards balance immediately.',
+    ]
+
+    const quickActions = [
+      {
+        type: 'video_support',
+        label: 'Request video support',
+        description:
+          'For complex installs, diagnostics, or premium product walkthroughs.',
+        href: buildSupportRequestLink(
+          'technical',
+          recentOrder
+            ? `I need a video support session for order ${recentOrder.order_number}.`
+            : 'I need a video support session for a product question.',
+        ),
+      },
+      {
+        type: 'appointment_booking',
+        label: 'Book expert appointment',
+        description: 'Reserve a guided shopping or post-purchase support slot.',
+        href: buildSupportRequestLink(
+          'product',
+          'I want to book an appointment with a TechTools product specialist.',
+        ),
+      },
+      {
+        type: 'cobrowsing',
+        label: 'Request co-browsing help',
+        description:
+          'Ask an agent to guide you through checkout, setup, or troubleshooting.',
+        href: buildSupportRequestLink(
+          'technical',
+          'I want a co-browsing support session so an agent can guide me live.',
+        ),
+      },
+      {
+        type: 'track_order',
+        label: 'Track my order',
+        description: 'Open the order tracking view instantly.',
+        href: '/track-order',
+      },
+    ]
+
+    res.json({
+      success: true,
+      data: {
+        customer: {
+          id: user.id,
+          email: user.email,
+          firstName: user.first_name,
+          lastName: user.last_name,
+          fullName: `${user.first_name} ${user.last_name}`.trim(),
+          joinedAt: user.created_at,
+          isVerified: !!user.email_verified,
+        },
+        orderSummary: {
+          totalOrders,
+          totalSpent,
+          activeOrders: Number(orderSummary.active_orders || 0),
+          averageOrderValue: totalOrders > 0 ? totalSpent / totalOrders : 0,
+          lastOrderAt: orderSummary.last_order_at,
+        },
+        recentOrder,
+        loyalty,
+        verifiedReviews: reviewsResult.rows.map((review) => ({
+          id: review.id,
+          productId: review.product_id,
+          productName: review.product_name,
+          productSlug: review.product_slug,
+          rating: review.rating,
+          title: review.title,
+          comment: review.comment,
+          isVerifiedPurchase: review.is_verified_purchase,
+          createdAt: review.created_at,
+        })),
+        recommendations: recommendationResult.rows.map((item) => ({
+          id: item.id,
+          name: item.name,
+          slug: item.slug,
+          price: Number(item.sale_price || item.base_price || 0),
+          primaryImage: item.primary_image,
+          categoryName: item.category_name,
+          reason: item.category_name
+            ? `Recommended from your ${item.category_name} shopping pattern`
+            : 'Featured by TechTools concierge',
+        })),
+        smartSuggestions,
+        quickActions,
+      },
+    })
+  } catch (error) {
+    logger.error('Get support profile error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get support profile',
     })
   }
 }

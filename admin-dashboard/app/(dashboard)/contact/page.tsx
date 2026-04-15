@@ -175,6 +175,7 @@ export default function ContactMessagesPage() {
   const [replyDialogOpen, setReplyDialogOpen] = useState(false)
   const [replyContent, setReplyContent] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState('Custom')
+  const [isSendingReply, setIsSendingReply] = useState(false)
 
   // Fetch contact submissions
   const { data, isLoading, error, refetch } = useQuery({
@@ -283,6 +284,38 @@ TechTools Support Team`
   // Open in Hostinger Webmail
   const openHostingerWebmail = () => {
     window.open('https://mail.hostinger.com', '_blank')
+  }
+
+  const sendReply = async () => {
+    if (!selectedMessage || !replyContent.trim()) {
+      toast.error('Reply content is required')
+      return
+    }
+
+    try {
+      setIsSendingReply(true)
+      const response = await contactService.replyToSubmission(
+        selectedMessage.id,
+        {
+          body: replyContent.trim(),
+          subject: `Re: ${selectedMessage.subject} - ${
+            selectedMessage.metadata?.ticketNumber || ''
+          }`,
+        },
+      )
+
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to send reply')
+      }
+
+      toast.success('Reply sent successfully')
+      setReplyDialogOpen(false)
+      await refetch()
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to send reply')
+    } finally {
+      setIsSendingReply(false)
+    }
   }
 
   // Export to CSV
@@ -798,15 +831,20 @@ TechTools Support Team`
               {/* Send Options */}
               <div className='rounded-lg border border-blue-200 bg-blue-50 p-3'>
                 <p className='text-sm text-blue-800'>
-                  <strong>Send:</strong> Copy your reply and open Hostinger or
-                  your email app to send.
+                  <strong>Send from dashboard:</strong> This reply will be sent
+                  through your configured TechTools support mailbox and logged
+                  against the customer inquiry.
                 </p>
               </div>
             </div>
           )}
 
           <DialogFooter className='flex flex-wrap gap-2 justify-end'>
-            <Button variant='outline' onClick={() => setReplyDialogOpen(false)}>
+            <Button
+              variant='outline'
+              onClick={() => setReplyDialogOpen(false)}
+              disabled={isSendingReply}
+            >
               Cancel
             </Button>
             <Button
@@ -830,19 +868,14 @@ TechTools Support Team`
                   toast.success('Reply copied! Paste it in Hostinger')
                 }
               }}
+              disabled={isSendingReply}
             >
               <ExternalLink className='mr-2 h-4 w-4' />
               Hostinger
             </Button>
-            <Button
-              onClick={() => {
-                if (selectedMessage) {
-                  window.location.href = getReplyMailtoLink(selectedMessage)
-                }
-              }}
-            >
+            <Button onClick={sendReply} disabled={isSendingReply}>
               <Send className='mr-2 h-4 w-4' />
-              Email App
+              {isSendingReply ? 'Sending...' : 'Send Reply'}
             </Button>
           </DialogFooter>
         </DialogContent>

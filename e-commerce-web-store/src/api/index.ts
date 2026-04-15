@@ -16,6 +16,7 @@ import type {
   Review,
   ApiResponse,
   Pagination,
+  SupportProfile,
 } from '../types'
 
 // API Configuration
@@ -1026,6 +1027,20 @@ export const newsletterApi = {
       message: string
     }>('/newsletter/unsubscribe', { email })
     return response.data
+  },
+}
+
+// ============================================
+// Support API
+// ============================================
+export const supportApi = {
+  async getProfile() {
+    const response = await api.get<{
+      success: boolean
+      data: SupportProfile
+    }>('/contact/support/profile')
+
+    return response.data.data
   },
 }
 

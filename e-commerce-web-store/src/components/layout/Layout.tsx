@@ -3,15 +3,25 @@
 // ============================================
 
 import { Outlet } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import Header from './Header'
 import Footer from './Footer'
 import { DriftChat } from './DriftChat'
+import { SupportConcierge } from './SupportConcierge'
 import { useEffect } from 'react'
 import { useAuthStore } from '../../stores'
+import { supportApi } from '../../api'
 import { NotificationToast } from '../notifications/NotificationToast'
 
 export default function Layout() {
-  const { fetchUser } = useAuthStore()
+  const { fetchUser, user, isAuthenticated, hasHydrated } = useAuthStore()
+
+  const { data: supportProfile } = useQuery({
+    queryKey: ['support-profile', user?.id],
+    queryFn: () => supportApi.getProfile(),
+    enabled: hasHydrated && isAuthenticated,
+    retry: false,
+  })
 
   // Fetch user on app load
   useEffect(() => {
@@ -26,7 +36,8 @@ export default function Layout() {
       </main>
       <Footer />
       <NotificationToast />
-      <DriftChat />
+      <SupportConcierge user={user} supportProfile={supportProfile || null} />
+      <DriftChat supportProfile={supportProfile || null} />
     </div>
   )
 }

@@ -10,6 +10,7 @@ export function DriftChat() {
   useEffect(() => {
     // Get Tawk.to Site ID from environment variable
     const tawkSiteId = process.env.NEXT_PUBLIC_TAWK_SITE_ID
+    const tawkWidgetId = process.env.NEXT_PUBLIC_TAWK_WIDGET_ID || '1jm6uk6rp'
 
     // Skip if no Tawk Site ID configured
     if (!tawkSiteId || tawkSiteId === 'YOUR_TAWK_SITE_ID') {
@@ -27,7 +28,7 @@ export function DriftChat() {
     // Load Tawk.to script
     const script = document.createElement('script')
     script.async = true
-    script.src = `https://embed.tawk.to/${tawkSiteId}/1jm6uk6rp`
+    script.src = `https://embed.tawk.to/${tawkSiteId}/${tawkWidgetId}`
     script.charset = 'UTF-8'
     script.setAttribute('crossorigin', '*')
     script.onerror = () => {

@@ -1,5 +1,10 @@
 import { Router } from 'express'
-import { submitContactForm, getContactSubmissions } from './contact.controller'
+import {
+  submitContactForm,
+  getContactSubmissions,
+  getSupportProfile,
+  replyToContactSubmission,
+} from './contact.controller'
 import { authenticate, authorize } from '../../../middleware/auth'
 import rateLimit from 'express-rate-limit'
 
@@ -40,6 +45,15 @@ router.get(
   authenticate,
   authorize('admin', 'super_admin'),
   getContactSubmissions,
+)
+
+router.get('/support/profile', authenticate, getSupportProfile)
+
+router.post(
+  '/submissions/:id/reply',
+  authenticate,
+  authorize('admin', 'super_admin'),
+  replyToContactSubmission,
 )
 
 export default router

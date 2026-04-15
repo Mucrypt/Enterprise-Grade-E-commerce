@@ -114,6 +114,19 @@ class ContactService {
       responseType: 'blob',
     })
   }
+
+  /**
+   * Send an admin reply to a submission
+   */
+  async replyToSubmission(
+    id: string,
+    data: { body: string; subject?: string },
+  ): Promise<ApiResponse<{ message: string }>> {
+    return apiClient.post<ApiResponse<{ message: string }>>(
+      `${this.baseUrl}/submissions/${id}/reply`,
+      data,
+    )
+  }
 }
 
 const contactService = new ContactService()

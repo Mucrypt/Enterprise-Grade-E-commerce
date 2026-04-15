@@ -2,8 +2,9 @@
 // Contact Us Page - Production Ready
 // ============================================
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import axios from 'axios'
+import { useSearchParams } from 'react-router-dom'
 import {
   Mail,
   Phone,
@@ -105,6 +106,7 @@ const officeLocations = [
 ]
 
 export default function ContactPage() {
+  const [searchParams] = useSearchParams()
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -118,6 +120,23 @@ export default function ContactPage() {
   const [ticketNumber, setTicketNumber] = useState('')
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    const subject = searchParams.get('subject') || ''
+    const orderNumber = searchParams.get('orderNumber') || ''
+    const message = searchParams.get('message') || ''
+
+    if (!subject && !orderNumber && !message) {
+      return
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      subject: subject || prev.subject,
+      orderNumber: orderNumber || prev.orderNumber,
+      message: message || prev.message,
+    }))
+  }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
