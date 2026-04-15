@@ -76,7 +76,7 @@ export function SupportConcierge({
   return (
     <div className='fixed bottom-6 left-6 z-40 max-w-sm'>
       {isOpen ? (
-        <div className='w-[22rem] overflow-hidden rounded-3xl border border-orange-200 bg-white shadow-2xl'>
+        <div className='w-88 overflow-hidden rounded-3xl border border-orange-200 bg-white shadow-2xl'>
           <div className='bg-linear-to-br from-orange-500 via-orange-600 to-amber-500 px-5 py-4 text-white'>
             <div className='flex items-start justify-between gap-3'>
               <div>
@@ -322,13 +322,4 @@ export function SupportConcierge({
       )}
     </div>
   )
-}
-
-declare global {
-  interface Window {
-    Tawk_API?: {
-      maximize?: () => void
-      [key: string]: unknown
-    }
-  }
 }
