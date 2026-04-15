@@ -100,12 +100,14 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
         NEXT_PUBLIC_MEDIA_URL: ${NEXT_PUBLIC_MEDIA_URL}
         NEXT_PUBLIC_BASE_PATH: ${NEXT_PUBLIC_BASE_PATH:-/admin}
+        NEXT_PUBLIC_TAWK_SITE_ID: ${NEXT_PUBLIC_TAWK_SITE_ID}
     container_name: techtools-admin-dashboard-prod
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
       NEXT_PUBLIC_MEDIA_URL: ${NEXT_PUBLIC_MEDIA_URL}
       NEXT_PUBLIC_BASE_PATH: ${NEXT_PUBLIC_BASE_PATH:-/admin}
+      NEXT_PUBLIC_TAWK_SITE_ID: ${NEXT_PUBLIC_TAWK_SITE_ID}
       API_INTERNAL_URL: http://api:9000/api/v1
     networks:
       - techtools-prod-network
@@ -139,11 +141,13 @@ services:
       args:
         VITE_API_URL: ${VITE_API_URL}
         VITE_MEDIA_URL: ${VITE_MEDIA_URL}
+        VITE_TAWK_SITE_ID: ${VITE_TAWK_SITE_ID}
     container_name: techtools-web-store-prod
     environment:
       NODE_ENV: production
       VITE_API_URL: ${VITE_API_URL}
       VITE_MEDIA_URL: ${VITE_MEDIA_URL}
+      VITE_TAWK_SITE_ID: ${VITE_TAWK_SITE_ID}
     networks:
       - techtools-prod-network
     depends_on:

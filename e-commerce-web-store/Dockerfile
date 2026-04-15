@@ -17,6 +17,7 @@ WORKDIR /app
 
 ARG VITE_API_URL
 ARG VITE_MEDIA_URL
+ARG VITE_TAWK_SITE_ID
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -27,6 +28,7 @@ ENV VITE_TELEMETRY_DISABLED=1
 # Vite injects these at build time
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_MEDIA_URL=$VITE_MEDIA_URL
+ENV VITE_TAWK_SITE_ID=$VITE_TAWK_SITE_ID
 
 RUN npm run build
 
