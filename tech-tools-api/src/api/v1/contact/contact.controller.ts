@@ -1,33 +1,8 @@
 import { Request, Response } from 'express'
-import nodemailer from 'nodemailer'
 import logger from '../../../utils/logger'
 import { query } from '../../../database/connection'
 import type { AuthRequest } from '../../../middleware/auth'
 import emailService from '../../../services/email.service'
-
-// Create email transporter
-const createTransporter = () => {
-  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-    return null
-  }
-
-  const port = parseInt(process.env.SMTP_PORT || '465')
-  // Port 465 uses implicit TLS (secure: true)
-  // Port 587 uses STARTTLS (secure: false)
-  const secure = process.env.SMTP_SECURE
-    ? process.env.SMTP_SECURE === 'true'
-    : port === 465
-
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.hostinger.com',
-    port,
-    secure,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  })
-}
 
 // Contact form submission types
 interface ContactFormData {
@@ -168,6 +143,60 @@ const buildReplyEmailHtml = (recipientName: string, body: string) => {
 </body>
 </html>`
 }
+
+const buildContactAdminAlertHtml = (data: {
+  ticketNumber: string
+  name: string
+  email: string
+  phone?: string
+  subjectLabel: string
+  orderNumber?: string
+  message: string
+}) => `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New Support Request</title>
+</head>
+<body style="margin:0;padding:0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f8fafc;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;margin:0 auto;background:#ffffff;">
+    <tr>
+      <td style="background:linear-gradient(135deg,#f97316 0%,#ea580c 100%);padding:32px 40px;color:#ffffff;">
+        <h1 style="margin:0;font-size:24px;font-weight:700;">New Contact Request</h1>
+        <p style="margin:8px 0 0;font-size:14px;color:rgba(255,255,255,0.9);">Ticket ${
+          data.ticketNumber
+        }</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:32px 40px;">
+        <p style="margin:0 0 10px;color:#0f172a;font-size:14px;"><strong>Name:</strong> ${escapeHtml(
+          data.name,
+        )}</p>
+        <p style="margin:0 0 10px;color:#0f172a;font-size:14px;"><strong>Email:</strong> ${escapeHtml(
+          data.email,
+        )}</p>
+        <p style="margin:0 0 10px;color:#0f172a;font-size:14px;"><strong>Phone:</strong> ${escapeHtml(
+          data.phone || 'Not provided',
+        )}</p>
+        <p style="margin:0 0 10px;color:#0f172a;font-size:14px;"><strong>Subject:</strong> ${escapeHtml(
+          data.subjectLabel,
+        )}</p>
+        <p style="margin:0 0 18px;color:#0f172a;font-size:14px;"><strong>Order Number:</strong> ${escapeHtml(
+          data.orderNumber || 'Not provided',
+        )}</p>
+        <div style="background:#fff7ed;border-left:4px solid #f97316;padding:18px;border-radius:0 10px 10px 0;">
+          <p style="margin:0;color:#334155;font-size:14px;line-height:1.8;white-space:pre-wrap;">${escapeHtml(
+            data.message,
+          )}</p>
+        </div>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
 
 /**
  * Submit contact form
@@ -403,12 +432,9 @@ export const submitContactForm = async (req: Request, res: Response) => {
 </html>
 `
 
-    // Ensure transporter is ready
-    const emailTransporter = createTransporter()
-
-    if (!emailTransporter) {
+    if (!emailService.isConfigured()) {
       logger.warn(
-        'Email transporter not configured. Contact form received but emails not sent.',
+        'Email service not configured. Contact form received but emails not sent.',
       )
 
       // Still log the contact submission
@@ -431,34 +457,44 @@ export const submitContactForm = async (req: Request, res: Response) => {
       })
     }
 
-    // Try to send emails (but don't fail the request if emails fail)
     let emailsSent = false
     try {
-      // Send email to support team
-      await emailTransporter.sendMail({
-        from: `"TechTools Contact Form" <${
-          process.env.SMTP_USER || 'noreply@techtoolstore.com'
-        }>`,
+      const teamEmailResult = await emailService.sendEmail({
         to: recipientEmail,
         replyTo: email,
         subject: `[${subjectLabel}] New Contact Form - ${ticketNumber}`,
         html: supportEmailHtml,
+        text: message,
+        emailType: 'custom',
       })
 
-      logger.info(`Contact form email sent to support: ${recipientEmail}`)
+      const adminAlertResult = await emailService.sendAdminNotification({
+        subject: `Support request ${ticketNumber}: ${subjectLabel}`,
+        html: buildContactAdminAlertHtml({
+          ticketNumber,
+          name,
+          email,
+          phone,
+          subjectLabel,
+          orderNumber,
+          message,
+        }),
+        text: message,
+        replyTo: email,
+        emailType: 'custom',
+      })
 
-      // Send confirmation email to customer
-      await emailTransporter.sendMail({
-        from: `"TechTools" <${
-          process.env.SMTP_USER || 'noreply@techtoolstore.com'
-        }>`,
+      const customerEmailResult = await emailService.sendEmail({
         to: email,
         subject: `We received your message - Ticket #${ticketNumber}`,
         html: customerEmailHtml,
+        emailType: 'custom',
       })
 
-      logger.info(`Contact form confirmation sent to customer: ${email}`)
-      emailsSent = true
+      emailsSent =
+        teamEmailResult.success ||
+        customerEmailResult.success ||
+        adminAlertResult.success
     } catch (emailError) {
       logger.warn(
         'Failed to send contact form emails, but submission was saved:',
@@ -508,26 +544,66 @@ async function logContactSubmission(data: {
   status: string
 }) {
   try {
-    // Log to email_messages table if it exists
-    await query(
-      `INSERT INTO email_messages (
-        email_type, recipient_email, recipient_name, subject, status, metadata, sent_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [
-        'contact_form',
-        data.email,
-        data.name,
-        data.subject,
-        data.status,
-        JSON.stringify({
-          ticketNumber: data.ticketNumber,
-          phone: data.phone,
-          orderNumber: data.orderNumber,
-          message: data.message,
-        }),
-        new Date(),
-      ],
-    )
+    const hasMetadata = await columnExists('email_messages', 'metadata')
+    const metadata = {
+      recordType: 'contact_form',
+      ticketNumber: data.ticketNumber,
+      phone: data.phone,
+      orderNumber: data.orderNumber,
+      message: data.message,
+    }
+
+    try {
+      if (hasMetadata) {
+        await query(
+          `INSERT INTO email_messages (
+            email_type, recipient_email, recipient_name, subject, status, metadata, sent_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            'contact_form',
+            data.email,
+            data.name,
+            data.subject,
+            data.status,
+            JSON.stringify(metadata),
+            new Date(),
+          ],
+        )
+      } else {
+        await query(
+          `INSERT INTO email_messages (
+            email_type, recipient_email, recipient_name, subject, status, sent_at
+          ) VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            'custom',
+            data.email,
+            data.name,
+            `[Contact] ${data.subject}`,
+            data.status,
+            new Date(),
+          ],
+        )
+      }
+    } catch (insertError) {
+      if (hasMetadata) {
+        await query(
+          `INSERT INTO email_messages (
+            email_type, recipient_email, recipient_name, subject, status, metadata, sent_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            'custom',
+            data.email,
+            data.name,
+            `[Contact] ${data.subject}`,
+            data.status,
+            JSON.stringify(metadata),
+            new Date(),
+          ],
+        )
+      } else {
+        throw insertError
+      }
+    }
   } catch (error) {
     // Table might not exist, just log and continue
     logger.warn('Could not log contact submission to database:', error)
@@ -542,17 +618,27 @@ export const getContactSubmissions = async (req: Request, res: Response) => {
   try {
     const { page = 1, limit = 20 } = req.query
     const offset = (Number(page) - 1) * Number(limit)
+    const hasMetadata = await columnExists('email_messages', 'metadata')
+    const contactWhereClause = hasMetadata
+      ? `email_type = 'contact_form'
+          OR (
+            email_type = 'custom'
+            AND metadata IS NOT NULL
+            AND metadata->>'recordType' = 'contact_form'
+          )`
+      : `email_type = 'contact_form' OR subject ILIKE '[Contact] %'`
 
     const result = await query(
       `SELECT * FROM email_messages 
-       WHERE email_type = 'contact_form' 
+       WHERE ${contactWhereClause}
        ORDER BY created_at DESC 
        LIMIT $1 OFFSET $2`,
       [limit, offset],
     )
 
     const countResult = await query(
-      `SELECT COUNT(*) FROM email_messages WHERE email_type = 'contact_form'`,
+      `SELECT COUNT(*) FROM email_messages
+       WHERE ${contactWhereClause}`,
     )
 
     res.json({
@@ -585,6 +671,7 @@ export const replyToContactSubmission = async (
   try {
     const { id } = req.params
     const { body, subject } = req.body as ReplySubmissionData
+    const hasMetadata = await columnExists('email_messages', 'metadata')
 
     if (!body?.trim()) {
       return res.status(400).json({
@@ -595,7 +682,17 @@ export const replyToContactSubmission = async (
 
     const submissionResult = await query(
       `SELECT * FROM email_messages
-       WHERE id = $1 AND email_type = 'contact_form'
+       WHERE id = $1
+         AND (${
+           hasMetadata
+             ? `email_type = 'contact_form'
+           OR (
+             email_type = 'custom'
+             AND metadata IS NOT NULL
+             AND metadata->>'recordType' = 'contact_form'
+           )`
+             : `email_type = 'contact_form' OR subject ILIKE '[Contact] %'`
+         })
        LIMIT 1`,
       [id],
     )
@@ -623,7 +720,7 @@ export const replyToContactSubmission = async (
       subject: replySubject,
       html: buildReplyEmailHtml(submission.recipient_name, body.trim()),
       text: body.trim(),
-      emailType: 'support_reply',
+      emailType: 'custom',
       replyTo: getRecipientEmail('technical'),
     })
 

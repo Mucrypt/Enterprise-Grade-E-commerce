@@ -4,6 +4,49 @@ import { query } from '../../../database/connection'
 import emailService from '../../../services/email.service'
 import logger from '../../../utils/logger'
 
+const buildNewsletterAdminAlertHtml = (data: {
+  email: string
+  name?: string | null
+  source: string
+  event: 'subscribed' | 'resubscribed'
+}) => `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Newsletter Activity</title>
+</head>
+<body style="margin:0;padding:0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f8fafc;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;margin:0 auto;background:#ffffff;">
+    <tr>
+      <td style="background:linear-gradient(135deg,#111827 0%,#f97316 100%);padding:28px 36px;color:#ffffff;">
+        <h1 style="margin:0;font-size:24px;font-weight:700;">Newsletter ${
+          data.event === 'subscribed' ? 'Subscription' : 'Reactivation'
+        }</h1>
+        <p style="margin:8px 0 0;font-size:14px;color:rgba(255,255,255,0.84);">A customer joined your mailing list.</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:32px 36px;">
+        <p style="margin:0 0 12px;color:#0f172a;font-size:14px;"><strong>Email:</strong> ${
+          data.email
+        }</p>
+        <p style="margin:0 0 12px;color:#0f172a;font-size:14px;"><strong>Name:</strong> ${
+          data.name || 'Not provided'
+        }</p>
+        <p style="margin:0 0 12px;color:#0f172a;font-size:14px;"><strong>Source:</strong> ${
+          data.source
+        }</p>
+        <p style="margin:0;color:#0f172a;font-size:14px;"><strong>Event:</strong> ${
+          data.event
+        }</p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
+
 // =====================================================
 // Public Endpoints
 // =====================================================
@@ -62,6 +105,17 @@ export const subscribe = async (req: Request, res: Response) => {
         [subscriber.id],
       )
 
+      await emailService.sendAdminNotification({
+        subject: `Newsletter reactivation: ${email.toLowerCase()}`,
+        html: buildNewsletterAdminAlertHtml({
+          email: email.toLowerCase(),
+          name: name || null,
+          source,
+          event: 'resubscribed',
+        }),
+        emailType: 'custom',
+      })
+
       return res.json({
         success: true,
         message: 'Welcome back! You have been resubscribed to our newsletter.',
@@ -76,6 +130,17 @@ export const subscribe = async (req: Request, res: Response) => {
        RETURNING id`,
       [email.toLowerCase(), name || null, source, ipAddress, userAgent],
     )
+
+    await emailService.sendAdminNotification({
+      subject: `New newsletter subscriber: ${email.toLowerCase()}`,
+      html: buildNewsletterAdminAlertHtml({
+        email: email.toLowerCase(),
+        name: name || null,
+        source,
+        event: 'subscribed',
+      }),
+      emailType: 'custom',
+    })
 
     // Send welcome email if enabled
     try {

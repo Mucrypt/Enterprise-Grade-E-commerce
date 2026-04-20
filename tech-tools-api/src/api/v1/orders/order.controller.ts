@@ -2,11 +2,60 @@ import { Response } from 'express'
 import { AuthRequest } from '../../../middleware/auth'
 import { query } from '../../../database/connection'
 import logger from '../../../utils/logger'
+import emailService from '../../../services/email.service'
 import { sendOrderConfirmationEmail, OrderDetails } from '../../../utils/email'
 import {
   sendOrderConfirmationWhatsApp,
   OrderDetails as WhatsAppOrderDetails,
 } from '../../../services/whatsapp.service'
+
+const buildOrderAdminAlertHtml = (data: {
+  orderNumber: string
+  customerName: string
+  customerEmail: string
+  grandTotal: number
+  itemCount: number
+}) => `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New Order Received</title>
+</head>
+<body style="margin:0;padding:0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f8fafc;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;margin:0 auto;background:#ffffff;">
+    <tr>
+      <td style="background:linear-gradient(135deg,#111827 0%,#f97316 100%);padding:32px 40px;color:#ffffff;">
+        <h1 style="margin:0;font-size:24px;font-weight:700;">New Order Received</h1>
+        <p style="margin:8px 0 0;font-size:14px;color:rgba(255,255,255,0.86);">Order ${
+          data.orderNumber
+        }</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:32px 40px;">
+        <p style="margin:0 0 10px;color:#0f172a;font-size:14px;"><strong>Customer:</strong> ${
+          data.customerName
+        }</p>
+        <p style="margin:0 0 10px;color:#0f172a;font-size:14px;"><strong>Email:</strong> ${
+          data.customerEmail
+        }</p>
+        <p style="margin:0 0 10px;color:#0f172a;font-size:14px;"><strong>Items:</strong> ${
+          data.itemCount
+        }</p>
+        <p style="margin:0 0 18px;color:#0f172a;font-size:14px;"><strong>Total:</strong> $${data.grandTotal.toFixed(
+          2,
+        )}</p>
+        <a href="${
+          process.env.ADMIN_DASHBOARD_URL ||
+          'https://techtoolstore.com/admin/dashboard'
+        }/orders" style="display:inline-block;background:#f97316;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:600;">Open orders dashboard</a>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
 
 // =====================================================
 // Admin Order Management
@@ -921,6 +970,18 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
         orderNumber: order.order_number,
         email: shippingAddress.email,
       })
+
+      await emailService.sendAdminNotification({
+        subject: `New order received: ${order.order_number}`,
+        html: buildOrderAdminAlertHtml({
+          orderNumber: order.order_number,
+          customerName: emailDetails.customerName,
+          customerEmail: shippingAddress.email,
+          grandTotal: grandTotal,
+          itemCount: orderItems.length,
+        }),
+        emailType: 'custom',
+      })
     } catch (emailError) {
       // Don't fail the order if email fails
       logger.error('Failed to send order confirmation email:', emailError)
@@ -1360,6 +1421,21 @@ export const createGuestOrder = async (req: any, res: Response) => {
           country: shippingAddress.country,
           phone: guestPhone,
         },
+      })
+
+      await emailService.sendAdminNotification({
+        subject: `New guest order received: ${order.order_number}`,
+        html: buildOrderAdminAlertHtml({
+          orderNumber: order.order_number,
+          customerName:
+            `${shippingAddress.firstName || ''} ${
+              shippingAddress.lastName || ''
+            }`.trim() || 'Valued Customer',
+          customerEmail: guestEmail,
+          grandTotal: grandTotal,
+          itemCount: orderItems.length,
+        }),
+        emailType: 'custom',
       })
     } catch (emailError) {
       logger.warn('Failed to send order confirmation email:', emailError)

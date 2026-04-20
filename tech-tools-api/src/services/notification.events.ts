@@ -31,7 +31,7 @@ export class NotificationEvents {
 
       // Notify all admins
       const adminResult = await dbQuery(
-        `SELECT id FROM users WHERE role IN ('admin', 'super_admin') LIMIT 10`,
+        `SELECT id FROM users WHERE user_type IN ('admin', 'super_admin') LIMIT 10`,
       )
 
       for (const admin of adminResult.rows) {
@@ -78,7 +78,7 @@ export class NotificationEvents {
 
       // Notify all admins
       const adminResult = await dbQuery(
-        `SELECT id FROM users WHERE role IN ('admin', 'super_admin') LIMIT 10`,
+        `SELECT id FROM users WHERE user_type IN ('admin', 'super_admin') LIMIT 10`,
       )
 
       for (const admin of adminResult.rows) {
@@ -220,7 +220,7 @@ export class NotificationEvents {
     try {
       // Notify all admins and sales team
       const adminResult = await dbQuery(
-        `SELECT id FROM users WHERE role IN ('admin', 'super_admin') LIMIT 10`,
+        `SELECT id FROM users WHERE user_type IN ('admin', 'super_admin') LIMIT 10`,
       )
 
       for (const admin of adminResult.rows) {
@@ -254,7 +254,7 @@ export class NotificationEvents {
     try {
       // Notify all admins
       const adminResult = await dbQuery(
-        `SELECT id FROM users WHERE role IN ('admin', 'super_admin') LIMIT 10`,
+        `SELECT id FROM users WHERE user_type IN ('admin', 'super_admin') LIMIT 10`,
       )
 
       for (const admin of adminResult.rows) {
@@ -309,7 +309,7 @@ export class NotificationEvents {
     try {
       // Notify admins
       const adminResult = await dbQuery(
-        `SELECT id FROM users WHERE role IN ('admin', 'super_admin') LIMIT 3`,
+        `SELECT id FROM users WHERE user_type IN ('admin', 'super_admin') LIMIT 3`,
       )
 
       for (const admin of adminResult.rows) {

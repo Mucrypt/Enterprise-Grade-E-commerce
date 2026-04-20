@@ -691,8 +691,10 @@ SMTP_USER=noreply@techtoolstore.com
 SMTP_PASS=your_email_password
 
 # Email Settings
-EMAIL_FROM=noreply@techtoolstore.com
-EMAIL_FROM_NAME=TechTools Store`}
+SMTP_FROM=noreply@techtoolstore.com
+EMAIL_FROM_NAME=TechTools Store
+ADMIN_NOTIFICATION_EMAILS=admin@techtoolstore.com
+ADMIN_DASHBOARD_URL=https://techtoolstore.com/admin/dashboard`}
               </pre>
             </div>
           )}

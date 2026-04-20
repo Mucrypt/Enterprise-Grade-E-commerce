@@ -1,30 +1,5 @@
-import nodemailer from 'nodemailer'
 import logger from './logger'
-
-// ============================================
-// Email Configuration
-// ============================================
-
-// Create reusable transporter
-const createTransporter = () => {
-  const port = parseInt(process.env.SMTP_PORT || '465')
-  // Port 465 uses implicit TLS (secure: true)
-  // Port 587 uses STARTTLS (secure: false)
-  const secure = process.env.SMTP_SECURE
-    ? process.env.SMTP_SECURE === 'true'
-    : port === 465
-
-  // Use environment variables for SMTP config
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.hostinger.com',
-    port,
-    secure,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  })
-}
+import emailService from '../services/email.service'
 
 // Company info for email templates
 const COMPANY_NAME = 'TechTools Store'
@@ -82,30 +57,17 @@ const sendEmail = async (
   to: string,
   subject: string,
   html: string,
+  emailType = 'custom',
 ): Promise<boolean> => {
   try {
-    // Check if SMTP is configured
-    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-      logger.warn('SMTP not configured. Email not sent:', { to, subject })
-      return false
-    }
-
-    const transporter = createTransporter()
-
-    const mailOptions = {
-      from: `"${COMPANY_NAME}" <${COMPANY_EMAIL}>`,
+    const result = await emailService.sendEmail({
       to,
       subject,
       html,
-    }
-
-    const info = await transporter.sendMail(mailOptions)
-    logger.info('Email sent successfully:', {
-      to,
-      subject,
-      messageId: info.messageId,
+      emailType,
     })
-    return true
+
+    return result.success
   } catch (error) {
     logger.error('Failed to send email:', { to, subject, error })
     return false
@@ -141,6 +103,7 @@ export const sendVerificationEmail = async (
     email,
     `Verify Your Email - ${COMPANY_NAME}`,
     getBaseTemplate(content),
+    'verification',
   )
 }
 
@@ -169,6 +132,7 @@ export const sendPasswordResetEmail = async (
     email,
     `Reset Your Password - ${COMPANY_NAME}`,
     getBaseTemplate(content),
+    'password_reset',
   )
 }
 
@@ -329,6 +293,7 @@ export const sendOrderConfirmationEmail = async (
     email,
     `Order Confirmed #${orderDetails.orderNumber} - ${COMPANY_NAME}`,
     getBaseTemplate(content),
+    'order_confirmation',
   )
 }
 
@@ -356,6 +321,7 @@ export const sendWelcomeEmail = async (
     email,
     `Welcome to ${COMPANY_NAME}!`,
     getBaseTemplate(content),
+    'welcome',
   )
 }
 
@@ -390,6 +356,7 @@ export const sendAdminInvitationEmail = async (
     email,
     `You're Invited to ${COMPANY_NAME}`,
     getBaseTemplate(content),
+    'custom',
   )
 }
 
@@ -459,6 +426,7 @@ export const sendOrderStatusUpdateEmail = async (
       newStatus.charAt(0).toUpperCase() + newStatus.slice(1)
     }`,
     getBaseTemplate(content),
+    'order_status',
   )
 }
 

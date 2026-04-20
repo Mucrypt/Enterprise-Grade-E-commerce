@@ -30,6 +30,15 @@ export interface SendEmailOptions {
   fromAlias?: string // Use specific alias
 }
 
+export interface SendAdminNotificationOptions {
+  subject: string
+  html: string
+  text?: string
+  replyTo?: string
+  emailType?: string
+  fromAlias?: string
+}
+
 export interface EmailMessage {
   id: string
   order_id?: string
@@ -66,8 +75,24 @@ export interface EmailFilters {
 
 // Company info for email templates
 const COMPANY_NAME = process.env.EMAIL_FROM_NAME || 'TechTools Store'
-const COMPANY_EMAIL = process.env.SMTP_USER || 'noreply@techtoolstore.com'
+const COMPANY_EMAIL =
+  process.env.SMTP_FROM ||
+  process.env.EMAIL_FROM ||
+  process.env.SMTP_USER ||
+  'noreply@techtoolstore.com'
 const COMPANY_WEBSITE = process.env.FRONTEND_URL || 'https://techtoolstore.com'
+
+const BASE_EMAIL_TYPES = new Set([
+  'order_confirmation',
+  'order_status',
+  'shipping_update',
+  'delivery_confirmation',
+  'welcome',
+  'password_reset',
+  'verification',
+  'promotional',
+  'custom',
+])
 
 // ============================================
 // Email Service Class
@@ -94,9 +119,64 @@ class EmailService {
       secure,
       user: process.env.SMTP_USER || '',
       pass: process.env.SMTP_PASS || '',
-      fromEmail: process.env.SMTP_FROM || process.env.SMTP_USER || '',
+      fromEmail:
+        process.env.SMTP_FROM ||
+        process.env.EMAIL_FROM ||
+        process.env.SMTP_USER ||
+        '',
       fromName: process.env.EMAIL_FROM_NAME || COMPANY_NAME,
     }
+  }
+
+  private normalizeEmailType(emailType?: string) {
+    if (!emailType) {
+      return 'custom'
+    }
+
+    return BASE_EMAIL_TYPES.has(emailType) ? emailType : 'custom'
+  }
+
+  private parseRecipientList(value?: string | null) {
+    if (!value) {
+      return []
+    }
+
+    return value
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
+
+  async getAdminNotificationRecipients(): Promise<
+    Array<{ email: string; name?: string }>
+  > {
+    const envRecipients = this.parseRecipientList(
+      process.env.ADMIN_NOTIFICATION_EMAILS ||
+        process.env.ADMIN_EMAIL ||
+        process.env.PGADMIN_EMAIL ||
+        '',
+    )
+
+    if (envRecipients.length > 0) {
+      return [...new Set(envRecipients)].map((email) => ({ email }))
+    }
+
+    const adminResult = await query(
+      `SELECT email, first_name, last_name
+       FROM users
+       WHERE user_type IN ('admin', 'super_admin')
+         AND is_active = true
+         AND email IS NOT NULL
+       ORDER BY created_at ASC
+       LIMIT 20`,
+    )
+
+    return adminResult.rows
+      .map((row: any) => ({
+        email: row.email,
+        name: [row.first_name, row.last_name].filter(Boolean).join(' ').trim(),
+      }))
+      .filter((recipient) => recipient.email)
   }
 
   /**
@@ -145,7 +225,7 @@ class EmailService {
           options.subject,
           options.html,
           options.text || null,
-          options.emailType || 'custom',
+          this.normalizeEmailType(options.emailType),
           options.orderId || null,
           this.defaultConfig?.fromEmail,
           this.defaultConfig?.fromName,
@@ -248,6 +328,59 @@ class EmailService {
       }
 
       return { success: false, error: error.message }
+    }
+  }
+
+  async sendAdminNotification(
+    options: SendAdminNotificationOptions,
+  ): Promise<{
+    success: boolean
+    sent: number
+    failed: number
+    errors: string[]
+  }> {
+    const recipients = await this.getAdminNotificationRecipients()
+
+    if (recipients.length === 0) {
+      return {
+        success: false,
+        sent: 0,
+        failed: 1,
+        errors: ['No admin notification recipients configured'],
+      }
+    }
+
+    let sent = 0
+    let failed = 0
+    const errors: string[] = []
+
+    for (const recipient of recipients) {
+      const result = await this.sendEmail({
+        to: recipient.email,
+        toName: recipient.name,
+        subject: options.subject,
+        html: options.html,
+        text: options.text,
+        replyTo: options.replyTo,
+        emailType: options.emailType || 'custom',
+        fromAlias: options.fromAlias,
+      })
+
+      if (result.success) {
+        sent += 1
+      } else {
+        failed += 1
+        if (result.error) {
+          errors.push(`${recipient.email}: ${result.error}`)
+        }
+      }
+    }
+
+    return {
+      success: sent > 0,
+      sent,
+      failed,
+      errors,
     }
   }
 
