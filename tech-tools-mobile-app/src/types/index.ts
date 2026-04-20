@@ -225,6 +225,71 @@ export interface ApiResponse<T> {
   error?: string
 }
 
+export interface SupportQuickAction {
+  type: string
+  label: string
+  description: string
+  href: string
+}
+
+export interface SupportRecommendation {
+  id: string
+  name: string
+  slug: string
+  price: number
+  primaryImage: string | null
+  categoryName: string | null
+  reason: string
+}
+
+export interface SupportVerifiedReview {
+  id: string
+  productId: string
+  productName: string
+  productSlug: string
+  rating: number
+  title: string | null
+  comment: string | null
+  isVerifiedPurchase: boolean
+  createdAt: string
+}
+
+export interface SupportProfile {
+  customer: {
+    id: string
+    email: string
+    firstName: string
+    lastName: string
+    fullName: string
+    joinedAt: string
+    isVerified: boolean
+  }
+  orderSummary: {
+    totalOrders: number
+    totalSpent: number
+    activeOrders: number
+    averageOrderValue: number
+    lastOrderAt: string | null
+  }
+  recentOrder: {
+    id: string
+    order_number: string
+    status: string
+    total: number
+    created_at: string
+  } | null
+  loyalty: {
+    points: number
+    tier: string
+    nextTier: string
+    pointsToNextTier: number
+  }
+  verifiedReviews: SupportVerifiedReview[]
+  recommendations: SupportRecommendation[]
+  smartSuggestions: string[]
+  quickActions: SupportQuickAction[]
+}
+
 export interface FlashDeal {
   id: string
   product: Product

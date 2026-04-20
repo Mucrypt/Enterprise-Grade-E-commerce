@@ -2,17 +2,45 @@ import { useEffect, useRef } from 'react'
 import type { SupportProfile } from '../../types'
 
 interface DriftChatProps {
+  enabled?: boolean
   supportProfile?: SupportProfile | null
+}
+
+const TAWK_SCRIPT_ID = 'techtools-tawk-script'
+
+const removeTawkArtifacts = () => {
+  document.getElementById(TAWK_SCRIPT_ID)?.remove()
+  document
+    .querySelectorAll('iframe[src*="tawk.to"], iframe[title*="chat" i]')
+    .forEach((node) => node.remove())
+  document
+    .querySelectorAll('div[class*="tawk" i], div[id*="tawk" i]')
+    .forEach((node) => {
+      if (node.childElementCount > 0 || node.textContent?.includes('tawk')) {
+        node.remove()
+      }
+    })
+  delete window.Tawk_API
+  delete window.Tawk_LoadStart
 }
 
 /**
  * Tawk.to Live Chat Widget for React
  * Initializes Tawk.to chat for customer support in e-commerce store
  */
-export function DriftChat({ supportProfile }: DriftChatProps) {
+export function DriftChat({ enabled = false, supportProfile }: DriftChatProps) {
   const appliedProfileRef = useRef<string | null>(null)
 
   useEffect(() => {
+    if (!enabled) {
+      if (window.Tawk_API && typeof window.Tawk_API.hideWidget === 'function') {
+        window.Tawk_API.hideWidget()
+      }
+      removeTawkArtifacts()
+      appliedProfileRef.current = null
+      return
+    }
+
     // Get Tawk.to Site ID from environment variable
     const tawkSiteId = import.meta.env.VITE_TAWK_SITE_ID
     const tawkWidgetId = import.meta.env.VITE_TAWK_WIDGET_ID || '1jm6uk6rp'
@@ -32,6 +60,7 @@ export function DriftChat({ supportProfile }: DriftChatProps) {
 
     // Load Tawk.to script
     const script = document.createElement('script')
+    script.id = TAWK_SCRIPT_ID
     script.async = true
     script.src = `https://embed.tawk.to/${tawkSiteId}/${tawkWidgetId}`
     script.charset = 'UTF-8'
@@ -44,12 +73,14 @@ export function DriftChat({ supportProfile }: DriftChatProps) {
     document.body.appendChild(script)
 
     return () => {
-      // Cleanup is handled by Tawk
+      if (!enabled) {
+        removeTawkArtifacts()
+      }
     }
-  }, [])
+  }, [enabled])
 
   useEffect(() => {
-    if (!supportProfile || !window.Tawk_API) {
+    if (!enabled || !supportProfile || !window.Tawk_API) {
       return
     }
 
@@ -85,7 +116,7 @@ export function DriftChat({ supportProfile }: DriftChatProps) {
     } catch (error) {
       console.warn('Failed to apply Tawk customer context', error)
     }
-  }, [supportProfile])
+  }, [enabled, supportProfile])
 
   return null
 }
@@ -97,6 +128,7 @@ declare global {
       setAttributes?: (attributes: Record<string, string>) => void
       addTags?: (tags: string[]) => void
       maximize?: () => void
+      hideWidget?: () => void
       [key: string]: any
     }
     Tawk_LoadStart?: Date

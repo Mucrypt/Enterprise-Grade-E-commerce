@@ -12,7 +12,7 @@ import {
   Alert,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { useRouter } from 'expo-router'
+import { type Href, useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import {
@@ -109,6 +109,10 @@ export default function ProfileTabScreen() {
         },
       },
     ])
+  }
+
+  const openSmartSupport = () => {
+    router.push('/support' as Href)
   }
 
   // Guest View
@@ -278,6 +282,13 @@ export default function ProfileTabScreen() {
         </MenuSection>
 
         <MenuSection title='Support'>
+          <MenuItem
+            icon='sparkles-outline'
+            title='Smart Support'
+            subtitle='Open personalized live help from your profile'
+            onPress={openSmartSupport}
+            color={AppColors.primary}
+          />
           <MenuItem
             icon='help-circle-outline'
             title='Help Center'

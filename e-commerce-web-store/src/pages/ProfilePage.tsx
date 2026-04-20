@@ -3,6 +3,7 @@
 // ============================================
 
 import { useState, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   User,
@@ -22,6 +23,8 @@ import {
   Shield,
   Bell,
 } from 'lucide-react'
+import { supportApi } from '../api'
+import { SupportConcierge } from '../components/layout/SupportConcierge'
 import { useAuthStore } from '../stores'
 import { cn } from '../utils'
 
@@ -42,6 +45,13 @@ export default function ProfilePage() {
   const [isSaving, setIsSaving] = useState(false)
   const [success, setSuccess] = useState('')
   const [error, setError] = useState('')
+
+  const { data: supportProfile } = useQuery({
+    queryKey: ['support-profile', user?.id],
+    queryFn: () => supportApi.getProfile(),
+    enabled: hasHydrated && isAuthenticated,
+    retry: false,
+  })
 
   const [formData, setFormData] = useState({
     first_name: '',
@@ -515,6 +525,8 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
+      <SupportConcierge user={user} supportProfile={supportProfile || null} />
     </div>
   )
 }

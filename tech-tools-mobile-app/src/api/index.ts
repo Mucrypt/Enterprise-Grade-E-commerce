@@ -16,6 +16,7 @@ import {
   Order,
   Address,
   Review,
+  SupportProfile,
   ProductFilters,
   Pagination,
   ApiResponse,
@@ -204,6 +205,33 @@ export const authApi = {
   isAuthenticated: async (): Promise<boolean> => {
     const token = await getAccessToken()
     return !!token
+  },
+}
+
+export const supportApi = {
+  getProfile: async (): Promise<SupportProfile> => {
+    const response = await apiClient.get<ApiResponse<SupportProfile>>(
+      '/contact/support/profile',
+    )
+    return response.data.data
+  },
+}
+
+export const contactApi = {
+  submit: async (payload: {
+    name: string
+    email: string
+    phone?: string
+    subject: string
+    orderNumber?: string
+    message: string
+  }): Promise<{ message: string; ticketNumber: string }> => {
+    const response = await apiClient.post('/contact', payload)
+    const data = response.data.data || response.data
+    return {
+      message: data.message || response.data.message,
+      ticketNumber: data.ticketNumber || response.data.ticketNumber,
+    }
   },
 }
 
@@ -953,6 +981,7 @@ export const ordersApiNew = {
 // Combined API object for convenience
 export const api = {
   auth: authApi,
+  contact: contactApi,
   products: productsApi,
   categories: categoriesApi,
   brands: brandsApi,

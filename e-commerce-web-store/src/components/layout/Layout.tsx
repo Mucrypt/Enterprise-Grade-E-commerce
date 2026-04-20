@@ -7,7 +7,6 @@ import { useQuery } from '@tanstack/react-query'
 import Header from './Header'
 import Footer from './Footer'
 import { DriftChat } from './DriftChat'
-import { SupportConcierge } from './SupportConcierge'
 import { useEffect } from 'react'
 import { useAuthStore } from '../../stores'
 import { supportApi } from '../../api'
@@ -36,8 +35,10 @@ export default function Layout() {
       </main>
       <Footer />
       <NotificationToast />
-      <SupportConcierge user={user} supportProfile={supportProfile || null} />
-      <DriftChat supportProfile={supportProfile || null} />
+      <DriftChat
+        enabled={hasHydrated && isAuthenticated}
+        supportProfile={supportProfile || null}
+      />
     </div>
   )
 }

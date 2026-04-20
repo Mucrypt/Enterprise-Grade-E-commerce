@@ -109,6 +109,29 @@ const getLoyaltySnapshot = (totalSpent: number) => {
   }
 }
 
+const tableExists = async (tableName: string) => {
+  const result = await query(`SELECT to_regclass($1) as regclass`, [
+    `public.${tableName}`,
+  ])
+
+  return !!result.rows[0]?.regclass
+}
+
+const columnExists = async (tableName: string, columnName: string) => {
+  const result = await query(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = $1
+         AND column_name = $2
+     ) as exists`,
+    [tableName, columnName],
+  )
+
+  return Boolean(result.rows[0]?.exists)
+}
+
 const buildReplyEmailHtml = (recipientName: string, body: string) => {
   const escapedBody = escapeHtml(body).replace(/\n/g, '<br />')
 
@@ -652,6 +675,35 @@ export const getSupportProfile = async (req: AuthRequest, res: Response) => {
       })
     }
 
+    const [reviewsHasStatus, productMediaExists, productImagesExists] =
+      await Promise.all([
+        columnExists('reviews', 'status'),
+        tableExists('product_media'),
+        tableExists('product_images'),
+      ])
+
+    const reviewsApprovalClause = reviewsHasStatus
+      ? `r.status = 'approved'`
+      : `r.is_approved = true`
+
+    const primaryImageSelect = productMediaExists
+      ? `(
+           SELECT pm.url
+           FROM product_media pm
+           WHERE pm.product_id = p.id AND pm.is_primary = true
+           ORDER BY pm.position ASC NULLS LAST
+           LIMIT 1
+         )`
+      : productImagesExists
+      ? `(
+             SELECT pi.image_url
+             FROM product_images pi
+             WHERE pi.product_id = p.id AND pi.is_primary = true
+             ORDER BY pi.display_order ASC NULLS LAST
+             LIMIT 1
+           )`
+      : 'NULL'
+
     const [userResult, orderSummaryResult, recentOrderResult, reviewsResult] =
       await Promise.all([
         query(
@@ -662,15 +714,19 @@ export const getSupportProfile = async (req: AuthRequest, res: Response) => {
         query(
           `SELECT
              COUNT(*)::int as total_orders,
-             COALESCE(SUM(total), 0)::numeric as total_spent,
-             COUNT(*) FILTER (WHERE status IN ('pending', 'confirmed', 'processing', 'shipped'))::int as active_orders,
+             COALESCE(SUM(total_amount), 0)::numeric as total_spent,
+             COUNT(*) FILTER (WHERE order_status IN ('pending', 'confirmed', 'processing', 'ready_to_ship', 'shipped'))::int as active_orders,
              MAX(created_at) as last_order_at
            FROM orders
            WHERE user_id = $1`,
           [userId],
         ),
         query(
-          `SELECT id, order_number, status, total, created_at
+          `SELECT id,
+                  order_number,
+                  order_status as status,
+                  total_amount as total,
+                  created_at
            FROM orders
            WHERE user_id = $1
            ORDER BY created_at DESC
@@ -689,7 +745,7 @@ export const getSupportProfile = async (req: AuthRequest, res: Response) => {
                   r.created_at
            FROM reviews r
            JOIN products p ON p.id = r.product_id
-           WHERE r.user_id = $1 AND r.status = 'approved'
+           WHERE r.user_id = $1 AND ${reviewsApprovalClause}
            ORDER BY r.created_at DESC
            LIMIT 3`,
           [userId],
@@ -728,13 +784,7 @@ export const getSupportProfile = async (req: AuthRequest, res: Response) => {
               p.base_price,
               p.sale_price,
               c.name as category_name,
-              (
-                SELECT pm.url
-                FROM product_media pm
-                WHERE pm.product_id = p.id AND pm.is_primary = true
-                ORDER BY pm.position ASC NULLS LAST
-                LIMIT 1
-              ) as primary_image
+        ${primaryImageSelect} as primary_image
        FROM products p
        LEFT JOIN categories c ON c.id = p.category_id
        WHERE p.is_active = true
