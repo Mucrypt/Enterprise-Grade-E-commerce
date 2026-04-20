@@ -10,7 +10,16 @@ export interface EmailMessage {
   order_id?: string
   recipient_email: string
   recipient_name?: string
-  email_type: 'order_confirmation' | 'order_status' | 'shipping_update' | 'delivery_confirmation' | 'welcome' | 'password_reset' | 'verification' | 'promotional' | 'custom'
+  email_type:
+    | 'order_confirmation'
+    | 'order_status'
+    | 'shipping_update'
+    | 'delivery_confirmation'
+    | 'welcome'
+    | 'password_reset'
+    | 'verification'
+    | 'promotional'
+    | 'custom'
   subject: string
   body_html?: string
   body_text?: string
@@ -27,6 +36,7 @@ export interface EmailMessage {
   clicked_at?: string
   created_at: string
   updated_at: string
+  metadata?: Record<string, any>
   // Joined fields
   order_number?: string
   order_first_name?: string
@@ -88,6 +98,7 @@ export interface EmailFilters {
   search?: string
   startDate?: string
   endDate?: string
+  includeInternal?: boolean
 }
 
 export interface EmailMessagesResponse {
@@ -112,7 +123,9 @@ class EmailService {
   /**
    * Get email messages with filters
    */
-  async getMessages(filters: EmailFilters = {}): Promise<ApiResponse<EmailMessagesResponse>> {
+  async getMessages(
+    filters: EmailFilters = {},
+  ): Promise<ApiResponse<EmailMessagesResponse>> {
     const params = new URLSearchParams()
 
     if (filters.page) params.append('page', String(filters.page))
@@ -122,9 +135,11 @@ class EmailService {
     if (filters.search) params.append('search', filters.search)
     if (filters.startDate) params.append('startDate', filters.startDate)
     if (filters.endDate) params.append('endDate', filters.endDate)
+    if (filters.includeInternal !== undefined)
+      params.append('includeInternal', String(filters.includeInternal))
 
     return apiClient.get<ApiResponse<EmailMessagesResponse>>(
-      `/emails/messages?${params.toString()}`
+      `/emails/messages?${params.toString()}`,
     )
   }
 
@@ -132,7 +147,9 @@ class EmailService {
    * Get message statistics
    */
   async getStats(): Promise<ApiResponse<{ stats: EmailStats }>> {
-    return apiClient.get<ApiResponse<{ stats: EmailStats }>>('/emails/messages/stats')
+    return apiClient.get<ApiResponse<{ stats: EmailStats }>>(
+      '/emails/messages/stats',
+    )
   }
 
   /**
@@ -151,7 +168,10 @@ class EmailService {
     emailType?: string
     fromAlias?: string
   }): Promise<ApiResponse<{ messageId: string }>> {
-    return apiClient.post<ApiResponse<{ messageId: string }>>('/emails/messages/send', data)
+    return apiClient.post<ApiResponse<{ messageId: string }>>(
+      '/emails/messages/send',
+      data,
+    )
   }
 
   /**
@@ -164,14 +184,18 @@ class EmailService {
   /**
    * Get configuration status
    */
-  async getConfigStatus(): Promise<ApiResponse<{
-    isConfigured: boolean
-    provider: string
-  }>> {
-    return apiClient.get<ApiResponse<{
+  async getConfigStatus(): Promise<
+    ApiResponse<{
       isConfigured: boolean
       provider: string
-    }>>('/emails/config/status')
+    }>
+  > {
+    return apiClient.get<
+      ApiResponse<{
+        isConfigured: boolean
+        provider: string
+      }>
+    >('/emails/config/status')
   }
 
   // =====================================================
@@ -181,20 +205,26 @@ class EmailService {
   /**
    * Get email settings
    */
-  async getSettings(): Promise<ApiResponse<{
-    settings: EmailSettings
-    isConfigured: boolean
-  }>> {
-    return apiClient.get<ApiResponse<{
+  async getSettings(): Promise<
+    ApiResponse<{
       settings: EmailSettings
       isConfigured: boolean
-    }>>('/emails/settings')
+    }>
+  > {
+    return apiClient.get<
+      ApiResponse<{
+        settings: EmailSettings
+        isConfigured: boolean
+      }>
+    >('/emails/settings')
   }
 
   /**
    * Update email settings
    */
-  async updateSettings(settings: Record<string, string>): Promise<ApiResponse<void>> {
+  async updateSettings(
+    settings: Record<string, string>,
+  ): Promise<ApiResponse<void>> {
     return apiClient.put<ApiResponse<void>>('/emails/settings', { settings })
   }
 
@@ -206,7 +236,9 @@ class EmailService {
    * Get all email aliases
    */
   async getAliases(): Promise<ApiResponse<{ aliases: EmailAlias[] }>> {
-    return apiClient.get<ApiResponse<{ aliases: EmailAlias[] }>>('/emails/aliases')
+    return apiClient.get<ApiResponse<{ aliases: EmailAlias[] }>>(
+      '/emails/aliases',
+    )
   }
 
   /**
@@ -223,7 +255,10 @@ class EmailService {
     smtpPass?: string
     isDefault?: boolean
   }): Promise<ApiResponse<{ alias: EmailAlias }>> {
-    return apiClient.post<ApiResponse<{ alias: EmailAlias }>>('/emails/aliases', data)
+    return apiClient.post<ApiResponse<{ alias: EmailAlias }>>(
+      '/emails/aliases',
+      data,
+    )
   }
 
   /**
@@ -241,9 +276,12 @@ class EmailService {
       smtpPass?: string
       isActive?: boolean
       isDefault?: boolean
-    }
+    },
   ): Promise<ApiResponse<{ alias: EmailAlias }>> {
-    return apiClient.put<ApiResponse<{ alias: EmailAlias }>>(`/emails/aliases/${id}`, data)
+    return apiClient.put<ApiResponse<{ alias: EmailAlias }>>(
+      `/emails/aliases/${id}`,
+      data,
+    )
   }
 
   /**
@@ -257,7 +295,9 @@ class EmailService {
    * Test an alias configuration
    */
   async testAlias(id: string, testEmail: string): Promise<ApiResponse<void>> {
-    return apiClient.post<ApiResponse<void>>(`/emails/aliases/${id}/test`, { testEmail })
+    return apiClient.post<ApiResponse<void>>(`/emails/aliases/${id}/test`, {
+      testEmail,
+    })
   }
 
   // =====================================================
@@ -268,7 +308,9 @@ class EmailService {
    * Get all templates
    */
   async getTemplates(): Promise<ApiResponse<{ templates: EmailTemplate[] }>> {
-    return apiClient.get<ApiResponse<{ templates: EmailTemplate[] }>>('/emails/templates')
+    return apiClient.get<ApiResponse<{ templates: EmailTemplate[] }>>(
+      '/emails/templates',
+    )
   }
 
   /**
@@ -282,7 +324,10 @@ class EmailService {
     bodyText?: string
     variables?: string[]
   }): Promise<ApiResponse<{ template: EmailTemplate }>> {
-    return apiClient.post<ApiResponse<{ template: EmailTemplate }>>('/emails/templates', data)
+    return apiClient.post<ApiResponse<{ template: EmailTemplate }>>(
+      '/emails/templates',
+      data,
+    )
   }
 
   /**
@@ -297,9 +342,12 @@ class EmailService {
       bodyText?: string
       variables?: string[]
       isActive?: boolean
-    }
+    },
   ): Promise<ApiResponse<{ template: EmailTemplate }>> {
-    return apiClient.put<ApiResponse<{ template: EmailTemplate }>>(`/emails/templates/${id}`, data)
+    return apiClient.put<ApiResponse<{ template: EmailTemplate }>>(
+      `/emails/templates/${id}`,
+      data,
+    )
   }
 
   /**

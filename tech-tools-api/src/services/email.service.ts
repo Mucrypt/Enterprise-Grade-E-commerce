@@ -28,6 +28,7 @@ export interface SendEmailOptions {
   orderId?: string
   emailType?: string
   fromAlias?: string // Use specific alias
+  metadata?: Record<string, any>
 }
 
 export interface SendAdminNotificationOptions {
@@ -71,6 +72,7 @@ export interface EmailFilters {
   search?: string
   startDate?: string
   endDate?: string
+  includeInternal?: boolean
 }
 
 // Company info for email templates
@@ -100,6 +102,14 @@ const BASE_EMAIL_TYPES = new Set([
 
 class EmailService {
   private defaultConfig: EmailConfig | null = null
+  private metadataColumnSupported: boolean | null = null
+
+  private readonly internalDepartmentEmails = [
+    'support@techtoolstore.com',
+    'orders@techtoolstore.com',
+    'returns@techtoolstore.com',
+    'billing@techtoolstore.com',
+  ]
 
   constructor() {
     this.loadConfig()
@@ -144,6 +154,42 @@ class EmailService {
     return value
       .split(',')
       .map((item) => item.trim())
+      .filter(Boolean)
+  }
+
+  private async supportsMessageMetadata() {
+    if (this.metadataColumnSupported !== null) {
+      return this.metadataColumnSupported
+    }
+
+    const result = await query(
+      `SELECT EXISTS (
+         SELECT 1
+         FROM information_schema.columns
+         WHERE table_schema = 'public'
+           AND table_name = 'email_messages'
+           AND column_name = 'metadata'
+       ) as exists`,
+    )
+
+    this.metadataColumnSupported = Boolean(result.rows[0]?.exists)
+    return this.metadataColumnSupported
+  }
+
+  private async getInternalRecipientEmails() {
+    const adminRecipients = await this.getAdminNotificationRecipients()
+    const envRecipients = this.parseRecipientList(
+      process.env.INTERNAL_NOTIFICATION_EMAILS || '',
+    )
+
+    return [
+      ...new Set([
+        ...adminRecipients.map((recipient) => recipient.email),
+        ...envRecipients,
+        ...this.internalDepartmentEmails,
+      ]),
+    ]
+      .map((email) => email.toLowerCase())
       .filter(Boolean)
   }
 
@@ -213,27 +259,52 @@ class EmailService {
     let logId: string | null = null
 
     try {
+      const hasMetadata = await this.supportsMessageMetadata()
+      const metadata = options.metadata || null
+
       // Log to database first
-      const logResult = await query(
-        `INSERT INTO email_messages 
-         (recipient_email, recipient_name, subject, body_html, body_text, email_type, order_id, from_email, from_name, reply_to, cc, bcc, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'pending')
-         RETURNING id`,
-        [
-          options.to,
-          options.toName || null,
-          options.subject,
-          options.html,
-          options.text || null,
-          this.normalizeEmailType(options.emailType),
-          options.orderId || null,
-          this.defaultConfig?.fromEmail,
-          this.defaultConfig?.fromName,
-          options.replyTo || null,
-          options.cc || null,
-          options.bcc || null,
-        ],
-      )
+      const logResult = hasMetadata
+        ? await query(
+            `INSERT INTO email_messages 
+             (recipient_email, recipient_name, subject, body_html, body_text, email_type, order_id, from_email, from_name, reply_to, cc, bcc, metadata, status)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'pending')
+             RETURNING id`,
+            [
+              options.to,
+              options.toName || null,
+              options.subject,
+              options.html,
+              options.text || null,
+              this.normalizeEmailType(options.emailType),
+              options.orderId || null,
+              this.defaultConfig?.fromEmail,
+              this.defaultConfig?.fromName,
+              options.replyTo || null,
+              options.cc || null,
+              options.bcc || null,
+              metadata ? JSON.stringify(metadata) : null,
+            ],
+          )
+        : await query(
+            `INSERT INTO email_messages 
+             (recipient_email, recipient_name, subject, body_html, body_text, email_type, order_id, from_email, from_name, reply_to, cc, bcc, status)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'pending')
+             RETURNING id`,
+            [
+              options.to,
+              options.toName || null,
+              options.subject,
+              options.html,
+              options.text || null,
+              this.normalizeEmailType(options.emailType),
+              options.orderId || null,
+              this.defaultConfig?.fromEmail,
+              this.defaultConfig?.fromName,
+              options.replyTo || null,
+              options.cc || null,
+              options.bcc || null,
+            ],
+          )
 
       logId = logResult.rows[0]?.id
 
@@ -331,9 +402,7 @@ class EmailService {
     }
   }
 
-  async sendAdminNotification(
-    options: SendAdminNotificationOptions,
-  ): Promise<{
+  async sendAdminNotification(options: SendAdminNotificationOptions): Promise<{
     success: boolean
     sent: number
     failed: number
@@ -364,6 +433,10 @@ class EmailService {
         replyTo: options.replyTo,
         emailType: options.emailType || 'custom',
         fromAlias: options.fromAlias,
+        metadata: {
+          audience: 'internal',
+          channel: 'admin_notification',
+        },
       })
 
       if (result.success) {
@@ -401,12 +474,34 @@ class EmailService {
       search,
       startDate,
       endDate,
+      includeInternal = false,
     } = filters
     const offset = (page - 1) * limit
+    const hasMetadata = await this.supportsMessageMetadata()
+    const internalRecipients = includeInternal
+      ? []
+      : await this.getInternalRecipientEmails()
 
     let whereClause = 'WHERE 1=1'
     const params: any[] = []
     let paramIndex = 1
+
+    if (!includeInternal) {
+      if (hasMetadata) {
+        whereClause += ` AND COALESCE(metadata->>'audience', 'customer') <> $${paramIndex++}`
+        params.push('internal')
+      }
+
+      if (internalRecipients.length > 0) {
+        const recipientPlaceholders = internalRecipients.map(
+          () => `$${paramIndex++}`,
+        )
+        whereClause += ` AND LOWER(recipient_email) NOT IN (${recipientPlaceholders.join(
+          ', ',
+        )})`
+        params.push(...internalRecipients)
+      }
+    }
 
     if (status) {
       whereClause += ` AND status = $${paramIndex++}`
@@ -477,7 +572,29 @@ class EmailService {
     weekCount: number
     byType: Record<string, number>
   }> {
-    const result = await query(`
+    const hasMetadata = await this.supportsMessageMetadata()
+    const internalRecipients = await this.getInternalRecipientEmails()
+    const statsParams: any[] = []
+    let statsWhereClause = 'WHERE 1=1'
+
+    if (hasMetadata) {
+      statsWhereClause += ` AND COALESCE(metadata->>'audience', 'customer') <> $1`
+      statsParams.push('internal')
+    }
+
+    if (internalRecipients.length > 0) {
+      const offset = statsParams.length + 1
+      const placeholders = internalRecipients.map(
+        (_, index) => `$${offset + index}`,
+      )
+      statsWhereClause += ` AND LOWER(recipient_email) NOT IN (${placeholders.join(
+        ', ',
+      )})`
+      statsParams.push(...internalRecipients)
+    }
+
+    const result = await query(
+      `
       SELECT 
         COUNT(*) as total,
         COUNT(*) FILTER (WHERE status = 'sent') as sent,
@@ -487,13 +604,20 @@ class EmailService {
         COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE) as today_count,
         COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE - INTERVAL '7 days') as week_count
       FROM email_messages
-    `)
+      ${statsWhereClause}
+    `,
+      statsParams,
+    )
 
-    const typeResult = await query(`
+    const typeResult = await query(
+      `
       SELECT email_type, COUNT(*) as count
       FROM email_messages
+      ${statsWhereClause}
       GROUP BY email_type
-    `)
+    `,
+      statsParams,
+    )
 
     const byType: Record<string, number> = {}
     typeResult.rows.forEach((row: any) => {

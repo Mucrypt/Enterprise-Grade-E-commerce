@@ -2,6 +2,7 @@ import { Request, Response } from 'express'
 import { AuthRequest } from '../../../middleware/auth'
 import { query } from '../../../database/connection'
 import emailService from '../../../services/email.service'
+import NotificationEvents from '../../../services/notification.events'
 import logger from '../../../utils/logger'
 
 const buildNewsletterAdminAlertHtml = (data: {
@@ -116,6 +117,14 @@ export const subscribe = async (req: Request, res: Response) => {
         emailType: 'custom',
       })
 
+      await NotificationEvents.onNewsletterSubscription({
+        email: email.toLowerCase(),
+        name: name || null,
+        source,
+        event: 'resubscribed',
+        subscriberId: subscriber.id,
+      })
+
       return res.json({
         success: true,
         message: 'Welcome back! You have been resubscribed to our newsletter.',
@@ -140,6 +149,14 @@ export const subscribe = async (req: Request, res: Response) => {
         event: 'subscribed',
       }),
       emailType: 'custom',
+    })
+
+    await NotificationEvents.onNewsletterSubscription({
+      email: email.toLowerCase(),
+      name: name || null,
+      source,
+      event: 'subscribed',
+      subscriberId: result.rows[0].id,
     })
 
     // Send welcome email if enabled

@@ -20,6 +20,7 @@ export const getMessages = async (req: AuthRequest, res: Response) => {
       search,
       startDate,
       endDate,
+      includeInternal,
     } = req.query
 
     const result = await emailService.getMessages({
@@ -30,6 +31,7 @@ export const getMessages = async (req: AuthRequest, res: Response) => {
       search: search as string,
       startDate: startDate as string,
       endDate: endDate as string,
+      includeInternal: includeInternal === 'true',
     })
 
     res.json({

@@ -78,6 +78,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { orderService, Order, OrderFilters } from '@/services/order.service'
+import { useAuth } from '@/contexts/AuthContext'
 
 // Order status config with colors and icons
 const ORDER_STATUS_CONFIG: Record<
@@ -177,6 +178,7 @@ const DATE_PRESETS = [
 
 export default function OrdersPage() {
   const queryClient = useQueryClient()
+  const { isLoading: authLoading, isAuthenticated } = useAuth()
 
   // State
   const [searchQuery, setSearchQuery] = useState('')
@@ -282,12 +284,14 @@ export default function OrdersPage() {
   } = useQuery({
     queryKey: ['orders', filters],
     queryFn: () => orderService.getOrders(filters),
+    enabled: !authLoading && isAuthenticated,
   })
 
   // Fetch stats
   const { data: statsData } = useQuery({
     queryKey: ['orderStats'],
     queryFn: () => orderService.getStats(),
+    enabled: !authLoading && isAuthenticated,
   })
 
   const orders = ordersData?.data?.orders || []

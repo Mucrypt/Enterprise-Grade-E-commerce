@@ -90,10 +90,22 @@ export const getAdminNotifications = async (
 
     const unreadCount = await NotificationService.getUnreadCount(adminId, true)
 
+    const notifications = result.rows.map((row) => {
+      const data =
+        typeof row.data === 'string' ? JSON.parse(row.data) : row.data || {}
+
+      return {
+        ...row,
+        data,
+        actionUrl: data.actionUrl,
+        actionLabel: data.actionLabel,
+      }
+    })
+
     res.json({
       success: true,
       data: {
-        notifications: result.rows,
+        notifications,
         unreadCount,
         limit: parseInt(limit as string),
         offset: parseInt(offset as string),

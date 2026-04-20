@@ -10,6 +10,15 @@ import logger from '../utils/logger'
  */
 
 export class NotificationEvents {
+  private static getAdminAppBaseUrl() {
+    const configuredUrl =
+      process.env.ADMIN_APP_URL ||
+      process.env.ADMIN_DASHBOARD_URL?.replace(/\/dashboard\/?$/, '') ||
+      'https://techtoolstore.com/admin'
+
+    return configuredUrl.replace(/\/$/, '')
+  }
+
   /**
    * Trigger when a user signs up
    */
@@ -218,6 +227,8 @@ export class NotificationEvents {
    */
   static async onContactMessageReceived(contactData: any) {
     try {
+      const adminAppUrl = this.getAdminAppBaseUrl()
+
       // Notify all admins and sales team
       const adminResult = await dbQuery(
         `SELECT id FROM users WHERE user_type IN ('admin', 'super_admin') LIMIT 10`,
@@ -234,12 +245,60 @@ export class NotificationEvents {
             senderName: contactData.name,
             senderEmail: contactData.email,
             subject: contactData.subject,
+            ticketNumber: contactData.ticketNumber,
+            actionUrl: `${adminAppUrl}/contact`,
+            actionLabel: 'Open Contact Messages',
           },
           priority: 'high',
         })
       }
     } catch (error) {
       logger.error('Error in onContactMessageReceived:', error)
+    }
+  }
+
+  /**
+   * Trigger when a newsletter subscription event happens
+   */
+  static async onNewsletterSubscription(subscriptionData: {
+    email: string
+    name?: string | null
+    source: string
+    event: 'subscribed' | 'resubscribed'
+    subscriberId?: string
+  }) {
+    try {
+      const adminAppUrl = this.getAdminAppBaseUrl()
+      const adminResult = await dbQuery(
+        `SELECT id FROM users WHERE user_type IN ('admin', 'super_admin') LIMIT 10`,
+      )
+
+      for (const admin of adminResult.rows) {
+        await NotificationService.create({
+          adminId: admin.id,
+          type: 'newsletter_signup',
+          title:
+            subscriptionData.event === 'resubscribed'
+              ? 'Newsletter Subscriber Reactivated'
+              : 'New Newsletter Subscriber',
+          message:
+            subscriptionData.event === 'resubscribed'
+              ? `${subscriptionData.email} rejoined the newsletter from ${subscriptionData.source}`
+              : `${subscriptionData.email} subscribed to the newsletter from ${subscriptionData.source}`,
+          data: {
+            subscriberId: subscriptionData.subscriberId,
+            email: subscriptionData.email,
+            name: subscriptionData.name,
+            source: subscriptionData.source,
+            event: subscriptionData.event,
+            actionUrl: `${adminAppUrl}/newsletter`,
+            actionLabel: 'Open Newsletter',
+          },
+          priority: 'normal',
+        })
+      }
+    } catch (error) {
+      logger.error('Error in onNewsletterSubscription:', error)
     }
   }
 

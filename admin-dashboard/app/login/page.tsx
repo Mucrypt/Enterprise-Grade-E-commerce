@@ -71,6 +71,7 @@ export default function LoginPage() {
                 id='email'
                 type='email'
                 placeholder='admin@techtools.com'
+                autoComplete='email'
                 {...register('email')}
                 disabled={isLoading}
                 className='h-11'
@@ -87,6 +88,7 @@ export default function LoginPage() {
                   id='password'
                   type={showPassword ? 'text' : 'password'}
                   placeholder='••••••••'
+                  autoComplete='current-password'
                   {...register('password')}
                   disabled={isLoading}
                   className='h-11 pr-10'

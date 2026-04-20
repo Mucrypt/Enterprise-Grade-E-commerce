@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
 import apiClient from '@/lib/api-client'
+import { useAuth } from '@/contexts/AuthContext'
 
 export interface Notification {
   id: string
@@ -45,6 +46,7 @@ export function NotificationBell({
 }: NotificationBellProps) {
   const [isOpen, setIsOpen] = useState(false)
   const queryClient = useQueryClient()
+  const { isLoading: authLoading, isAuthenticated } = useAuth()
 
   const invalidateNotifications = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['admin-notifications'] })
@@ -64,6 +66,7 @@ export function NotificationBell({
         }
       }>('/notifications/admin/list?limit=10')
     },
+    enabled: !authLoading && isAuthenticated,
     retry: 1,
     refetchInterval: 30000, // Refetch every 30 seconds
   })

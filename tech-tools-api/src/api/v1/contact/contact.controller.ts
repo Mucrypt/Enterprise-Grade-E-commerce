@@ -3,6 +3,7 @@ import logger from '../../../utils/logger'
 import { query } from '../../../database/connection'
 import type { AuthRequest } from '../../../middleware/auth'
 import emailService from '../../../services/email.service'
+import NotificationEvents from '../../../services/notification.events'
 
 // Contact form submission types
 interface ContactFormData {
@@ -466,6 +467,12 @@ export const submitContactForm = async (req: Request, res: Response) => {
         html: supportEmailHtml,
         text: message,
         emailType: 'custom',
+        metadata: {
+          audience: 'internal',
+          channel: 'contact_team_alert',
+          ticketNumber,
+          subject,
+        },
       })
 
       const adminAlertResult = await emailService.sendAdminNotification({
@@ -495,11 +502,27 @@ export const submitContactForm = async (req: Request, res: Response) => {
         teamEmailResult.success ||
         customerEmailResult.success ||
         adminAlertResult.success
+
+      await NotificationEvents.onContactMessageReceived({
+        id: ticketNumber,
+        ticketNumber,
+        name,
+        email,
+        subject: subjectLabel,
+      })
     } catch (emailError) {
       logger.warn(
         'Failed to send contact form emails, but submission was saved:',
         emailError,
       )
+
+      await NotificationEvents.onContactMessageReceived({
+        id: ticketNumber,
+        ticketNumber,
+        name,
+        email,
+        subject: subjectLabel,
+      })
     }
 
     // Log the contact submission
