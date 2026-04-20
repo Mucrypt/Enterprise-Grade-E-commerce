@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bell, X, AlertCircle, ShoppingCart, Mail } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
+import { api } from '../../api'
 
 export interface Notification {
   id: string
@@ -29,11 +30,10 @@ export function NotificationBell() {
       const token = localStorage.getItem('auth_token')
       if (!token) return { data: { notifications: [], unreadCount: 0 } }
 
-      const response = await fetch('/api/v1/notifications?limit=10', {
+      const response = await api.get('/notifications?limit=10', {
         headers: { Authorization: `Bearer ${token}` },
       })
-      if (!response.ok) return { data: { notifications: [], unreadCount: 0 } }
-      return response.json()
+      return response.data
     },
     refetchInterval: 30000,
   })
@@ -43,8 +43,7 @@ export function NotificationBell() {
 
   const markAsRead = async (notificationId: string) => {
     try {
-      await fetch(`/api/v1/notifications/${notificationId}/read`, {
-        method: 'PUT',
+      await api.put(`/notifications/${notificationId}/read`, undefined, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
         },
@@ -57,8 +56,7 @@ export function NotificationBell() {
 
   const deleteNotification = async (notificationId: string) => {
     try {
-      await fetch(`/api/v1/notifications/${notificationId}`, {
-        method: 'DELETE',
+      await api.delete(`/notifications/${notificationId}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
         },

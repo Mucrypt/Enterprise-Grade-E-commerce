@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Bell,
@@ -20,6 +20,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
+import apiClient from '@/lib/api-client'
 
 export interface Notification {
   id: string
@@ -31,6 +32,7 @@ export interface Notification {
   actionLabel?: string
   is_read: boolean
   created_at: string
+  notification_type?: string
   data?: Record<string, any>
 }
 
@@ -44,18 +46,25 @@ export function NotificationBell({
   const [isOpen, setIsOpen] = useState(false)
   const queryClient = useQueryClient()
 
+  const invalidateNotifications = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['admin-notifications'] })
+  }, [queryClient])
+
   // Fetch notifications
   const { data: notificationsData, isLoading } = useQuery({
-    queryKey: ['notifications'],
+    queryKey: ['admin-notifications'],
     queryFn: async () => {
-      const response = await fetch('/api/v1/notifications?limit=10', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
-        },
-      })
-      if (!response.ok) throw new Error('Failed to fetch notifications')
-      return response.json()
+      return apiClient.get<{
+        success: boolean
+        data: {
+          notifications: Notification[]
+          unreadCount: number
+          limit: number
+          offset: number
+        }
+      }>('/notifications/admin/list?limit=10')
     },
+    retry: 1,
     refetchInterval: 30000, // Refetch every 30 seconds
   })
 
@@ -66,63 +75,51 @@ export function NotificationBell({
   const markAsRead = useCallback(
     async (notificationId: string) => {
       try {
-        await fetch(`/api/v1/notifications/${notificationId}/read`, {
-          method: 'PUT',
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
-          },
-        })
-        queryClient.invalidateQueries({ queryKey: ['notifications'] })
+        await apiClient.put(`/notifications/admin/${notificationId}/read`)
+        invalidateNotifications()
       } catch (error) {
         toast.error('Failed to mark as read')
       }
     },
-    [queryClient],
+    [invalidateNotifications],
   )
 
   // Archive notification
   const archiveNotification = useCallback(
     async (notificationId: string) => {
       try {
-        await fetch(`/api/v1/notifications/${notificationId}/archive`, {
-          method: 'PUT',
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
-          },
-        })
-        queryClient.invalidateQueries({ queryKey: ['notifications'] })
-        toast.success('Notification archived')
+        await apiClient.delete(`/notifications/admin/${notificationId}`)
+        invalidateNotifications()
+        toast.success('Notification dismissed')
       } catch (error) {
-        toast.error('Failed to archive notification')
+        toast.error('Failed to dismiss notification')
       }
     },
-    [queryClient],
+    [invalidateNotifications],
   )
 
   // Delete notification
   const deleteNotification = useCallback(
     async (notificationId: string) => {
       try {
-        await fetch(`/api/v1/notifications/${notificationId}`, {
-          method: 'DELETE',
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
-          },
-        })
-        queryClient.invalidateQueries({ queryKey: ['notifications'] })
+        await apiClient.delete(`/notifications/admin/${notificationId}`)
+        invalidateNotifications()
         toast.success('Notification deleted')
       } catch (error) {
         toast.error('Failed to delete notification')
       }
     },
-    [queryClient],
+    [invalidateNotifications],
   )
 
   const getNotificationIcon = (notification: Notification) => {
-    if (notification.data?.type?.includes('order')) {
+    const notificationType =
+      notification.notification_type || notification.data?.type || ''
+
+    if (notificationType.includes('order')) {
       return <ShoppingCart className='h-4 w-4 text-blue-500' />
     }
-    if (notification.data?.type?.includes('contact')) {
+    if (notificationType.includes('contact')) {
       return <Mail className='h-4 w-4 text-green-500' />
     }
     return <AlertCircle className='h-4 w-4 text-yellow-500' />

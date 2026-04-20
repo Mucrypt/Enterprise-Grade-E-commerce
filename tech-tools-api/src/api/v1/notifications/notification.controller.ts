@@ -4,7 +4,7 @@ import NotificationService from '../../../services/notification.service'
 import logger from '../../../utils/logger'
 
 export interface AuthRequest extends Request {
-  user?: { id: string; role: string }
+  user?: { id: string; userType?: string }
 }
 
 // =====================================================
@@ -57,7 +57,10 @@ export const getAdminNotifications = async (
 ) => {
   try {
     const adminId = req.user?.id
-    if (!adminId || !['admin', 'super_admin'].includes(req.user?.role || '')) {
+    if (
+      !adminId ||
+      !['admin', 'super_admin'].includes(req.user?.userType || '')
+    ) {
       return res.status(401).json({ success: false, error: 'Unauthorized' })
     }
 
@@ -74,7 +77,7 @@ export const getAdminNotifications = async (
     }
 
     if (type && type !== 'all') {
-      query += ` AND notification_type = ?`
+      query += ` AND notification_type = $${params.length + 1}`
       params.push(type)
     }
 
@@ -115,7 +118,7 @@ export const getUnreadCount = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ success: false, error: 'Unauthorized' })
     }
 
-    const isAdmin = ['admin', 'super_admin'].includes(req.user?.role || '')
+    const isAdmin = ['admin', 'super_admin'].includes(req.user?.userType || '')
     const count = await NotificationService.getUnreadCount(userId, isAdmin)
 
     res.json({
@@ -163,7 +166,7 @@ export const markAllAsRead = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ success: false, error: 'Unauthorized' })
     }
 
-    const isAdmin = ['admin', 'super_admin'].includes(req.user?.role || '')
+    const isAdmin = ['admin', 'super_admin'].includes(req.user?.userType || '')
     await NotificationService.markAllAsRead(userId, isAdmin)
 
     res.json({
