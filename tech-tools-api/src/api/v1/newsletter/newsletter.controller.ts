@@ -48,6 +48,81 @@ const buildNewsletterAdminAlertHtml = (data: {
 </body>
 </html>`
 
+const queueNewsletterSubscriptionSideEffects = (data: {
+  subscriberId: string
+  email: string
+  name?: string | null
+  source: string
+  event: 'subscribed' | 'resubscribed'
+}) => {
+  setImmediate(async () => {
+    try {
+      await emailService.sendAdminNotification({
+        subject:
+          data.event === 'subscribed'
+            ? `New newsletter subscriber: ${data.email}`
+            : `Newsletter reactivation: ${data.email}`,
+        html: buildNewsletterAdminAlertHtml({
+          email: data.email,
+          name: data.name || null,
+          source: data.source,
+          event: data.event,
+        }),
+        emailType: 'custom',
+      })
+    } catch (error) {
+      logger.warn('Failed to send newsletter admin alert:', error)
+    }
+
+    try {
+      await NotificationEvents.onNewsletterSubscription({
+        email: data.email,
+        name: data.name || null,
+        source: data.source,
+        event: data.event,
+        subscriberId: data.subscriberId,
+      })
+    } catch (error) {
+      logger.warn('Failed to create newsletter admin notification:', error)
+    }
+
+    if (data.event !== 'subscribed') {
+      return
+    }
+
+    try {
+      const settingsResult = await query(
+        `SELECT setting_key, setting_value FROM newsletter_settings 
+         WHERE setting_key IN ('welcome_email_enabled', 'welcome_subject', 'welcome_message', 'from_name', 'from_email')`,
+      )
+
+      const settings: Record<string, string> = {}
+      settingsResult.rows.forEach((row) => {
+        settings[row.setting_key] = row.setting_value
+      })
+
+      if (settings.welcome_email_enabled === 'true') {
+        const sendResult = await emailService.sendEmail({
+          to: data.email,
+          toName: data.name || undefined,
+          subject: settings.welcome_subject || 'Welcome to our Newsletter!',
+          html: settings.welcome_message || '<p>Thank you for subscribing!</p>',
+          emailType: 'promotional',
+        })
+
+        if (!sendResult.success) {
+          logger.warn('Welcome email delivery failed:', {
+            email: data.email,
+            error: sendResult.error,
+          })
+        }
+      }
+    } catch (error) {
+      logger.warn('Failed to process newsletter welcome email:', error)
+    }
+  })
+}
+
 // =====================================================
 // Public Endpoints
 // =====================================================
@@ -106,18 +181,7 @@ export const subscribe = async (req: Request, res: Response) => {
         [subscriber.id],
       )
 
-      await emailService.sendAdminNotification({
-        subject: `Newsletter reactivation: ${email.toLowerCase()}`,
-        html: buildNewsletterAdminAlertHtml({
-          email: email.toLowerCase(),
-          name: name || null,
-          source,
-          event: 'resubscribed',
-        }),
-        emailType: 'custom',
-      })
-
-      await NotificationEvents.onNewsletterSubscription({
+      queueNewsletterSubscriptionSideEffects({
         email: email.toLowerCase(),
         name: name || null,
         source,
@@ -127,7 +191,7 @@ export const subscribe = async (req: Request, res: Response) => {
 
       return res.json({
         success: true,
-        message: 'Welcome back! You have been resubscribed to our newsletter.',
+        message: 'Welcome back. Your newsletter subscription is active again.',
         resubscribed: true,
       })
     }
@@ -140,18 +204,7 @@ export const subscribe = async (req: Request, res: Response) => {
       [email.toLowerCase(), name || null, source, ipAddress, userAgent],
     )
 
-    await emailService.sendAdminNotification({
-      subject: `New newsletter subscriber: ${email.toLowerCase()}`,
-      html: buildNewsletterAdminAlertHtml({
-        email: email.toLowerCase(),
-        name: name || null,
-        source,
-        event: 'subscribed',
-      }),
-      emailType: 'custom',
-    })
-
-    await NotificationEvents.onNewsletterSubscription({
+    queueNewsletterSubscriptionSideEffects({
       email: email.toLowerCase(),
       name: name || null,
       source,
@@ -159,35 +212,9 @@ export const subscribe = async (req: Request, res: Response) => {
       subscriberId: result.rows[0].id,
     })
 
-    // Send welcome email if enabled
-    try {
-      const settingsResult = await query(
-        `SELECT setting_key, setting_value FROM newsletter_settings 
-         WHERE setting_key IN ('welcome_email_enabled', 'welcome_subject', 'welcome_message', 'from_name', 'from_email')`,
-      )
-
-      const settings: Record<string, string> = {}
-      settingsResult.rows.forEach((row) => {
-        settings[row.setting_key] = row.setting_value
-      })
-
-      if (settings.welcome_email_enabled === 'true') {
-        await emailService.sendEmail({
-          to: email,
-          toName: name || undefined,
-          subject: settings.welcome_subject || 'Welcome to our Newsletter!',
-          html: settings.welcome_message || '<p>Thank you for subscribing!</p>',
-          emailType: 'promotional',
-        })
-      }
-    } catch (emailError) {
-      logger.warn('Failed to send welcome email:', emailError)
-      // Don't fail the subscription if email fails
-    }
-
     res.status(201).json({
       success: true,
-      message: 'Thank you for subscribing! Check your email for 10% off.',
+      message: 'Thank you for subscribing. Your newsletter subscription is now active.',
       subscriberId: result.rows[0].id,
     })
   } catch (error) {
