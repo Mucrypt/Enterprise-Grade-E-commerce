@@ -37,9 +37,25 @@ export interface ContactFilters {
   search?: string
 }
 
-// =====================================================
-// Contact Service
-// =====================================================
+export interface ContactAnalyticsTotals {
+  guest_contact_cta_click: number
+  protected_contact_login_redirect: number
+}
+
+export interface ContactAnalyticsDayEntry {
+  day: string
+  guest_contact_cta_click: number
+  protected_contact_login_redirect: number
+}
+
+export interface ContactAnalyticsData {
+  totals: ContactAnalyticsTotals
+  last7Days: ContactAnalyticsDayEntry[]
+  last30Days: ContactAnalyticsTotals
+  conversionRate: number
+}
+
+
 
 class ContactService {
   private baseUrl = '/contact'
@@ -125,6 +141,15 @@ class ContactService {
     return apiClient.post<ApiResponse<{ message: string }>>(
       `${this.baseUrl}/submissions/${id}/reply`,
       data,
+    )
+  }
+
+  /**
+   * Get contact funnel analytics (hybrid policy conversion metrics)
+   */
+  async getAnalytics(): Promise<ApiResponse<ContactAnalyticsData>> {
+    return apiClient.get<ApiResponse<ContactAnalyticsData>>(
+      `${this.baseUrl}/analytics`,
     )
   }
 }

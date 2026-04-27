@@ -14,6 +14,7 @@ import {
   User,
   Shield,
   Search,
+  Lock,
   MessageSquare,
 } from 'lucide-react'
 
@@ -44,6 +45,11 @@ const faqCategories: FAQCategory[] = [
         question: 'Can I modify or cancel my order after placing it?',
         answer:
           'You can modify or cancel your order within 1 hour of placing it, as long as it hasn\'t been processed yet. To do this, go to your account dashboard, find the order, and click "Modify" or "Cancel". If the option isn\'t available, please contact our support team immediately.',
+      },
+      {
+        question: 'Do I need an account to contact support?',
+        answer:
+          'General and product questions can be sent as a guest through the Contact page. For order, shipping, return, and billing support, you must sign in so we can verify account ownership and protect customer data.',
       },
       {
         question: 'How do I track my order?',
@@ -454,12 +460,22 @@ export default function FAQPage() {
               Can't find the answer you're looking for? Our friendly support
               team is here to help you.
             </p>
+            <div className='mx-auto mb-6 max-w-2xl rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left'>
+              <p className='inline-flex items-center gap-2 text-sm font-semibold text-amber-900'>
+                <Lock className='h-4 w-4' />
+                Support access policy
+              </p>
+              <p className='mt-1 text-sm text-amber-800'>
+                Guest contact is available for general and product questions.
+                Order, shipping, return, and billing support requires sign-in.
+              </p>
+            </div>
             <div className='flex flex-col sm:flex-row items-center justify-center gap-4'>
               <Link
-                to='/contact'
+                to='/contact?subject=other&message=I%20need%20general%20support.'
                 className='inline-flex items-center gap-2 px-6 py-3 bg-orange-500 text-white font-semibold rounded-lg hover:bg-orange-600 transition-colors'
               >
-                Contact Support
+                Contact General Support
                 <svg
                   className='w-4 h-4'
                   fill='none'
@@ -473,6 +489,20 @@ export default function FAQPage() {
                     d='M17 8l4 4m0 0l-4 4m4-4H3'
                   />
                 </svg>
+              </Link>
+              <Link
+                to='/login'
+                state={{
+                  from: {
+                    pathname: '/contact',
+                    search:
+                      '?subject=order&message=I%20need%20help%20with%20my%20order.',
+                  },
+                  reason: 'contact-support-auth',
+                }}
+                className='inline-flex items-center gap-2 px-6 py-3 bg-slate-900 text-white font-semibold rounded-lg hover:bg-slate-800 transition-colors'
+              >
+                Sign In for Order or Billing Help
               </Link>
               <a
                 href='mailto:support@techtools.com'

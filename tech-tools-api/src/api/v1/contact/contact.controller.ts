@@ -1,4 +1,5 @@
 import { Request, Response } from 'express'
+import jwt from 'jsonwebtoken'
 import logger from '../../../utils/logger'
 import { query } from '../../../database/connection'
 import type { AuthRequest } from '../../../middleware/auth'
@@ -48,6 +49,8 @@ const subjectLabels: Record<string, string> = {
   feedback: 'Feedback/Suggestion',
   other: 'General Inquiry',
 }
+
+const protectedSubjects = new Set(['order', 'shipping', 'return', 'billing'])
 
 const supportQuickLinkBase = '/contact'
 
@@ -145,6 +148,38 @@ const buildReplyEmailHtml = (recipientName: string, body: string) => {
 </html>`
 }
 
+const isProtectedContactSubject = (subject: string) =>
+  protectedSubjects.has((subject || '').trim().toLowerCase())
+
+const getAuthenticatedContactIdentity = async (req: AuthRequest) => {
+  const authHeader = req.headers.authorization
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null
+  }
+
+  try {
+    const token = authHeader.split(' ')[1]
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as jwt.JwtPayload
+
+    const userId = decoded.userId as string | undefined
+    if (!userId) {
+      return null
+    }
+
+    const result = await query(
+      `SELECT id, email, first_name, last_name, phone
+       FROM users
+       WHERE id = $1 AND is_active = true`,
+      [userId],
+    )
+
+    return result.rows[0] || null
+  } catch {
+    return null
+  }
+}
+
 const buildContactAdminAlertHtml = (data: {
   ticketNumber: string
   name: string
@@ -203,7 +238,7 @@ const buildContactAdminAlertHtml = (data: {
  * Submit contact form
  * Public endpoint - no authentication required
  */
-export const submitContactForm = async (req: Request, res: Response) => {
+export const submitContactForm = async (req: AuthRequest, res: Response) => {
   try {
     const { name, email, phone, subject, orderNumber, message } =
       req.body as ContactFormData
@@ -225,8 +260,33 @@ export const submitContactForm = async (req: Request, res: Response) => {
       })
     }
 
-    const recipientEmail = getRecipientEmail(subject)
-    const subjectLabel = subjectLabels[subject] || 'General Inquiry'
+    const normalizedSubject = (subject || '').trim().toLowerCase()
+    const requiresAuthentication = isProtectedContactSubject(normalizedSubject)
+    const authenticatedUser = await getAuthenticatedContactIdentity(req)
+
+    if (requiresAuthentication && !authenticatedUser) {
+      return res.status(401).json({
+        success: false,
+        error:
+          'Please sign in to contact support about orders, shipping, returns, or billing.',
+        code: 'AUTH_REQUIRED_FOR_PROTECTED_CONTACT',
+      })
+    }
+
+    const resolvedName = requiresAuthentication
+      ? `${authenticatedUser.first_name || ''} ${
+          authenticatedUser.last_name || ''
+        }`.trim() || name.trim()
+      : name.trim()
+    const resolvedEmail = requiresAuthentication
+      ? authenticatedUser.email
+      : email.trim().toLowerCase()
+    const resolvedPhone = requiresAuthentication
+      ? authenticatedUser.phone || phone
+      : phone
+
+    const recipientEmail = getRecipientEmail(normalizedSubject)
+    const subjectLabel = subjectLabels[normalizedSubject] || 'General Inquiry'
 
     // Generate unique ticket number
     const ticketNumber = `TT-${Date.now()
@@ -264,16 +324,16 @@ export const submitContactForm = async (req: Request, res: Response) => {
             <td style="padding: 20px;">
               <h2 style="margin: 0 0 20px; color: #1e293b; font-size: 18px; font-weight: 600;">Customer Information</h2>
               <p style="margin: 0 0 10px; color: #64748b; font-size: 14px;">
-                <strong style="color: #1e293b;">Name:</strong> ${name}
+                <strong style="color: #1e293b;">Name:</strong> ${resolvedName}
               </p>
               <p style="margin: 0 0 10px; color: #64748b; font-size: 14px;">
-                <strong style="color: #1e293b;">Email:</strong> <a href="mailto:${email}" style="color: #f97316;">${email}</a>
+                <strong style="color: #1e293b;">Email:</strong> <a href="mailto:${resolvedEmail}" style="color: #f97316;">${resolvedEmail}</a>
               </p>
               ${
-                phone
+                resolvedPhone
                   ? `
               <p style="margin: 0 0 10px; color: #64748b; font-size: 14px;">
-                <strong style="color: #1e293b;">Phone:</strong> <a href="tel:${phone}" style="color: #f97316;">${phone}</a>
+                <strong style="color: #1e293b;">Phone:</strong> <a href="tel:${resolvedPhone}" style="color: #f97316;">${resolvedPhone}</a>
               </p>
               `
                   : ''
@@ -290,6 +350,15 @@ export const submitContactForm = async (req: Request, res: Response) => {
               <p style="margin: 0; color: #64748b; font-size: 14px;">
                 <strong style="color: #1e293b;">Subject:</strong> ${subjectLabel}
               </p>
+              ${
+                requiresAuthentication
+                  ? `
+              <p style="margin: 10px 0 0; color: #64748b; font-size: 14px;">
+                <strong style="color: #1e293b;">Authenticated Account:</strong> Yes
+              </p>
+              `
+                  : ''
+              }
             </td>
           </tr>
         </table>
@@ -306,7 +375,7 @@ export const submitContactForm = async (req: Request, res: Response) => {
         <table width="100%" cellspacing="0" cellpadding="0">
           <tr>
             <td style="text-align: center;">
-              <a href="mailto:${email}?subject=Re: ${subjectLabel} - Ticket #${ticketNumber}" 
+              <a href="mailto:${resolvedEmail}?subject=Re: ${subjectLabel} - Ticket #${ticketNumber}" 
                  style="display: inline-block; background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 8px; font-weight: 600; font-size: 14px;">
                 Reply to Customer
               </a>
@@ -360,7 +429,7 @@ export const submitContactForm = async (req: Request, res: Response) => {
     <tr>
       <td style="padding: 40px;">
         <p style="margin: 0 0 20px; color: #1e293b; font-size: 16px; line-height: 1.6;">
-          Hi ${name},
+          Hi ${resolvedName},
         </p>
         
         <p style="margin: 0 0 25px; color: #64748b; font-size: 14px; line-height: 1.8;">
@@ -441,9 +510,9 @@ export const submitContactForm = async (req: Request, res: Response) => {
       // Still log the contact submission
       await logContactSubmission({
         ticketNumber,
-        name,
-        email,
-        phone,
+        name: resolvedName,
+        email: resolvedEmail,
+        phone: resolvedPhone,
         subject: subjectLabel,
         orderNumber,
         message,
@@ -462,7 +531,7 @@ export const submitContactForm = async (req: Request, res: Response) => {
     try {
       const teamEmailResult = await emailService.sendEmail({
         to: recipientEmail,
-        replyTo: email,
+        replyTo: resolvedEmail,
         subject: `[${subjectLabel}] New Contact Form - ${ticketNumber}`,
         html: supportEmailHtml,
         text: message,
@@ -471,7 +540,8 @@ export const submitContactForm = async (req: Request, res: Response) => {
           audience: 'internal',
           channel: 'contact_team_alert',
           ticketNumber,
-          subject,
+          subject: normalizedSubject,
+          requiresAuthentication,
         },
       })
 
@@ -479,20 +549,20 @@ export const submitContactForm = async (req: Request, res: Response) => {
         subject: `Support request ${ticketNumber}: ${subjectLabel}`,
         html: buildContactAdminAlertHtml({
           ticketNumber,
-          name,
-          email,
-          phone,
+          name: resolvedName,
+          email: resolvedEmail,
+          phone: resolvedPhone,
           subjectLabel,
           orderNumber,
           message,
         }),
         text: message,
-        replyTo: email,
+        replyTo: resolvedEmail,
         emailType: 'custom',
       })
 
       const customerEmailResult = await emailService.sendEmail({
-        to: email,
+        to: resolvedEmail,
         subject: `We received your message - Ticket #${ticketNumber}`,
         html: customerEmailHtml,
         emailType: 'custom',
@@ -506,8 +576,8 @@ export const submitContactForm = async (req: Request, res: Response) => {
       await NotificationEvents.onContactMessageReceived({
         id: ticketNumber,
         ticketNumber,
-        name,
-        email,
+        name: resolvedName,
+        email: resolvedEmail,
         subject: subjectLabel,
       })
     } catch (emailError) {
@@ -519,8 +589,8 @@ export const submitContactForm = async (req: Request, res: Response) => {
       await NotificationEvents.onContactMessageReceived({
         id: ticketNumber,
         ticketNumber,
-        name,
-        email,
+        name: resolvedName,
+        email: resolvedEmail,
         subject: subjectLabel,
       })
     }
@@ -528,9 +598,9 @@ export const submitContactForm = async (req: Request, res: Response) => {
     // Log the contact submission
     await logContactSubmission({
       ticketNumber,
-      name,
-      email,
-      phone,
+      name: resolvedName,
+      email: resolvedEmail,
+      phone: resolvedPhone,
       subject: subjectLabel,
       orderNumber,
       message,
@@ -1042,6 +1112,167 @@ export const getSupportProfile = async (req: AuthRequest, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Failed to get support profile',
+    })
+  }
+}
+
+// =====================================================
+// Allowed event types (allowlist to prevent injection)
+// =====================================================
+const ALLOWED_ANALYTICS_EVENTS = new Set([
+  'guest_contact_cta_click',
+  'protected_contact_login_redirect',
+])
+
+/**
+ * POST /api/v1/contact/analytics
+ * Record a contact funnel analytics event (public, fire-and-forget from web store)
+ */
+export const trackContactAnalyticsEvent = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    const { event_type, subject } = req.body as {
+      event_type?: string
+      subject?: string
+    }
+
+    if (!event_type || !ALLOWED_ANALYTICS_EVENTS.has(event_type)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid event_type',
+      })
+    }
+
+    // Sanitise optional subject
+    const safeSubject =
+      typeof subject === 'string' && subject.length <= 60
+        ? subject.replace(/[^a-z0-9_-]/gi, '')
+        : null
+
+    const userAgent = (req.headers['user-agent'] || '').slice(0, 500)
+    const referrer = (
+      req.headers['referer'] ||
+      req.headers['referrer'] ||
+      ''
+    ).slice(0, 500)
+
+    await query(
+      `INSERT INTO contact_analytics (event_type, subject, user_agent, referrer)
+       VALUES ($1, $2, $3, $4)`,
+      [event_type, safeSubject, userAgent, referrer],
+    )
+
+    res.status(201).json({ success: true })
+  } catch (error) {
+    logger.error('trackContactAnalyticsEvent error:', error)
+    // Return 200 so the client fire-and-forget doesn't surface an error to users
+    res.status(200).json({ success: false })
+  }
+}
+
+/**
+ * GET /api/v1/contact/analytics
+ * Retrieve contact funnel analytics summary (admin only)
+ */
+export const getContactAnalytics = async (req: Request, res: Response) => {
+  try {
+    // Verify table exists; return empty stats if not yet migrated
+    const analyticsTableReady = await tableExists('contact_analytics')
+    if (!analyticsTableReady) {
+      return res.json({
+        success: true,
+        data: {
+          totals: { guest_contact_cta_click: 0, protected_contact_login_redirect: 0 },
+          last7Days: [],
+          last30Days: { guest_contact_cta_click: 0, protected_contact_login_redirect: 0 },
+        },
+      })
+    }
+
+    const [totalsResult, last7DaysResult, last30DaysResult] = await Promise.all([
+      query(
+        `SELECT event_type, COUNT(*)::int AS count
+         FROM contact_analytics
+         GROUP BY event_type`,
+      ),
+      query(
+        `SELECT
+           DATE(created_at) AS day,
+           event_type,
+           COUNT(*)::int AS count
+         FROM contact_analytics
+         WHERE created_at >= NOW() - INTERVAL '7 days'
+         GROUP BY day, event_type
+         ORDER BY day ASC`,
+      ),
+      query(
+        `SELECT event_type, COUNT(*)::int AS count
+         FROM contact_analytics
+         WHERE created_at >= NOW() - INTERVAL '30 days'
+         GROUP BY event_type`,
+      ),
+    ])
+
+    const toMap = (rows: { event_type: string; count: number }[]) =>
+      rows.reduce<Record<string, number>>((acc, r) => {
+        acc[r.event_type] = r.count
+        return acc
+      }, {})
+
+    const totals = toMap(totalsResult.rows)
+    const last30Days = toMap(last30DaysResult.rows)
+
+    // Build a daily series: { day, guest_contact_cta_click, protected_contact_login_redirect }
+    const dailyMap: Record<string, Record<string, number>> = {}
+    for (const row of last7DaysResult.rows) {
+      const day = String(row.day).slice(0, 10)
+      if (!dailyMap[day]) dailyMap[day] = {}
+      dailyMap[day][row.event_type] = row.count
+    }
+    const last7Days = Object.entries(dailyMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([day, events]) => ({
+        day,
+        guest_contact_cta_click: events['guest_contact_cta_click'] ?? 0,
+        protected_contact_login_redirect:
+          events['protected_contact_login_redirect'] ?? 0,
+      }))
+
+    // Conversion rate: redirects / (redirects + cta_clicks) — how often guests hit the auth wall
+    const guestClicks = (totals['guest_contact_cta_click'] ?? 0) +
+      (totals['protected_contact_login_redirect'] ?? 0)
+    const conversionRate =
+      guestClicks > 0
+        ? Math.round(
+            ((totals['protected_contact_login_redirect'] ?? 0) / guestClicks) *
+              100,
+          )
+        : 0
+
+    res.json({
+      success: true,
+      data: {
+        totals: {
+          guest_contact_cta_click: totals['guest_contact_cta_click'] ?? 0,
+          protected_contact_login_redirect:
+            totals['protected_contact_login_redirect'] ?? 0,
+        },
+        last7Days,
+        last30Days: {
+          guest_contact_cta_click: last30Days['guest_contact_cta_click'] ?? 0,
+          protected_contact_login_redirect:
+            last30Days['protected_contact_login_redirect'] ?? 0,
+        },
+        conversionRate,
+      },
+    })
+  } catch (error) {
+    logger.error('getContactAnalytics error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve contact analytics',
     })
   }
 }

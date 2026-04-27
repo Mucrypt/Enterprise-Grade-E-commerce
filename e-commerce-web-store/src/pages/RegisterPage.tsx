@@ -3,7 +3,7 @@
 // ============================================
 
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   Eye,
   EyeOff,
@@ -20,7 +20,14 @@ import { cn } from '../utils'
 
 export default function RegisterPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { register, isLoading } = useAuthStore()
+
+  const from = (
+    location.state as { from?: { pathname: string; search?: string } }
+  )?.from
+
+  const redirectTo = from ? `${from.pathname}${from.search || ''}` : '/'
 
   const [formData, setFormData] = useState({
     firstName: '',
@@ -101,7 +108,7 @@ export default function RegisterPage() {
         firstName: formData.firstName,
         lastName: formData.lastName,
       })
-      navigate('/')
+      navigate(redirectTo)
     } catch (err) {
       setError(
         err instanceof Error

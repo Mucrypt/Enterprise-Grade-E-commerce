@@ -246,7 +246,9 @@ export default function BlogPostsPage() {
             </div>
             <Select
               value={status || 'all'}
-              onValueChange={(value) => setStatus(value === 'all' ? '' : value)}
+              onValueChange={(value: string) =>
+                setStatus(value === 'all' ? '' : value)
+              }
             >
               <SelectTrigger className='w-full sm:w-40'>
                 <SelectValue placeholder='All Status' />

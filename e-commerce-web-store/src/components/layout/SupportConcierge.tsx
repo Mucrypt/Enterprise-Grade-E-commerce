@@ -4,6 +4,7 @@ import {
   Bot,
   CalendarDays,
   Gift,
+  Lock,
   MessageCircleMore,
   PackageSearch,
   Sparkles,
@@ -24,7 +25,7 @@ const routeCopy: Record<
 > = {
   '/checkout': {
     title: 'Checkout confidence',
-    body: 'Need payment, shipping, or coupon help before you place the order?',
+    body: 'Need payment, shipping, or coupon help before you place the order? Billing support requires sign-in to protect account data.',
     cta: 'Get checkout help',
     href: '/contact?subject=billing&message=I%20need%20help%20with%20checkout.',
   },
@@ -41,6 +42,11 @@ const routeCopy: Record<
     href: '/contact?subject=product&message=I%20need%20expert%20product%20guidance.',
   },
 }
+
+const protectedContactSubjects = ['order', 'shipping', 'return', 'billing']
+
+const isProtectedContactHref = (href: string) =>
+  protectedContactSubjects.some((subject) => href.includes(`subject=${subject}`))
 
 export function SupportConcierge({
   user,
@@ -110,6 +116,12 @@ export function SupportConcierge({
                 <p className='mt-1 text-sm text-slate-600'>
                   {routeInsight.body}
                 </p>
+                {isProtectedContactHref(routeInsight.href) && (
+                  <p className='mt-2 inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-orange-700'>
+                    <Lock className='h-3 w-3' />
+                    Account required
+                  </p>
+                )}
                 <a
                   href={routeInsight.href}
                   className='mt-3 inline-flex items-center gap-2 text-sm font-semibold text-orange-700'
@@ -118,6 +130,16 @@ export function SupportConcierge({
                 </a>
               </div>
             )}
+
+            <div className='rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3'>
+              <p className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
+                Support Policy
+              </p>
+              <p className='mt-1 text-sm text-slate-700'>
+                General and product questions can be sent as a guest. Order,
+                shipping, returns, and billing support requires sign-in.
+              </p>
+            </div>
 
             {supportProfile && (
               <div className='grid grid-cols-2 gap-3'>
@@ -287,6 +309,13 @@ export function SupportConcierge({
 
             <div className='grid grid-cols-3 gap-2'>
               <a
+                href='/contact?subject=order&message=I%20need%20help%20with%20my%20order.'
+                className='rounded-2xl border border-slate-200 px-3 py-3 text-center text-xs font-semibold text-slate-700'
+              >
+                <Lock className='mx-auto mb-2 h-4 w-4 text-orange-600' />
+                Order Help
+              </a>
+              <a
                 href='/contact?subject=technical&message=I%20need%20video%20support.'
                 className='rounded-2xl border border-slate-200 px-3 py-3 text-center text-xs font-semibold text-slate-700'
               >
@@ -308,6 +337,9 @@ export function SupportConcierge({
                 Co-browse
               </a>
             </div>
+            <p className='text-[11px] text-slate-500'>
+              Links for order, shipping, returns, and billing will ask you to sign in.
+            </p>
           </div>
         </div>
       ) : (

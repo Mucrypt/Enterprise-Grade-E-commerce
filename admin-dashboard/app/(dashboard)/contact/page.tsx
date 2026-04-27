@@ -22,6 +22,9 @@ import {
   Send,
   ExternalLink,
   Reply,
+  MousePointerClick,
+  LogIn,
+  TrendingUp,
 } from 'lucide-react'
 import { format, formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
@@ -52,6 +55,7 @@ import { Separator } from '@/components/ui/separator'
 import contactService, {
   ContactSubmission,
   ContactFilters,
+  ContactAnalyticsData,
 } from '@/services/contact.service'
 
 // Status badge colors
@@ -182,6 +186,14 @@ export default function ContactMessagesPage() {
     queryKey: ['contact-submissions', filters],
     queryFn: () => contactService.getSubmissions(filters),
   })
+
+  // Fetch hybrid-policy analytics
+  const { data: analyticsData } = useQuery({
+    queryKey: ['contact-analytics'],
+    queryFn: () => contactService.getAnalytics(),
+    staleTime: 60_000,
+  })
+  const analytics: ContactAnalyticsData | undefined = analyticsData?.data
 
   const submissions = data?.data?.submissions || []
   const pagination = data?.data?.pagination
@@ -466,6 +478,110 @@ TechTools Support Team`
           </CardContent>
         </Card>
       </div>
+
+      {/* Hybrid Contact Policy Analytics */}
+      <Card className='border-orange-200 bg-orange-50/30'>
+        <CardHeader className='pb-3'>
+          <CardTitle className='flex items-center gap-2 text-base'>
+            <TrendingUp className='h-4 w-4 text-orange-600' />
+            Hybrid Support Policy — Funnel Analytics
+          </CardTitle>
+          <p className='text-xs text-muted-foreground'>
+            Measures how the guest / sign-in policy affects support traffic. All-time
+            and rolling 30-day counts.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className='grid gap-4 md:grid-cols-3'>
+            {/* Guest CTA clicks */}
+            <div className='rounded-xl border border-green-200 bg-green-50 p-4'>
+              <div className='flex items-center gap-2 mb-1'>
+                <MousePointerClick className='h-4 w-4 text-green-600' />
+                <span className='text-sm font-medium text-green-900'>Guest CTA Clicks</span>
+              </div>
+              <p className='text-xs text-green-700 mb-3'>
+                Guest clicked &quot;Contact General Support&quot;
+              </p>
+              <div className='flex items-end justify-between'>
+                <div>
+                  <div className='text-2xl font-bold text-green-800'>
+                    {analytics?.totals.guest_contact_cta_click ?? '—'}
+                  </div>
+                  <div className='text-xs text-green-600'>all time</div>
+                </div>
+                <div className='text-right'>
+                  <div className='text-lg font-semibold text-green-700'>
+                    {analytics?.last30Days.guest_contact_cta_click ?? '—'}
+                  </div>
+                  <div className='text-xs text-green-600'>last 30 days</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Protected login redirects */}
+            <div className='rounded-xl border border-amber-200 bg-amber-50 p-4'>
+              <div className='flex items-center gap-2 mb-1'>
+                <LogIn className='h-4 w-4 text-amber-600' />
+                <span className='text-sm font-medium text-amber-900'>Auth-Wall Hits</span>
+              </div>
+              <p className='text-xs text-amber-700 mb-3'>
+                Guest redirected to sign-in for protected subject
+              </p>
+              <div className='flex items-end justify-between'>
+                <div>
+                  <div className='text-2xl font-bold text-amber-800'>
+                    {analytics?.totals.protected_contact_login_redirect ?? '—'}
+                  </div>
+                  <div className='text-xs text-amber-600'>all time</div>
+                </div>
+                <div className='text-right'>
+                  <div className='text-lg font-semibold text-amber-700'>
+                    {analytics?.last30Days.protected_contact_login_redirect ?? '—'}
+                  </div>
+                  <div className='text-xs text-amber-600'>last 30 days</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Auth-wall rate */}
+            <div className='rounded-xl border border-slate-200 bg-slate-50 p-4'>
+              <div className='flex items-center gap-2 mb-1'>
+                <TrendingUp className='h-4 w-4 text-slate-600' />
+                <span className='text-sm font-medium text-slate-900'>Auth-Wall Rate</span>
+              </div>
+              <p className='text-xs text-slate-600 mb-3'>
+                % of contact intent that hit the sign-in gate
+              </p>
+              <div className='flex items-end gap-3'>
+                <div className='text-3xl font-bold text-slate-800'>
+                  {analytics != null ? `${analytics.conversionRate}%` : '—'}
+                </div>
+                <div className='text-xs text-slate-500 leading-tight'>
+                  of guest<br />traffic
+                </div>
+              </div>
+              {analytics && analytics.last7Days.length > 0 && (
+                <div className='mt-3 pt-3 border-t border-slate-200'>
+                  <p className='text-xs font-medium text-slate-600 mb-1'>Last 7 days</p>
+                  <div className='space-y-1'>
+                    {analytics.last7Days.map((entry) => (
+                      <div key={entry.day} className='flex items-center gap-2 text-xs'>
+                        <span className='w-20 text-slate-500 shrink-0'>
+                          {entry.day.slice(5)}
+                        </span>
+                        <span className='text-green-700 w-6 text-right'>{entry.guest_contact_cta_click}</span>
+                        <span className='text-slate-400'>guest</span>
+                        <span className='text-amber-700 w-6 text-right'>{entry.protected_contact_login_redirect}</span>
+                        <span className='text-slate-400'>gate</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Search and Filters */}
       <div className='flex flex-col gap-4 md:flex-row md:items-center'>

@@ -23,8 +23,11 @@ export default function LoginPage() {
     password?: string
   }>({})
 
-  const from =
-    (location.state as { from?: { pathname: string } })?.from?.pathname || '/'
+  const from = (
+    location.state as { from?: { pathname: string; search?: string } }
+  )?.from
+
+  const redirectTo = from ? `${from.pathname}${from.search || ''}` : '/'
 
   const validateForm = () => {
     const errors: { email?: string; password?: string } = {}
@@ -53,7 +56,7 @@ export default function LoginPage() {
 
     try {
       await login(email, password)
-      navigate(from, { replace: true })
+      navigate(redirectTo, { replace: true })
     } catch (err) {
       setError(
         err instanceof Error

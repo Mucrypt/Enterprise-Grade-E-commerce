@@ -2,9 +2,14 @@
 // Contact Us Page - Production Ready
 // ============================================
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
-import { useSearchParams } from 'react-router-dom'
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from 'react-router-dom'
 import {
   Mail,
   Phone,
@@ -19,10 +24,22 @@ import {
   RotateCcw,
   AlertCircle,
   Copy,
+  Lock,
 } from 'lucide-react'
+import { useAuthStore } from '../stores'
 
 const API_URL =
   import.meta.env.VITE_API_URL || 'https://techtoolstore.com/api/v1'
+
+// Fire-and-forget: no await, never surfaces errors to the user
+const trackContactEvent = (
+  event_type: 'guest_contact_cta_click' | 'protected_contact_login_redirect',
+  subject?: string,
+) => {
+  axios
+    .post(`${API_URL}/contact/analytics`, { event_type, subject })
+    .catch(() => {/* silent */})
+}
 
 const contactMethods = [
   {
@@ -105,8 +122,24 @@ const officeLocations = [
   },
 ]
 
+const protectedSubjects = new Set(['order', 'shipping', 'return', 'billing'])
+
+const subjectOptions = [
+  { value: 'order', label: 'Order Inquiry', requiresAccount: true },
+  { value: 'shipping', label: 'Shipping Question', requiresAccount: true },
+  { value: 'return', label: 'Return/Refund Request', requiresAccount: true },
+  { value: 'product', label: 'Product Question', requiresAccount: false },
+  { value: 'billing', label: 'Billing Issue', requiresAccount: true },
+  { value: 'technical', label: 'Technical Support', requiresAccount: false },
+  { value: 'feedback', label: 'Feedback/Suggestion', requiresAccount: false },
+  { value: 'other', label: 'Other', requiresAccount: false },
+]
+
 export default function ContactPage() {
+  const navigate = useNavigate()
+  const location = useLocation()
   const [searchParams] = useSearchParams()
+  const { user, isAuthenticated, hasHydrated } = useAuthStore()
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -120,6 +153,11 @@ export default function ContactPage() {
   const [ticketNumber, setTicketNumber] = useState('')
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
+
+  const selectedSubjectRequiresAccount = useMemo(
+    () => protectedSubjects.has(formData.subject),
+    [formData.subject],
+  )
 
   useEffect(() => {
     const subject = searchParams.get('subject') || ''
@@ -138,13 +176,49 @@ export default function ContactPage() {
     }))
   }, [searchParams])
 
+  useEffect(() => {
+    if (!hasHydrated || !isAuthenticated || !user) {
+      return
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      name:
+        prev.name || `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+      email: prev.email || user.email || '',
+      phone: prev.phone || user.phone || '',
+    }))
+  }, [hasHydrated, isAuthenticated, user])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (selectedSubjectRequiresAccount && !isAuthenticated) {
+      trackContactEvent('protected_contact_login_redirect', formData.subject)
+      navigate('/login', {
+        state: {
+          from: {
+            pathname: location.pathname,
+            search: location.search,
+          },
+          reason: 'contact-support-auth',
+        },
+      })
+      return
+    }
+
     setIsSubmitting(true)
     setError('')
 
     try {
-      const response = await axios.post(`${API_URL}/contact`, formData)
+      const token = localStorage.getItem('auth_token')
+      const response = await axios.post(`${API_URL}/contact`, formData, {
+        headers: token
+          ? {
+              Authorization: `Bearer ${token}`,
+            }
+          : undefined,
+      })
 
       if (response.data.success) {
         setTicketNumber(response.data.ticketNumber)
@@ -161,6 +235,19 @@ export default function ContactPage() {
         setError(response.data.error || 'Failed to send message')
       }
     } catch (err: any) {
+      if (err.response?.data?.code === 'AUTH_REQUIRED_FOR_PROTECTED_CONTACT') {
+        navigate('/login', {
+          state: {
+            from: {
+              pathname: location.pathname,
+              search: location.search,
+            },
+            reason: 'contact-support-auth',
+          },
+        })
+        return
+      }
+
       setError(
         err.response?.data?.error ||
           'Unable to send your message. Please try again or email us directly.',
@@ -198,6 +285,17 @@ export default function ContactPage() {
               We're here to help! Reach out to our friendly support team and
               we'll get back to you as soon as possible.
             </p>
+            <div className='mt-6 max-w-3xl mx-auto rounded-xl border border-white/25 bg-white/10 px-4 py-3 text-left backdrop-blur-sm'>
+              <p className='inline-flex items-center gap-2 text-sm font-semibold text-white'>
+                <Lock className='h-4 w-4' />
+                Support access policy
+              </p>
+              <p className='mt-1 text-sm text-white/90'>
+                General and product questions can be sent without an account.
+                Order, shipping, return, and billing support requires sign-in
+                to protect customer data.
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -256,8 +354,9 @@ export default function ContactPage() {
                   Send Us a Message
                 </h2>
                 <p className='text-gray-600 mb-6'>
-                  Fill out the form below and we'll get back to you within 24
-                  hours.
+                  General questions stay open for guests. Order, shipping,
+                  returns, and billing support require a signed-in account so we
+                  can protect customer data.
                 </p>
 
                 {isSubmitted ? (
@@ -335,6 +434,55 @@ export default function ContactPage() {
                       </div>
                     )}
 
+                    {selectedSubjectRequiresAccount && !isAuthenticated && (
+                      <div className='flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg'>
+                        <Lock className='w-5 h-5 text-amber-600 shrink-0 mt-0.5' />
+                        <div>
+                          <p className='text-sm font-medium text-amber-900'>
+                            This support category requires an account
+                          </p>
+                          <p className='text-sm text-amber-700 mt-1'>
+                            Sign in to contact us about orders, shipping,
+                            returns, or billing. General and pre-sales questions
+                            can still be sent without an account.
+                          </p>
+                          <div className='flex flex-wrap gap-3 mt-3'>
+                            <Link
+                              to='/login'
+                              state={{
+                                from: {
+                                  pathname: location.pathname,
+                                  search: location.search,
+                                },
+                                reason: 'contact-support-auth',
+                              }}
+                              onClick={() =>
+                                trackContactEvent(
+                                  'protected_contact_login_redirect',
+                                  formData.subject,
+                                )
+                              }
+                              className='inline-flex items-center justify-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 transition-colors'
+                            >
+                              Sign In
+                            </Link>
+                            <Link
+                              to='/register'
+                              state={{
+                                from: {
+                                  pathname: location.pathname,
+                                  search: location.search,
+                                },
+                              }}
+                              className='inline-flex items-center justify-center rounded-lg border border-amber-300 px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100 transition-colors'
+                            >
+                              Create Account
+                            </Link>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     <div className='grid md:grid-cols-2 gap-6'>
                       <div>
                         <label
@@ -350,9 +498,18 @@ export default function ContactPage() {
                           value={formData.name}
                           onChange={handleChange}
                           required
+                          disabled={
+                            selectedSubjectRequiresAccount && isAuthenticated
+                          }
                           className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors'
                           placeholder='John Doe'
                         />
+                        {selectedSubjectRequiresAccount && isAuthenticated && (
+                          <p className='mt-2 text-xs text-gray-500'>
+                            Using your signed-in account identity for protected
+                            support.
+                          </p>
+                        )}
                       </div>
                       <div>
                         <label
@@ -368,6 +525,9 @@ export default function ContactPage() {
                           value={formData.email}
                           onChange={handleChange}
                           required
+                          disabled={
+                            selectedSubjectRequiresAccount && isAuthenticated
+                          }
                           className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors'
                           placeholder='john@example.com'
                         />
@@ -388,6 +548,11 @@ export default function ContactPage() {
                           name='phone'
                           value={formData.phone}
                           onChange={handleChange}
+                          disabled={
+                            selectedSubjectRequiresAccount &&
+                            isAuthenticated &&
+                            Boolean(user?.phone)
+                          }
                           className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors'
                           placeholder='+1 (234) 567-890'
                         />
@@ -427,14 +592,14 @@ export default function ContactPage() {
                         className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors'
                       >
                         <option value=''>Select a subject</option>
-                        <option value='order'>Order Inquiry</option>
-                        <option value='shipping'>Shipping Question</option>
-                        <option value='return'>Return/Refund Request</option>
-                        <option value='product'>Product Question</option>
-                        <option value='billing'>Billing Issue</option>
-                        <option value='technical'>Technical Support</option>
-                        <option value='feedback'>Feedback/Suggestion</option>
-                        <option value='other'>Other</option>
+                        {subjectOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                            {option.requiresAccount
+                              ? ' (Account Required)'
+                              : ''}
+                          </option>
+                        ))}
                       </select>
                     </div>
 
@@ -488,7 +653,9 @@ export default function ContactPage() {
                       ) : (
                         <>
                           <Send className='w-5 h-5' />
-                          Send Message
+                          {selectedSubjectRequiresAccount && !isAuthenticated
+                            ? 'Sign In to Continue'
+                            : 'Send Message'}
                         </>
                       )}
                     </button>
@@ -697,6 +864,42 @@ export default function ContactPage() {
           <p className='text-gray-600 mb-6'>
             Check out our FAQ section for instant answers to common questions.
           </p>
+          <div className='mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left'>
+            <p className='inline-flex items-center gap-2 text-sm font-semibold text-amber-900'>
+              <Lock className='h-4 w-4' />
+              Contact support policy
+            </p>
+            <p className='mt-1 text-sm text-amber-800'>
+              Guest contact is available for general and product questions.
+              Sign in first for order, shipping, return, and billing support.
+            </p>
+          </div>
+          <div className='mb-6 flex flex-col sm:flex-row items-center justify-center gap-3'>
+            <Link
+              to='/contact?subject=other&message=I%20need%20general%20support.'
+              onClick={() => trackContactEvent('guest_contact_cta_click')}
+              className='inline-flex items-center gap-2 px-5 py-3 bg-orange-500 text-white font-semibold rounded-lg hover:bg-orange-600 transition-colors'
+            >
+              Contact General Support
+            </Link>
+            <Link
+              to='/login'
+              state={{
+                from: {
+                  pathname: location.pathname,
+                  search:
+                    '?subject=order&message=I%20need%20help%20with%20my%20order.',
+                },
+                reason: 'contact-support-auth',
+              }}
+              onClick={() =>
+                trackContactEvent('protected_contact_login_redirect', 'order')
+              }
+              className='inline-flex items-center gap-2 px-5 py-3 bg-slate-900 text-white font-semibold rounded-lg hover:bg-slate-800 transition-colors'
+            >
+              Sign In for Order or Billing Help
+            </Link>
+          </div>
           <a
             href='/faq'
             className='inline-flex items-center gap-2 px-6 py-3 bg-gray-900 text-white font-semibold rounded-lg hover:bg-gray-800 transition-colors'
