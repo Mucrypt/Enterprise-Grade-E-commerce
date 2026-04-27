@@ -14,13 +14,39 @@ cd /root/Enterprise-Grade-E-commerce
 POSTGRES_CONTAINER="techtools-postgres-prod"
 API_CONTAINER="techtools-api-prod"
 MIGRATIONS_DIR="tech-tools-api/src/database/migrations"
+DB_USER="${DB_USER:-}"
+DB_NAME="${DB_NAME:-}"
+
+# Read a single KEY=value from .env without evaluating shell content.
+read_env_value() {
+    local key="$1"
+    local env_file=".env"
+
+    [ -f "$env_file" ] || return 1
+
+    local line
+    line=$(grep -E "^${key}=" "$env_file" | tail -n 1) || return 1
+    line="${line#*=}"
+
+    # Trim surrounding quotes if present.
+    line="${line%\"}"
+    line="${line#\"}"
+    line="${line%\'}"
+    line="${line#\'}"
+
+    printf '%s' "$line"
+}
+
+# Load only DB vars used by this script.
+if [ -z "$DB_USER" ]; then
+    DB_USER="$(read_env_value DB_USER 2>/dev/null || true)"
+fi
+if [ -z "$DB_NAME" ]; then
+    DB_NAME="$(read_env_value DB_NAME 2>/dev/null || true)"
+fi
+
 DB_USER="${DB_USER:-techtools_user}"
 DB_NAME="${DB_NAME:-techtools}"
-
-# Load env if exists
-if [ -f .env ]; then
-    export $(grep -v '^#' .env | xargs)
-fi
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
