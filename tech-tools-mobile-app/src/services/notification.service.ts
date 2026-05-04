@@ -4,6 +4,8 @@ import Constants from 'expo-constants'
 import axios from 'axios'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
+type NavigateHandler = (path: string) => void
+
 // =====================================================
 // PUSH NOTIFICATION SETUP FOR MOBILE APP
 // =====================================================
@@ -12,12 +14,14 @@ export class MobileNotificationService {
   /**
    * Initialize push notifications
    */
-  static async init() {
+  static async init(onNavigate?: NavigateHandler) {
     try {
       // Set notification handler
       Notifications.setNotificationHandler({
         handleNotification: async () => ({
           shouldShowAlert: true,
+          shouldShowBanner: true,
+          shouldShowList: true,
           shouldPlaySound: true,
           shouldSetBadge: true,
         }),
@@ -33,11 +37,20 @@ export class MobileNotificationService {
       }
 
       // Listen for notifications
-      this.setupListeners()
+      const cleanup = this.setupListeners(onNavigate)
+
+      // Handle case where app is opened from a killed/background state by tap.
+      const lastResponse =
+        await Notifications.getLastNotificationResponseAsync()
+      if (lastResponse) {
+        this.handleNotificationTap(lastResponse.notification, onNavigate)
+      }
 
       console.log('Push notifications initialized')
+      return cleanup
     } catch (error) {
       console.error('Error initializing push notifications:', error)
+      return undefined
     }
   }
 
@@ -121,7 +134,7 @@ export class MobileNotificationService {
   /**
    * Setup notification listeners
    */
-  static setupListeners() {
+  static setupListeners(onNavigate?: NavigateHandler) {
     // Listen for notifications in foreground
     const foregroundSubscription =
       Notifications.addNotificationReceivedListener((notification) => {
@@ -135,7 +148,7 @@ export class MobileNotificationService {
       Notifications.addNotificationResponseReceivedListener((response) => {
         console.log('Notification tapped:', response.notification)
         // Handle notification tap - navigate to relevant screen
-        this.handleNotificationTap(response.notification)
+        this.handleNotificationTap(response.notification, onNavigate)
       })
 
     return () => {
@@ -155,35 +168,72 @@ export class MobileNotificationService {
   /**
    * Handle notification tap - navigate to relevant screen
    */
-  static handleNotificationTap(notification: Notifications.Notification) {
+  static handleNotificationTap(
+    notification: Notifications.Notification,
+    onNavigate?: NavigateHandler,
+  ) {
     const data = notification.request.content.data
+    const route = this.resolveRoute(data as Record<string, any> | undefined)
+
+    if (route && onNavigate) {
+      onNavigate(route)
+    }
+  }
+
+  /**
+   * Resolve push payload to an in-app route.
+   */
+  static resolveRoute(data?: Record<string, any>): string {
     const notificationType = data?.type || data?.notification_type
 
-    // Navigate based on notification type
+    // Prefer explicit deep link if present.
+    const explicitPath = data?.deepLink || data?.path || data?.route
+    if (typeof explicitPath === 'string' && explicitPath.startsWith('/')) {
+      return explicitPath
+    }
+
+    const productSlug = data?.productSlug || data?.slug
+    const categorySlug = data?.categorySlug
+
     switch (notificationType) {
+      case 'product_back_in_stock':
+      case 'product_price_drop':
+      case 'product_featured':
+        if (typeof productSlug === 'string' && productSlug.length > 0) {
+          return `/product/${productSlug}`
+        }
+        return '/products/index'
+
+      case 'category_sale':
+      case 'category_featured':
+        if (typeof categorySlug === 'string' && categorySlug.length > 0) {
+          return `/category/${categorySlug}`
+        }
+        return '/categories'
+
+      case 'collection_trending':
+      case 'trending_update':
+      case 'campaign_launch':
+        return '/(tabs)/trending'
+
       case 'order_placed':
       case 'order_confirmed':
       case 'order_shipped':
       case 'order_delivered':
-        if (data?.orderId) {
-          // Navigate to order details
-          // Navigation.navigate('OrderStack', { screen: 'OrderDetail', params: { orderId: data.orderId } })
-        }
-        break
       case 'payment_received':
-        if (data?.orderId) {
-          // Navigate to order
+        if (typeof data?.orderId === 'string' && data.orderId.length > 0) {
+          return `/orders/${data.orderId}`
         }
-        break
-      case 'product_back_in_stock':
-        if (data?.productId) {
-          // Navigate to product
-          // Navigation.navigate('ProductStack', { screen: 'ProductDetail', params: { productId: data.productId } })
+        return '/orders'
+
+      case 'blog_published':
+        if (typeof productSlug === 'string' && productSlug.length > 0) {
+          return `/blog/${productSlug}`
         }
-        break
+        return '/blog/index'
+
       default:
-        // Navigate to notifications
-        break
+        return '/(tabs)/index'
     }
   }
 
@@ -203,7 +253,10 @@ export class MobileNotificationService {
           data,
           badge: 1,
         },
-        trigger: { seconds: 2 },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+          seconds: 2,
+        },
       })
     } catch (error) {
       console.error('Error sending local notification:', error)

@@ -65,9 +65,11 @@ echo "1) Build & Submit to Play Store (Production)"
 echo "2) Build Only (No Submit)"
 echo "3) Submit Latest Build (Skip Build)"
 echo "4) Build Preview APK (Testing)"
-echo "5) Cancel"
+echo "5) Build iOS Production (App Store)"
+echo "6) Submit Latest iOS Build"
+echo "7) Cancel"
 echo ""
-read -p "Select option [1-5]: " option
+read -p "Select option [1-7]: " option
 
 case $option in
     1)
@@ -134,6 +136,21 @@ case $option in
         echo "Download link will be shown above."
         ;;
     5)
+        echo ""
+        echo -e "${BLUE}Building iOS production binary...${NC}"
+        npx eas build --platform ios --profile production
+        echo ""
+        echo -e "${GREEN}✓ iOS build started!${NC}"
+        echo "Submit with: npx eas submit --platform ios --profile production"
+        ;;
+    6)
+        echo ""
+        echo -e "${BLUE}Submitting latest iOS build to App Store Connect...${NC}"
+        npx eas submit --platform ios --profile production
+        echo ""
+        echo -e "${GREEN}✓ iOS submit started!${NC}"
+        ;;
+    7)
         echo "Cancelled."
         exit 0
         ;;

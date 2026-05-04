@@ -40,11 +40,13 @@ echo "  ${RED}4)${NC} Major Release (1.0.0 → 2.0.0)"
 echo ""
 echo "  ${BLUE}5)${NC} Build Preview APK (no store submit)"
 echo "  ${BLUE}6)${NC} Build Production + Submit to Play Store"
+echo "  ${BLUE}7)${NC} Build iOS Production (App Store)"
+echo "  ${BLUE}8)${NC} Submit Latest iOS Build to App Store"
 echo ""
 echo "  ${NC}0)${NC} Exit"
 echo ""
 
-read -p "Enter choice [0-6]: " choice
+read -p "Enter choice [0-8]: " choice
 
 case $choice in
     1)
@@ -147,6 +149,21 @@ case $choice in
         echo ""
         echo -e "${GREEN}✓ Production build started with auto-submit!${NC}"
         echo "Check build status: https://expo.dev/accounts/yongsi/projects/techtools/builds"
+        ;;
+    7)
+        echo ""
+        echo -e "${BLUE}Building production iOS binary for App Store...${NC}"
+        npx eas-cli build --profile production --platform ios
+        echo ""
+        echo -e "${GREEN}✓ iOS production build started!${NC}"
+        echo "Check build status: https://expo.dev/accounts/yongsi/projects/techtools/builds"
+        ;;
+    8)
+        echo ""
+        echo -e "${BLUE}Submitting latest iOS build to App Store Connect...${NC}"
+        npx eas-cli submit --profile production --platform ios
+        echo ""
+        echo -e "${GREEN}✓ iOS submit started!${NC}"
         ;;
     0)
         echo "Exiting..."

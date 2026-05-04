@@ -240,13 +240,13 @@ export default function ProfileTabScreen() {
             icon='receipt-outline'
             title='All Orders'
             subtitle='View your order history'
-            onPress={() => {}}
+            onPress={() => router.push('/orders' as Href)}
           />
           <MenuItem
             icon='car-outline'
             title='Track Order'
             subtitle='Check delivery status'
-            onPress={() => {}}
+            onPress={() => router.push('/orders' as Href)}
           />
           <MenuItem
             icon='return-down-back-outline'

@@ -2,7 +2,7 @@
   "expo": {
     "name": "TechTools",
     "slug": "techtools",
-    "version": "1.0.0",
+    "version": "1.13.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "techtools",
@@ -10,11 +10,12 @@
     "ios": {
       "bundleIdentifier": "com.mucrypt.techtools",
       "icon": "./assets/expo.icon",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "buildNumber": "13"
     },
     "android": {
       "package": "com.mucrypt.techtools",
-      "versionCode": 1,
+      "versionCode": 13,
       "adaptiveIcon": {
         "backgroundColor": "#FF6B35",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -34,6 +35,7 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      "expo-notifications",
       [
         "@stripe/stripe-react-native",
         {
