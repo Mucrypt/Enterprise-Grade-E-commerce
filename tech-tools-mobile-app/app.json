@@ -16,6 +16,7 @@
     "android": {
       "package": "com.mucrypt.techtools",
       "versionCode": 13,
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#FF6B35",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

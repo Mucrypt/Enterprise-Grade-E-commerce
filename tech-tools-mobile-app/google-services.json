@@ -1,0 +1,35 @@
+{
+  "project_info": {
+    "project_number": "786338514195",
+    "firebase_url": "https://native-projects-default-rtdb.firebaseio.com",
+    "project_id": "native-projects",
+    "storage_bucket": "native-projects.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:786338514195:android:2a440431b6103621d3c6e6",
+        "android_client_info": {
+          "package_name": "com.mucrypt.techtools"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCSXaZ_m5G3_b--pzYgeHE_mCT-h1eIc_o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "786338514195-tncmbkcodv1irur043ks555jc5q0ghfb.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
