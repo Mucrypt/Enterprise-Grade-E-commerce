@@ -210,7 +210,7 @@ export function BlogPostForm({ post, onSubmit, isSubmitting }: BlogPostFormProps
             </CardContent>
           </Card>
 
-          {/* Content Tabs */}
+          {/* Content Tabs - Markdown and HTML */}
           <Card>
             <CardHeader>
               <CardTitle>Content</CardTitle>
