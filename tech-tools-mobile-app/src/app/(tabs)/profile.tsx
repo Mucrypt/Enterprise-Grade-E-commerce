@@ -2,7 +2,7 @@
 // TechTools Mobile App - Profile Tab Screen
 // ============================================
 
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   View,
   Text,
@@ -22,6 +22,7 @@ import {
   AppShadows,
   AppGradients,
 } from '@/constants/appTheme'
+import { ordersApiNew } from '@/api'
 import { useAuthStore, useCartStore, useWishlistStore } from '@/stores'
 
 interface MenuItemProps {
@@ -97,6 +98,42 @@ export default function ProfileTabScreen() {
   const { user, isAuthenticated, logout } = useAuthStore()
   const cartCount = useCartStore((state) => state.itemCount())
   const wishlistCount = useWishlistStore((state) => state.items.length)
+  const [activeOrdersCount, setActiveOrdersCount] = useState(0)
+  const [totalOrdersCount, setTotalOrdersCount] = useState(0)
+
+  useEffect(() => {
+    const loadOrdersSummary = async () => {
+      if (!isAuthenticated) {
+        setActiveOrdersCount(0)
+        setTotalOrdersCount(0)
+        return
+      }
+
+      try {
+        const response = await ordersApiNew.getAll(1, 50)
+        const orders = response.orders || []
+        const activeStatuses = new Set([
+          'pending',
+          'confirmed',
+          'processing',
+          'shipped',
+          'ready_to_ship',
+        ])
+
+        const active = orders.filter((order) =>
+          activeStatuses.has(order.order_status),
+        ).length
+
+        setActiveOrdersCount(active)
+        setTotalOrdersCount(response.pagination?.total || orders.length)
+      } catch (error) {
+        setActiveOrdersCount(0)
+        setTotalOrdersCount(0)
+      }
+    }
+
+    loadOrdersSummary()
+  }, [isAuthenticated])
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -212,7 +249,7 @@ export default function ProfileTabScreen() {
           {/* Quick Stats */}
           <View style={styles.statsContainer}>
             <TouchableOpacity style={styles.stat}>
-              <Text style={styles.statValue}>0</Text>
+              <Text style={styles.statValue}>{totalOrdersCount}</Text>
               <Text style={styles.statLabel}>Orders</Text>
             </TouchableOpacity>
             <View style={styles.statDivider} />
@@ -241,6 +278,7 @@ export default function ProfileTabScreen() {
             title='All Orders'
             subtitle='View your order history'
             onPress={() => router.push('/orders' as Href)}
+            badge={activeOrdersCount}
           />
           <MenuItem
             icon='car-outline'
