@@ -19,6 +19,9 @@ import RegisterPage from './pages/RegisterPage'
 import ProfilePage from './pages/ProfilePage'
 import OrdersPage from './pages/OrdersPage'
 import WishlistPage from './pages/WishlistPage'
+import PaymentMethodsPage from './pages/PaymentMethodsPage'
+import SettingsPage from './pages/SettingsPage'
+import SupportPage from './pages/SupportPage'
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
 import TermsOfServicePage from './pages/TermsOfServicePage'
 import CookiePolicyPage from './pages/CookiePolicyPage'
@@ -83,6 +86,8 @@ function App() {
               <Route path='profile' element={<ProfilePage />} />
               <Route path='orders' element={<OrdersPage />} />
               <Route path='wishlist' element={<WishlistPage />} />
+              <Route path='payment-methods' element={<PaymentMethodsPage />} />
+              <Route path='settings' element={<SettingsPage />} />
 
               {/* Legal Pages */}
               <Route path='privacy' element={<PrivacyPolicyPage />} />
@@ -90,6 +95,7 @@ function App() {
               <Route path='cookies' element={<CookiePolicyPage />} />
 
               {/* Support Pages */}
+              <Route path='support' element={<SupportPage />} />
               <Route path='contact' element={<ContactPage />} />
               <Route path='faq' element={<FAQPage />} />
               <Route path='shipping' element={<ShippingInfoPage />} />

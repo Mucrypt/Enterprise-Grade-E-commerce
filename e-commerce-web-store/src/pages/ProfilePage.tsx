@@ -22,6 +22,10 @@ import {
   ChevronRight,
   Shield,
   Bell,
+  LifeBuoy,
+  HelpCircle,
+  MessageCircle,
+  Star,
 } from 'lucide-react'
 import { supportApi } from '../api'
 import { SupportConcierge } from '../components/layout/SupportConcierge'
@@ -124,8 +128,25 @@ export default function ProfilePage() {
   const quickLinks = [
     { label: 'My Orders', icon: Package, href: '/orders', count: 5 },
     { label: 'Wishlist', icon: Heart, href: '/wishlist', count: 12 },
+    { label: 'Track Order', icon: Package, href: '/track-order' },
+    { label: 'Returns', icon: MessageCircle, href: '/returns' },
     { label: 'Payment Methods', icon: CreditCard, href: '/payment-methods' },
     { label: 'Settings', icon: Settings, href: '/settings' },
+  ]
+
+  const supportLinks = [
+    {
+      label: 'Smart Support',
+      icon: LifeBuoy,
+      href: '/contact?subject=technical&message=I%20want%20live%20support.',
+    },
+    { label: 'Help Center', icon: HelpCircle, href: '/faq' },
+    { label: 'Contact Us', icon: MessageCircle, href: '/contact' },
+    {
+      label: 'Rate the App',
+      icon: Star,
+      href: '/contact?subject=feedback&message=I%20want%20to%20rate%20the%20app.',
+    },
   ]
 
   return (
@@ -221,6 +242,25 @@ export default function ProfilePage() {
                       )}
                       <ChevronRight className='w-4 h-4' />
                     </div>
+                  </Link>
+                ))}
+              </nav>
+            </div>
+
+            <div className='bg-white rounded-2xl shadow-sm p-4 mt-6'>
+              <h3 className='font-semibold text-gray-900 px-3 mb-2'>Support</h3>
+              <nav className='space-y-1'>
+                {supportLinks.map((item) => (
+                  <Link
+                    key={item.href}
+                    to={item.href}
+                    className='flex items-center justify-between px-3 py-2.5 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors'
+                  >
+                    <div className='flex items-center gap-3'>
+                      <item.icon className='w-5 h-5' />
+                      <span className='font-medium'>{item.label}</span>
+                    </div>
+                    <ChevronRight className='w-4 h-4' />
                   </Link>
                 ))}
               </nav>
