@@ -19,6 +19,35 @@ APP_DIR="$(dirname "$SCRIPT_DIR")"
 
 cd "$APP_DIR"
 
+EAS_CMD="npx eas-cli@latest"
+
+run_eas() {
+    $EAS_CMD "$@"
+}
+
+run_build_with_retries() {
+    local max_retries=3
+    local retry_count=0
+
+    while [[ $retry_count -lt $max_retries ]]; do
+        if run_eas build "$@"; then
+            return 0
+        fi
+
+        retry_count=$((retry_count + 1))
+        if [[ $retry_count -lt $max_retries ]]; then
+            echo ""
+            echo -e "${YELLOW}Build request failed, retrying in 15 seconds... (attempt $((retry_count + 1))/$max_retries)${NC}"
+            sleep 15
+        else
+            echo ""
+            echo -e "${RED}Build failed after $max_retries attempts.${NC}"
+            echo -e "${YELLOW}Please verify EAS auth and service status, then retry.${NC}"
+            return 1
+        fi
+    done
+}
+
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}   TechTools Mobile App Deploy         ${NC}"
 echo -e "${BLUE}========================================${NC}"
@@ -34,6 +63,15 @@ fi
 # Check current branch
 CURRENT_BRANCH=$(git branch --show-current)
 echo -e "Current branch: ${GREEN}$CURRENT_BRANCH${NC}"
+
+echo ""
+echo -e "${BLUE}Checking EAS authentication...${NC}"
+if ! run_eas whoami >/dev/null 2>&1; then
+    echo -e "${RED}Not logged in to EAS CLI.${NC}"
+    echo "Run: npx eas-cli@latest login"
+    exit 1
+fi
+echo -e "${GREEN}EAS authentication OK${NC}"
 
 # Check for uncommitted changes
 if [[ -n $(git status -s) ]]; then
@@ -78,7 +116,7 @@ case $option in
         echo "This will take 10-15 minutes."
         echo ""
         
-        npx eas build --platform android --profile production --non-interactive
+        run_build_with_retries --platform android --profile production --non-interactive
         
         echo ""
         echo -e "${GREEN}✓ Build complete!${NC}"
@@ -90,7 +128,7 @@ case $option in
         RETRY_COUNT=0
         
         while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            if npx eas submit --platform android --latest --non-interactive; then
+            if run_eas submit --platform android --latest --non-interactive; then
                 echo ""
                 echo -e "${GREEN}✓ Successfully submitted to Play Store!${NC}"
                 break
@@ -115,7 +153,7 @@ case $option in
     2)
         echo ""
         echo -e "${BLUE}Building Production AAB (No Submit)...${NC}"
-        npx eas build --platform android --profile production --non-interactive
+        run_build_with_retries --platform android --profile production --non-interactive
         echo ""
         echo -e "${GREEN}✓ Build complete!${NC}"
         echo "Submit later with: npx eas submit --platform android --latest"
@@ -123,14 +161,14 @@ case $option in
     3)
         echo ""
         echo -e "${BLUE}Submitting latest build to Play Store...${NC}"
-        npx eas submit --platform android --latest --non-interactive
+        run_eas submit --platform android --latest --non-interactive
         echo ""
         echo -e "${GREEN}✓ Submitted!${NC}"
         ;;
     4)
         echo ""
         echo -e "${BLUE}Building Preview APK...${NC}"
-        npx eas build --platform android --profile preview --non-interactive
+        run_build_with_retries --platform android --profile preview --non-interactive
         echo ""
         echo -e "${GREEN}✓ Preview APK built!${NC}"
         echo "Download link will be shown above."
@@ -138,7 +176,7 @@ case $option in
     5)
         echo ""
         echo -e "${BLUE}Building iOS production binary...${NC}"
-        npx eas build --platform ios --profile production
+        run_build_with_retries --platform ios --profile production
         echo ""
         echo -e "${GREEN}✓ iOS build started!${NC}"
         echo "Submit with: npx eas submit --platform ios --profile production"
@@ -146,7 +184,7 @@ case $option in
     6)
         echo ""
         echo -e "${BLUE}Submitting latest iOS build to App Store Connect...${NC}"
-        npx eas submit --platform ios --profile production
+        run_eas submit --platform ios --profile production
         echo ""
         echo -e "${GREEN}✓ iOS submit started!${NC}"
         ;;
