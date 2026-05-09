@@ -27,6 +27,7 @@ interface AuthState {
   logout: () => Promise<void>
   checkAuth: () => Promise<void>
   initialize: () => Promise<void>
+  updateUser: (updates: Partial<User>) => void
   clearError: () => void
   setHasHydrated: (state: boolean) => void
 }
@@ -146,6 +147,17 @@ export const useAuthStore = create<AuthState>()(
         // Wait for hydration then check auth
         await get().checkAuth()
         set({ isInitialized: true })
+      },
+
+      updateUser: (updates) => {
+        set((state) => ({
+          user: state.user
+            ? {
+                ...state.user,
+                ...updates,
+              }
+            : state.user,
+        }))
       },
 
       clearError: () => set({ error: null }),

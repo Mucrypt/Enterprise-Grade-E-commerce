@@ -14,7 +14,6 @@ import {
   Brand,
   User,
   Order,
-  Address,
   Review,
   SupportProfile,
   ProductFilters,
@@ -60,6 +59,55 @@ const setTokens = async (
 const clearTokens = async (): Promise<void> => {
   await SecureStore.deleteItemAsync('accessToken')
   await SecureStore.deleteItemAsync('refreshToken')
+}
+
+export interface ApiErrorContext {
+  message: string
+  statusCode?: number
+  isAuthError: boolean
+  isNetworkError: boolean
+}
+
+export const getApiErrorContext = (
+  error: unknown,
+  fallbackMessage = 'Something went wrong. Please try again.',
+): ApiErrorContext => {
+  if (!axios.isAxiosError(error)) {
+    return {
+      message: fallbackMessage,
+      isAuthError: false,
+      isNetworkError: false,
+    }
+  }
+
+  const statusCode = error.response?.status
+  const responseData = error.response?.data as
+    | { message?: string; error?: string }
+    | undefined
+
+  const message =
+    responseData?.message ||
+    responseData?.error ||
+    error.message ||
+    fallbackMessage
+
+  return {
+    message,
+    statusCode,
+    isAuthError: statusCode === 401 || statusCode === 403,
+    isNetworkError: !error.response,
+  }
+}
+
+export const getApiErrorMessage = (
+  error: unknown,
+  fallbackMessage = 'Something went wrong. Please try again.',
+): string => getApiErrorContext(error, fallbackMessage).message
+
+interface SecurityEventPayload {
+  action: string
+  status: 'success' | 'failed'
+  metadata?: Record<string, unknown>
 }
 
 // Request interceptor - Add auth token
@@ -232,6 +280,127 @@ export const contactApi = {
       message: data.message || response.data.message,
       ticketNumber: data.ticketNumber || response.data.ticketNumber,
     }
+  },
+}
+
+export const securityApi = {
+  logSensitiveAction: async ({
+    action,
+    status,
+    metadata,
+  }: SecurityEventPayload): Promise<void> => {
+    const safeMetadata = metadata
+      ? Object.fromEntries(
+          Object.entries(metadata).filter(
+            ([key]) =>
+              !['token', 'accessToken', 'refreshToken', 'password'].includes(
+                key,
+              ),
+          ),
+        )
+      : undefined
+
+    const payload = {
+      action,
+      status,
+      metadata: safeMetadata,
+      source: 'mobile-app',
+      timestamp: new Date().toISOString(),
+    }
+
+    try {
+      await apiClient.post('/security/client-events', payload)
+    } catch {
+      // Best-effort logging only. Do not break user flows if audit endpoint is unavailable.
+    }
+  },
+}
+
+export interface UserAddress {
+  id: string
+  user_id: string
+  address_type: 'shipping' | 'billing'
+  full_name: string
+  address_line1: string
+  address_line2: string | null
+  city: string
+  state: string | null
+  country: string
+  postal_code: string
+  phone: string | null
+  is_default: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface UserAddressInput {
+  addressType: 'shipping' | 'billing'
+  fullName: string
+  addressLine1: string
+  addressLine2?: string
+  city: string
+  state?: string
+  country: string
+  postalCode: string
+  phone?: string
+  isDefault?: boolean
+}
+
+interface UserProfilePayload {
+  user: {
+    id: string
+    email: string
+    firstName: string
+    lastName: string
+    phone: string | null
+    userType: string
+    companyName: string | null
+    emailVerified: boolean
+    phoneVerified: boolean
+    isActive: boolean
+    lastLogin: string | null
+    createdAt: string
+    updatedAt: string
+  }
+  addresses: UserAddress[]
+}
+
+const normalizeAddress = (address: any): UserAddress => ({
+  id: address.id,
+  user_id: address.user_id,
+  address_type: address.address_type,
+  full_name: address.full_name,
+  address_line1: address.address_line1,
+  address_line2: address.address_line2 || null,
+  city: address.city,
+  state: address.state || null,
+  country: address.country,
+  postal_code: address.postal_code,
+  phone: address.phone || null,
+  is_default: Boolean(address.is_default),
+  created_at: address.created_at,
+  updated_at: address.updated_at,
+})
+
+export const userApi = {
+  getProfile: async (): Promise<UserProfilePayload> => {
+    const response = await apiClient.get('/users/profile')
+    const data = response.data.data || response.data
+    return {
+      user: data.user,
+      addresses: (data.addresses || []).map(normalizeAddress),
+    }
+  },
+
+  updateProfile: async (payload: {
+    firstName?: string
+    lastName?: string
+    phone?: string
+    companyName?: string
+  }): Promise<UserProfilePayload['user']> => {
+    const response = await apiClient.put('/users/profile', payload)
+    const data = response.data.data || response.data
+    return data.user || data
   },
 }
 
@@ -423,33 +592,105 @@ export const ordersApi = {
 // Addresses API
 // ============================================
 export const addressesApi = {
-  getAll: async (): Promise<Address[]> => {
-    const response = await apiClient.get('/addresses')
+  getAll: async (): Promise<UserAddress[]> => {
+    const response = await apiClient.get('/users/addresses')
     const data = response.data.data || response.data
-    return data.addresses || data
+    return (data.addresses || data || []).map(normalizeAddress)
   },
 
-  create: async (
-    addressData: Omit<Address, 'id' | 'user_id'>,
-  ): Promise<Address> => {
-    const response = await apiClient.post('/addresses', addressData)
-    return response.data.data || response.data
+  create: async (addressData: UserAddressInput): Promise<UserAddress> => {
+    const response = await apiClient.post('/users/addresses', addressData)
+    const data = response.data.data || response.data
+    return normalizeAddress(data.address || data)
   },
 
   update: async (
     id: string,
-    addressData: Partial<Address>,
-  ): Promise<Address> => {
-    const response = await apiClient.put(`/addresses/${id}`, addressData)
-    return response.data.data || response.data
+    addressData: Partial<UserAddressInput>,
+  ): Promise<UserAddress> => {
+    const response = await apiClient.put(`/users/addresses/${id}`, addressData)
+    const data = response.data.data || response.data
+    return normalizeAddress(data.address || data)
   },
 
   delete: async (id: string): Promise<void> => {
-    await apiClient.delete(`/addresses/${id}`)
+    await apiClient.delete(`/users/addresses/${id}`)
   },
 
   setDefault: async (id: string): Promise<void> => {
-    await apiClient.post(`/addresses/${id}/default`)
+    await apiClient.put(`/users/addresses/${id}`, { isDefault: true })
+  },
+}
+
+export interface AppNotification {
+  id: string
+  notification_type: string
+  title: string
+  message: string
+  data: Record<string, any> | null
+  is_read: boolean
+  is_archived: boolean
+  created_at: string
+  read_at: string | null
+}
+
+const normalizeNotification = (notification: any): AppNotification => ({
+  id: notification.id,
+  notification_type: notification.notification_type,
+  title: notification.title,
+  message: notification.message,
+  data: notification.data || null,
+  is_read: Boolean(notification.is_read),
+  is_archived: Boolean(notification.is_archived),
+  created_at: notification.created_at,
+  read_at: notification.read_at || null,
+})
+
+export const notificationsApi = {
+  getAll: async (params?: {
+    limit?: number
+    offset?: number
+    unreadOnly?: boolean
+  }): Promise<{
+    notifications: AppNotification[]
+    unreadCount: number
+    limit: number
+    offset: number
+  }> => {
+    const queryParams = new URLSearchParams()
+
+    if (params?.limit) queryParams.append('limit', String(params.limit))
+    if (params?.offset) queryParams.append('offset', String(params.offset))
+    if (params?.unreadOnly) queryParams.append('unreadOnly', 'true')
+
+    const queryString = queryParams.toString()
+    const response = await apiClient.get(
+      `/notifications${queryString ? `?${queryString}` : ''}`,
+    )
+    const data = response.data.data || response.data
+
+    return {
+      notifications: (data.notifications || []).map(normalizeNotification),
+      unreadCount: data.unreadCount || 0,
+      limit: data.limit || params?.limit || 20,
+      offset: data.offset || params?.offset || 0,
+    }
+  },
+
+  markAsRead: async (id: string): Promise<void> => {
+    await apiClient.put(`/notifications/${id}/read`)
+  },
+
+  markAllAsRead: async (): Promise<void> => {
+    await apiClient.put('/notifications/read/all')
+  },
+
+  archive: async (id: string): Promise<void> => {
+    await apiClient.put(`/notifications/${id}/archive`)
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await apiClient.delete(`/notifications/${id}`)
   },
 }
 
@@ -981,6 +1222,7 @@ export const ordersApiNew = {
 // Combined API object for convenience
 export const api = {
   auth: authApi,
+  user: userApi,
   contact: contactApi,
   products: productsApi,
   categories: categoriesApi,
@@ -988,6 +1230,7 @@ export const api = {
   orders: ordersApi,
   ordersNew: ordersApiNew,
   addresses: addressesApi,
+  notifications: notificationsApi,
   reviews: reviewsApi,
   wishlist: wishlistApi,
   blog: blogApi,

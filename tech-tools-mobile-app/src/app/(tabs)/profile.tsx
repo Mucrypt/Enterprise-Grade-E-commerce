@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native'
+import * as Linking from 'expo-linking'
 import { Ionicons } from '@expo/vector-icons'
 import { type Href, useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -152,6 +153,14 @@ export default function ProfileTabScreen() {
     router.push('/support' as Href)
   }
 
+  const openExternal = async (url: string) => {
+    try {
+      await Linking.openURL(url)
+    } catch {
+      Alert.alert('Unavailable', 'Could not open this link right now.')
+    }
+  }
+
   // Guest View
   if (!isAuthenticated) {
     return (
@@ -203,18 +212,18 @@ export default function ProfileTabScreen() {
           <MenuItem
             icon='help-circle-outline'
             title='Help & Support'
-            onPress={() => {}}
+            onPress={() => router.push('/help-center' as Href)}
             color={AppColors.info}
           />
           <MenuItem
             icon='document-text-outline'
             title='Terms & Conditions'
-            onPress={() => {}}
+            onPress={() => openExternal('https://techtoolstore.com/terms')}
           />
           <MenuItem
             icon='shield-checkmark-outline'
             title='Privacy Policy'
-            onPress={() => {}}
+            onPress={() => openExternal('https://techtoolstore.com/privacy')}
           />
         </MenuSection>
       </SafeAreaView>
@@ -290,7 +299,7 @@ export default function ProfileTabScreen() {
             icon='return-down-back-outline'
             title='Returns'
             subtitle='Manage returns & refunds'
-            onPress={() => {}}
+            onPress={() => router.push('/returns' as Href)}
           />
         </MenuSection>
 
@@ -298,24 +307,24 @@ export default function ProfileTabScreen() {
           <MenuItem
             icon='person-outline'
             title='Edit Profile'
-            onPress={() => {}}
+            onPress={() => router.push('/profile/edit' as Href)}
           />
           <MenuItem
             icon='location-outline'
             title='Addresses'
             subtitle='Manage delivery addresses'
-            onPress={() => {}}
+            onPress={() => router.push('/profile/addresses' as Href)}
           />
           <MenuItem
             icon='card-outline'
             title='Payment Methods'
-            onPress={() => {}}
+            onPress={() => router.push('/profile/payment-methods' as Href)}
           />
           <MenuItem
             icon='notifications-outline'
             title='Notifications'
             subtitle='Manage preferences'
-            onPress={() => {}}
+            onPress={() => router.push('/profile/notifications' as Href)}
           />
         </MenuSection>
 
@@ -330,19 +339,19 @@ export default function ProfileTabScreen() {
           <MenuItem
             icon='help-circle-outline'
             title='Help Center'
-            onPress={() => {}}
+            onPress={() => router.push('/help-center' as Href)}
             color={AppColors.info}
           />
           <MenuItem
             icon='chatbubble-outline'
             title='Contact Us'
-            onPress={() => {}}
+            onPress={() => router.push('/contact-us' as Href)}
             color={AppColors.info}
           />
           <MenuItem
             icon='star-outline'
             title='Rate the App'
-            onPress={() => {}}
+            onPress={() => router.push('/rate-app' as Href)}
             color={AppColors.warning}
           />
         </MenuSection>
@@ -351,7 +360,7 @@ export default function ProfileTabScreen() {
           <MenuItem
             icon='settings-outline'
             title='Settings'
-            onPress={() => {}}
+            onPress={() => router.push('/profile/settings' as Href)}
           />
           <MenuItem
             icon='log-out-outline'
