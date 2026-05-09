@@ -128,5 +128,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#208AEF',
     zIndex: 1000,
+    
   },
 });
