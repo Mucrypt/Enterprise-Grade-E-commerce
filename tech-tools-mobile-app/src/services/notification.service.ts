@@ -63,20 +63,46 @@ export class MobileNotificationService {
       return false
     }
 
-    const { status: existingStatus } = await Notifications.getPermissionsAsync()
-    let finalStatus = existingStatus
+    let permissions = await Notifications.getPermissionsAsync()
 
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync()
-      finalStatus = status
+    if (!this.isPermissionGranted(permissions)) {
+      permissions = await Notifications.requestPermissionsAsync()
     }
 
-    if (finalStatus !== 'granted') {
+    if (!this.isPermissionGranted(permissions)) {
       console.log('Failed to get push notification permission.')
       return false
     }
 
     return true
+  }
+
+  /**
+   * Normalize notification permission checks across expo-notifications versions.
+   */
+  private static isPermissionGranted(
+    permissions: Notifications.NotificationPermissionsStatus,
+  ): boolean {
+    const permissionAny = permissions as any
+
+    if (typeof permissionAny.granted === 'boolean') {
+      return permissionAny.granted
+    }
+
+    if (typeof permissionAny.status === 'string') {
+      return permissionAny.status === 'granted'
+    }
+
+    const iosStatus = permissions.ios?.status
+    if (typeof iosStatus === 'number') {
+      return (
+        iosStatus === Notifications.IosAuthorizationStatus.AUTHORIZED ||
+        iosStatus === Notifications.IosAuthorizationStatus.PROVISIONAL ||
+        iosStatus === Notifications.IosAuthorizationStatus.EPHEMERAL
+      )
+    }
+
+    return false
   }
 
   /**
