@@ -293,7 +293,7 @@ export default function ProfileTabScreen() {
             icon='car-outline'
             title='Track Order'
             subtitle='Check delivery status'
-            onPress={() => router.push('/orders' as Href)}
+            onPress={() => router.push('/track-order' as Href)}
           />
           <MenuItem
             icon='return-down-back-outline'

@@ -132,6 +132,7 @@ export default function OrderDetailScreen() {
   }
 
   const statusColor = getOrderStatusColor(order.order_status)
+  const orderItems = Array.isArray(order.items) ? order.items : []
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -170,19 +171,25 @@ export default function OrderDetailScreen() {
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Items</Text>
-          {order.items.map((item) => (
-            <View key={item.id} style={styles.itemRow}>
-              <View style={styles.itemMain}>
-                <Text style={styles.itemName}>{item.product_name}</Text>
-                <Text style={styles.itemMeta}>
-                  Qty {item.quantity} x {formatPrice(item.unit_price)}
+          {orderItems.length === 0 ? (
+            <Text style={styles.emptyItemsText}>
+              No line items available for this order yet.
+            </Text>
+          ) : (
+            orderItems.map((item) => (
+              <View key={item.id} style={styles.itemRow}>
+                <View style={styles.itemMain}>
+                  <Text style={styles.itemName}>{item.product_name}</Text>
+                  <Text style={styles.itemMeta}>
+                    Qty {item.quantity} x {formatPrice(item.unit_price)}
+                  </Text>
+                </View>
+                <Text style={styles.itemTotal}>
+                  {formatPrice(item.total_price)}
                 </Text>
               </View>
-              <Text style={styles.itemTotal}>
-                {formatPrice(item.total_price)}
-              </Text>
-            </View>
-          ))}
+            ))
+          )}
         </View>
 
         <View style={styles.card}>
@@ -334,6 +341,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: AppColors.gray900,
+  },
+  emptyItemsText: {
+    fontSize: 13,
+    color: AppColors.gray500,
   },
   summaryRow: {
     flexDirection: 'row',

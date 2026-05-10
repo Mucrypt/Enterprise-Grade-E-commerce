@@ -87,7 +87,7 @@ export default function HelpCenterScreen() {
 
         <TouchableOpacity
           style={styles.linkCard}
-          onPress={() => router.push('/orders' as Href)}
+          onPress={() => router.push('/track-order' as Href)}
         >
           <View style={styles.linkIconWrap}>
             <Ionicons name='car-outline' size={20} color={AppColors.info} />

@@ -104,6 +104,161 @@ export const getApiErrorMessage = (
   fallbackMessage = 'Something went wrong. Please try again.',
 ): string => getApiErrorContext(error, fallbackMessage).message
 
+type UnknownRecord = Record<string, unknown>
+
+const normalizationWarningCache = new Set<string>()
+
+const createRequestId = (): string => {
+  const ts = Date.now().toString(36)
+  const rand = Math.random().toString(36).slice(2, 10)
+  return `m-${ts}-${rand}`
+}
+
+const isRecord = (value: unknown): value is UnknownRecord =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const toSafeString = (value: unknown, fallback = ''): string =>
+  typeof value === 'string' ? value : fallback
+
+const toSafeNullableString = (value: unknown): string | null =>
+  typeof value === 'string' && value.trim().length > 0 ? value : null
+
+const toSafeNumber = (value: unknown, fallback = 0): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) {
+      return parsed
+    }
+  }
+
+  return fallback
+}
+
+const toSafeBoolean = (value: unknown, fallback = false): boolean =>
+  typeof value === 'boolean' ? value : fallback
+
+const toSafeArray = <T>(value: unknown): T[] =>
+  Array.isArray(value) ? (value as T[]) : []
+
+const getPayloadKeys = (payload: unknown): string[] =>
+  isRecord(payload) ? Object.keys(payload).slice(0, 25) : []
+
+const readRequestId = (
+  source: unknown,
+): string | undefined => {
+  if (!source) return undefined
+
+  if (isRecord(source)) {
+    const direct = source['x-request-id'] ?? source['X-Request-Id']
+    if (typeof direct === 'string' && direct.trim().length > 0) {
+      return direct
+    }
+
+    const internal = source['_requestId']
+    if (typeof internal === 'string' && internal.trim().length > 0) {
+      return internal
+    }
+
+    const getter = source['get']
+    if (typeof getter === 'function') {
+      const byLower = getter.call(source, 'x-request-id')
+      if (typeof byLower === 'string' && byLower.trim().length > 0) {
+        return byLower
+      }
+
+      const byUpper = getter.call(source, 'X-Request-Id')
+      if (typeof byUpper === 'string' && byUpper.trim().length > 0) {
+        return byUpper
+      }
+    }
+  }
+
+  return undefined
+}
+
+const getRequestIdFromResponse = (
+  response: unknown,
+): string => {
+  if (!isRecord(response)) {
+    return createRequestId()
+  }
+
+  const fromConfig = readRequestId(response.config)
+  const fromHeaders = readRequestId(response.headers)
+  return fromConfig || fromHeaders || createRequestId()
+}
+
+const logNormalizationIssue = (
+  endpoint: string,
+  issue: string,
+  payload: unknown,
+  requestId?: string,
+) => {
+  const cacheKey = `${endpoint}:${issue}`
+
+  if (!normalizationWarningCache.has(cacheKey)) {
+    normalizationWarningCache.add(cacheKey)
+    console.warn(`[api-normalizer] ${endpoint}: ${issue}`, {
+      requestId,
+      keys: getPayloadKeys(payload),
+    })
+  }
+
+  void apiClient
+    .post('/security/client-events', {
+      action: 'payload_normalization',
+      status: 'failed',
+      metadata: {
+        endpoint,
+        issue,
+        requestId,
+        keys: getPayloadKeys(payload),
+      },
+      source: 'mobile-app',
+      timestamp: new Date().toISOString(),
+    })
+    .catch(() => {
+      // Best-effort only.
+    })
+}
+
+const normalizeAuthUser = (rawUser: unknown, endpoint: string): User => {
+  if (!isRecord(rawUser)) {
+    logNormalizationIssue(
+      endpoint,
+      'Expected user object payload',
+      rawUser,
+    )
+    return {
+      id: '',
+      email: '',
+      first_name: '',
+      last_name: '',
+      phone: null,
+      avatar_url: null,
+      is_verified: false,
+      created_at: new Date().toISOString(),
+    }
+  }
+
+  return {
+    id: toSafeString(rawUser.id),
+    email: toSafeString(rawUser.email),
+    first_name: toSafeString(rawUser.firstName ?? rawUser.first_name),
+    last_name: toSafeString(rawUser.lastName ?? rawUser.last_name),
+    phone: toSafeNullableString(rawUser.phone),
+    avatar_url: toSafeNullableString(rawUser.avatarUrl ?? rawUser.avatar_url),
+    is_verified: toSafeBoolean(rawUser.isVerified ?? rawUser.is_verified),
+    created_at:
+      toSafeString(rawUser.createdAt ?? rawUser.created_at) ||
+      new Date().toISOString(),
+  }
+}
+
 interface SecurityEventPayload {
   action: string
   status: 'success' | 'failed'
@@ -113,6 +268,23 @@ interface SecurityEventPayload {
 // Request interceptor - Add auth token
 apiClient.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
+    const requestId = createRequestId()
+
+    ;(config as InternalAxiosRequestConfig & { _requestId?: string })._requestId =
+      requestId
+
+    const headers = config.headers as
+      | (Record<string, string> & { set?: (name: string, value: string) => void })
+      | undefined
+
+    if (headers?.set) {
+      headers.set('x-request-id', requestId)
+    } else {
+      ;(config.headers as Record<string, string> | undefined) =
+        (config.headers as Record<string, string> | undefined) || {}
+      ;(config.headers as Record<string, string>)['x-request-id'] = requestId
+    }
+
     const token = await getAccessToken()
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
@@ -174,16 +346,7 @@ export const authApi = {
     await setTokens(accessToken, refreshToken)
 
     const rawUser = data.user || data
-    const user: User = {
-      id: rawUser.id,
-      email: rawUser.email,
-      first_name: rawUser.firstName || rawUser.first_name,
-      last_name: rawUser.lastName || rawUser.last_name,
-      phone: rawUser.phone,
-      avatar_url: rawUser.avatarUrl || rawUser.avatar_url,
-      is_verified: rawUser.isVerified || rawUser.is_verified,
-      created_at: rawUser.createdAt || rawUser.created_at,
-    }
+    const user = normalizeAuthUser(rawUser, '/auth/login')
 
     return { user, accessToken, refreshToken }
   },
@@ -204,16 +367,7 @@ export const authApi = {
     await setTokens(accessToken, refreshToken)
 
     const rawUser = responseData.user || responseData
-    const user: User = {
-      id: rawUser.id,
-      email: rawUser.email,
-      first_name: rawUser.firstName || rawUser.first_name,
-      last_name: rawUser.lastName || rawUser.last_name,
-      phone: rawUser.phone,
-      avatar_url: rawUser.avatarUrl || rawUser.avatar_url,
-      is_verified: rawUser.isVerified || rawUser.is_verified,
-      created_at: rawUser.createdAt || rawUser.created_at,
-    }
+    const user = normalizeAuthUser(rawUser, '/auth/register')
 
     return { user, accessToken, refreshToken }
   },
@@ -234,16 +388,7 @@ export const authApi = {
       response.data.user ||
       response.data
 
-    return {
-      id: rawUser.id,
-      email: rawUser.email,
-      first_name: rawUser.firstName || rawUser.first_name,
-      last_name: rawUser.lastName || rawUser.last_name,
-      phone: rawUser.phone,
-      avatar_url: rawUser.avatarUrl || rawUser.avatar_url,
-      is_verified: rawUser.isVerified || rawUser.is_verified,
-      created_at: rawUser.createdAt || rawUser.created_at,
-    }
+    return normalizeAuthUser(rawUser, '/auth/me')
   },
 
   forgotPassword: async (email: string): Promise<void> => {
@@ -382,13 +527,73 @@ const normalizeAddress = (address: any): UserAddress => ({
   updated_at: address.updated_at,
 })
 
+const normalizeProfileUser = (
+  rawUser: unknown,
+): UserProfilePayload['user'] => {
+  if (!isRecord(rawUser)) {
+    logNormalizationIssue('/users/profile', 'Missing profile user object', rawUser)
+    return {
+      id: '',
+      email: '',
+      firstName: '',
+      lastName: '',
+      phone: null,
+      userType: 'customer',
+      companyName: null,
+      emailVerified: false,
+      phoneVerified: false,
+      isActive: true,
+      lastLogin: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+  }
+
+  return {
+    id: toSafeString(rawUser.id),
+    email: toSafeString(rawUser.email),
+    firstName: toSafeString(rawUser.firstName ?? rawUser.first_name),
+    lastName: toSafeString(rawUser.lastName ?? rawUser.last_name),
+    phone: toSafeNullableString(rawUser.phone),
+    userType: toSafeString(rawUser.userType ?? rawUser.user_type, 'customer'),
+    companyName: toSafeNullableString(rawUser.companyName ?? rawUser.company_name),
+    emailVerified: toSafeBoolean(
+      rawUser.emailVerified ?? rawUser.email_verified,
+    ),
+    phoneVerified: toSafeBoolean(
+      rawUser.phoneVerified ?? rawUser.phone_verified,
+    ),
+    isActive: toSafeBoolean(rawUser.isActive ?? rawUser.is_active, true),
+    lastLogin: toSafeNullableString(rawUser.lastLogin ?? rawUser.last_login),
+    createdAt:
+      toSafeString(rawUser.createdAt ?? rawUser.created_at) ||
+      new Date().toISOString(),
+    updatedAt:
+      toSafeString(rawUser.updatedAt ?? rawUser.updated_at) ||
+      new Date().toISOString(),
+  }
+}
+
 export const userApi = {
   getProfile: async (): Promise<UserProfilePayload> => {
     const response = await apiClient.get('/users/profile')
+    const requestId = getRequestIdFromResponse(response)
     const data = response.data.data || response.data
+
+    if (!isRecord(data)) {
+      logNormalizationIssue(
+        '/users/profile',
+        'Unexpected profile payload shape',
+        data,
+        requestId,
+      )
+    }
+
     return {
-      user: data.user,
-      addresses: (data.addresses || []).map(normalizeAddress),
+      user: normalizeProfileUser(isRecord(data) ? data.user : null),
+      addresses: toSafeArray<unknown>(isRecord(data) ? data.addresses : []).map(
+        normalizeAddress,
+      ),
     }
   },
 
@@ -399,8 +604,19 @@ export const userApi = {
     companyName?: string
   }): Promise<UserProfilePayload['user']> => {
     const response = await apiClient.put('/users/profile', payload)
+    const requestId = getRequestIdFromResponse(response)
     const data = response.data.data || response.data
-    return data.user || data
+
+    if (!isRecord(data)) {
+      logNormalizationIssue(
+        '/users/profile',
+        'Unexpected profile update payload shape',
+        data,
+        requestId,
+      )
+    }
+
+    return normalizeProfileUser(isRecord(data) ? data.user || data : data)
   },
 }
 
@@ -1086,8 +1302,41 @@ export const paymentsApi = {
   // Get saved payment methods
   getPaymentMethods: async (): Promise<PaymentMethod[]> => {
     const response = await apiClient.get('/payments/methods')
+    const requestId = getRequestIdFromResponse(response)
     const data = response.data.data || response.data
-    return data.paymentMethods || data
+    const source = isRecord(data) ? data.paymentMethods || data : data
+    const methods = toSafeArray<unknown>(source)
+
+    if (!Array.isArray(source)) {
+      logNormalizationIssue(
+        '/payments/methods',
+        'Expected payment method array payload',
+        data,
+        requestId,
+      )
+    }
+
+    return methods.map((method, index) => {
+      if (!isRecord(method)) {
+        logNormalizationIssue(
+          '/payments/methods',
+          'Encountered non-object payment method item',
+          method,
+          requestId,
+        )
+      }
+
+      const item = isRecord(method) ? method : {}
+      return {
+        id: toSafeString(item.id, `pm-${index}`),
+        type: toSafeString(item.type, 'card'),
+        brand: toSafeString(item.brand),
+        last4: toSafeString(item.last4),
+        expMonth: toSafeNumber(item.expMonth ?? item.exp_month, 0),
+        expYear: toSafeNumber(item.expYear ?? item.exp_year, 0),
+        isDefault: toSafeBoolean(item.isDefault ?? item.is_default),
+      }
+    })
   },
 
   // Remove payment method
@@ -1150,8 +1399,67 @@ export const ordersApiNew = {
     created_at: string
   }> => {
     const response = await apiClient.post('/orders', data)
+    const requestId = getRequestIdFromResponse(response)
     const result = response.data.data || response.data
-    return result.order || result
+    const rawOrder = isRecord(result) ? result.order || result : result
+
+    if (!isRecord(rawOrder)) {
+      logNormalizationIssue(
+        '/orders',
+        'Unexpected order create payload',
+        rawOrder,
+        requestId,
+      )
+      return {
+        id: '',
+        order_number: '',
+        order_status: 'pending',
+        payment_status: 'pending',
+        grand_total: 0,
+        shipping_address: {},
+        items: [],
+        created_at: new Date().toISOString(),
+      }
+    }
+
+    const rawItems =
+      rawOrder.items || rawOrder.order_items || rawOrder.orderItems || []
+    const normalizedItems = toSafeArray<unknown>(rawItems).map(
+      (item, index) => {
+        const line = isRecord(item) ? item : {}
+        const quantity = toSafeNumber(line.quantity, 0)
+        const unitPrice = toSafeNumber(line.unit_price ?? line.unitPrice, 0)
+        const nestedProductName = isRecord(line.product)
+          ? toSafeString(line.product.name)
+          : ''
+        return {
+          id: toSafeString(line.id, `${toSafeString(rawOrder.id)}-${index}`),
+          product_name:
+            toSafeString(line.product_name ?? line.productName) ||
+            nestedProductName ||
+            'Product',
+          quantity,
+          unit_price: unitPrice,
+          total_price:
+            toSafeNumber(line.total_price ?? line.totalPrice, 0) ||
+            quantity * unitPrice,
+        }
+      },
+    )
+
+    return {
+      id: toSafeString(rawOrder.id),
+      order_number: toSafeString(rawOrder.order_number),
+      order_status: toSafeString(rawOrder.order_status, 'pending'),
+      payment_status: toSafeString(rawOrder.payment_status, 'pending'),
+      grand_total: toSafeNumber(rawOrder.grand_total),
+      shipping_address: isRecord(rawOrder.shipping_address)
+        ? rawOrder.shipping_address
+        : {},
+      items: normalizedItems,
+      created_at:
+        toSafeString(rawOrder.created_at) || new Date().toISOString(),
+    }
   },
 
   // Get user orders
@@ -1171,15 +1479,49 @@ export const ordersApiNew = {
     pagination: Pagination
   }> => {
     const response = await apiClient.get(`/orders?page=${page}&limit=${limit}`)
+    const requestId = getRequestIdFromResponse(response)
     const data = response.data.data || response.data
-    return {
-      orders: data.orders || data,
-      pagination: data.pagination || {
-        page: 1,
-        limit: 10,
-        total: data.orders?.length || 0,
-        totalPages: 1,
+    const ordersSource = isRecord(data) ? data.orders || data : data
+    const normalizedOrders = toSafeArray<unknown>(ordersSource).map(
+      (order, index) => {
+        const item = isRecord(order) ? order : {}
+        return {
+          id: toSafeString(item.id, `order-${index}`),
+          order_number: toSafeString(item.order_number),
+          order_status: toSafeString(item.order_status, 'pending'),
+          payment_status: toSafeString(item.payment_status, 'pending'),
+          grand_total: toSafeNumber(item.grand_total),
+          created_at: toSafeString(item.created_at) || new Date().toISOString(),
+          item_count: toSafeNumber(item.item_count ?? item.itemCount, 0),
+        }
       },
+    )
+
+    if (!Array.isArray(ordersSource)) {
+      logNormalizationIssue(
+        '/orders',
+        'Expected order list array payload',
+        data,
+        requestId,
+      )
+    }
+
+    return {
+      orders: normalizedOrders,
+      pagination:
+        (isRecord(data) && isRecord(data.pagination)
+          ? {
+              page: toSafeNumber(data.pagination.page, 1),
+              limit: toSafeNumber(data.pagination.limit, limit),
+              total: toSafeNumber(data.pagination.total, normalizedOrders.length),
+              totalPages: toSafeNumber(data.pagination.totalPages, 1),
+            }
+          : {
+              page: 1,
+              limit,
+              total: normalizedOrders.length,
+              totalPages: 1,
+            }) as Pagination,
     }
   },
 
@@ -1207,8 +1549,69 @@ export const ordersApiNew = {
     created_at: string
   }> => {
     const response = await apiClient.get(`/orders/${id}`)
+    const requestId = getRequestIdFromResponse(response)
     const data = response.data.data || response.data
-    return data.order || data
+    const rawOrder = isRecord(data) ? data.order || data : data
+
+    if (!isRecord(rawOrder)) {
+      logNormalizationIssue(
+        '/orders/:id',
+        'Unexpected order detail payload',
+        rawOrder,
+        requestId,
+      )
+      return {
+        id,
+        order_number: '',
+        order_status: 'pending',
+        payment_status: 'pending',
+        total_amount: 0,
+        tax_amount: 0,
+        shipping_amount: 0,
+        grand_total: 0,
+        shipping_address: {},
+        items: [],
+        created_at: new Date().toISOString(),
+      }
+    }
+
+    const rawItems =
+      rawOrder?.items || rawOrder?.order_items || rawOrder?.orderItems || []
+
+    const normalizedItems = Array.isArray(rawItems)
+      ? rawItems.map((item: any, index: number) => ({
+          id: String(item?.id ?? `${id}-item-${index}`),
+          product_id: String(item?.product_id ?? item?.productId ?? ''),
+          product_name:
+            item?.product_name ||
+            item?.productName ||
+            item?.product?.name ||
+            'Product',
+          quantity: Number(item?.quantity ?? 0),
+          unit_price: Number(item?.unit_price ?? item?.unitPrice ?? 0),
+          total_price:
+            Number(item?.total_price ?? item?.totalPrice) ||
+            Number(item?.unit_price ?? item?.unitPrice ?? 0) *
+              Number(item?.quantity ?? 0),
+        }))
+      : []
+
+    return {
+      ...rawOrder,
+      id: toSafeString(rawOrder.id, id),
+      order_number: toSafeString(rawOrder.order_number),
+      order_status: toSafeString(rawOrder.order_status, 'pending'),
+      payment_status: toSafeString(rawOrder.payment_status, 'pending'),
+      total_amount: toSafeNumber(rawOrder.total_amount),
+      tax_amount: toSafeNumber(rawOrder.tax_amount),
+      shipping_amount: toSafeNumber(rawOrder.shipping_amount),
+      grand_total: toSafeNumber(rawOrder.grand_total),
+      shipping_address: isRecord(rawOrder.shipping_address)
+        ? rawOrder.shipping_address
+        : {},
+      created_at: toSafeString(rawOrder.created_at) || new Date().toISOString(),
+      items: normalizedItems,
+    }
   },
 
   // Cancel order
