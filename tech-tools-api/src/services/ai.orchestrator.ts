@@ -927,12 +927,16 @@ export async function getAiStats(): Promise<object> {
 async function sendEmailDraft(draft: Record<string, any>): Promise<void> {
   // Dynamic import to avoid circular dep at module load time
   const emailService = (await import('./email.service')).default
-  await emailService.sendEmail({
+  const result = await emailService.sendEmail({
     to: draft.recipient_email,
     subject: draft.subject || 'Message from TechTools',
     html: draft.body_html || draft.body_text,
     text: draft.body_text,
   })
+
+  if (!result.success) {
+    throw new Error(result.error || 'Email delivery failed')
+  }
 }
 
 async function sendWhatsAppDraft(draft: Record<string, any>): Promise<void> {
@@ -992,6 +996,13 @@ async function sendNewsletterDraft(draft: Record<string, any>): Promise<void> {
 
 async function addToTimeline(draft: Record<string, any>): Promise<void> {
   try {
+    if (!draft.customer_id) {
+      logger.info(
+        '[AI] Skipping communication timeline insert because draft has no customer_id',
+      )
+      return
+    }
+
     await db(
       `INSERT INTO communication_timeline
         (customer_id, customer_email, customer_phone, channel, direction, subject, body_preview, body_full, ai_draft_id)

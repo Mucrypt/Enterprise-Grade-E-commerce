@@ -303,6 +303,9 @@ function EmailDetailsDialog({ email: emailMsg }: { email: EmailMessage }) {
       <DialogContent className='sm:max-w-150'>
         <DialogHeader>
           <DialogTitle>Email Details</DialogTitle>
+          <DialogDescription>
+            View recipient, subject, content, and delivery status for this email.
+          </DialogDescription>
         </DialogHeader>
         <div className='space-y-4 max-h-[70vh] overflow-y-auto'>
           <div className='grid grid-cols-2 gap-4'>
