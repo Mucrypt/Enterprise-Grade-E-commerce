@@ -25,8 +25,15 @@ let redisClient: ReturnType<typeof createClient> | null = null
 
 async function getRedis() {
   if (!redisClient) {
+    const redisUrl = process.env.REDIS_URL
+    const redisHost = process.env.REDIS_HOST || 'redis'
+    const redisPort = process.env.REDIS_PORT || '6379'
+    const redisPassword = process.env.REDIS_PASSWORD
+
     redisClient = createClient({
-      url: process.env.REDIS_URL || 'redis://redis:6379',
+      url:
+        redisUrl ||
+        `redis://${redisPassword ? `:${encodeURIComponent(redisPassword)}@` : ''}${redisHost}:${redisPort}`,
       socket: { reconnectStrategy: (n) => Math.min(n * 100, 5000) },
     })
     redisClient.on('error', (err) =>
@@ -452,17 +459,28 @@ function extractJsonObject(text: string): string {
 
 // ─── Rate limiter (Redis sliding window, 20 req/min per admin) ──────
 async function checkRateLimit(actorId: string): Promise<void> {
-  const redis = await getRedis()
+  let redis: Awaited<ReturnType<typeof getRedis>> = null
+  try {
+    redis = await getRedis()
+  } catch (error) {
+    logger.warn('[AI] Redis rate limiter unavailable, continuing without rate limiting:', error)
+    return
+  }
+
   if (!redis) return // graceful degradation
 
   const key = `ai:rl:${actorId}`
   const limit = parseInt(process.env.AI_RATE_LIMIT_PER_MINUTE || '20')
-  const count = await redis.incr(key)
-  if (count === 1) await redis.expire(key, 60)
-  if (count > limit) {
-    throw new Error(
-      `Rate limit exceeded. Max ${limit} AI requests per minute per admin.`,
-    )
+  try {
+    const count = await redis.incr(key)
+    if (count === 1) await redis.expire(key, 60)
+    if (count > limit) {
+      throw new Error(
+        `Rate limit exceeded. Max ${limit} AI requests per minute per admin.`,
+      )
+    }
+  } catch (error) {
+    logger.warn('[AI] Redis rate limiter command failed, continuing without rate limiting:', error)
   }
 }
 
