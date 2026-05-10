@@ -385,7 +385,6 @@ async function callOpenAI(messages: OpenAiMessage[]): Promise<OpenAiResponse> {
   const chatResult = await postOpenAi('/v1/chat/completions', {
     model,
     messages,
-    temperature: 0.4,
     max_tokens: 2000,
   })
 
@@ -405,7 +404,6 @@ async function callOpenAI(messages: OpenAiMessage[]): Promise<OpenAiResponse> {
   const responsesResult = await postOpenAi('/v1/responses', {
     model,
     input: flattenedInput,
-    temperature: 0.4,
     max_output_tokens: 2000,
   })
 
