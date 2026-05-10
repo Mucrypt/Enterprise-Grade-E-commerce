@@ -122,6 +122,11 @@ interface OpenAiResponse {
   model: string
 }
 
+interface OpenAiHttpResult {
+  statusCode: number
+  bodyText: string
+}
+
 interface DraftContent {
   subject?: string
   body_html?: string
@@ -215,23 +220,20 @@ IMPORTANT RULES:
 `
 }
 
-// ─── OpenAI API caller (no SDK dep — native HTTPS for reliability) ──
-async function callOpenAI(messages: OpenAiMessage[]): Promise<OpenAiResponse> {
+async function postOpenAi(
+  path: string,
+  payload: Record<string, unknown>,
+): Promise<OpenAiHttpResult> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) throw new Error('OPENAI_API_KEY is not configured')
 
-  const body = JSON.stringify({
-    model: process.env.AI_MODEL || 'gpt-5.5',
-    messages,
-    temperature: 0.4,
-    max_tokens: 2000,
-  })
+  const body = JSON.stringify(payload)
 
   return new Promise((resolve, reject) => {
     const req = https.request(
       {
         hostname: 'api.openai.com',
-        path: '/v1/chat/completions',
+        path,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -244,15 +246,10 @@ async function callOpenAI(messages: OpenAiMessage[]): Promise<OpenAiResponse> {
         let data = ''
         res.on('data', (chunk) => (data += chunk))
         res.on('end', () => {
-          if (res.statusCode && res.statusCode >= 400) {
-            reject(new Error(`OpenAI API error ${res.statusCode}: ${data.slice(0, 200)}`))
-            return
-          }
-          try {
-            resolve(JSON.parse(data) as OpenAiResponse)
-          } catch {
-            reject(new Error('Failed to parse OpenAI response'))
-          }
+          resolve({
+            statusCode: res.statusCode || 500,
+            bodyText: data,
+          })
         })
       },
     )
@@ -261,6 +258,94 @@ async function callOpenAI(messages: OpenAiMessage[]): Promise<OpenAiResponse> {
     req.write(body)
     req.end()
   })
+}
+
+function parseResponsesText(raw: any): string {
+  if (typeof raw?.output_text === 'string' && raw.output_text.trim()) {
+    return raw.output_text
+  }
+
+  const outputs = Array.isArray(raw?.output) ? raw.output : []
+  const textChunks: string[] = []
+
+  for (const item of outputs) {
+    const content = Array.isArray(item?.content) ? item.content : []
+    for (const part of content) {
+      if (typeof part?.text === 'string') {
+        textChunks.push(part.text)
+      }
+    }
+  }
+
+  const combined = textChunks.join('\n').trim()
+  if (!combined) {
+    throw new Error('OpenAI Responses API returned no text output')
+  }
+  return combined
+}
+
+// ─── OpenAI API caller with compatibility fallback ───────────
+async function callOpenAI(messages: OpenAiMessage[]): Promise<OpenAiResponse> {
+  const model = process.env.AI_MODEL || 'gpt-5.5'
+
+  // First attempt: Chat Completions API
+  const chatResult = await postOpenAi('/v1/chat/completions', {
+    model,
+    messages,
+    temperature: 0.4,
+    max_tokens: 2000,
+  })
+
+  if (chatResult.statusCode < 400) {
+    try {
+      return JSON.parse(chatResult.bodyText) as OpenAiResponse
+    } catch {
+      throw new Error('Failed to parse OpenAI chat completion response')
+    }
+  }
+
+  // Fallback: Responses API (for models/projects not supporting chat.completions)
+  const flattenedInput = messages
+    .map((m) => `${m.role.toUpperCase()}:\n${m.content}`)
+    .join('\n\n')
+
+  const responsesResult = await postOpenAi('/v1/responses', {
+    model,
+    input: flattenedInput,
+    temperature: 0.4,
+    max_output_tokens: 2000,
+  })
+
+  if (responsesResult.statusCode >= 400) {
+    throw new Error(
+      `OpenAI API error chat=${chatResult.statusCode} responses=${responsesResult.statusCode}: ${responsesResult.bodyText.slice(0, 400)}`,
+    )
+  }
+
+  let responsesJson: any
+  try {
+    responsesJson = JSON.parse(responsesResult.bodyText)
+  } catch {
+    throw new Error('Failed to parse OpenAI responses API payload')
+  }
+
+  const responseText = parseResponsesText(responsesJson)
+
+  return {
+    choices: [
+      {
+        message: {
+          content: responseText,
+        },
+      },
+    ],
+    usage: {
+      prompt_tokens: responsesJson?.usage?.input_tokens || 0,
+      completion_tokens: responsesJson?.usage?.output_tokens || 0,
+      total_tokens: responsesJson?.usage?.total_tokens || 0,
+    },
+    model: responsesJson?.model || model,
+  }
 }
 
 function extractJsonObject(text: string): string {
