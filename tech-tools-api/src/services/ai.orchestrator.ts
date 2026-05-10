@@ -143,6 +143,24 @@ interface DraftContent {
   notes?: string
 }
 
+function normalizeIpAddress(ip?: string): string | null {
+  if (!ip) return null
+  const trimmed = ip.trim()
+  if (!trimmed) return null
+
+  // Handle IPv4-mapped IPv6 addresses like ::ffff:127.0.0.1
+  const ipv4Mapped = trimmed.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i)
+  if (ipv4Mapped?.[1]) return ipv4Mapped[1]
+
+  const ipv4Regex = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/
+  const ipv6Regex = /^[0-9a-f:]+$/i
+
+  if (ipv4Regex.test(trimmed)) return trimmed
+  if (trimmed.includes(':') && ipv6Regex.test(trimmed)) return trimmed
+
+  return null
+}
+
 function buildFallbackDraft(input: GenerateDraftInput): DraftContent {
   const safeName = input.recipientName?.trim() || 'there'
   const subject =

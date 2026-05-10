@@ -6,6 +6,16 @@ interface AuthRequest extends Request {
   user?: { id: string; email: string; userType: string }
 }
 
+function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message
+  if (typeof err === 'string') return err
+  try {
+    return JSON.stringify(err)
+  } catch {
+    return 'Unknown error'
+  }
+}
+
 // ─── Generate AI Draft ────────────────────────────────────────
 export const generateDraft = async (req: AuthRequest, res: Response) => {
   try {
@@ -48,17 +58,18 @@ export const generateDraft = async (req: AuthRequest, res: Response) => {
 
     return res.status(201).json({ draft })
   } catch (err: any) {
-    logger.error('[AI] generateDraft error:', err.message)
-    if (err.message.includes('Rate limit')) {
-      return res.status(429).json({ error: err.message })
+    const errorMessage = getErrorMessage(err)
+    logger.error(`[AI] generateDraft error: ${errorMessage}`)
+    if (errorMessage.includes('Rate limit')) {
+      return res.status(429).json({ error: errorMessage })
     }
-    if (err.message.includes('OPENAI_API_KEY')) {
+    if (errorMessage.includes('OPENAI_API_KEY')) {
       return res.status(503).json({ error: 'AI service is not configured. Contact your administrator.' })
     }
-    if (err.message.includes('OpenAI API error')) {
-      return res.status(502).json({ error: err.message })
+    if (errorMessage.includes('OpenAI API error')) {
+      return res.status(502).json({ error: errorMessage })
     }
-    return res.status(500).json({ error: `Failed to generate AI draft: ${err.message}` })
+    return res.status(500).json({ error: `Failed to generate AI draft: ${errorMessage}` })
   }
 }
 
