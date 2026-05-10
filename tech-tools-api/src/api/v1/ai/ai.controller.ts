@@ -85,7 +85,8 @@ export const listDrafts = async (req: AuthRequest, res: Response) => {
     })
     return res.json(result)
   } catch (err: any) {
-    logger.error('[AI] listDrafts error:', err.message)
+    const errorMessage = getErrorMessage(err)
+    logger.error(`[AI] listDrafts error: ${errorMessage}`)
     return res.status(500).json({
       error: 'Failed to fetch drafts',
       hint: 'Ensure AI migration 021_ai_orchestrator.sql has been applied',
@@ -100,11 +101,12 @@ export const approveDraft = async (req: AuthRequest, res: Response) => {
     const result = await aiOrchestrator.approveDraft(id, req.user!.id, req.ip)
     return res.json(result)
   } catch (err: any) {
-    logger.error('[AI] approveDraft error:', err.message)
-    if (err.message.includes('not found')) {
-      return res.status(404).json({ error: err.message })
+    const errorMessage = getErrorMessage(err)
+    logger.error(`[AI] approveDraft error: ${errorMessage}`)
+    if (errorMessage.includes('not found')) {
+      return res.status(404).json({ error: errorMessage })
     }
-    return res.status(500).json({ error: err.message })
+    return res.status(500).json({ error: errorMessage })
   }
 }
 
@@ -119,11 +121,12 @@ export const rejectDraft = async (req: AuthRequest, res: Response) => {
     await aiOrchestrator.rejectDraft(id, req.user!.id, reason, req.ip)
     return res.json({ success: true })
   } catch (err: any) {
-    logger.error('[AI] rejectDraft error:', err.message)
-    if (err.message.includes('not found')) {
-      return res.status(404).json({ error: err.message })
+    const errorMessage = getErrorMessage(err)
+    logger.error(`[AI] rejectDraft error: ${errorMessage}`)
+    if (errorMessage.includes('not found')) {
+      return res.status(404).json({ error: errorMessage })
     }
-    return res.status(500).json({ error: 'Failed to reject draft' })
+    return res.status(500).json({ error: `Failed to reject draft: ${errorMessage}` })
   }
 }
 
@@ -137,8 +140,9 @@ export const getCustomerContext = async (req: AuthRequest, res: Response) => {
     }
     return res.json({ context: ctx })
   } catch (err: any) {
-    logger.error('[AI] getCustomerContext error:', err.message)
-    return res.status(500).json({ error: 'Failed to load customer context' })
+    const errorMessage = getErrorMessage(err)
+    logger.error(`[AI] getCustomerContext error: ${errorMessage}`)
+    return res.status(500).json({ error: `Failed to load customer context: ${errorMessage}` })
   }
 }
 
@@ -151,8 +155,9 @@ export const getTimeline = async (req: AuthRequest, res: Response) => {
     const result = await aiOrchestrator.getCustomerTimeline(customerId, page, limit)
     return res.json(result)
   } catch (err: any) {
-    logger.error('[AI] getTimeline error:', err.message)
-    return res.status(500).json({ error: 'Failed to load timeline' })
+    const errorMessage = getErrorMessage(err)
+    logger.error(`[AI] getTimeline error: ${errorMessage}`)
+    return res.status(500).json({ error: `Failed to load timeline: ${errorMessage}` })
   }
 }
 
@@ -162,7 +167,8 @@ export const getStats = async (req: AuthRequest, res: Response) => {
     const stats = await aiOrchestrator.getAiStats()
     return res.json({ stats })
   } catch (err: any) {
-    logger.error('[AI] getStats error:', err.message)
+    const errorMessage = getErrorMessage(err)
+    logger.error(`[AI] getStats error: ${errorMessage}`)
     return res.status(500).json({
       error: 'Failed to load AI stats',
       hint: 'Ensure AI migration 021_ai_orchestrator.sql has been applied',
