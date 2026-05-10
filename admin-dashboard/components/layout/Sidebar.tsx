@@ -31,6 +31,7 @@ import {
   Inbox,
   Send,
   Megaphone,
+  Bot,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -151,6 +152,12 @@ const navigation: NavItem[] = [
     icon: Send,
     badge: 'New',
     children: [
+      {
+        title: 'AI Hub',
+        href: '/ai-hub',
+        icon: Bot,
+        badge: 'AI',
+      },
       {
         title: 'Email',
         href: '/email',

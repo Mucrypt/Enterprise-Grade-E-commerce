@@ -22,6 +22,7 @@ import emailRoutes from './emails/email.routes'
 import contactRoutes from './contact/contact.routes'
 import newsletterRoutes from './newsletter/newsletter.routes'
 import { blogRoutes } from './blog'
+import aiRoutes from './ai/ai.routes'
 
 const router = Router()
 
@@ -59,6 +60,7 @@ router.use('/emails', emailRoutes)
 router.use('/contact', contactRoutes)
 router.use('/newsletter', newsletterRoutes)
 router.use('/blog', blogRoutes)
+router.use('/ai', aiRoutes)
 
 // Documentation route
 router.get('/docs', (_req, res) => {
