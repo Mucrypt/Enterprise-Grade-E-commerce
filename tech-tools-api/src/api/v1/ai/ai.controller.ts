@@ -55,7 +55,10 @@ export const generateDraft = async (req: AuthRequest, res: Response) => {
     if (err.message.includes('OPENAI_API_KEY')) {
       return res.status(503).json({ error: 'AI service is not configured. Contact your administrator.' })
     }
-    return res.status(500).json({ error: 'Failed to generate AI draft' })
+    if (err.message.includes('OpenAI API error')) {
+      return res.status(502).json({ error: err.message })
+    }
+    return res.status(500).json({ error: `Failed to generate AI draft: ${err.message}` })
   }
 }
 

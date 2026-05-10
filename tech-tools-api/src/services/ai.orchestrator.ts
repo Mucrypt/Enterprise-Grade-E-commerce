@@ -216,18 +216,13 @@ IMPORTANT RULES:
 }
 
 // ─── OpenAI API caller (no SDK dep — native HTTPS for reliability) ──
-async function callOpenAI(
-  messages: OpenAiMessage[],
-  functions: object[],
-): Promise<OpenAiResponse> {
+async function callOpenAI(messages: OpenAiMessage[]): Promise<OpenAiResponse> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) throw new Error('OPENAI_API_KEY is not configured')
 
   const body = JSON.stringify({
     model: process.env.AI_MODEL || 'gpt-5.5',
     messages,
-    functions,
-    function_call: { name: 'generate_draft' },
     temperature: 0.4,
     max_tokens: 2000,
   })
@@ -266,6 +261,30 @@ async function callOpenAI(
     req.write(body)
     req.end()
   })
+}
+
+function extractJsonObject(text: string): string {
+  const trimmed = text.trim()
+
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    return trimmed
+  }
+
+  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)
+  if (fencedMatch?.[1]) {
+    const fenced = fencedMatch[1].trim()
+    if (fenced.startsWith('{') && fenced.endsWith('}')) {
+      return fenced
+    }
+  }
+
+  const firstBrace = trimmed.indexOf('{')
+  const lastBrace = trimmed.lastIndexOf('}')
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    return trimmed.slice(firstBrace, lastBrace + 1)
+  }
+
+  throw new Error('AI did not return JSON content')
 }
 
 // ─── Rate limiter (Redis sliding window, 20 req/min per admin) ──────
@@ -385,41 +404,6 @@ export async function generateDraft(input: GenerateDraftInput): Promise<AiDraft>
 
   const systemPrompt = buildSystemPrompt(input.channel, ctx)
 
-  const functions = [
-    {
-      name: 'generate_draft',
-      description: 'Generate a communication draft for the specified channel',
-      parameters: {
-        type: 'object',
-        properties: {
-          subject: {
-            type: 'string',
-            description: 'Email subject line (email/newsletter only, omit for whatsapp)',
-          },
-          body_text: {
-            type: 'string',
-            description: 'Plain-text version of the message (required)',
-          },
-          body_html: {
-            type: 'string',
-            description: 'HTML version of the message (email/newsletter only)',
-          },
-          confidence: {
-            type: 'integer',
-            minimum: 0,
-            maximum: 100,
-            description: 'Your confidence that this draft is high-quality and complete (0-100)',
-          },
-          notes: {
-            type: 'string',
-            description: 'Optional notes to the admin about assumptions made or things to verify',
-          },
-        },
-        required: ['body_text', 'confidence'],
-      },
-    },
-  ]
-
   const messages: OpenAiMessage[] = [
     { role: 'system', content: systemPrompt },
     {
@@ -430,20 +414,35 @@ Task: ${input.prompt}
 
 ${input.recipientName ? `Recipient name: ${input.recipientName}` : ''}
 ${input.recipientEmail ? `Recipient email: ${input.recipientEmail}` : ''}
-${input.recipientPhone ? `Recipient phone: ${input.recipientPhone}` : ''}`,
+${input.recipientPhone ? `Recipient phone: ${input.recipientPhone}` : ''}
+
+Return ONLY valid JSON with this exact shape:
+{
+  "subject": "string optional",
+  "body_text": "string required",
+  "body_html": "string optional",
+  "confidence": 0,
+  "notes": "string optional"
+}`,
     },
   ]
 
-  const aiResponse = await callOpenAI(messages, functions)
+  const aiResponse = await callOpenAI(messages)
 
   const choice = aiResponse.choices?.[0]
-  if (!choice?.message?.function_call) {
-    throw new Error('AI did not return a structured draft')
+  const functionArgs = choice?.message?.function_call?.arguments
+  const messageContent = choice?.message?.content
+
+  if (!functionArgs && !messageContent) {
+    throw new Error('AI did not return draft content')
   }
 
   let parsed: DraftContent
   try {
-    parsed = JSON.parse(choice.message.function_call.arguments) as DraftContent
+    const jsonText = functionArgs
+      ? functionArgs
+      : extractJsonObject(messageContent as string)
+    parsed = JSON.parse(jsonText) as DraftContent
   } catch {
     throw new Error('AI returned malformed JSON draft')
   }
