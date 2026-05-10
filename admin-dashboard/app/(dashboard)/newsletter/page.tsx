@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import newsletterService, {
+  NewsletterCampaign,
   NewsletterSubscriber,
   SubscriberFilters,
 } from '@/services/newsletter.service'
@@ -40,6 +41,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -96,7 +98,14 @@ export default function NewsletterPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
+  const [isCampaignDialogOpen, setIsCampaignDialogOpen] = useState(false)
   const [importEmails, setImportEmails] = useState('')
+  const [campaignName, setCampaignName] = useState('')
+  const [campaignSubject, setCampaignSubject] = useState('')
+  const [campaignHtml, setCampaignHtml] = useState('')
+  const [campaignText, setCampaignText] = useState('')
+  const [campaignScheduleAt, setCampaignScheduleAt] = useState('')
+  const [sendCampaignNow, setSendCampaignNow] = useState(true)
   const [editForm, setEditForm] = useState({
     email: '',
     name: '',
@@ -119,8 +128,19 @@ export default function NewsletterPage() {
     queryFn: () => newsletterService.getSubscriberStats(),
   })
 
+  const {
+    data: campaignsResponse,
+    isLoading: isLoadingCampaigns,
+    refetch: refetchCampaigns,
+  } = useQuery({
+    queryKey: ['newsletter-campaigns'],
+    queryFn: () => newsletterService.getCampaigns(1, 5),
+    staleTime: 30_000,
+  })
+
   const subscribersData = subscribersResponse?.data
   const stats = statsResponse?.data?.stats
+  const campaigns = campaignsResponse?.data?.campaigns || []
 
   // Update subscriber mutation
   const updateMutation = useMutation({
@@ -175,6 +195,52 @@ export default function NewsletterPage() {
     },
   })
 
+  const campaignMutation = useMutation({
+    mutationFn: async (data: {
+      name: string
+      subject: string
+      contentHtml: string
+      contentText?: string
+      scheduledAt?: string
+      sendNow: boolean
+    }) => {
+      const created = await newsletterService.createCampaign({
+        name: data.name,
+        subject: data.subject,
+        contentHtml: data.contentHtml,
+        contentText: data.contentText || undefined,
+        scheduledAt: data.scheduledAt || undefined,
+      })
+
+      const campaign = created.data?.campaign
+      if (data.sendNow && campaign?.id) {
+        await newsletterService.sendCampaign(campaign.id)
+      }
+
+      return created
+    },
+    onSuccess: async (_, variables) => {
+      toast.success(
+        variables.sendNow
+          ? 'Campaign created and queued for sending'
+          : 'Campaign draft saved',
+      )
+      queryClient.invalidateQueries({ queryKey: ['newsletter-campaigns'] })
+      queryClient.invalidateQueries({ queryKey: ['newsletter-stats'] })
+      setIsCampaignDialogOpen(false)
+      setCampaignName('')
+      setCampaignSubject('')
+      setCampaignHtml('')
+      setCampaignText('')
+      setCampaignScheduleAt('')
+      setSendCampaignNow(true)
+      await refetchCampaigns()
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to create campaign')
+    },
+  })
+
   const handleSearch = () => {
     setFilters((prev) => ({ ...prev, search: searchInput, page: 1 }))
   }
@@ -213,6 +279,22 @@ export default function NewsletterPage() {
       return { email, name: name || undefined }
     })
     importMutation.mutate(subscribers)
+  }
+
+  const handleCampaignCreate = () => {
+    if (!campaignName || !campaignSubject || !campaignHtml) {
+      toast.error('Campaign name, subject, and HTML content are required')
+      return
+    }
+
+    campaignMutation.mutate({
+      name: campaignName,
+      subject: campaignSubject,
+      contentHtml: campaignHtml,
+      contentText: campaignText || undefined,
+      scheduledAt: campaignScheduleAt || undefined,
+      sendNow: sendCampaignNow,
+    })
   }
 
   const handleEdit = (subscriber: NewsletterSubscriber) => {
@@ -273,10 +355,21 @@ export default function NewsletterPage() {
           <Button
             variant='outline'
             size='sm'
-            onClick={() => refetchSubscribers()}
+            onClick={() => {
+              refetchSubscribers()
+              refetchCampaigns()
+            }}
           >
             <RefreshCw className='mr-2 h-4 w-4' />
             Refresh
+          </Button>
+          <Button
+            variant='outline'
+            size='sm'
+            onClick={() => setIsCampaignDialogOpen(true)}
+          >
+            <Mail className='mr-2 h-4 w-4' />
+            New Campaign
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -366,6 +459,64 @@ export default function NewsletterPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Recent campaigns */}
+      <Card>
+        <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+          <div>
+            <CardTitle className='text-sm font-medium'>
+              Recent Campaigns
+            </CardTitle>
+            <CardDescription>
+              Drafts and promotions created from the dashboard
+            </CardDescription>
+          </div>
+          <Button
+            variant='ghost'
+            size='sm'
+            onClick={() => setIsCampaignDialogOpen(true)}
+          >
+            <Mail className='mr-2 h-4 w-4' />
+            Create
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {isLoadingCampaigns ? (
+            <div className='space-y-3'>
+              {[...Array(3)].map((_, i) => (
+                <Skeleton key={i} className='h-14 w-full' />
+              ))}
+            </div>
+          ) : campaigns.length === 0 ? (
+            <p className='text-sm text-muted-foreground'>
+              No campaigns yet. Create a promotion to start emailing
+              subscribers.
+            </p>
+          ) : (
+            <div className='space-y-3'>
+              {campaigns.map((campaign: NewsletterCampaign) => (
+                <div
+                  key={campaign.id}
+                  className='flex flex-col gap-2 rounded-lg border p-4 md:flex-row md:items-center md:justify-between'
+                >
+                  <div>
+                    <div className='flex flex-wrap items-center gap-2'>
+                      <p className='font-medium'>{campaign.name}</p>
+                      <Badge variant='outline'>{campaign.status}</Badge>
+                    </div>
+                    <p className='text-sm text-muted-foreground'>
+                      {campaign.subject}
+                    </p>
+                  </div>
+                  <div className='text-sm text-muted-foreground'>
+                    {campaign.total_recipients.toLocaleString()} recipients
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Source breakdown */}
       {stats?.bySource && Object.keys(stats.bySource).length > 0 && (
@@ -718,6 +869,106 @@ jane@example.com,Jane Smith'
               disabled={importMutation.isPending || !importEmails.trim()}
             >
               {importMutation.isPending ? 'Importing...' : 'Import'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Campaign Dialog */}
+      <Dialog
+        open={isCampaignDialogOpen}
+        onOpenChange={setIsCampaignDialogOpen}
+      >
+        <DialogContent className='max-w-3xl'>
+          <DialogHeader>
+            <DialogTitle>Create Campaign</DialogTitle>
+            <DialogDescription>
+              Build a newsletter promotion or announcement and send it to active
+              subscribers.
+            </DialogDescription>
+          </DialogHeader>
+          <div className='grid gap-4 py-2'>
+            <div className='grid gap-4 md:grid-cols-2'>
+              <div className='space-y-2'>
+                <Label htmlFor='campaignName'>Campaign Name</Label>
+                <Input
+                  id='campaignName'
+                  value={campaignName}
+                  onChange={(e) => setCampaignName(e.target.value)}
+                  placeholder='Black Friday Promotion'
+                />
+              </div>
+              <div className='space-y-2'>
+                <Label htmlFor='campaignSubject'>Email Subject</Label>
+                <Input
+                  id='campaignSubject'
+                  value={campaignSubject}
+                  onChange={(e) => setCampaignSubject(e.target.value)}
+                  placeholder='Special offer for our customers'
+                />
+              </div>
+            </div>
+            <div className='space-y-2'>
+              <Label htmlFor='campaignHtml'>Email HTML Content</Label>
+              <Textarea
+                id='campaignHtml'
+                className='min-h-40 font-mono text-sm'
+                value={campaignHtml}
+                onChange={(e) => setCampaignHtml(e.target.value)}
+                placeholder='<h1>Promotion</h1><p>Write your HTML email here.</p>'
+              />
+            </div>
+            <div className='space-y-2'>
+              <Label htmlFor='campaignText'>Plain Text Version</Label>
+              <Textarea
+                id='campaignText'
+                className='min-h-28 font-mono text-sm'
+                value={campaignText}
+                onChange={(e) => setCampaignText(e.target.value)}
+                placeholder='Plain text fallback for email clients'
+              />
+            </div>
+            <div className='grid gap-4 md:grid-cols-2'>
+              <div className='space-y-2'>
+                <Label htmlFor='campaignScheduleAt'>
+                  Schedule At (optional)
+                </Label>
+                <Input
+                  id='campaignScheduleAt'
+                  type='datetime-local'
+                  value={campaignScheduleAt}
+                  onChange={(e) => setCampaignScheduleAt(e.target.value)}
+                />
+              </div>
+              <div className='flex items-end gap-2 rounded-lg border bg-muted/40 p-3'>
+                <input
+                  id='sendCampaignNow'
+                  type='checkbox'
+                  checked={sendCampaignNow}
+                  onChange={(e) => setSendCampaignNow(e.target.checked)}
+                  className='h-4 w-4'
+                />
+                <Label
+                  htmlFor='sendCampaignNow'
+                  className='cursor-pointer text-sm'
+                >
+                  Create and send immediately
+                </Label>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant='outline'
+              onClick={() => setIsCampaignDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCampaignCreate}
+              disabled={campaignMutation.isPending}
+            >
+              {campaignMutation.isPending ? 'Saving...' : 'Save Campaign'}
             </Button>
           </DialogFooter>
         </DialogContent>

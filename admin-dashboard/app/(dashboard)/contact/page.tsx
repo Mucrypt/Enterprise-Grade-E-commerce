@@ -293,9 +293,12 @@ TechTools Support Team`
     return `mailto:${submission.recipient_email}?subject=${subject}&body=${body}`
   }
 
-  // Open in Hostinger Webmail
-  const openHostingerWebmail = () => {
-    window.open('https://mail.hostinger.com', '_blank')
+  const openEmailCenter = () => {
+    window.location.href = '/email'
+  }
+
+  const openPromotionsCenter = () => {
+    window.location.href = '/newsletter'
   }
 
   const sendReply = async () => {
@@ -412,9 +415,13 @@ TechTools Support Team`
           </p>
         </div>
         <div className='flex gap-2'>
-          <Button variant='outline' onClick={openHostingerWebmail}>
-            <ExternalLink className='mr-2 h-4 w-4' />
-            Hostinger Mail
+          <Button variant='outline' onClick={openEmailCenter}>
+            <Mail className='mr-2 h-4 w-4' />
+            Email Center
+          </Button>
+          <Button variant='outline' onClick={openPromotionsCenter}>
+            <Send className='mr-2 h-4 w-4' />
+            Promotions
           </Button>
           <Button variant='outline' onClick={() => refetch()}>
             <RefreshCw className='mr-2 h-4 w-4' />
@@ -818,11 +825,11 @@ TechTools Support Team`
                           variant='outline'
                           onClick={() => {
                             copyForHostinger(submission)
-                            openHostingerWebmail()
+                            openEmailCenter()
                           }}
                         >
-                          <ExternalLink className='mr-2 h-4 w-4' />
-                          Reply in Hostinger
+                          <Mail className='mr-2 h-4 w-4' />
+                          Open Email Center
                         </Button>
                         <Button
                           variant='outline'
@@ -980,14 +987,14 @@ TechTools Support Team`
               onClick={() => {
                 if (selectedMessage) {
                   navigator.clipboard.writeText(replyContent)
-                  openHostingerWebmail()
-                  toast.success('Reply copied! Paste it in Hostinger')
+                  openEmailCenter()
+                  toast.success('Reply copied! Continue in the email center')
                 }
               }}
               disabled={isSendingReply}
             >
-              <ExternalLink className='mr-2 h-4 w-4' />
-              Hostinger
+              <Mail className='mr-2 h-4 w-4' />
+              Email Center
             </Button>
             <Button onClick={sendReply} disabled={isSendingReply}>
               <Send className='mr-2 h-4 w-4' />
