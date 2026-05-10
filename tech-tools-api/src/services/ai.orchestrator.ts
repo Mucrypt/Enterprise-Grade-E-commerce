@@ -150,6 +150,16 @@ interface DraftContent {
   notes?: string
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error
+  try {
+    return JSON.stringify(error)
+  } catch {
+    return 'Unknown error'
+  }
+}
+
 function normalizeIpAddress(ip?: string): string | null {
   if (!ip) return null
   const trimmed = ip.trim()
@@ -616,6 +626,9 @@ Return ONLY valid JSON with this exact shape:
   let modelName = process.env.AI_MODEL || 'gpt-5.5'
   let modelVersion = modelName
   let usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+  const allowTemplateFallback =
+    (process.env.AI_ENABLE_TEMPLATE_FALLBACK || 'false').toLowerCase() ===
+    'true'
 
   try {
     const aiResponse = await callOpenAI(messages)
@@ -641,8 +654,15 @@ Return ONLY valid JSON with this exact shape:
     modelVersion = (aiResponse.model || modelName).slice(0, 50)
     usage = aiResponse.usage || usage
   } catch (error: any) {
-    logger.warn('[AI] Falling back to template draft:', error?.message || error)
+    const reason = getErrorMessage(error)
+
+    if (!allowTemplateFallback) {
+      throw new Error(`AI provider failed: ${reason}`)
+    }
+
+    logger.warn(`[AI] Falling back to template draft: ${reason}`)
     parsed = buildFallbackDraft(input)
+    parsed.notes = `${parsed.notes} Root cause: ${reason.slice(0, 300)}`
     modelName = 'fallback-template'
     modelVersion = 'fallback-template'
   }

@@ -106,6 +106,13 @@ export const approveDraft = async (req: AuthRequest, res: Response) => {
     if (errorMessage.includes('not found')) {
       return res.status(404).json({ error: errorMessage })
     }
+    if (
+      errorMessage.includes('Draft approved but send failed') ||
+      errorMessage.includes('Invalid login') ||
+      errorMessage.includes('SMTP')
+    ) {
+      return res.status(502).json({ error: errorMessage })
+    }
     return res.status(500).json({ error: errorMessage })
   }
 }
