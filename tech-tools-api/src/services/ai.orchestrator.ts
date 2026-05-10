@@ -45,14 +45,14 @@ export type AiChannel = 'email' | 'whatsapp' | 'newsletter' | 'contact_reply'
 
 export interface GenerateDraftInput {
   channel: AiChannel
-  prompt: string                 // admin's natural-language intent
+  prompt: string // admin's natural-language intent
   recipientEmail?: string
   recipientPhone?: string
   recipientName?: string
   customerId?: string
   contactId?: string
   scheduledAt?: string
-  actorId: string                // admin user id
+  actorId: string // admin user id
   actorIp?: string
   actorAgent?: string
 }
@@ -71,7 +71,11 @@ export interface AiDraft {
   bodyText: string
   prompt: string
   modelName: string
-  tokenUsage: { promptTokens: number; completionTokens: number; totalTokens: number }
+  tokenUsage: {
+    promptTokens: number
+    completionTokens: number
+    totalTokens: number
+  }
   confidence: number
   createdBy: string
   createdAt: string
@@ -118,7 +122,11 @@ interface OpenAiResponse {
       function_call?: { name: string; arguments: string }
     }
   }>
-  usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
+  usage: {
+    prompt_tokens: number
+    completion_tokens: number
+    total_tokens: number
+  }
   model: string
 }
 
@@ -135,6 +143,36 @@ interface DraftContent {
   notes?: string
 }
 
+function buildFallbackDraft(input: GenerateDraftInput): DraftContent {
+  const safeName = input.recipientName?.trim() || 'there'
+  const subject =
+    input.channel === 'newsletter'
+      ? 'TechTools update for you'
+      : input.channel === 'contact_reply'
+      ? 'Update on your request'
+      : 'Message from TechTools'
+
+  const bodyText = [
+    `Hi ${safeName},`,
+    '',
+    'Thanks for your message. We are processing your request and will follow up shortly.',
+    '',
+    'Context from admin instruction:',
+    input.prompt.slice(0, 800),
+    '',
+    'Best regards,',
+    'TechTools Team',
+  ].join('\n')
+
+  return {
+    subject,
+    body_text: bodyText,
+    confidence: 35,
+    notes:
+      'Fallback template generated because AI provider call failed. Please review before sending.',
+  }
+}
+
 function isMissingAiTablesError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false
   const pgError = error as { code?: string; message?: string }
@@ -146,7 +184,10 @@ function isMissingAiTablesError(error: unknown): boolean {
 }
 
 // ─── Channel-aware system prompt builder ────────────────────
-function buildSystemPrompt(channel: AiChannel, ctx: CustomerContext | null): string {
+function buildSystemPrompt(
+  channel: AiChannel,
+  ctx: CustomerContext | null,
+): string {
   const brand = 'TechTools Store'
   const tone = 'professional yet friendly, concise, and action-oriented'
 
@@ -156,14 +197,28 @@ function buildSystemPrompt(channel: AiChannel, ctx: CustomerContext | null): str
 - Name: ${ctx.customer.name}
 - Email: ${ctx.customer.email}
 - Member since: ${ctx.customer.joinedAt}
-- Total orders: ${ctx.customer.totalOrders} (total spent: $${ctx.customer.totalSpent})
+- Total orders: ${ctx.customer.totalOrders} (total spent: $${
+        ctx.customer.totalSpent
+      })
 - Last order: ${ctx.customer.lastOrderAt || 'never'}
 
 ### Recent Orders
-${ctx.recentOrders.map((o) => `- Order ${o.number} [${o.status}] $${o.total} — items: ${o.items.map((i) => i.name).join(', ')}`).join('\n')}
+${ctx.recentOrders
+  .map(
+    (o) =>
+      `- Order ${o.number} [${o.status}] $${o.total} — items: ${o.items
+        .map((i) => i.name)
+        .join(', ')}`,
+  )
+  .join('\n')}
 
 ### Recent Communication
-${ctx.communicationHistory.slice(0, 5).map((c) => `- [${c.channel}/${c.direction}] ${c.subject || ''}: ${c.preview}`).join('\n')}
+${ctx.communicationHistory
+  .slice(0, 5)
+  .map(
+    (c) => `- [${c.channel}/${c.direction}] ${c.subject || ''}: ${c.preview}`,
+  )
+  .join('\n')}
 `
     : ''
 
@@ -254,7 +309,10 @@ async function postOpenAi(
       },
     )
     req.on('error', reject)
-    req.on('timeout', () => { req.destroy(); reject(new Error('OpenAI request timed out')) })
+    req.on('timeout', () => {
+      req.destroy()
+      reject(new Error('OpenAI request timed out'))
+    })
     req.write(body)
     req.end()
   })
@@ -318,7 +376,9 @@ async function callOpenAI(messages: OpenAiMessage[]): Promise<OpenAiResponse> {
 
   if (responsesResult.statusCode >= 400) {
     throw new Error(
-      `OpenAI API error chat=${chatResult.statusCode} responses=${responsesResult.statusCode}: ${responsesResult.bodyText.slice(0, 400)}`,
+      `OpenAI API error chat=${chatResult.statusCode} responses=${
+        responsesResult.statusCode
+      }: ${responsesResult.bodyText.slice(0, 400)}`,
     )
   }
 
@@ -382,7 +442,9 @@ async function checkRateLimit(actorId: string): Promise<void> {
   const count = await redis.incr(key)
   if (count === 1) await redis.expire(key, 60)
   if (count > limit) {
-    throw new Error(`Rate limit exceeded. Max ${limit} AI requests per minute per admin.`)
+    throw new Error(
+      `Rate limit exceeded. Max ${limit} AI requests per minute per admin.`,
+    )
   }
 }
 
@@ -481,7 +543,9 @@ export async function loadCustomerContext(
 }
 
 // ─── Core: Generate AI Draft ─────────────────────────────────
-export async function generateDraft(input: GenerateDraftInput): Promise<AiDraft> {
+export async function generateDraft(
+  input: GenerateDraftInput,
+): Promise<AiDraft> {
   await checkRateLimit(input.actorId)
 
   // Load context (non-blocking if not found)
@@ -512,32 +576,45 @@ Return ONLY valid JSON with this exact shape:
     },
   ]
 
-  const aiResponse = await callOpenAI(messages)
-
-  const choice = aiResponse.choices?.[0]
-  const functionArgs = choice?.message?.function_call?.arguments
-  const messageContent = choice?.message?.content
-
-  if (!functionArgs && !messageContent) {
-    throw new Error('AI did not return draft content')
-  }
-
   let parsed: DraftContent
+  let modelName = process.env.AI_MODEL || 'gpt-5.5'
+  let modelVersion = modelName
+  let usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+
   try {
+    const aiResponse = await callOpenAI(messages)
+
+    const choice = aiResponse.choices?.[0]
+    const functionArgs = choice?.message?.function_call?.arguments
+    const messageContent = choice?.message?.content
+
+    if (!functionArgs && !messageContent) {
+      throw new Error('AI did not return draft content')
+    }
+
     const jsonText = functionArgs
       ? functionArgs
       : extractJsonObject(messageContent as string)
     parsed = JSON.parse(jsonText) as DraftContent
-  } catch {
-    throw new Error('AI returned malformed JSON draft')
+
+    if (!parsed.body_text?.trim()) {
+      throw new Error('AI draft is empty')
+    }
+
+    modelName = (process.env.AI_MODEL || 'gpt-5.5').slice(0, 100)
+    modelVersion = (aiResponse.model || modelName).slice(0, 50)
+    usage = aiResponse.usage || usage
+  } catch (error: any) {
+    logger.warn('[AI] Falling back to template draft:', error?.message || error)
+    parsed = buildFallbackDraft(input)
+    modelName = 'fallback-template'
+    modelVersion = 'fallback-template'
   }
 
-  if (!parsed.body_text?.trim()) {
-    throw new Error('AI draft is empty')
-  }
-
-  const modelName = process.env.AI_MODEL || 'gpt-5.5'
-  const usage = aiResponse.usage
+  const safeConfidence = Math.max(
+    0,
+    Math.min(100, Number(parsed.confidence) || 35),
+  )
 
   // Persist to DB
   const result = await db(
@@ -559,9 +636,13 @@ Return ONLY valid JSON with this exact shape:
       parsed.body_text,
       input.prompt,
       modelName,
-      aiResponse.model,
-      JSON.stringify({ promptTokens: usage.prompt_tokens, completionTokens: usage.completion_tokens, totalTokens: usage.total_tokens }),
-      parsed.confidence,
+      modelVersion,
+      JSON.stringify({
+        promptTokens: usage.prompt_tokens,
+        completionTokens: usage.completion_tokens,
+        totalTokens: usage.total_tokens,
+      }),
+      safeConfidence,
       input.actorId,
       input.scheduledAt ?? null,
     ],
@@ -578,13 +659,19 @@ Return ONLY valid JSON with this exact shape:
       draft.id,
       input.channel,
       input.customerId ?? null,
-      JSON.stringify({ prompt: input.prompt.slice(0, 200), confidence: parsed.confidence, notes: parsed.notes }),
+      JSON.stringify({
+        prompt: input.prompt.slice(0, 200),
+        confidence: safeConfidence,
+        notes: parsed.notes,
+      }),
       input.actorIp ?? null,
       input.actorAgent?.slice(0, 300) ?? null,
     ],
   )
 
-  logger.info(`[AI] Draft generated: ${draft.id} channel=${input.channel} confidence=${parsed.confidence}%`)
+  logger.info(
+    `[AI] Draft generated: ${draft.id} channel=${input.channel} confidence=${safeConfidence}% model=${modelName}`,
+  )
 
   return mapDraftRow(draft)
 }
@@ -645,14 +732,17 @@ export async function approveDraft(
     logger.info(`[AI] Draft sent: ${draftId} channel=${draft.channel}`)
     return { sent: true, message: 'Draft approved and sent successfully' }
   } catch (err: any) {
-    await db(
-      `UPDATE ai_drafts SET status = 'failed' WHERE id = $1`,
-      [draftId],
-    )
+    await db(`UPDATE ai_drafts SET status = 'failed' WHERE id = $1`, [draftId])
     await db(
       `INSERT INTO ai_audit_log (action, actor_id, draft_id, channel, meta, ip_address)
        VALUES ('draft_failed', $1, $2, $3, $4, $5)`,
-      [actorId, draftId, draft.channel, JSON.stringify({ error: err.message }), actorIp ?? null],
+      [
+        actorId,
+        draftId,
+        draft.channel,
+        JSON.stringify({ error: err.message }),
+        actorIp ?? null,
+      ],
     )
     logger.error(`[AI] Draft send failed: ${draftId}`, err.message)
     throw new Error(`Draft approved but send failed: ${err.message}`)
@@ -671,7 +761,8 @@ export async function rejectDraft(
      WHERE id = $3 AND status = 'pending' RETURNING id`,
     [actorId, reason, draftId],
   )
-  if (!result.rows.length) throw new Error('Draft not found or already processed')
+  if (!result.rows.length)
+    throw new Error('Draft not found or already processed')
 
   await db(
     `INSERT INTO ai_audit_log (action, actor_id, draft_id, meta, ip_address)
@@ -710,7 +801,9 @@ export async function listDrafts(params: {
     const [countResult, rowsResult] = await Promise.all([
       db(`SELECT COUNT(*) FROM ai_drafts ${where}`, values),
       db(
-        `SELECT * FROM ai_drafts ${where} ORDER BY created_at DESC LIMIT $${idx} OFFSET $${idx + 1}`,
+        `SELECT * FROM ai_drafts ${where} ORDER BY created_at DESC LIMIT $${idx} OFFSET $${
+          idx + 1
+        }`,
         [...values, limit, offset],
       ),
     ])
@@ -721,7 +814,9 @@ export async function listDrafts(params: {
     }
   } catch (error) {
     if (isMissingAiTablesError(error)) {
-      logger.warn('[AI] listDrafts: AI tables not migrated yet, returning empty list')
+      logger.warn(
+        '[AI] listDrafts: AI tables not migrated yet, returning empty list',
+      )
       return { drafts: [], total: 0 }
     }
     throw error
@@ -737,7 +832,9 @@ export async function getCustomerTimeline(
   const offset = (page - 1) * limit
 
   const [countResult, rowsResult] = await Promise.all([
-    db(`SELECT COUNT(*) FROM communication_timeline WHERE customer_id = $1`, [customerId]),
+    db(`SELECT COUNT(*) FROM communication_timeline WHERE customer_id = $1`, [
+      customerId,
+    ]),
     db(
       `SELECT * FROM communication_timeline
        WHERE customer_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
@@ -772,7 +869,9 @@ export async function getAiStats(): Promise<object> {
     return result.rows[0]
   } catch (error) {
     if (isMissingAiTablesError(error)) {
-      logger.warn('[AI] getAiStats: AI tables not migrated yet, returning zeros')
+      logger.warn(
+        '[AI] getAiStats: AI tables not migrated yet, returning zeros',
+      )
       return {
         pending: '0',
         approved: '0',
@@ -802,7 +901,10 @@ async function sendEmailDraft(draft: Record<string, any>): Promise<void> {
 
 async function sendWhatsAppDraft(draft: Record<string, any>): Promise<void> {
   const whatsappService = (await import('./whatsapp.service')).default
-  await whatsappService.sendCustomMessage(draft.recipient_phone, draft.body_text)
+  await whatsappService.sendCustomMessage(
+    draft.recipient_phone,
+    draft.body_text,
+  )
 }
 
 async function sendNewsletterDraft(draft: Record<string, any>): Promise<void> {
@@ -820,7 +922,9 @@ async function sendNewsletterDraft(draft: Record<string, any>): Promise<void> {
   const campaignId = camResult.rows[0].id
 
   // Mark campaign as sending and fetch active subscriber emails
-  await db(`UPDATE newsletter_campaigns SET status = 'sending' WHERE id = $1`, [campaignId])
+  await db(`UPDATE newsletter_campaigns SET status = 'sending' WHERE id = $1`, [
+    campaignId,
+  ])
 
   const subscribersResult = await db(
     `SELECT email FROM newsletter_subscribers WHERE status = 'active'`,

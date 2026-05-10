@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import aiService, { AiDraft, AiChannel, AiDraftStatus } from '@/services/ai.service'
@@ -134,6 +134,7 @@ export default function AiHubPage() {
   const [recipientEmail, setRecipientEmail] = useState('')
   const [recipientPhone, setRecipientPhone] = useState('')
   const [recipientName, setRecipientName] = useState('')
+  const [generationStage, setGenerationStage] = useState(0)
 
   // Preview dialog
   const [previewDraft, setPreviewDraft] = useState<AiDraft | null>(null)
@@ -175,7 +176,9 @@ export default function AiHubPage() {
       setPreviewDraft(draft)
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.error || 'Failed to generate draft')
+      const apiError = err.response?.data?.error
+      const apiHint = err.response?.data?.hint
+      toast.error(apiHint ? `${apiError}. ${apiHint}` : apiError || 'Failed to generate draft')
     },
   })
 
@@ -219,6 +222,26 @@ export default function AiHubPage() {
 
   const drafts = draftsData?.drafts ?? []
   const stats = statsData
+
+  useEffect(() => {
+    if (!generateMutation.isPending) {
+      setGenerationStage(0)
+      return
+    }
+
+    const timer = setInterval(() => {
+      setGenerationStage((prev) => (prev + 1) % 4)
+    }, 1300)
+
+    return () => clearInterval(timer)
+  }, [generateMutation.isPending])
+
+  const generationMessages = [
+    'Reading customer context and communication history…',
+    'Crafting tone, structure, and conversion angle…',
+    'Optimizing for clarity and deliverability…',
+    'Finalizing draft for your approval…',
+  ]
 
   return (
     <div className='space-y-6'>
@@ -375,6 +398,29 @@ export default function AiHubPage() {
                 </>
               )}
             </Button>
+
+            {generateMutation.isPending && (
+              <div className='rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3'>
+                <div className='flex items-center justify-between text-sm'>
+                  <div className='flex items-center gap-2 font-medium'>
+                    <Sparkles className='h-4 w-4 text-primary animate-pulse' />
+                    AI is generating your draft
+                  </div>
+                  <span className='text-xs text-muted-foreground'>
+                    Stage {generationStage + 1}/4
+                  </span>
+                </div>
+                <div className='h-2 w-full rounded-full bg-primary/15 overflow-hidden'>
+                  <div
+                    className='h-full bg-primary transition-all duration-700 ease-out'
+                    style={{ width: `${(generationStage + 1) * 25}%` }}
+                  />
+                </div>
+                <p className='text-sm text-muted-foreground'>
+                  {generationMessages[generationStage]}
+                </p>
+              </div>
+            )}
 
             {!isConfigured && (
               <p className='text-xs text-destructive text-center'>

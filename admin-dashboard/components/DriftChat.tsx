@@ -23,6 +23,18 @@ export function DriftChat() {
       return
     }
 
+    // Tawk site id should be a 24-char hex string.
+    const isValidSiteId = /^[a-f0-9]{24}$/i.test(tawkSiteId)
+    const isValidWidgetId = /^[a-z0-9]{6,}$/i.test(tawkWidgetId)
+    if (!isValidSiteId || !isValidWidgetId) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(
+          `Skipping Tawk.to load due to invalid ids (siteId=${tawkSiteId}, widgetId=${tawkWidgetId}).`,
+        )
+      }
+      return
+    }
+
     // Check if Tawk is already loaded
     if (window.Tawk_API) {
       return
