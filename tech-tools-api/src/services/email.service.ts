@@ -119,9 +119,25 @@ class EmailService {
     const port = parseInt(process.env.SMTP_PORT || '465')
     // Port 465 uses implicit TLS (secure: true)
     // Port 587 uses STARTTLS (secure: false)
-    const secure = process.env.SMTP_SECURE
+    let secure = process.env.SMTP_SECURE
       ? process.env.SMTP_SECURE === 'true'
       : port === 465
+
+    // Guardrail for common SMTP misconfiguration:
+    // - 465 must use implicit TLS (secure=true)
+    // - 587 must use STARTTLS upgrade (secure=false)
+    if (port === 465 && !secure) {
+      logger.warn(
+        'SMTP config corrected: port 465 requires SMTP_SECURE=true. Auto-fixing secure=true.',
+      )
+      secure = true
+    }
+    if (port === 587 && secure) {
+      logger.warn(
+        'SMTP config corrected: port 587 requires SMTP_SECURE=false (STARTTLS). Auto-fixing secure=false.',
+      )
+      secure = false
+    }
 
     this.defaultConfig = {
       host: process.env.SMTP_HOST || 'smtp.hostinger.com',
