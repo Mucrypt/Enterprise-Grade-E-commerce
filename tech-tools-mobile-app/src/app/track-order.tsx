@@ -19,10 +19,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 
-import {
-  getApiErrorMessage,
-  ordersApiNew,
-} from '@/api'
+import { getApiErrorMessage, ordersApiNew } from '@/api'
 import {
   AppBorderRadius,
   AppColors,
@@ -134,8 +131,7 @@ const formatDate = (iso: string) => {
   }
 }
 
-const formatCurrency = (amount: number) =>
-  `$${Number(amount).toFixed(2)}`
+const formatCurrency = (amount: number) => `$${Number(amount).toFixed(2)}`
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -152,7 +148,12 @@ function StatusTimeline({ status }: StatusTimelineProps) {
           size={20}
           color={STATUS_COLORS[status] || AppColors.error}
         />
-        <Text style={[tlStyles.cancelledText, { color: STATUS_COLORS[status] || AppColors.error }]}>
+        <Text
+          style={[
+            tlStyles.cancelledText,
+            { color: STATUS_COLORS[status] || AppColors.error },
+          ]}
+        >
           {STATUS_LABELS[status] || status}
         </Text>
       </View>
@@ -175,7 +176,10 @@ function StatusTimeline({ status }: StatusTimelineProps) {
               <View
                 style={[
                   tlStyles.dot,
-                  { borderColor: color, backgroundColor: isDone ? color : AppColors.white },
+                  {
+                    borderColor: color,
+                    backgroundColor: isDone ? color : AppColors.white,
+                  },
                   isActive && tlStyles.dotActive,
                 ]}
               >
@@ -203,7 +207,10 @@ function StatusTimeline({ status }: StatusTimelineProps) {
               <View
                 style={[
                   tlStyles.connector,
-                  { backgroundColor: idx < activeIdx ? AppColors.success : AppColors.gray200 },
+                  {
+                    backgroundColor:
+                      idx < activeIdx ? AppColors.success : AppColors.gray200,
+                  },
                 ]}
               />
             )}
@@ -234,7 +241,10 @@ function OrderCard({ order }: OrderCardProps) {
         <View
           style={[
             cardStyles.statusBadge,
-            { backgroundColor: (STATUS_COLORS[order.order_status] || AppColors.gray400) + '20' },
+            {
+              backgroundColor:
+                (STATUS_COLORS[order.order_status] || AppColors.gray400) + '20',
+            },
           ]}
         >
           <Text
@@ -256,9 +266,14 @@ function OrderCard({ order }: OrderCardProps) {
       {/* Shipping info */}
       {hasTracking && (
         <View style={cardStyles.infoRow}>
-          <Ionicons name='barcode-outline' size={16} color={AppColors.gray500} />
+          <Ionicons
+            name='barcode-outline'
+            size={16}
+            color={AppColors.gray500}
+          />
           <Text style={cardStyles.infoText}>
-            Tracking: <Text style={cardStyles.infoValue}>{addr.tracking_number}</Text>
+            Tracking:{' '}
+            <Text style={cardStyles.infoValue}>{addr.tracking_number}</Text>
           </Text>
         </View>
       )}
@@ -267,14 +282,21 @@ function OrderCard({ order }: OrderCardProps) {
         <View style={cardStyles.infoRow}>
           <Ionicons name='car-outline' size={16} color={AppColors.gray500} />
           <Text style={cardStyles.infoText}>
-            Carrier: <Text style={cardStyles.infoValue}>{String(addr.carrier).toUpperCase()}</Text>
+            Carrier:{' '}
+            <Text style={cardStyles.infoValue}>
+              {String(addr.carrier).toUpperCase()}
+            </Text>
           </Text>
         </View>
       )}
 
       {(addr.city || addr.street) && (
         <View style={cardStyles.infoRow}>
-          <Ionicons name='location-outline' size={16} color={AppColors.gray500} />
+          <Ionicons
+            name='location-outline'
+            size={16}
+            color={AppColors.gray500}
+          />
           <Text style={cardStyles.infoText} numberOfLines={2}>
             {[addr.street || addr.address, addr.city, addr.state, addr.country]
               .filter(Boolean)
@@ -302,7 +324,8 @@ function OrderCard({ order }: OrderCardProps) {
           ))}
           {order.items.length > 2 && (
             <Text style={cardStyles.moreItems}>
-              +{order.items.length - 2} more item{order.items.length - 2 !== 1 ? 's' : ''}
+              +{order.items.length - 2} more item
+              {order.items.length - 2 !== 1 ? 's' : ''}
             </Text>
           )}
         </View>
@@ -311,7 +334,9 @@ function OrderCard({ order }: OrderCardProps) {
       {/* Total */}
       <View style={cardStyles.totalRow}>
         <Text style={cardStyles.totalLabel}>Order Total</Text>
-        <Text style={cardStyles.totalValue}>{formatCurrency(order.grand_total)}</Text>
+        <Text style={cardStyles.totalValue}>
+          {formatCurrency(order.grand_total)}
+        </Text>
       </View>
     </View>
   )
@@ -359,49 +384,54 @@ export default function TrackOrderScreen() {
     }
   }, [params.orderNumber])
 
-  const handleSearch = useCallback(async (orderNumber?: string) => {
-    const term = (orderNumber ?? query).trim()
-    if (!term) {
-      setErrorMsg('Please enter an order number.')
-      return
-    }
+  const handleSearch = useCallback(
+    async (orderNumber?: string) => {
+      const term = (orderNumber ?? query).trim()
+      if (!term) {
+        setErrorMsg('Please enter an order number.')
+        return
+      }
 
-    setIsSearching(true)
-    setErrorMsg(null)
-    setTrackedOrder(null)
-    setHasSearched(true)
+      setIsSearching(true)
+      setErrorMsg(null)
+      setTrackedOrder(null)
+      setHasSearched(true)
 
-    try {
-      // First try to find from recent orders list (exact match on order_number)
-      const recentMatch = recentOrders.find(
-        (o) => o.order_number.toLowerCase() === term.toLowerCase(),
-      )
-
-      if (recentMatch) {
-        const detail = await ordersApiNew.getById(recentMatch.id)
-        setTrackedOrder(detail)
-      } else {
-        // Search by fetching more orders and matching
-        const result = await ordersApiNew.getAll(1, 50)
-        const found = result.orders.find(
+      try {
+        // First try to find from recent orders list (exact match on order_number)
+        const recentMatch = recentOrders.find(
           (o) => o.order_number.toLowerCase() === term.toLowerCase(),
         )
 
-        if (found) {
-          const detail = await ordersApiNew.getById(found.id)
+        if (recentMatch) {
+          const detail = await ordersApiNew.getById(recentMatch.id)
           setTrackedOrder(detail)
         } else {
-          setErrorMsg(
-            `No order found with number "${term}". Please check the order number and try again.`,
+          // Search by fetching more orders and matching
+          const result = await ordersApiNew.getAll(1, 50)
+          const found = result.orders.find(
+            (o) => o.order_number.toLowerCase() === term.toLowerCase(),
           )
+
+          if (found) {
+            const detail = await ordersApiNew.getById(found.id)
+            setTrackedOrder(detail)
+          } else {
+            setErrorMsg(
+              `No order found with number "${term}". Please check the order number and try again.`,
+            )
+          }
         }
+      } catch (err) {
+        setErrorMsg(
+          getApiErrorMessage(err) || 'Failed to find order. Please try again.',
+        )
+      } finally {
+        setIsSearching(false)
       }
-    } catch (err) {
-      setErrorMsg(getApiErrorMessage(err) || 'Failed to find order. Please try again.')
-    } finally {
-      setIsSearching(false)
-    }
-  }, [query, recentOrders])
+    },
+    [query, recentOrders],
+  )
 
   const handleSelectRecent = useCallback(async (order: RecentOrder) => {
     setQuery(order.order_number)
@@ -484,14 +514,24 @@ export default function TrackOrderScreen() {
                   autoCorrect={false}
                 />
                 {query.length > 0 && (
-                  <TouchableOpacity onPress={handleClear} style={styles.clearBtn}>
-                    <Ionicons name='close-circle' size={18} color={AppColors.gray400} />
+                  <TouchableOpacity
+                    onPress={handleClear}
+                    style={styles.clearBtn}
+                  >
+                    <Ionicons
+                      name='close-circle'
+                      size={18}
+                      color={AppColors.gray400}
+                    />
                   </TouchableOpacity>
                 )}
               </View>
 
               <TouchableOpacity
-                style={[styles.searchBtn, isSearching && styles.searchBtnDisabled]}
+                style={[
+                  styles.searchBtn,
+                  isSearching && styles.searchBtnDisabled,
+                ]}
                 onPress={() => handleSearch()}
                 disabled={isSearching}
               >
@@ -505,7 +545,11 @@ export default function TrackOrderScreen() {
 
             {errorMsg && (
               <View style={styles.errorBox}>
-                <Ionicons name='alert-circle-outline' size={16} color={AppColors.error} />
+                <Ionicons
+                  name='alert-circle-outline'
+                  size={16}
+                  color={AppColors.error}
+                />
                 <Text style={styles.errorText}>{errorMsg}</Text>
               </View>
             )}
@@ -522,7 +566,11 @@ export default function TrackOrderScreen() {
           {/* No result state */}
           {hasSearched && !trackedOrder && !isSearching && !errorMsg && (
             <View style={styles.emptyState}>
-              <Ionicons name='search-outline' size={48} color={AppColors.gray300} />
+              <Ionicons
+                name='search-outline'
+                size={48}
+                color={AppColors.gray300}
+              />
               <Text style={styles.emptyTitle}>Order not found</Text>
               <Text style={styles.emptySubtitle}>
                 Double-check the order number and try again.
@@ -553,14 +601,19 @@ export default function TrackOrderScreen() {
                       <Ionicons
                         name='receipt-outline'
                         size={18}
-                        color={STATUS_COLORS[order.order_status] || AppColors.gray500}
+                        color={
+                          STATUS_COLORS[order.order_status] || AppColors.gray500
+                        }
                       />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.recentOrderNum}>#{order.order_number}</Text>
+                      <Text style={styles.recentOrderNum}>
+                        #{order.order_number}
+                      </Text>
                       <Text style={styles.recentMeta}>
-                        {STATUS_LABELS[order.order_status] || order.order_status} ·{' '}
-                        {formatDate(order.created_at)}
+                        {STATUS_LABELS[order.order_status] ||
+                          order.order_status}{' '}
+                        · {formatDate(order.created_at)}
                       </Text>
                     </View>
                     <Text style={styles.recentAmount}>
@@ -581,10 +634,15 @@ export default function TrackOrderScreen() {
           {/* Not logged in tip */}
           {!isAuthenticated && !trackedOrder && (
             <View style={styles.tipBox}>
-              <Ionicons name='information-circle-outline' size={18} color={AppColors.info} />
+              <Ionicons
+                name='information-circle-outline'
+                size={18}
+                color={AppColors.info}
+              />
               <Text style={styles.tipText}>
                 <Text style={{ fontWeight: '600' }}>Tip: </Text>
-                Log in to quickly track any of your orders from your order history.
+                Log in to quickly track any of your orders from your order
+                history.
               </Text>
             </View>
           )}
