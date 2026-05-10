@@ -130,6 +130,16 @@ interface DraftContent {
   notes?: string
 }
 
+function isMissingAiTablesError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const pgError = error as { code?: string; message?: string }
+  return (
+    pgError.code === '42P01' ||
+    pgError.message?.includes('ai_drafts') === true ||
+    pgError.message?.includes('communication_timeline') === true
+  )
+}
+
 // ─── Channel-aware system prompt builder ────────────────────
 function buildSystemPrompt(channel: AiChannel, ctx: CustomerContext | null): string {
   const brand = 'TechTools Store'
@@ -593,36 +603,44 @@ export async function listDrafts(params: {
   page?: number
   limit?: number
 }): Promise<{ drafts: AiDraft[]; total: number }> {
-  const page = params.page ?? 1
-  const limit = Math.min(params.limit ?? 20, 100)
-  const offset = (page - 1) * limit
+  try {
+    const page = params.page ?? 1
+    const limit = Math.min(params.limit ?? 20, 100)
+    const offset = (page - 1) * limit
 
-  const conditions: string[] = []
-  const values: unknown[] = []
-  let idx = 1
+    const conditions: string[] = []
+    const values: unknown[] = []
+    let idx = 1
 
-  if (params.status) {
-    conditions.push(`status = $${idx++}`)
-    values.push(params.status)
-  }
-  if (params.channel) {
-    conditions.push(`channel = $${idx++}`)
-    values.push(params.channel)
-  }
+    if (params.status) {
+      conditions.push(`status = $${idx++}`)
+      values.push(params.status)
+    }
+    if (params.channel) {
+      conditions.push(`channel = $${idx++}`)
+      values.push(params.channel)
+    }
 
-  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
 
-  const [countResult, rowsResult] = await Promise.all([
-    db(`SELECT COUNT(*) FROM ai_drafts ${where}`, values),
-    db(
-      `SELECT * FROM ai_drafts ${where} ORDER BY created_at DESC LIMIT $${idx} OFFSET $${idx + 1}`,
-      [...values, limit, offset],
-    ),
-  ])
+    const [countResult, rowsResult] = await Promise.all([
+      db(`SELECT COUNT(*) FROM ai_drafts ${where}`, values),
+      db(
+        `SELECT * FROM ai_drafts ${where} ORDER BY created_at DESC LIMIT $${idx} OFFSET $${idx + 1}`,
+        [...values, limit, offset],
+      ),
+    ])
 
-  return {
-    drafts: rowsResult.rows.map(mapDraftRow),
-    total: parseInt(countResult.rows[0].count),
+    return {
+      drafts: rowsResult.rows.map(mapDraftRow),
+      total: parseInt(countResult.rows[0].count),
+    }
+  } catch (error) {
+    if (isMissingAiTablesError(error)) {
+      logger.warn('[AI] listDrafts: AI tables not migrated yet, returning empty list')
+      return { drafts: [], total: 0 }
+    }
+    throw error
   }
 }
 
@@ -651,19 +669,39 @@ export async function getCustomerTimeline(
 
 // ─── AI Stats ─────────────────────────────────────────────────
 export async function getAiStats(): Promise<object> {
-  const result = await db(`
-    SELECT
-      COUNT(*) FILTER (WHERE status = 'pending')  AS pending,
-      COUNT(*) FILTER (WHERE status = 'approved') AS approved,
-      COUNT(*) FILTER (WHERE status = 'rejected') AS rejected,
-      COUNT(*) FILTER (WHERE status = 'sent')     AS sent,
-      COUNT(*) FILTER (WHERE status = 'failed')   AS failed,
-      COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '24 hours') AS last_24h,
-      ROUND(AVG(confidence)) AS avg_confidence,
-      SUM((token_usage->>'totalTokens')::int) AS total_tokens_used
-    FROM ai_drafts
-  `)
-  return result.rows[0]
+  try {
+    const result = await db(`
+      SELECT
+        COUNT(*) FILTER (WHERE status = 'pending')  AS pending,
+        COUNT(*) FILTER (WHERE status = 'approved') AS approved,
+        COUNT(*) FILTER (WHERE status = 'rejected') AS rejected,
+        COUNT(*) FILTER (WHERE status = 'sent')     AS sent,
+        COUNT(*) FILTER (WHERE status = 'failed')   AS failed,
+        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '24 hours') AS last_24h,
+        COALESCE(ROUND(AVG(confidence)), 0) AS avg_confidence,
+        COALESCE(SUM(CASE
+          WHEN (token_usage->>'totalTokens') ~ '^[0-9]+$' THEN (token_usage->>'totalTokens')::int
+          ELSE 0
+        END), 0) AS total_tokens_used
+      FROM ai_drafts
+    `)
+    return result.rows[0]
+  } catch (error) {
+    if (isMissingAiTablesError(error)) {
+      logger.warn('[AI] getAiStats: AI tables not migrated yet, returning zeros')
+      return {
+        pending: '0',
+        approved: '0',
+        rejected: '0',
+        sent: '0',
+        failed: '0',
+        last_24h: '0',
+        avg_confidence: '0',
+        total_tokens_used: '0',
+      }
+    }
+    throw error
+  }
 }
 
 // ─── Channel senders (thin wrappers around existing services) ──

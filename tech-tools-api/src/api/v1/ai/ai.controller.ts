@@ -72,7 +72,10 @@ export const listDrafts = async (req: AuthRequest, res: Response) => {
     return res.json(result)
   } catch (err: any) {
     logger.error('[AI] listDrafts error:', err.message)
-    return res.status(500).json({ error: 'Failed to fetch drafts' })
+    return res.status(500).json({
+      error: 'Failed to fetch drafts',
+      hint: 'Ensure AI migration 021_ai_orchestrator.sql has been applied',
+    })
   }
 }
 
@@ -146,14 +149,17 @@ export const getStats = async (req: AuthRequest, res: Response) => {
     return res.json({ stats })
   } catch (err: any) {
     logger.error('[AI] getStats error:', err.message)
-    return res.status(500).json({ error: 'Failed to load AI stats' })
+    return res.status(500).json({
+      error: 'Failed to load AI stats',
+      hint: 'Ensure AI migration 021_ai_orchestrator.sql has been applied',
+    })
   }
 }
 
 // ─── AI Service Health ────────────────────────────────────────
 export const getAiStatus = async (_req: Request, res: Response) => {
   const configured = Boolean(process.env.OPENAI_API_KEY)
-  const model = process.env.AI_MODEL || 'gpt-4o'
+  const model = process.env.AI_MODEL || 'gpt-5.5'
   return res.json({
     configured,
     model,

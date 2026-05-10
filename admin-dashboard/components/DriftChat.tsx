@@ -12,11 +12,14 @@ export function DriftChat() {
     const tawkSiteId = process.env.NEXT_PUBLIC_TAWK_SITE_ID
     const tawkWidgetId = process.env.NEXT_PUBLIC_TAWK_WIDGET_ID || '1jm6uk6rp'
 
-    // Skip if no Tawk Site ID configured
+    // Skip if no Tawk Site ID configured.
+    // Warn only in development to avoid noisy production consoles.
     if (!tawkSiteId || tawkSiteId === 'YOUR_TAWK_SITE_ID') {
-      console.warn(
-        'Tawk.to chat not configured. Set NEXT_PUBLIC_TAWK_SITE_ID environment variable.',
-      )
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(
+          'Tawk.to chat not configured. Set NEXT_PUBLIC_TAWK_SITE_ID environment variable.',
+        )
+      }
       return
     }
 
