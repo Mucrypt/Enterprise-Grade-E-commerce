@@ -915,13 +915,25 @@ export default function NewsletterPage() {
                     key={product.id}
                     className='flex items-center justify-between gap-3 rounded-md px-2 py-1.5 hover:bg-muted'
                   >
-                    <div className='min-w-0'>
-                      <p className='text-sm font-medium truncate'>
-                        {product.name}
-                      </p>
-                      <p className='text-xs text-muted-foreground'>
-                        ${product.price.toFixed(2)}
-                      </p>
+                    <div className='flex min-w-0 items-center gap-3'>
+                      {product.imageUrl ? (
+                        <img
+                          src={product.imageUrl}
+                          alt={product.name}
+                          className='h-10 w-10 shrink-0 rounded-md border object-cover'
+                          loading='lazy'
+                        />
+                      ) : (
+                        <div className='h-10 w-10 shrink-0 rounded-md border bg-muted' />
+                      )}
+                      <div className='min-w-0'>
+                        <p className='text-sm font-medium truncate'>
+                          {product.name}
+                        </p>
+                        <p className='text-xs text-muted-foreground'>
+                          ${product.price.toFixed(2)}
+                        </p>
+                      </div>
                     </div>
                     <input
                       type='checkbox'
