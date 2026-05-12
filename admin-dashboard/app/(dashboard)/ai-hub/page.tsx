@@ -10,7 +10,13 @@ import aiService, {
 } from '@/services/ai.service'
 import { productService } from '@/services/product.service'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
@@ -31,12 +37,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/tabs'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Bot,
   Mail,
@@ -61,65 +62,120 @@ import {
 import { toast } from 'sonner'
 
 // ─── Channel config ──────────────────────────────────────────
-const CHANNELS: { value: AiChannel; label: string; icon: React.ComponentType<{ className?: string }>; color: string; placeholder: string }[] = [
+const CHANNELS: {
+  value: AiChannel
+  label: string
+  icon: React.ComponentType<{ className?: string }>
+  color: string
+  placeholder: string
+}[] = [
   {
     value: 'email',
     label: 'Email',
     icon: Mail,
     color: 'text-blue-500',
-    placeholder: 'E.g. "Write a win-back email for Sophie who hasn\'t ordered in 60 days, mention her last purchase was a laptop stand."',
+    placeholder:
+      'E.g. "Write a win-back email for Sophie who hasn\'t ordered in 60 days, mention her last purchase was a laptop stand."',
   },
   {
     value: 'whatsapp',
     label: 'WhatsApp',
     icon: MessageSquare,
     color: 'text-green-500',
-    placeholder: 'E.g. "Send a flash sale WhatsApp to +39333272555 — 20% off all accessories today only."',
+    placeholder:
+      'E.g. "Send a flash sale WhatsApp to +39333272555 — 20% off all accessories today only."',
   },
   {
     value: 'newsletter',
     label: 'Newsletter',
     icon: Newspaper,
     color: 'text-purple-500',
-    placeholder: 'E.g. "Create a newsletter campaign promoting our new MacBook accessories collection, targeting all active subscribers."',
+    placeholder:
+      'E.g. "Create a newsletter campaign promoting our new MacBook accessories collection, targeting all active subscribers."',
   },
   {
     value: 'contact_reply',
     label: 'Reply to Contact',
     icon: Inbox,
     color: 'text-orange-500',
-    placeholder: 'E.g. "Reply to Pascaline\'s billing question — her order TT-M0FWVP7K-Y0EG is under review and will be resolved in 24 hours."',
+    placeholder:
+      'E.g. "Reply to Pascaline\'s billing question — her order TT-M0FWVP7K-Y0EG is under review and will be resolved in 24 hours."',
   },
 ]
 
 // ─── Status helpers ───────────────────────────────────────────
 function StatusBadge({ status }: { status: AiDraftStatus }) {
-  const map: Record<AiDraftStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: React.ReactNode }> = {
-    pending:  { label: 'Pending Review', variant: 'secondary', icon: <Clock className='h-3 w-3 mr-1' /> },
-    approved: { label: 'Approved',       variant: 'default',   icon: <CheckCircle className='h-3 w-3 mr-1' /> },
-    rejected: { label: 'Rejected',       variant: 'destructive', icon: <XCircle className='h-3 w-3 mr-1' /> },
-    sent:     { label: 'Sent',           variant: 'default',   icon: <Send className='h-3 w-3 mr-1' /> },
-    failed:   { label: 'Failed',         variant: 'destructive', icon: <AlertTriangle className='h-3 w-3 mr-1' /> },
+  const map: Record<
+    AiDraftStatus,
+    {
+      label: string
+      variant: 'default' | 'secondary' | 'destructive' | 'outline'
+      icon: React.ReactNode
+    }
+  > = {
+    pending: {
+      label: 'Pending Review',
+      variant: 'secondary',
+      icon: <Clock className='h-3 w-3 mr-1' />,
+    },
+    approved: {
+      label: 'Approved',
+      variant: 'default',
+      icon: <CheckCircle className='h-3 w-3 mr-1' />,
+    },
+    rejected: {
+      label: 'Rejected',
+      variant: 'destructive',
+      icon: <XCircle className='h-3 w-3 mr-1' />,
+    },
+    sent: {
+      label: 'Sent',
+      variant: 'default',
+      icon: <Send className='h-3 w-3 mr-1' />,
+    },
+    failed: {
+      label: 'Failed',
+      variant: 'destructive',
+      icon: <AlertTriangle className='h-3 w-3 mr-1' />,
+    },
   }
   const cfg = map[status]
   return (
     <Badge variant={cfg.variant} className='flex items-center text-xs'>
-      {cfg.icon}{cfg.label}
+      {cfg.icon}
+      {cfg.label}
     </Badge>
   )
 }
 
 function ConfidenceBadge({ score }: { score: number }) {
-  const color = score >= 85 ? 'text-green-600 bg-green-50' : score >= 65 ? 'text-yellow-700 bg-yellow-50' : 'text-red-600 bg-red-50'
+  const color =
+    score >= 85
+      ? 'text-green-600 bg-green-50'
+      : score >= 65
+      ? 'text-yellow-700 bg-yellow-50'
+      : 'text-red-600 bg-red-50'
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${color}`}>
-      <Zap className='h-3 w-3 mr-1' />{score}% confidence
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${color}`}
+    >
+      <Zap className='h-3 w-3 mr-1' />
+      {score}% confidence
     </span>
   )
 }
 
-function ChannelIcon({ channel, className }: { channel: AiChannel; className?: string }) {
-  const IconMap: Record<AiChannel, React.ComponentType<{ className?: string }>> = {
+function ChannelIcon({
+  channel,
+  className,
+}: {
+  channel: AiChannel
+  className?: string
+}) {
+  const IconMap: Record<
+    AiChannel,
+    React.ComponentType<{ className?: string }>
+  > = {
     email: Mail,
     whatsapp: MessageSquare,
     newsletter: Newspaper,
@@ -168,9 +224,17 @@ export default function AiHubPage() {
     refetchInterval: 30_000,
   })
 
-  const { data: draftsData, isLoading: isLoadingDrafts, refetch: refetchDrafts } = useQuery({
+  const {
+    data: draftsData,
+    isLoading: isLoadingDrafts,
+    refetch: refetchDrafts,
+  } = useQuery({
     queryKey: ['ai-drafts', filterStatus],
-    queryFn: () => aiService.listDrafts({ status: filterStatus as AiDraftStatus, limit: 30 }),
+    queryFn: () =>
+      aiService.listDrafts({
+        status: filterStatus as AiDraftStatus,
+        limit: 30,
+      }),
   })
 
   const { data: productOptions = [] } = useQuery({
@@ -208,7 +272,11 @@ export default function AiHubPage() {
     onError: (err: any) => {
       const apiError = err.response?.data?.error
       const apiHint = err.response?.data?.hint
-      toast.error(apiHint ? `${apiError}. ${apiHint}` : apiError || 'Failed to generate draft')
+      toast.error(
+        apiHint
+          ? `${apiError}. ${apiHint}`
+          : apiError || 'Failed to generate draft',
+      )
     },
   })
 
@@ -216,7 +284,7 @@ export default function AiHubPage() {
     mutationFn: aiService.generateCampaignDraft,
     onSuccess: (result) => {
       toast.success(
-        `Campaign draft created for ~${result.audienceEstimate} subscribers.`,
+        `Draft saved for ~${result.audienceEstimate} subscribers. Send whenever you're ready.`,
       )
       queryClient.invalidateQueries({ queryKey: ['ai-drafts'] })
       queryClient.invalidateQueries({ queryKey: ['ai-stats'] })
@@ -277,9 +345,18 @@ export default function AiHubPage() {
   const isConfigured = statusData?.configured !== false
 
   const handleGenerate = () => {
-    if (!prompt.trim()) { toast.error('Please describe what you want to communicate.'); return }
-    if (channel === 'email' && !recipientEmail) { toast.error('Recipient email is required for email channel.'); return }
-    if (channel === 'whatsapp' && !recipientPhone) { toast.error('Recipient phone is required for WhatsApp channel.'); return }
+    if (!prompt.trim()) {
+      toast.error('Please describe what you want to communicate.')
+      return
+    }
+    if (channel === 'email' && !recipientEmail) {
+      toast.error('Recipient email is required for email channel.')
+      return
+    }
+    if (channel === 'whatsapp' && !recipientPhone) {
+      toast.error('Recipient phone is required for WhatsApp channel.')
+      return
+    }
     if (channel === 'newsletter') {
       generateCampaignMutation.mutate({
         prompt,
@@ -306,6 +383,14 @@ export default function AiHubPage() {
 
   const drafts = draftsData?.drafts ?? []
   const stats = statsData
+
+  const handleSaveDraft = () => {
+    if (!previewDraft) return
+    toast.success('Draft saved. You can send it later from the drafts list.')
+    setPreviewDraft(null)
+    setShowRejectInput(false)
+    setRejectReason('')
+  }
 
   useEffect(() => {
     if (!generateMutation.isPending && !generateCampaignMutation.isPending) {
@@ -352,8 +437,15 @@ export default function AiHubPage() {
               AI not configured — add OPENAI_API_KEY
             </Badge>
           )}
-          <Button variant='outline' size='sm' onClick={() => { refetchDrafts() }}>
-            <RefreshCw className='mr-2 h-4 w-4' />Refresh
+          <Button
+            variant='outline'
+            size='sm'
+            onClick={() => {
+              refetchDrafts()
+            }}
+          >
+            <RefreshCw className='mr-2 h-4 w-4' />
+            Refresh
           </Button>
         </div>
       </div>
@@ -361,15 +453,37 @@ export default function AiHubPage() {
       {/* Stats row */}
       <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-5'>
         {[
-          { label: 'Pending', key: 'pending', icon: Clock, color: 'text-yellow-500' },
+          {
+            label: 'Pending',
+            key: 'pending',
+            icon: Clock,
+            color: 'text-yellow-500',
+          },
           { label: 'Sent', key: 'sent', icon: Send, color: 'text-green-500' },
-          { label: 'Rejected', key: 'rejected', icon: XCircle, color: 'text-red-400' },
-          { label: 'Last 24h', key: 'last_24h', icon: TrendingUp, color: 'text-blue-500' },
-          { label: 'Avg Confidence', key: 'avg_confidence', icon: Zap, color: 'text-purple-500' },
+          {
+            label: 'Rejected',
+            key: 'rejected',
+            icon: XCircle,
+            color: 'text-red-400',
+          },
+          {
+            label: 'Last 24h',
+            key: 'last_24h',
+            icon: TrendingUp,
+            color: 'text-blue-500',
+          },
+          {
+            label: 'Avg Confidence',
+            key: 'avg_confidence',
+            icon: Zap,
+            color: 'text-purple-500',
+          },
         ].map(({ label, key, icon: Icon, color }) => (
           <Card key={key}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-              <CardTitle className='text-xs font-medium text-muted-foreground'>{label}</CardTitle>
+              <CardTitle className='text-xs font-medium text-muted-foreground'>
+                {label}
+              </CardTitle>
               <Icon className={`h-4 w-4 ${color}`} />
             </CardHeader>
             <CardContent>
@@ -377,7 +491,9 @@ export default function AiHubPage() {
                 <Skeleton className='h-7 w-16' />
               ) : (
                 <div className='text-2xl font-bold'>
-                  {key === 'avg_confidence' ? `${stats?.[key as keyof typeof stats] ?? 0}%` : (stats?.[key as keyof typeof stats] ?? 0)}
+                  {key === 'avg_confidence'
+                    ? `${stats?.[key as keyof typeof stats] ?? 0}%`
+                    : stats?.[key as keyof typeof stats] ?? 0}
                 </div>
               )}
             </CardContent>
@@ -405,7 +521,9 @@ export default function AiHubPage() {
                   key={ch.value}
                   onClick={() => setChannel(ch.value)}
                   className={`flex items-center gap-2 rounded-lg border p-3 text-sm font-medium transition-all hover:border-primary ${
-                    channel === ch.value ? 'border-primary bg-primary/5 text-primary' : 'text-muted-foreground'
+                    channel === ch.value
+                      ? 'border-primary bg-primary/5 text-primary'
+                      : 'text-muted-foreground'
                   }`}
                 >
                   <ch.icon className={`h-4 w-4 ${ch.color}`} />
@@ -441,7 +559,9 @@ export default function AiHubPage() {
             )}
             {channel !== 'newsletter' && (
               <div className='space-y-2'>
-                <Label htmlFor='recipient-name'>Recipient Name (optional)</Label>
+                <Label htmlFor='recipient-name'>
+                  Recipient Name (optional)
+                </Label>
                 <Input
                   id='recipient-name'
                   placeholder='Customer name'
@@ -462,7 +582,9 @@ export default function AiHubPage() {
                 onChange={(e) => setPrompt(e.target.value)}
                 maxLength={2000}
               />
-              <p className='text-xs text-muted-foreground text-right'>{prompt.length}/2000</p>
+              <p className='text-xs text-muted-foreground text-right'>
+                {prompt.length}/2000
+              </p>
             </div>
 
             <div className='space-y-2'>
@@ -483,7 +605,14 @@ export default function AiHubPage() {
                 <div>
                   <Label className='text-sm font-medium'>Segment Sources</Label>
                   <div className='mt-2 grid grid-cols-2 gap-2 text-sm'>
-                    {['website', 'checkout', 'popup', 'footer', 'import', 'admin'].map((source) => (
+                    {[
+                      'website',
+                      'checkout',
+                      'popup',
+                      'footer',
+                      'import',
+                      'admin',
+                    ].map((source) => (
                       <label key={source} className='flex items-center gap-2'>
                         <input
                           type='checkbox'
@@ -503,7 +632,9 @@ export default function AiHubPage() {
                 </div>
 
                 <div>
-                  <Label className='text-sm font-medium'>Subscriber Statuses</Label>
+                  <Label className='text-sm font-medium'>
+                    Subscriber Statuses
+                  </Label>
                   <div className='mt-2 flex flex-wrap gap-3 text-sm'>
                     {['active', 'unsubscribed', 'bounced'].map((status) => (
                       <label key={status} className='flex items-center gap-2'>
@@ -533,15 +664,24 @@ export default function AiHubPage() {
                 </div>
 
                 <div>
-                  <Label className='text-sm font-medium'>Product Picker (optional)</Label>
+                  <Label className='text-sm font-medium'>
+                    Product Picker (optional)
+                  </Label>
                   <div className='mt-2 max-h-40 space-y-1 overflow-y-auto rounded-md border p-2'>
                     {productOptions.length === 0 ? (
-                      <p className='text-xs text-muted-foreground'>No products loaded yet.</p>
+                      <p className='text-xs text-muted-foreground'>
+                        No products loaded yet.
+                      </p>
                     ) : (
                       productOptions.map((product: any) => (
-                        <label key={product.id} className='flex items-center justify-between gap-2 text-sm'>
+                        <label
+                          key={product.id}
+                          className='flex items-center justify-between gap-2 text-sm'
+                        >
                           <span className='truncate'>{product.name}</span>
-                          <span className='text-xs text-muted-foreground'>${product.price.toFixed(2)}</span>
+                          <span className='text-xs text-muted-foreground'>
+                            ${product.price.toFixed(2)}
+                          </span>
                           <input
                             type='checkbox'
                             checked={selectedProductIds.includes(product.id)}
@@ -570,7 +710,8 @@ export default function AiHubPage() {
                 !isConfigured
               }
             >
-              {generateMutation.isPending || generateCampaignMutation.isPending ? (
+              {generateMutation.isPending ||
+              generateCampaignMutation.isPending ? (
                 <>
                   <RefreshCw className='mr-2 h-4 w-4 animate-spin' />
                   Generating…
@@ -583,7 +724,8 @@ export default function AiHubPage() {
               )}
             </Button>
 
-            {(generateMutation.isPending || generateCampaignMutation.isPending) && (
+            {(generateMutation.isPending ||
+              generateCampaignMutation.isPending) && (
               <div className='rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3'>
                 <div className='flex items-center justify-between text-sm'>
                   <div className='flex items-center gap-2 font-medium'>
@@ -608,7 +750,8 @@ export default function AiHubPage() {
 
             {!isConfigured && (
               <p className='text-xs text-destructive text-center'>
-                Add <code className='font-mono'>OPENAI_API_KEY</code> to the server .env to enable AI.
+                Add <code className='font-mono'>OPENAI_API_KEY</code> to the
+                server .env to enable AI.
               </p>
             )}
           </CardContent>
@@ -619,7 +762,9 @@ export default function AiHubPage() {
           <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
             <div>
               <CardTitle>Drafts Queue</CardTitle>
-              <CardDescription>Review and approve AI-generated messages before sending</CardDescription>
+              <CardDescription>
+                Review and approve AI-generated messages before sending
+              </CardDescription>
             </div>
             <Select value={filterStatus} onValueChange={setFilterStatus}>
               <SelectTrigger className='w-36'>
@@ -637,14 +782,18 @@ export default function AiHubPage() {
           <CardContent>
             {isLoadingDrafts ? (
               <div className='space-y-3'>
-                {[...Array(4)].map((_, i) => <Skeleton key={i} className='h-20 w-full' />)}
+                {[...Array(4)].map((_, i) => (
+                  <Skeleton key={i} className='h-20 w-full' />
+                ))}
               </div>
             ) : drafts.length === 0 ? (
               <div className='flex flex-col items-center justify-center py-16 text-muted-foreground'>
                 <Bot className='h-12 w-12 mb-3 opacity-30' />
                 <p className='text-sm'>No {filterStatus} drafts yet.</p>
                 {filterStatus === 'pending' && (
-                  <p className='text-xs mt-1'>Use the composer to generate your first draft.</p>
+                  <p className='text-xs mt-1'>
+                    Use the composer to generate your first draft.
+                  </p>
                 )}
               </div>
             ) : (
@@ -656,9 +805,15 @@ export default function AiHubPage() {
                   >
                     <div className='flex items-start justify-between gap-2'>
                       <div className='flex items-center gap-2 min-w-0'>
-                        <ChannelIcon channel={draft.channel} className='h-4 w-4 text-muted-foreground shrink-0' />
+                        <ChannelIcon
+                          channel={draft.channel}
+                          className='h-4 w-4 text-muted-foreground shrink-0'
+                        />
                         <p className='text-sm font-medium truncate'>
-                          {draft.subject || draft.recipientEmail || draft.recipientPhone || 'Newsletter'}
+                          {draft.subject ||
+                            draft.recipientEmail ||
+                            draft.recipientPhone ||
+                            'Newsletter'}
                         </p>
                       </div>
                       <div className='flex items-center gap-2 shrink-0'>
@@ -667,7 +822,9 @@ export default function AiHubPage() {
                       </div>
                     </div>
 
-                    <p className='text-xs text-muted-foreground line-clamp-2'>{draft.bodyText}</p>
+                    <p className='text-xs text-muted-foreground line-clamp-2'>
+                      {draft.bodyText}
+                    </p>
 
                     <div className='flex items-center justify-between pt-1'>
                       <span className='text-xs text-muted-foreground'>
@@ -679,23 +836,31 @@ export default function AiHubPage() {
                           variant='ghost'
                           onClick={() => setPreviewDraft(draft)}
                         >
-                          <Eye className='h-3.5 w-3.5 mr-1' />Preview
+                          <Eye className='h-3.5 w-3.5 mr-1' />
+                          Preview
                         </Button>
                         {draft.status === 'pending' && (
                           <>
                             <Button
                               size='sm'
                               variant='destructive'
-                              onClick={() => { setPreviewDraft(draft); setShowRejectInput(true) }}
+                              onClick={() => {
+                                setPreviewDraft(draft)
+                                setShowRejectInput(true)
+                              }}
                             >
-                              <XCircle className='h-3.5 w-3.5 mr-1' />Reject
+                              <XCircle className='h-3.5 w-3.5 mr-1' />
+                              Reject
                             </Button>
                             <Button
                               size='sm'
                               disabled={approveMutation.isPending}
-                              onClick={() => approveMutation.mutate({ id: draft.id })}
+                              onClick={() =>
+                                approveMutation.mutate({ id: draft.id })
+                              }
                             >
-                              <Send className='h-3.5 w-3.5 mr-1' />Send
+                              <Send className='h-3.5 w-3.5 mr-1' />
+                              Send
                             </Button>
                           </>
                         )}
@@ -710,7 +875,16 @@ export default function AiHubPage() {
       </div>
 
       {/* ── Preview / Approve / Reject Dialog ── */}
-      <Dialog open={!!previewDraft} onOpenChange={(open: boolean) => { if (!open) { setPreviewDraft(null); setShowRejectInput(false); setRejectReason('') } }}>
+      <Dialog
+        open={!!previewDraft}
+        onOpenChange={(open: boolean) => {
+          if (!open) {
+            setPreviewDraft(null)
+            setShowRejectInput(false)
+            setRejectReason('')
+          }
+        }}
+      >
         {previewDraft && (
           <DialogContent
             className='max-w-3xl max-h-[90vh] overflow-y-auto'
@@ -718,19 +892,28 @@ export default function AiHubPage() {
           >
             <DialogHeader>
               <DialogTitle className='flex items-center gap-2'>
-                <ChannelIcon channel={previewDraft.channel} className='h-5 w-5' />
+                <ChannelIcon
+                  channel={previewDraft.channel}
+                  className='h-5 w-5'
+                />
                 Draft Preview
                 <StatusBadge status={previewDraft.status} />
                 <ConfidenceBadge score={previewDraft.confidence} />
               </DialogTitle>
               <DialogDescription id='ai-draft-dialog-description'>
-                Generated by {previewDraft.modelName} · {new Date(previewDraft.createdAt).toLocaleString()}
+                Generated by {previewDraft.modelName} ·{' '}
+                {new Date(previewDraft.createdAt).toLocaleString()}
               </DialogDescription>
             </DialogHeader>
 
-            <Tabs defaultValue={previewDraft.bodyHtml ? 'html' : 'text'} className='mt-2'>
+            <Tabs
+              defaultValue={previewDraft.bodyHtml ? 'html' : 'text'}
+              className='mt-2'
+            >
               <TabsList>
-                {previewDraft.bodyHtml && <TabsTrigger value='html'>HTML Preview</TabsTrigger>}
+                {previewDraft.bodyHtml && (
+                  <TabsTrigger value='html'>HTML Preview</TabsTrigger>
+                )}
                 <TabsTrigger value='text'>Plain Text</TabsTrigger>
                 <TabsTrigger value='meta'>Details</TabsTrigger>
               </TabsList>
@@ -739,8 +922,12 @@ export default function AiHubPage() {
                 <TabsContent value='html'>
                   {previewDraft.subject && (
                     <div className='mb-3 rounded-md bg-muted px-4 py-2'>
-                      <span className='text-xs text-muted-foreground'>Subject: </span>
-                      <span className='font-medium text-sm'>{previewDraft.subject}</span>
+                      <span className='text-xs text-muted-foreground'>
+                        Subject:{' '}
+                      </span>
+                      <span className='font-medium text-sm'>
+                        {previewDraft.subject}
+                      </span>
                     </div>
                   )}
                   <div
@@ -759,7 +946,9 @@ export default function AiHubPage() {
               <TabsContent value='meta'>
                 <dl className='grid grid-cols-2 gap-x-4 gap-y-2 text-sm'>
                   <dt className='text-muted-foreground'>Channel</dt>
-                  <dd className='capitalize'>{previewDraft.channel.replace('_', ' ')}</dd>
+                  <dd className='capitalize'>
+                    {previewDraft.channel.replace('_', ' ')}
+                  </dd>
                   <dt className='text-muted-foreground'>To (email)</dt>
                   <dd>{previewDraft.recipientEmail || '—'}</dd>
                   <dt className='text-muted-foreground'>To (phone)</dt>
@@ -769,7 +958,9 @@ export default function AiHubPage() {
                   <dt className='text-muted-foreground'>Tokens used</dt>
                   <dd>{previewDraft.tokenUsage?.totalTokens ?? '—'}</dd>
                   <dt className='text-muted-foreground'>Your prompt</dt>
-                  <dd className='col-span-2 mt-1 rounded bg-muted px-3 py-2 text-xs'>{previewDraft.prompt}</dd>
+                  <dd className='col-span-2 mt-1 rounded bg-muted px-3 py-2 text-xs'>
+                    {previewDraft.prompt}
+                  </dd>
                 </dl>
               </TabsContent>
             </Tabs>
@@ -790,32 +981,62 @@ export default function AiHubPage() {
             <DialogFooter className='gap-2 mt-4'>
               {previewDraft.status === 'pending' && (
                 <>
+                  <Button variant='outline' onClick={handleSaveDraft}>
+                    Save as Draft
+                  </Button>
                   {!showRejectInput ? (
-                    <Button variant='destructive' onClick={() => setShowRejectInput(true)}>
-                      <XCircle className='mr-2 h-4 w-4' />Reject
+                    <Button
+                      variant='destructive'
+                      onClick={() => setShowRejectInput(true)}
+                    >
+                      <XCircle className='mr-2 h-4 w-4' />
+                      Reject
                     </Button>
                   ) : (
                     <Button
                       variant='destructive'
-                      disabled={!rejectReason.trim() || rejectMutation.isPending}
-                      onClick={() => rejectMutation.mutate({ id: previewDraft.id, reason: rejectReason })}
+                      disabled={
+                        !rejectReason.trim() || rejectMutation.isPending
+                      }
+                      onClick={() =>
+                        rejectMutation.mutate({
+                          id: previewDraft.id,
+                          reason: rejectReason,
+                        })
+                      }
                     >
-                      {rejectMutation.isPending ? 'Rejecting…' : 'Confirm Reject'}
+                      {rejectMutation.isPending
+                        ? 'Rejecting…'
+                        : 'Confirm Reject'}
                     </Button>
                   )}
                   <Button
                     disabled={approveMutation.isPending}
-                    onClick={() => approveMutation.mutate({ id: previewDraft.id })}
+                    onClick={() =>
+                      approveMutation.mutate({ id: previewDraft.id })
+                    }
                   >
                     {approveMutation.isPending ? (
-                      <><RefreshCw className='mr-2 h-4 w-4 animate-spin' />Sending…</>
+                      <>
+                        <RefreshCw className='mr-2 h-4 w-4 animate-spin' />
+                        Sending…
+                      </>
                     ) : (
-                      <><Send className='mr-2 h-4 w-4' />Approve &amp; Send</>
+                      <>
+                        <Send className='mr-2 h-4 w-4' />
+                        Approve &amp; Send
+                      </>
                     )}
                   </Button>
                 </>
               )}
-              <Button variant='outline' onClick={() => { setPreviewDraft(null); setShowRejectInput(false) }}>
+              <Button
+                variant='outline'
+                onClick={() => {
+                  setPreviewDraft(null)
+                  setShowRejectInput(false)
+                }}
+              >
                 Close
               </Button>
             </DialogFooter>
@@ -826,10 +1047,30 @@ export default function AiHubPage() {
       {/* ── Quick-access links ── */}
       <div className='grid gap-4 md:grid-cols-4'>
         {[
-          { label: 'Email Center', href: '/email', icon: Mail, desc: 'All sent emails & templates' },
-          { label: 'WhatsApp', href: '/whatsapp', icon: MessageSquare, desc: 'WhatsApp messages' },
-          { label: 'Newsletter', href: '/newsletter', icon: Newspaper, desc: 'Campaigns & subscribers' },
-          { label: 'Contact Inbox', href: '/contact', icon: Inbox, desc: 'Customer tickets' },
+          {
+            label: 'Email Center',
+            href: '/email',
+            icon: Mail,
+            desc: 'All sent emails & templates',
+          },
+          {
+            label: 'WhatsApp',
+            href: '/whatsapp',
+            icon: MessageSquare,
+            desc: 'WhatsApp messages',
+          },
+          {
+            label: 'Newsletter',
+            href: '/newsletter',
+            icon: Newspaper,
+            desc: 'Campaigns & subscribers',
+          },
+          {
+            label: 'Contact Inbox',
+            href: '/contact',
+            icon: Inbox,
+            desc: 'Customer tickets',
+          },
         ].map((link) => (
           <button
             key={link.href}

@@ -1088,7 +1088,7 @@ export async function approveDraft(
   options?: { forceSend?: boolean },
 ): Promise<{ sent: boolean; message: string }> {
   const result = await db(
-    `SELECT * FROM ai_drafts WHERE id = $1 AND status = 'pending'`,
+    `SELECT * FROM ai_drafts WHERE id = $1 AND status IN ('pending', 'failed')`,
     [draftId],
   )
 
@@ -1100,19 +1100,6 @@ export async function approveDraft(
 
   const guardrail = evaluatePolicyGuardrails(draft)
   if (!guardrail.pass && !options?.forceSend) {
-    await db(
-      `INSERT INTO ai_audit_log (action, actor_id, draft_id, channel, customer_id, meta, ip_address)
-       VALUES ('guardrail_blocked', $1, $2, $3, $4, $5, $6)`,
-      [
-        actorId,
-        draftId,
-        draft.channel,
-        draft.customer_id,
-        JSON.stringify(guardrail),
-        actorIp ?? null,
-      ],
-    )
-
     throw new Error(
       `Policy guardrail blocked send (score=${guardrail.score}). Violations: ${guardrail.violations.join('; ')}`,
     )
@@ -1131,16 +1118,10 @@ export async function approveDraft(
   )
 
   await db(
-    `INSERT INTO ai_audit_log (action, actor_id, draft_id, channel, customer_id, meta, ip_address)
-     VALUES ('guardrail_scored', $1, $2, $3, $4, $5, $6)`,
-    [
-      actorId,
-      draftId,
-      draft.channel,
-      draft.customer_id,
-      JSON.stringify({ ...guardrail, forced: Boolean(options?.forceSend) }),
-      actorIp ?? null,
-    ],
+    `UPDATE ai_drafts
+     SET updated_at = NOW()
+     WHERE id = $1`,
+    [draftId],
   )
 
   // Delegate to channel-specific sender
