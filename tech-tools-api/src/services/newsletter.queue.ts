@@ -1,4 +1,5 @@
 import { query } from '../database/connection'
+import { randomUUID } from 'crypto'
 import emailService from './email.service'
 import logger from '../utils/logger'
 
@@ -43,6 +44,7 @@ interface CampaignQueueConfig {
     sources?: string[]
     statuses?: string[]
   } | null
+  ab_winner_variant: 'A' | 'B' | null
   status: 'draft' | 'scheduled' | 'sending' | 'sent' | 'cancelled'
   scheduled_at: string | null
   rate_limit_per_minute: number
@@ -60,6 +62,45 @@ interface RecipientRow {
   variant_key: 'A' | 'B'
   attempt_count: number
   next_attempt_at: string | null
+}
+
+function toLowerTrim(value: string): string {
+  return String(value || '').trim().toLowerCase()
+}
+
+function inferProductSlug(url: string): string | null {
+  const match = String(url || '').match(/\/products\/([a-z0-9-]+)/i)
+  return match?.[1] ? toLowerTrim(match[1]) : null
+}
+
+function getTrackingBaseUrl(): string {
+  const fallbackFrontend =
+    (process.env.FRONTEND_URL || 'https://techtoolstore.com').replace(/\/$/, '')
+  const configured =
+    process.env.NEWSLETTER_TRACKING_BASE_URL || `${fallbackFrontend}/api/v1`
+
+  return configured.replace(/\/$/, '')
+}
+
+function extractTrackableLinks(
+  html: string,
+): Array<{ url: string; position: number }> {
+  const links: Array<{ url: string; position: number }> = []
+  const regex = /href\s*=\s*["']([^"']+)["']/gi
+  let match: RegExpExecArray | null
+  let position = 0
+
+  while ((match = regex.exec(html)) !== null) {
+    const url = String(match[1] || '').trim()
+    if (!url || url.startsWith('#') || /^mailto:|^tel:|^javascript:/i.test(url)) {
+      continue
+    }
+
+    position += 1
+    links.push({ url, position })
+  }
+
+  return links
 }
 
 function normalizeValues(values?: string[]): string[] {
@@ -115,6 +156,21 @@ function resolveVariantContent(
   campaign: CampaignQueueConfig,
   variantKey: 'A' | 'B',
 ): { subject: string; html: string; text?: string } {
+  if (campaign.ab_winner_variant === 'A' || campaign.ab_winner_variant === 'B') {
+    const winner = campaign.ab_winner_variant
+    return winner === 'B'
+      ? {
+          subject: campaign.subject_b || campaign.subject,
+          html: campaign.content_html_b || campaign.content_html,
+          text: campaign.content_text_b || campaign.content_text || undefined,
+        }
+      : {
+          subject: campaign.subject_a || campaign.subject,
+          html: campaign.content_html_a || campaign.content_html,
+          text: campaign.content_text_a || campaign.content_text || undefined,
+        }
+  }
+
   if (campaign.ab_test_enabled && variantKey === 'B') {
     return {
       subject: campaign.subject_b || campaign.subject,
@@ -180,6 +236,17 @@ async function ensureCampaignRecipients(campaignId: string): Promise<number> {
 }
 
 async function assignRecipientVariants(campaign: CampaignQueueConfig) {
+  if (campaign.ab_winner_variant === 'A' || campaign.ab_winner_variant === 'B') {
+    await query(
+      `UPDATE newsletter_campaign_recipients
+       SET variant_key = $2
+       WHERE campaign_id = $1
+         AND status = 'pending'`,
+      [campaign.id, campaign.ab_winner_variant],
+    )
+    return
+  }
+
   if (!campaign.ab_test_enabled) {
     await query(
       `UPDATE newsletter_campaign_recipients
@@ -254,6 +321,147 @@ async function selectCampaignBatch(campaign: CampaignQueueConfig): Promise<Recip
   return result.rows
 }
 
+async function applyLinkTracking(options: {
+  campaignId: string
+  recipient: RecipientRow
+  variantKey: 'A' | 'B'
+  html: string
+  text?: string
+}): Promise<{ html: string; text?: string }> {
+  const links = extractTrackableLinks(options.html)
+  if (links.length === 0) {
+    return { html: options.html, text: options.text }
+  }
+
+  const trackingBase = getTrackingBaseUrl()
+  let trackedHtml = options.html
+  let trackedText = options.text
+
+  for (const link of links) {
+    const token = randomUUID()
+    const redirectUrl = `${trackingBase}/newsletter/track/click/${token}`
+
+    await query(
+      `INSERT INTO newsletter_link_events
+        (token, campaign_id, recipient_id, recipient_email, variant_key, destination_url, product_slug, link_position)
+       VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        token,
+        options.campaignId,
+        options.recipient.id,
+        toLowerTrim(options.recipient.email),
+        options.variantKey,
+        link.url,
+        inferProductSlug(link.url),
+        link.position,
+      ],
+    )
+
+    trackedHtml = trackedHtml.replace(link.url, redirectUrl)
+    if (trackedText && trackedText.includes(link.url)) {
+      trackedText = trackedText.replace(link.url, redirectUrl)
+    }
+  }
+
+  return { html: trackedHtml, text: trackedText }
+}
+
+async function evaluateAbWinnerAndRollout(campaign: CampaignQueueConfig) {
+  if (!campaign.ab_test_enabled || campaign.ab_winner_variant) {
+    return
+  }
+
+  const minSample = Math.max(
+    20,
+    Number.parseInt(process.env.AB_AUTO_WINNER_MIN_SAMPLE || '80', 10) || 80,
+  )
+  const minDelta = Math.max(
+    0.001,
+    Number.parseFloat(process.env.AB_AUTO_WINNER_MIN_DELTA || '0.01') || 0.01,
+  )
+
+  const statsResult = await query(
+    `WITH sent AS (
+        SELECT variant_key, COUNT(*)::int AS sent_count
+        FROM newsletter_campaign_recipients
+        WHERE campaign_id = $1
+          AND status IN ('sent', 'delivered', 'opened', 'clicked')
+        GROUP BY variant_key
+      ),
+      clicks AS (
+        SELECT variant_key, COUNT(DISTINCT recipient_id)::int AS clicked_count
+        FROM newsletter_link_events
+        WHERE campaign_id = $1
+          AND clicked_at IS NOT NULL
+        GROUP BY variant_key
+      )
+      SELECT
+        s.variant_key,
+        s.sent_count,
+        COALESCE(c.clicked_count, 0)::int AS clicked_count,
+        CASE WHEN s.sent_count > 0
+          THEN COALESCE(c.clicked_count, 0)::decimal / s.sent_count
+          ELSE 0::decimal
+        END AS ctr
+      FROM sent s
+      LEFT JOIN clicks c ON c.variant_key = s.variant_key`,
+    [campaign.id],
+  )
+
+  const byVariant: Record<string, { sent: number; clicked: number; ctr: number }> = {}
+  let totalSent = 0
+
+  for (const row of statsResult.rows) {
+    const key = String(row.variant_key || '')
+    byVariant[key] = {
+      sent: Number(row.sent_count || 0),
+      clicked: Number(row.clicked_count || 0),
+      ctr: Number(row.ctr || 0),
+    }
+    totalSent += Number(row.sent_count || 0)
+  }
+
+  if (totalSent < minSample || !byVariant.A || !byVariant.B) {
+    return
+  }
+
+  const delta = Math.abs(byVariant.A.ctr - byVariant.B.ctr)
+  if (delta < minDelta) {
+    return
+  }
+
+  const winner: 'A' | 'B' = byVariant.A.ctr >= byVariant.B.ctr ? 'A' : 'B'
+
+  await query(
+    `UPDATE newsletter_campaigns
+     SET ab_winner_variant = $2,
+         ab_rollout_at = CURRENT_TIMESTAMP,
+         ab_test_enabled = false,
+         subject = CASE WHEN $2 = 'B' THEN COALESCE(subject_b, subject) ELSE COALESCE(subject_a, subject) END,
+         content_html = CASE WHEN $2 = 'B' THEN COALESCE(content_html_b, content_html) ELSE COALESCE(content_html_a, content_html) END,
+         content_text = CASE WHEN $2 = 'B' THEN COALESCE(content_text_b, content_text) ELSE COALESCE(content_text_a, content_text) END,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = $1`,
+    [campaign.id, winner],
+  )
+
+  await query(
+    `UPDATE newsletter_campaign_recipients
+     SET variant_key = $2
+     WHERE campaign_id = $1
+       AND status = 'pending'`,
+    [campaign.id, winner],
+  )
+
+  logger.info('[NewsletterQueue] A/B winner selected and rolled out', {
+    campaignId: campaign.id,
+    winner,
+    ctrA: byVariant.A.ctr,
+    ctrB: byVariant.B.ctr,
+    totalSent,
+  })
+}
+
 async function markCampaignProgress(campaignId: string): Promise<void> {
   const stats = await query(
     `SELECT
@@ -310,13 +518,20 @@ async function processRecipient(campaign: CampaignQueueConfig, recipient: Recipi
   )
 
   const variant = resolveVariantContent(campaign, recipient.variant_key || 'A')
+  const trackedVariant = await applyLinkTracking({
+    campaignId: campaign.id,
+    recipient,
+    variantKey: recipient.variant_key || 'A',
+    html: variant.html,
+    text: variant.text,
+  })
 
   const result = await emailService.sendEmail({
     to: recipient.email,
     toName: recipient.name || undefined,
     subject: variant.subject,
-    html: variant.html,
-    text: variant.text,
+    html: trackedVariant.html,
+    text: trackedVariant.text,
     emailType: 'promotional',
     metadata: {
       channel: 'newsletter',
@@ -371,6 +586,7 @@ async function processRecipient(campaign: CampaignQueueConfig, recipient: Recipi
 
 async function processCampaign(campaign: CampaignQueueConfig): Promise<void> {
   await ensureCampaignRecipients(campaign.id)
+  await evaluateAbWinnerAndRollout(campaign)
   await assignRecipientVariants(campaign)
 
   const batch = await selectCampaignBatch(campaign)
@@ -426,6 +642,7 @@ async function processQueueTick(): Promise<void> {
               content_text_b,
               segment_a,
               segment_b,
+              ab_winner_variant,
               status,
               scheduled_at,
               rate_limit_per_minute,

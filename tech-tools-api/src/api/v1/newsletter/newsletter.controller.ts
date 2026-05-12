@@ -1182,11 +1182,24 @@ export const getCampaignStats = async (req: AuthRequest, res: Response) => {
       stats[row.status] = parseInt(row.count)
     })
 
+    const conversionsSummary = await query(
+      `SELECT
+         COUNT(DISTINCT order_id)::int AS orders,
+         COALESCE(SUM(order_total), 0)::decimal AS revenue
+       FROM newsletter_conversion_events
+       WHERE campaign_id = $1`,
+      [id],
+    )
+
     res.json({
       success: true,
       data: {
         campaign: campaign.rows[0],
         stats,
+        conversions: {
+          orders: Number(conversionsSummary.rows[0]?.orders || 0),
+          revenue: Number(conversionsSummary.rows[0]?.revenue || 0),
+        },
       },
     })
   } catch (error) {
@@ -1195,6 +1208,178 @@ export const getCampaignStats = async (req: AuthRequest, res: Response) => {
       success: false,
       error: 'Failed to get campaign statistics',
     })
+  }
+}
+
+async function syncCampaignConversions(campaignId: string): Promise<void> {
+  await query(
+    `INSERT INTO newsletter_conversion_events
+      (campaign_id, link_event_id, order_id, recipient_email, product_slug, order_total)
+     SELECT
+       le.campaign_id,
+       le.id,
+       o.id,
+       le.recipient_email,
+       le.product_slug,
+       o.grand_total
+     FROM newsletter_link_events le
+     JOIN orders o
+       ON o.created_at >= le.clicked_at
+      AND o.created_at <= le.clicked_at + INTERVAL '14 days'
+     LEFT JOIN users u ON u.id = o.user_id
+     WHERE le.campaign_id = $1
+       AND le.clicked_at IS NOT NULL
+       AND LOWER(COALESCE(u.email, o.shipping_address->>'email', '')) = LOWER(le.recipient_email)
+       AND (
+         le.product_slug IS NULL OR EXISTS (
+           SELECT 1
+           FROM order_items oi
+           JOIN products p ON p.id = oi.product_id
+           WHERE oi.order_id = o.id
+             AND LOWER(p.slug) = LOWER(le.product_slug)
+         )
+       )
+     ON CONFLICT (campaign_id, link_event_id, order_id) DO NOTHING`,
+    [campaignId],
+  )
+}
+
+export const getCampaignConversions = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params
+
+    const campaign = await query(
+      `SELECT id, name, subject, ab_test_enabled, ab_winner_variant, ab_rollout_at
+       FROM newsletter_campaigns
+       WHERE id = $1`,
+      [id],
+    )
+
+    if (campaign.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Campaign not found',
+      })
+    }
+
+    await syncCampaignConversions(id)
+
+    const [summaryResult, byProductResult, byVariantResult] = await Promise.all([
+      query(
+        `SELECT
+           COUNT(DISTINCT order_id)::int AS orders,
+           COALESCE(SUM(order_total), 0)::decimal AS revenue,
+           COUNT(*)::int AS attributed_events
+         FROM newsletter_conversion_events
+         WHERE campaign_id = $1`,
+        [id],
+      ),
+      query(
+        `SELECT
+           COALESCE(product_slug, 'unknown') AS product_slug,
+           COUNT(DISTINCT order_id)::int AS orders,
+           COALESCE(SUM(order_total), 0)::decimal AS revenue
+         FROM newsletter_conversion_events
+         WHERE campaign_id = $1
+         GROUP BY COALESCE(product_slug, 'unknown')
+         ORDER BY revenue DESC, orders DESC
+         LIMIT 20`,
+        [id],
+      ),
+      query(
+        `SELECT
+           le.variant_key,
+           COUNT(DISTINCT nce.order_id)::int AS orders,
+           COALESCE(SUM(nce.order_total), 0)::decimal AS revenue
+         FROM newsletter_link_events le
+         LEFT JOIN newsletter_conversion_events nce
+           ON nce.link_event_id = le.id
+         WHERE le.campaign_id = $1
+         GROUP BY le.variant_key
+         ORDER BY le.variant_key ASC`,
+        [id],
+      ),
+    ])
+
+    res.json({
+      success: true,
+      data: {
+        campaign: campaign.rows[0],
+        summary: {
+          orders: Number(summaryResult.rows[0]?.orders || 0),
+          revenue: Number(summaryResult.rows[0]?.revenue || 0),
+          attributedEvents: Number(summaryResult.rows[0]?.attributed_events || 0),
+        },
+        byProduct: byProductResult.rows.map((row) => ({
+          productSlug: row.product_slug,
+          orders: Number(row.orders || 0),
+          revenue: Number(row.revenue || 0),
+        })),
+        byVariant: byVariantResult.rows.map((row) => ({
+          variant: row.variant_key,
+          orders: Number(row.orders || 0),
+          revenue: Number(row.revenue || 0),
+        })),
+      },
+    })
+  } catch (error) {
+    logger.error('Get campaign conversions error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get campaign conversions',
+    })
+  }
+}
+
+export const trackClickRedirect = async (req: Request, res: Response) => {
+  try {
+    const { token } = req.params
+
+    const eventResult = await query(
+      `UPDATE newsletter_link_events
+       SET clicked_at = COALESCE(clicked_at, CURRENT_TIMESTAMP),
+           click_count = click_count + 1,
+           clicked_ip = $2,
+           clicked_user_agent = $3
+       WHERE token = $1::uuid
+       RETURNING id, campaign_id, recipient_id, destination_url`,
+      [token, req.ip || null, req.headers['user-agent'] || null],
+    )
+
+    if (eventResult.rows.length === 0) {
+      return res.redirect('https://techtoolstore.com/')
+    }
+
+    const event = eventResult.rows[0]
+
+    await query(
+      `UPDATE newsletter_campaign_recipients
+       SET status = CASE
+             WHEN status IN ('sent', 'delivered', 'opened') THEN 'clicked'
+             ELSE status
+           END,
+           clicked_at = COALESCE(clicked_at, CURRENT_TIMESTAMP)
+       WHERE id = $1`,
+      [event.recipient_id],
+    )
+
+    await query(
+      `UPDATE newsletter_campaigns
+       SET clicked_count = (
+            SELECT COUNT(DISTINCT recipient_id)
+            FROM newsletter_link_events
+            WHERE campaign_id = $1
+              AND clicked_at IS NOT NULL
+          ),
+          updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [event.campaign_id],
+    )
+
+    return res.redirect(event.destination_url)
+  } catch (error) {
+    logger.error('Track click redirect error:', error)
+    return res.redirect('https://techtoolstore.com/')
   }
 }
 

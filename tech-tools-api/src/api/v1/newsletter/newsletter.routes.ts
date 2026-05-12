@@ -19,8 +19,10 @@ import {
   deleteCampaign,
   sendCampaign,
   getCampaignStats,
+  getCampaignConversions,
   getDeliverabilityDashboard,
   recordComplaint,
+  trackClickRedirect,
   // Settings
   getSettings,
   updateSettings,
@@ -38,6 +40,8 @@ router.post('/subscribe', subscribe)
 
 // Unsubscribe from newsletter
 router.post('/unsubscribe', unsubscribe)
+
+router.get('/track/click/:token', trackClickRedirect)
 
 // =====================================================
 // Admin Endpoints (Auth required)
@@ -111,6 +115,12 @@ router.get(
   authenticate,
   authorize('admin', 'super_admin'),
   getCampaignStats,
+)
+router.get(
+  '/campaigns/:id/conversions',
+  authenticate,
+  authorize('admin', 'super_admin'),
+  getCampaignConversions,
 )
 router.put(
   '/campaigns/:id',

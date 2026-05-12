@@ -33,7 +33,9 @@ async function getRedis() {
     redisClient = createClient({
       url:
         redisUrl ||
-        `redis://${redisPassword ? `:${encodeURIComponent(redisPassword)}@` : ''}${redisHost}:${redisPort}`,
+        `redis://${
+          redisPassword ? `:${encodeURIComponent(redisPassword)}@` : ''
+        }${redisHost}:${redisPort}`,
       socket: { reconnectStrategy: (n) => Math.min(n * 100, 5000) },
     })
     redisClient.on('error', (err) =>
@@ -250,7 +252,8 @@ function normalizeIpAddress(ip?: string): string | null {
   const ipv4Mapped = trimmed.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i)
   if (ipv4Mapped?.[1]) return ipv4Mapped[1]
 
-  const ipv4Regex = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/
+  const ipv4Regex =
+    /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/
   const ipv6Regex = /^[0-9a-f:]+$/i
 
   if (ipv4Regex.test(trimmed)) return trimmed
@@ -313,17 +316,22 @@ function toParagraphHtml(text: string): string {
     .split(/\n\s*\n/g)
     .map((p) => p.trim())
     .filter(Boolean)
-    .map((p) => `<p style="margin:0 0 16px 0;line-height:1.6;color:#1f2937;">${p.replace(/\n/g, '<br/>')}</p>`)
+    .map(
+      (p) =>
+        `<p style="margin:0 0 16px 0;line-height:1.6;color:#1f2937;">${p.replace(
+          /\n/g,
+          '<br/>',
+        )}</p>`,
+    )
     .join('')
 }
 
 function resolveAssetUrl(pathOrUrl: string): string {
   if (!pathOrUrl) return ''
   if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl
-  const base = (process.env.FRONTEND_URL || 'https://techtoolstore.com').replace(
-    /\/$/,
-    '',
-  )
+  const base = (
+    process.env.FRONTEND_URL || 'https://techtoolstore.com'
+  ).replace(/\/$/, '')
   return `${base}${pathOrUrl.startsWith('/') ? '' : '/'}${pathOrUrl}`
 }
 
@@ -343,13 +351,21 @@ function buildProductsGrid(products: FeaturedProduct[]): string {
                   <td style="width:92px;vertical-align:top;">
                     ${
                       product.imageUrl
-                        ? `<a href="${productUrl}" style="text-decoration:none;"><img src="${escapeHtml(product.imageUrl)}" alt="${escapeHtml(product.name)}" width="88" height="88" style="display:block;border-radius:10px;object-fit:cover;border:1px solid #e5e7eb;"/></a>`
+                        ? `<a href="${productUrl}" style="text-decoration:none;"><img src="${escapeHtml(
+                            product.imageUrl,
+                          )}" alt="${escapeHtml(
+                            product.name,
+                          )}" width="88" height="88" style="display:block;border-radius:10px;object-fit:cover;border:1px solid #e5e7eb;"/></a>`
                         : `<a href="${productUrl}" style="display:block;width:88px;height:88px;border-radius:10px;border:1px solid #e5e7eb;background:#f9fafb;text-decoration:none;"></a>`
                     }
                   </td>
                   <td style="vertical-align:top;padding-right:4px;">
-                    <a href="${productUrl}" style="text-decoration:none;color:#111827;font-size:15px;font-weight:700;line-height:1.4;display:inline-block;">${escapeHtml(product.name)}</a>
-                    <div style="margin-top:6px;color:#ea580c;font-size:15px;font-weight:700;">$${product.price.toFixed(2)}</div>
+                    <a href="${productUrl}" style="text-decoration:none;color:#111827;font-size:15px;font-weight:700;line-height:1.4;display:inline-block;">${escapeHtml(
+                product.name,
+              )}</a>
+                    <div style="margin-top:6px;color:#ea580c;font-size:15px;font-weight:700;">$${product.price.toFixed(
+                      2,
+                    )}</div>
                     <div style="margin-top:8px;">
                       <a href="${productUrl}" style="font-size:13px;color:#1d4ed8;text-decoration:none;font-weight:600;">View product</a>
                     </div>
@@ -374,9 +390,28 @@ function buildBrandedEmailHtml(options: {
 }): string {
   const brand = process.env.EMAIL_FROM_NAME || 'TechTools Store'
   const logoUrl = process.env.EMAIL_LOGO_URL || resolveAssetUrl('/favicon.svg')
+  const primaryColor = process.env.EMAIL_PRIMARY_COLOR || '#f97316'
+  const supportEmail = process.env.SUPPORT_EMAIL || 'support@techtoolstore.com'
+  const brandInitial = escapeHtml(brand.charAt(0).toUpperCase())
   const headerLogo = logoUrl
-    ? `<img src="${escapeHtml(resolveAssetUrl(logoUrl))}" alt="${escapeHtml(brand)}" style="height:36px;max-width:180px;display:block;margin:0 auto 10px auto;"/>`
-    : `<div style="font-size:28px;font-weight:800;letter-spacing:0.2px;">${escapeHtml(brand)}</div>`
+    ? `
+      <div style="display:inline-flex;align-items:center;gap:12px;padding:8px 12px;background:rgba(255,255,255,0.16);border:1px solid rgba(255,255,255,0.22);border-radius:999px;">
+        <span style="display:inline-flex;width:42px;height:42px;align-items:center;justify-content:center;border-radius:999px;background:#ffffff;">
+          <img src="${escapeHtml(resolveAssetUrl(logoUrl))}" alt="${escapeHtml(
+        brand,
+      )}" width="26" height="26" style="display:block;object-fit:contain;"/>
+        </span>
+        <span style="font-size:22px;font-weight:800;letter-spacing:0.2px;color:#ffffff;">${escapeHtml(
+          brand,
+        )}</span>
+      </div>`
+    : `
+      <div style="display:inline-flex;align-items:center;gap:12px;padding:8px 12px;background:rgba(255,255,255,0.16);border:1px solid rgba(255,255,255,0.22);border-radius:999px;">
+        <span style="display:inline-flex;width:42px;height:42px;align-items:center;justify-content:center;border-radius:999px;background:#ffffff;color:#111827;font-size:20px;font-weight:800;">${brandInitial}</span>
+        <span style="font-size:22px;font-weight:800;letter-spacing:0.2px;color:#ffffff;">${escapeHtml(
+          brand,
+        )}</span>
+      </div>`
 
   const mainBody = options.bodyHtml?.trim()
     ? options.bodyHtml
@@ -384,7 +419,11 @@ function buildBrandedEmailHtml(options: {
 
   const ctaBlock =
     options.ctaLabel && options.ctaUrl
-      ? `<div style="margin:24px 0 4px 0;"><a href="${escapeHtml(options.ctaUrl)}" style="display:inline-block;padding:12px 18px;background:#ea580c;color:#ffffff;text-decoration:none;border-radius:10px;font-weight:700;font-size:14px;">${escapeHtml(options.ctaLabel)}</a></div>`
+      ? `<div style="margin:24px 0 4px 0;"><a href="${escapeHtml(
+          options.ctaUrl,
+        )}" style="display:inline-block;padding:12px 18px;background:#ea580c;color:#ffffff;text-decoration:none;border-radius:10px;font-weight:700;font-size:14px;">${escapeHtml(
+          options.ctaLabel,
+        )}</a></div>`
       : ''
 
   return `
@@ -396,14 +435,17 @@ function buildBrandedEmailHtml(options: {
     <title>${escapeHtml(options.subject)}</title>
   </head>
   <body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(
+      options.subject,
+    )} - curated update from ${escapeHtml(brand)}</div>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:28px 14px;background:#f3f4f6;">
       <tr>
         <td align="center">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e5e7eb;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:680px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e5e7eb;box-shadow:0 14px 32px rgba(2,6,23,0.07);">
             <tr>
-              <td style="background:linear-gradient(120deg,#f97316,#ea580c);padding:26px 22px;text-align:center;color:#ffffff;">
+              <td style="background:linear-gradient(120deg,${primaryColor},#ea580c);padding:28px 24px;text-align:center;color:#ffffff;">
                 ${headerLogo}
-                <div style="font-size:14px;opacity:0.95;">Premium tech support and offers</div>
+                <div style="margin-top:10px;font-size:14px;opacity:0.95;">Premium tech support and offers</div>
               </td>
             </tr>
             <tr>
@@ -414,7 +456,16 @@ function buildBrandedEmailHtml(options: {
                 <hr style="border:none;border-top:1px solid #e5e7eb;margin:26px 0 16px;"/>
                 <p style="margin:0;color:#6b7280;font-size:12px;line-height:1.6;">
                   You are receiving this email from ${escapeHtml(brand)}.<br/>
-                  Website: <a href="${escapeHtml(resolveAssetUrl('/'))}" style="color:#1d4ed8;text-decoration:none;">${escapeHtml(resolveAssetUrl('/'))}</a>
+                  Need help: <a href="mailto:${escapeHtml(
+                    supportEmail,
+                  )}" style="color:#1d4ed8;text-decoration:none;">${escapeHtml(
+    supportEmail,
+  )}</a><br/>
+                  Website: <a href="${escapeHtml(
+                    resolveAssetUrl('/'),
+                  )}" style="color:#1d4ed8;text-decoration:none;">${escapeHtml(
+    resolveAssetUrl('/'),
+  )}</a>
                 </p>
               </td>
             </tr>
@@ -456,7 +507,9 @@ async function loadFeaturedProducts(limit = 6): Promise<FeaturedProduct[]> {
   }))
 }
 
-async function loadProductsByIds(productIds: string[]): Promise<FeaturedProduct[]> {
+async function loadProductsByIds(
+  productIds: string[],
+): Promise<FeaturedProduct[]> {
   if (!productIds.length) return []
 
   const result = await db(
@@ -491,7 +544,11 @@ async function loadProductsByIds(productIds: string[]): Promise<FeaturedProduct[
 function normalizeTextList(values?: string[]): string[] {
   if (!Array.isArray(values)) return []
   return values
-    .map((v) => String(v || '').trim().toLowerCase())
+    .map((v) =>
+      String(v || '')
+        .trim()
+        .toLowerCase(),
+    )
     .filter(Boolean)
 }
 
@@ -537,7 +594,9 @@ export async function generateSegmentCampaignDraft(
 
   const selectedProducts = await loadProductsByIds(selectedProductIds)
   const featuredProducts =
-    selectedProducts.length > 0 ? selectedProducts : await loadFeaturedProducts(6)
+    selectedProducts.length > 0
+      ? selectedProducts
+      : await loadFeaturedProducts(6)
 
   const audienceEstimate = await estimateNewsletterAudience(input.segment)
 
@@ -547,11 +606,18 @@ export async function generateSegmentCampaignDraft(
   const segmentSummary = [
     `Audience estimate: ${audienceEstimate} subscribers`,
     `Sources: ${segmentSources.length > 0 ? segmentSources.join(', ') : 'all'}`,
-    `Statuses: ${segmentStatuses.length > 0 ? segmentStatuses.join(', ') : 'active only'}`,
+    `Statuses: ${
+      segmentStatuses.length > 0 ? segmentStatuses.join(', ') : 'active only'
+    }`,
   ].join('\n')
 
   const productSummary = featuredProducts
-    .map((p) => `- ${p.name} ($${p.price.toFixed(2)}) ${resolveAssetUrl(`/products/${p.slug}`)}`)
+    .map(
+      (p) =>
+        `- ${p.name} ($${p.price.toFixed(2)}) ${resolveAssetUrl(
+          `/products/${p.slug}`,
+        )}`,
+    )
     .join('\n')
 
   const enrichedPrompt = `${input.prompt}\n\nCampaign segment context:\n${segmentSummary}\n\nProducts to feature:\n${productSummary}`
@@ -821,7 +887,10 @@ async function checkRateLimit(actorId: string): Promise<void> {
   try {
     redis = await getRedis()
   } catch (error) {
-    logger.warn('[AI] Redis rate limiter unavailable, continuing without rate limiting:', error)
+    logger.warn(
+      '[AI] Redis rate limiter unavailable, continuing without rate limiting:',
+      error,
+    )
     return
   }
 
@@ -838,7 +907,10 @@ async function checkRateLimit(actorId: string): Promise<void> {
       )
     }
   } catch (error) {
-    logger.warn('[AI] Redis rate limiter command failed, continuing without rate limiting:', error)
+    logger.warn(
+      '[AI] Redis rate limiter command failed, continuing without rate limiting:',
+      error,
+    )
   }
 }
 
@@ -1101,7 +1173,9 @@ export async function approveDraft(
   const guardrail = evaluatePolicyGuardrails(draft)
   if (!guardrail.pass && !options?.forceSend) {
     throw new Error(
-      `Policy guardrail blocked send (score=${guardrail.score}). Violations: ${guardrail.violations.join('; ')}`,
+      `Policy guardrail blocked send (score=${
+        guardrail.score
+      }). Violations: ${guardrail.violations.join('; ')}`,
     )
   }
 

@@ -70,8 +70,36 @@ export interface NewsletterCampaign {
     sources?: string[]
     statuses?: string[]
   }
+  ab_winner_variant?: 'A' | 'B'
+  ab_rollout_at?: string
   created_at: string
   updated_at: string
+}
+
+export interface CampaignConversionsResponse {
+  campaign: {
+    id: string
+    name: string
+    subject: string
+    ab_test_enabled: boolean
+    ab_winner_variant?: 'A' | 'B'
+    ab_rollout_at?: string
+  }
+  summary: {
+    orders: number
+    revenue: number
+    attributedEvents: number
+  }
+  byProduct: Array<{
+    productSlug: string
+    orders: number
+    revenue: number
+  }>
+  byVariant: Array<{
+    variant: 'A' | 'B'
+    orders: number
+    revenue: number
+  }>
 }
 
 export interface DeliverabilityDashboard {
@@ -304,6 +332,14 @@ class NewsletterService {
   async getCampaignStats(id: string): Promise<ApiResponse<CampaignStats>> {
     return apiClient.get<ApiResponse<CampaignStats>>(
       `/newsletter/campaigns/${id}/stats`,
+    )
+  }
+
+  async getCampaignConversions(
+    id: string,
+  ): Promise<ApiResponse<CampaignConversionsResponse>> {
+    return apiClient.get<ApiResponse<CampaignConversionsResponse>>(
+      `/newsletter/campaigns/${id}/conversions`,
     )
   }
 
