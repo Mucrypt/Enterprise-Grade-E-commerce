@@ -45,6 +45,17 @@ export interface GenerateDraftPayload {
   scheduledAt?: string
 }
 
+export interface GenerateCampaignDraftPayload {
+  prompt: string
+  scheduledAt?: string
+  segment?: {
+    sources?: string[]
+    statuses?: string[]
+    includeUnsubscribed?: boolean
+  }
+  selectedProductIds?: string[]
+}
+
 export interface AiStats {
   pending: string
   approved: string
@@ -113,6 +124,16 @@ const aiService = {
     return res.draft
   },
 
+  /** Generate segment-aware newsletter campaign draft */
+  generateCampaignDraft: async (
+    payload: GenerateCampaignDraftPayload,
+  ): Promise<{ draft: AiDraft; audienceEstimate: number }> => {
+    return apiClient.post<{ draft: AiDraft; audienceEstimate: number }>(
+      '/ai/campaigns/generate',
+      payload,
+    )
+  },
+
   /** List drafts with optional filters */
   listDrafts: async (params?: {
     status?: AiDraftStatus
@@ -128,9 +149,11 @@ const aiService = {
   /** Approve a draft — triggers actual send */
   approveDraft: async (
     id: string,
+    options?: { forceSend?: boolean },
   ): Promise<{ sent: boolean; message: string }> => {
     return apiClient.post<{ sent: boolean; message: string }>(
       `/ai/drafts/${id}/approve`,
+      options || {},
     )
   },
 

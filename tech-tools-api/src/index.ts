@@ -4,6 +4,10 @@ dotenv.config()
 import app from './app'
 import { connectDatabase } from './database/connection'
 import { connectRedis } from './config/redis'
+import {
+  startNewsletterQueueWorker,
+  stopNewsletterQueueWorker,
+} from './services/newsletter.queue'
 import logger from './utils/logger'
 
 const PORT = process.env.PORT || 9000
@@ -17,6 +21,9 @@ async function startServer() {
     // Connect to Redis
     await connectRedis()
     logger.info('✅ Redis connected successfully')
+
+    // Start background newsletter queue worker
+    startNewsletterQueueWorker()
 
     // Start server
     app.listen(PORT, () => {
@@ -35,10 +42,12 @@ startServer()
 // Graceful shutdown
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received. Shutting down gracefully...')
+  stopNewsletterQueueWorker()
   process.exit(0)
 })
 
 process.on('SIGINT', () => {
   logger.info('SIGINT received. Shutting down gracefully...')
+  stopNewsletterQueueWorker()
   process.exit(0)
 })

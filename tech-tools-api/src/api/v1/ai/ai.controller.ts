@@ -73,6 +73,44 @@ export const generateDraft = async (req: AuthRequest, res: Response) => {
   }
 }
 
+// ─── Generate Segment-aware Campaign Draft ───────────────────
+export const generateCampaignDraft = async (req: AuthRequest, res: Response) => {
+  try {
+    const { prompt, scheduledAt, segment, selectedProductIds } = req.body
+
+    if (!prompt || typeof prompt !== 'string') {
+      return res.status(400).json({ error: 'prompt is required' })
+    }
+
+    if (prompt.length < 10 || prompt.length > 4000) {
+      return res
+        .status(400)
+        .json({ error: 'prompt must be between 10 and 4000 characters' })
+    }
+
+    const result = await aiOrchestrator.generateSegmentCampaignDraft({
+      prompt,
+      scheduledAt,
+      segment,
+      selectedProductIds,
+      actorId: req.user!.id,
+      actorIp: req.ip,
+      actorAgent: req.headers['user-agent'],
+    })
+
+    return res.status(201).json(result)
+  } catch (err: any) {
+    const errorMessage = getErrorMessage(err)
+    logger.error(`[AI] generateCampaignDraft error: ${errorMessage}`)
+    if (errorMessage.includes('Rate limit')) {
+      return res.status(429).json({ error: errorMessage })
+    }
+    return res
+      .status(500)
+      .json({ error: `Failed to generate campaign draft: ${errorMessage}` })
+  }
+}
+
 // ─── List Drafts ──────────────────────────────────────────────
 export const listDrafts = async (req: AuthRequest, res: Response) => {
   try {
@@ -98,7 +136,10 @@ export const listDrafts = async (req: AuthRequest, res: Response) => {
 export const approveDraft = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params
-    const result = await aiOrchestrator.approveDraft(id, req.user!.id, req.ip)
+    const { forceSend } = req.body || {}
+    const result = await aiOrchestrator.approveDraft(id, req.user!.id, req.ip, {
+      forceSend: Boolean(forceSend),
+    })
     return res.json(result)
   } catch (err: any) {
     const errorMessage = getErrorMessage(err)

@@ -3,7 +3,12 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
-import aiService, { AiDraft, AiChannel, AiDraftStatus } from '@/services/ai.service'
+import aiService, {
+  AiDraft,
+  AiChannel,
+  AiDraftStatus,
+} from '@/services/ai.service'
+import { productService } from '@/services/product.service'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -51,6 +56,7 @@ import {
   Users,
   TrendingUp,
   Activity,
+  CalendarClock,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -135,6 +141,11 @@ export default function AiHubPage() {
   const [recipientPhone, setRecipientPhone] = useState('')
   const [recipientName, setRecipientName] = useState('')
   const [generationStage, setGenerationStage] = useState(0)
+  const [scheduledAt, setScheduledAt] = useState('')
+  const [segmentSources, setSegmentSources] = useState<string[]>([])
+  const [segmentStatuses, setSegmentStatuses] = useState<string[]>(['active'])
+  const [includeUnsubscribed, setIncludeUnsubscribed] = useState(false)
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([])
 
   // Preview dialog
   const [previewDraft, setPreviewDraft] = useState<AiDraft | null>(null)
@@ -162,6 +173,25 @@ export default function AiHubPage() {
     queryFn: () => aiService.listDrafts({ status: filterStatus as AiDraftStatus, limit: 30 }),
   })
 
+  const { data: productOptions = [] } = useQuery({
+    queryKey: ['ai-campaign-product-options'],
+    queryFn: async () => {
+      const response = await productService.getProducts({
+        limit: 50,
+        sortBy: 'updated_at',
+        sortOrder: 'desc',
+      })
+      const data = response?.data as any
+      const products = data?.products || data?.items || []
+      return products.map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        slug: p.slug,
+        price: Number(p.sale_price || p.base_price || p.basePrice || 0),
+      }))
+    },
+  })
+
   // ─── Mutations ───────────────────────────────────────────────
   const generateMutation = useMutation({
     mutationFn: aiService.generateDraft,
@@ -182,16 +212,49 @@ export default function AiHubPage() {
     },
   })
 
+  const generateCampaignMutation = useMutation({
+    mutationFn: aiService.generateCampaignDraft,
+    onSuccess: (result) => {
+      toast.success(
+        `Campaign draft created for ~${result.audienceEstimate} subscribers.`,
+      )
+      queryClient.invalidateQueries({ queryKey: ['ai-drafts'] })
+      queryClient.invalidateQueries({ queryKey: ['ai-stats'] })
+      setPrompt('')
+      setScheduledAt('')
+      setSegmentSources([])
+      setSegmentStatuses(['active'])
+      setIncludeUnsubscribed(false)
+      setSelectedProductIds([])
+      setPreviewDraft(result.draft)
+    },
+    onError: (err: any) => {
+      const apiError = err.response?.data?.error
+      toast.error(apiError || 'Failed to generate segment-aware campaign draft')
+    },
+  })
+
   const approveMutation = useMutation({
-    mutationFn: (id: string) => aiService.approveDraft(id),
-    onSuccess: (_, id) => {
+    mutationFn: ({ id, forceSend }: { id: string; forceSend?: boolean }) =>
+      aiService.approveDraft(id, { forceSend }),
+    onSuccess: (_, { id }) => {
       toast.success('Draft approved and sent!')
       queryClient.invalidateQueries({ queryKey: ['ai-drafts'] })
       queryClient.invalidateQueries({ queryKey: ['ai-stats'] })
       if (previewDraft?.id === id) setPreviewDraft(null)
     },
-    onError: (err: any) => {
-      toast.error(err.response?.data?.error || 'Failed to send draft')
+    onError: (err: any, variables) => {
+      const apiError = err.response?.data?.error || 'Failed to send draft'
+      if (String(apiError).toLowerCase().includes('policy guardrail blocked')) {
+        const shouldForce = window.confirm(
+          `${apiError}\n\nSend anyway with override?`,
+        )
+        if (shouldForce) {
+          approveMutation.mutate({ id: variables.id, forceSend: true })
+        }
+        return
+      }
+      toast.error(apiError)
     },
   })
 
@@ -217,14 +280,35 @@ export default function AiHubPage() {
     if (!prompt.trim()) { toast.error('Please describe what you want to communicate.'); return }
     if (channel === 'email' && !recipientEmail) { toast.error('Recipient email is required for email channel.'); return }
     if (channel === 'whatsapp' && !recipientPhone) { toast.error('Recipient phone is required for WhatsApp channel.'); return }
-    generateMutation.mutate({ channel, prompt, recipientEmail, recipientPhone, recipientName })
+    if (channel === 'newsletter') {
+      generateCampaignMutation.mutate({
+        prompt,
+        scheduledAt: scheduledAt || undefined,
+        selectedProductIds,
+        segment: {
+          sources: segmentSources,
+          statuses: segmentStatuses,
+          includeUnsubscribed,
+        },
+      })
+      return
+    }
+
+    generateMutation.mutate({
+      channel,
+      prompt,
+      recipientEmail,
+      recipientPhone,
+      recipientName,
+      scheduledAt: scheduledAt || undefined,
+    })
   }
 
   const drafts = draftsData?.drafts ?? []
   const stats = statsData
 
   useEffect(() => {
-    if (!generateMutation.isPending) {
+    if (!generateMutation.isPending && !generateCampaignMutation.isPending) {
       setGenerationStage(0)
       return
     }
@@ -234,7 +318,7 @@ export default function AiHubPage() {
     }, 1300)
 
     return () => clearInterval(timer)
-  }, [generateMutation.isPending])
+  }, [generateCampaignMutation.isPending, generateMutation.isPending])
 
   const generationMessages = [
     'Reading customer context and communication history…',
@@ -381,12 +465,112 @@ export default function AiHubPage() {
               <p className='text-xs text-muted-foreground text-right'>{prompt.length}/2000</p>
             </div>
 
+            <div className='space-y-2'>
+              <Label htmlFor='scheduled-at' className='flex items-center gap-2'>
+                <CalendarClock className='h-4 w-4' />
+                Schedule Send (optional)
+              </Label>
+              <Input
+                id='scheduled-at'
+                type='datetime-local'
+                value={scheduledAt}
+                onChange={(e) => setScheduledAt(e.target.value)}
+              />
+            </div>
+
+            {channel === 'newsletter' && (
+              <div className='space-y-4 rounded-lg border p-3'>
+                <div>
+                  <Label className='text-sm font-medium'>Segment Sources</Label>
+                  <div className='mt-2 grid grid-cols-2 gap-2 text-sm'>
+                    {['website', 'checkout', 'popup', 'footer', 'import', 'admin'].map((source) => (
+                      <label key={source} className='flex items-center gap-2'>
+                        <input
+                          type='checkbox'
+                          checked={segmentSources.includes(source)}
+                          onChange={(e) => {
+                            setSegmentSources((prev) =>
+                              e.target.checked
+                                ? [...prev, source]
+                                : prev.filter((item) => item !== source),
+                            )
+                          }}
+                        />
+                        <span className='capitalize'>{source}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <Label className='text-sm font-medium'>Subscriber Statuses</Label>
+                  <div className='mt-2 flex flex-wrap gap-3 text-sm'>
+                    {['active', 'unsubscribed', 'bounced'].map((status) => (
+                      <label key={status} className='flex items-center gap-2'>
+                        <input
+                          type='checkbox'
+                          checked={segmentStatuses.includes(status)}
+                          onChange={(e) => {
+                            setSegmentStatuses((prev) =>
+                              e.target.checked
+                                ? [...prev, status]
+                                : prev.filter((item) => item !== status),
+                            )
+                          }}
+                        />
+                        <span className='capitalize'>{status}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <label className='mt-2 flex items-center gap-2 text-sm'>
+                    <input
+                      type='checkbox'
+                      checked={includeUnsubscribed}
+                      onChange={(e) => setIncludeUnsubscribed(e.target.checked)}
+                    />
+                    Include unsubscribed when statuses are not selected
+                  </label>
+                </div>
+
+                <div>
+                  <Label className='text-sm font-medium'>Product Picker (optional)</Label>
+                  <div className='mt-2 max-h-40 space-y-1 overflow-y-auto rounded-md border p-2'>
+                    {productOptions.length === 0 ? (
+                      <p className='text-xs text-muted-foreground'>No products loaded yet.</p>
+                    ) : (
+                      productOptions.map((product: any) => (
+                        <label key={product.id} className='flex items-center justify-between gap-2 text-sm'>
+                          <span className='truncate'>{product.name}</span>
+                          <span className='text-xs text-muted-foreground'>${product.price.toFixed(2)}</span>
+                          <input
+                            type='checkbox'
+                            checked={selectedProductIds.includes(product.id)}
+                            onChange={(e) => {
+                              setSelectedProductIds((prev) =>
+                                e.target.checked
+                                  ? [...prev, product.id]
+                                  : prev.filter((item) => item !== product.id),
+                              )
+                            }}
+                          />
+                        </label>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <Button
               className='w-full'
               onClick={handleGenerate}
-              disabled={generateMutation.isPending || !isConfigured}
+              disabled={
+                generateMutation.isPending ||
+                generateCampaignMutation.isPending ||
+                !isConfigured
+              }
             >
-              {generateMutation.isPending ? (
+              {generateMutation.isPending || generateCampaignMutation.isPending ? (
                 <>
                   <RefreshCw className='mr-2 h-4 w-4 animate-spin' />
                   Generating…
@@ -399,7 +583,7 @@ export default function AiHubPage() {
               )}
             </Button>
 
-            {generateMutation.isPending && (
+            {(generateMutation.isPending || generateCampaignMutation.isPending) && (
               <div className='rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3'>
                 <div className='flex items-center justify-between text-sm'>
                   <div className='flex items-center gap-2 font-medium'>
@@ -509,7 +693,7 @@ export default function AiHubPage() {
                             <Button
                               size='sm'
                               disabled={approveMutation.isPending}
-                              onClick={() => approveMutation.mutate(draft.id)}
+                              onClick={() => approveMutation.mutate({ id: draft.id })}
                             >
                               <Send className='h-3.5 w-3.5 mr-1' />Send
                             </Button>
@@ -621,7 +805,7 @@ export default function AiHubPage() {
                   )}
                   <Button
                     disabled={approveMutation.isPending}
-                    onClick={() => approveMutation.mutate(previewDraft.id)}
+                    onClick={() => approveMutation.mutate({ id: previewDraft.id })}
                   >
                     {approveMutation.isPending ? (
                       <><RefreshCw className='mr-2 h-4 w-4 animate-spin' />Sending…</>

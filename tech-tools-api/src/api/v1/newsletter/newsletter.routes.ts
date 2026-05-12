@@ -19,6 +19,8 @@ import {
   deleteCampaign,
   sendCampaign,
   getCampaignStats,
+  getDeliverabilityDashboard,
+  recordComplaint,
   // Settings
   getSettings,
   updateSettings,
@@ -127,6 +129,20 @@ router.post(
   authenticate,
   authorize('admin', 'super_admin'),
   sendCampaign,
+)
+
+router.get(
+  '/deliverability/dashboard',
+  authenticate,
+  authorize('admin', 'super_admin'),
+  getDeliverabilityDashboard,
+)
+
+router.post(
+  '/deliverability/complaints',
+  authenticate,
+  authorize('admin', 'super_admin'),
+  recordComplaint,
 )
 
 // Settings

@@ -1,5 +1,7 @@
 'use client'
 
+import { useEffect, useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Card,
   CardContent,
@@ -7,6 +9,11 @@ import {
   CardTitle,
   CardDescription,
 } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { toast } from 'sonner'
+import newsletterService from '@/services/newsletter.service'
 import {
   Settings,
   Store,
@@ -16,15 +23,156 @@ import {
   Globe,
   CreditCard,
   Mail,
+  Save,
+  Image,
 } from 'lucide-react'
 
 export default function SettingsPage() {
+  const queryClient = useQueryClient()
+
+  const [brandName, setBrandName] = useState('')
+  const [brandLogoUrl, setBrandLogoUrl] = useState('')
+  const [brandPrimaryColor, setBrandPrimaryColor] = useState('#f97316')
+  const [supportEmail, setSupportEmail] = useState('')
+
+  const { data: settingsData, isLoading: isLoadingSettings } = useQuery({
+    queryKey: ['newsletter-settings-branding'],
+    queryFn: newsletterService.getSettings,
+  })
+
+  useEffect(() => {
+    const settings = settingsData?.data?.settings || {}
+    if (!settingsData) return
+
+    setBrandName(
+      settings.brand_name?.value || settings.from_name?.value || 'TechTools Store',
+    )
+    setBrandLogoUrl(
+      settings.brand_logo_url?.value || 'https://techtoolstore.com/favicon.svg',
+    )
+    setBrandPrimaryColor(settings.brand_primary_color?.value || '#f97316')
+    setSupportEmail(settings.support_email?.value || settings.from_email?.value || '')
+  }, [settingsData])
+
+  const saveBrandingMutation = useMutation({
+    mutationFn: async () => {
+      return newsletterService.updateSettings({
+        brand_name: brandName,
+        brand_logo_url: brandLogoUrl,
+        brand_primary_color: brandPrimaryColor,
+        support_email: supportEmail,
+        from_name: brandName,
+      })
+    },
+    onSuccess: () => {
+      toast.success('Communication branding settings saved.')
+      queryClient.invalidateQueries({ queryKey: ['newsletter-settings-branding'] })
+    },
+    onError: () => {
+      toast.error('Failed to save communication branding settings')
+    },
+  })
+
+  const logoPreview = useMemo(() => {
+    if (!brandLogoUrl || !/^https?:\/\//.test(brandLogoUrl)) {
+      return null
+    }
+    return brandLogoUrl
+  }, [brandLogoUrl])
+
   return (
     <div className='space-y-6'>
       <div>
         <h1 className='text-3xl font-bold'>Settings</h1>
         <p className='text-muted-foreground'>Configure your store settings</p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className='flex items-center gap-2'>
+            <Mail className='h-5 w-5 text-orange-500' />
+            Communication Brand Config
+          </CardTitle>
+          <CardDescription>
+            Configure logo and brand identity used in AI replies and promotional emails.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className='space-y-4'>
+          <div className='grid gap-4 md:grid-cols-2'>
+            <div className='space-y-2'>
+              <Label htmlFor='brand-name'>Brand Name</Label>
+              <Input
+                id='brand-name'
+                value={brandName}
+                onChange={(e) => setBrandName(e.target.value)}
+                placeholder='TechTools Store'
+                disabled={isLoadingSettings}
+              />
+            </div>
+            <div className='space-y-2'>
+              <Label htmlFor='support-email'>Support Email</Label>
+              <Input
+                id='support-email'
+                type='email'
+                value={supportEmail}
+                onChange={(e) => setSupportEmail(e.target.value)}
+                placeholder='support@techtoolstore.com'
+                disabled={isLoadingSettings}
+              />
+            </div>
+            <div className='space-y-2 md:col-span-2'>
+              <Label htmlFor='brand-logo-url'>Brand Logo URL</Label>
+              <Input
+                id='brand-logo-url'
+                value={brandLogoUrl}
+                onChange={(e) => setBrandLogoUrl(e.target.value)}
+                placeholder='https://techtoolstore.com/assets/logo-email.png'
+                disabled={isLoadingSettings}
+              />
+              {logoPreview ? (
+                <div className='mt-2 rounded-lg border bg-muted/40 p-3'>
+                  <img
+                    src={logoPreview}
+                    alt='Brand logo preview'
+                    className='h-10 object-contain'
+                  />
+                </div>
+              ) : (
+                <p className='text-xs text-muted-foreground'>
+                  Add an absolute URL to preview and embed logo in outbound emails.
+                </p>
+              )}
+            </div>
+            <div className='space-y-2'>
+              <Label htmlFor='brand-primary-color'>Brand Primary Color</Label>
+              <div className='flex items-center gap-2'>
+                <Input
+                  id='brand-primary-color'
+                  value={brandPrimaryColor}
+                  onChange={(e) => setBrandPrimaryColor(e.target.value)}
+                  placeholder='#f97316'
+                  disabled={isLoadingSettings}
+                />
+                <span
+                  className='h-8 w-8 rounded border'
+                  style={{ backgroundColor: brandPrimaryColor || '#f97316' }}
+                  aria-label='Selected color preview'
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className='flex justify-end'>
+            <Button
+              onClick={() => saveBrandingMutation.mutate()}
+              disabled={saveBrandingMutation.isPending || isLoadingSettings}
+            >
+              <Save className='mr-2 h-4 w-4' />
+              {saveBrandingMutation.isPending ? 'Saving…' : 'Save Communication Branding'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className='grid gap-4 md:grid-cols-2'>
         <Card className='cursor-pointer hover:shadow-md transition-shadow'>
@@ -54,7 +202,7 @@ export default function SettingsPage() {
         <Card className='cursor-pointer hover:shadow-md transition-shadow'>
           <CardHeader>
             <CardTitle className='flex items-center gap-2'>
-              <Mail className='h-5 w-5 text-purple-500' />
+              <Image className='h-5 w-5 text-purple-500' />
               Email Templates
             </CardTitle>
             <CardDescription>

@@ -1,8 +1,10 @@
 import { Request, Response } from 'express'
+import { promises as dns } from 'dns'
 import { AuthRequest } from '../../../middleware/auth'
 import { query } from '../../../database/connection'
 import emailService from '../../../services/email.service'
 import NotificationEvents from '../../../services/notification.events'
+import { enqueueCampaign } from '../../../services/newsletter.queue'
 import logger from '../../../utils/logger'
 
 const buildNewsletterAdminAlertHtml = (data: {
@@ -767,7 +769,25 @@ export const getCampaignById = async (req: AuthRequest, res: Response) => {
  */
 export const createCampaign = async (req: AuthRequest, res: Response) => {
   try {
-    const { name, subject, contentHtml, contentText, scheduledAt } = req.body
+    const {
+      name,
+      subject,
+      contentHtml,
+      contentText,
+      scheduledAt,
+      rateLimitPerMinute,
+      maxRetries,
+      retryBackoffSeconds,
+      abTestEnabled,
+      subjectA,
+      subjectB,
+      contentHtmlA,
+      contentHtmlB,
+      contentTextA,
+      contentTextB,
+      segmentA,
+      segmentB,
+    } = req.body
 
     if (!name || !subject || !contentHtml) {
       return res.status(400).json({
@@ -778,9 +798,42 @@ export const createCampaign = async (req: AuthRequest, res: Response) => {
 
     const status = scheduledAt ? 'scheduled' : 'draft'
 
+    const normalizedRateLimit = Math.min(
+      Math.max(Number(rateLimitPerMinute) || 60, 1),
+      2000,
+    )
+    const normalizedMaxRetries = Math.min(
+      Math.max(Number(maxRetries) || 3, 1),
+      10,
+    )
+    const normalizedRetryBackoffSeconds = Math.min(
+      Math.max(Number(retryBackoffSeconds) || 45, 10),
+      600,
+    )
+
     const result = await query(
-      `INSERT INTO newsletter_campaigns (name, subject, content_html, content_text, status, scheduled_at, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO newsletter_campaigns (
+          name,
+          subject,
+          content_html,
+          content_text,
+          status,
+          scheduled_at,
+          created_by,
+          rate_limit_per_minute,
+          max_retries,
+           retry_backoff_seconds,
+           ab_test_enabled,
+           subject_a,
+           subject_b,
+           content_html_a,
+           content_html_b,
+           content_text_a,
+           content_text_b,
+           segment_a,
+           segment_b
+       )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
        RETURNING *`,
       [
         name,
@@ -790,6 +843,18 @@ export const createCampaign = async (req: AuthRequest, res: Response) => {
         status,
         scheduledAt || null,
         req.user?.id || null,
+        normalizedRateLimit,
+        normalizedMaxRetries,
+        normalizedRetryBackoffSeconds,
+        Boolean(abTestEnabled),
+        subjectA || null,
+        subjectB || null,
+        contentHtmlA || null,
+        contentHtmlB || null,
+        contentTextA || null,
+        contentTextB || null,
+        segmentA ? JSON.stringify(segmentA) : null,
+        segmentB ? JSON.stringify(segmentB) : null,
       ],
     )
 
@@ -813,8 +878,26 @@ export const createCampaign = async (req: AuthRequest, res: Response) => {
 export const updateCampaign = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params
-    const { name, subject, contentHtml, contentText, scheduledAt, status } =
-      req.body
+    const {
+      name,
+      subject,
+      contentHtml,
+      contentText,
+      scheduledAt,
+      status,
+      rateLimitPerMinute,
+      maxRetries,
+      retryBackoffSeconds,
+      abTestEnabled,
+      subjectA,
+      subjectB,
+      contentHtmlA,
+      contentHtmlB,
+      contentTextA,
+      contentTextB,
+      segmentA,
+      segmentB,
+    } = req.body
 
     // Check if campaign exists and is editable
     const existing = await query(
@@ -868,6 +951,66 @@ export const updateCampaign = async (req: AuthRequest, res: Response) => {
     if (status) {
       updates.push(`status = $${paramIndex++}`)
       params.push(status)
+    }
+
+    if (rateLimitPerMinute !== undefined) {
+      updates.push(`rate_limit_per_minute = $${paramIndex++}`)
+      params.push(Math.min(Math.max(Number(rateLimitPerMinute) || 60, 1), 2000))
+    }
+
+    if (maxRetries !== undefined) {
+      updates.push(`max_retries = $${paramIndex++}`)
+      params.push(Math.min(Math.max(Number(maxRetries) || 3, 1), 10))
+    }
+
+    if (retryBackoffSeconds !== undefined) {
+      updates.push(`retry_backoff_seconds = $${paramIndex++}`)
+      params.push(Math.min(Math.max(Number(retryBackoffSeconds) || 45, 10), 600))
+    }
+
+    if (abTestEnabled !== undefined) {
+      updates.push(`ab_test_enabled = $${paramIndex++}`)
+      params.push(Boolean(abTestEnabled))
+    }
+
+    if (subjectA !== undefined) {
+      updates.push(`subject_a = $${paramIndex++}`)
+      params.push(subjectA || null)
+    }
+
+    if (subjectB !== undefined) {
+      updates.push(`subject_b = $${paramIndex++}`)
+      params.push(subjectB || null)
+    }
+
+    if (contentHtmlA !== undefined) {
+      updates.push(`content_html_a = $${paramIndex++}`)
+      params.push(contentHtmlA || null)
+    }
+
+    if (contentHtmlB !== undefined) {
+      updates.push(`content_html_b = $${paramIndex++}`)
+      params.push(contentHtmlB || null)
+    }
+
+    if (contentTextA !== undefined) {
+      updates.push(`content_text_a = $${paramIndex++}`)
+      params.push(contentTextA || null)
+    }
+
+    if (contentTextB !== undefined) {
+      updates.push(`content_text_b = $${paramIndex++}`)
+      params.push(contentTextB || null)
+    }
+
+    if (segmentA !== undefined) {
+      updates.push(`segment_a = $${paramIndex++}`)
+      params.push(segmentA ? JSON.stringify(segmentA) : null)
+    }
+
+    if (segmentB !== undefined) {
+      updates.push(`segment_b = $${paramIndex++}`)
+      params.push(segmentB ? JSON.stringify(segmentB) : null)
     }
 
     if (updates.length === 0) {
@@ -973,110 +1116,16 @@ export const sendCampaign = async (req: AuthRequest, res: Response) => {
       })
     }
 
-    // Get active subscribers
-    const subscribersResult = await query(
-      `SELECT id, email, name FROM newsletter_subscribers WHERE status = 'active'`,
-    )
-
-    if (subscribersResult.rows.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'No active subscribers to send to',
-      })
-    }
-
-    // Update campaign status
-    await query(
-      `UPDATE newsletter_campaigns 
-       SET status = 'sending', 
-           total_recipients = $2,
-           updated_at = CURRENT_TIMESTAMP 
-       WHERE id = $1`,
-      [id, subscribersResult.rows.length],
-    )
-
-    // Get settings for from email
-    const settingsResult = await query(
-      `SELECT setting_key, setting_value FROM newsletter_settings 
-       WHERE setting_key IN ('from_name', 'from_email')`,
-    )
-
-    const settings: Record<string, string> = {}
-    settingsResult.rows.forEach((row) => {
-      settings[row.setting_key] = row.setting_value
-    })
-
-    // Send emails asynchronously
-    let sentCount = 0
-    let failedCount = 0
-
-    // Process in background (in production, use a queue)
-    setImmediate(async () => {
-      for (const subscriber of subscribersResult.rows) {
-        try {
-          // Create recipient record
-          await query(
-            `INSERT INTO newsletter_campaign_recipients (campaign_id, subscriber_id, email, status)
-             VALUES ($1, $2, $3, 'pending')
-             ON CONFLICT (campaign_id, subscriber_id) DO NOTHING`,
-            [id, subscriber.id, subscriber.email],
-          )
-
-          // Send email
-          const result = await emailService.sendEmail({
-            to: subscriber.email,
-            toName: subscriber.name || undefined,
-            subject: campaign.subject,
-            html: campaign.content_html,
-            text: campaign.content_text,
-            emailType: 'promotional',
-          })
-
-          if (result.success) {
-            sentCount++
-            await query(
-              `UPDATE newsletter_campaign_recipients 
-               SET status = 'sent', sent_at = CURRENT_TIMESTAMP 
-               WHERE campaign_id = $1 AND subscriber_id = $2`,
-              [id, subscriber.id],
-            )
-          } else {
-            failedCount++
-            await query(
-              `UPDATE newsletter_campaign_recipients 
-               SET status = 'bounced' 
-               WHERE campaign_id = $1 AND subscriber_id = $2`,
-              [id, subscriber.id],
-            )
-          }
-        } catch (err) {
-          failedCount++
-          logger.error(`Failed to send to ${subscriber.email}:`, err)
-        }
-      }
-
-      // Update campaign as sent
-      await query(
-        `UPDATE newsletter_campaigns 
-         SET status = 'sent', 
-             sent_at = CURRENT_TIMESTAMP,
-             sent_count = $2,
-             bounced_count = $3,
-             updated_at = CURRENT_TIMESTAMP 
-         WHERE id = $1`,
-        [id, sentCount, failedCount],
-      )
-
-      logger.info(
-        `Campaign ${id} completed: ${sentCount} sent, ${failedCount} failed`,
-      )
-    })
+    const queueResult = await enqueueCampaign(id)
 
     res.json({
       success: true,
-      message: `Campaign is being sent to ${subscribersResult.rows.length} subscribers`,
+      message:
+        campaign.status === 'scheduled'
+          ? `Campaign queued and will send at scheduled time`
+          : `Campaign queued and processing has started`,
       data: {
-        totalRecipients: subscribersResult.rows.length,
+        totalRecipients: queueResult.totalRecipients,
       },
     })
   } catch (error) {
@@ -1145,6 +1194,199 @@ export const getCampaignStats = async (req: AuthRequest, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Failed to get campaign statistics',
+    })
+  }
+}
+
+// =====================================================
+// Deliverability
+// =====================================================
+
+function getDomainFromEmail(email: string): string {
+  const parts = String(email || '').toLowerCase().split('@')
+  return parts.length === 2 ? parts[1] : ''
+}
+
+async function resolveTxtSafe(hostname: string): Promise<string[]> {
+  try {
+    const records = await dns.resolveTxt(hostname)
+    return records.map((chunk) => chunk.join('')).filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
+export const getDeliverabilityDashboard = async (
+  _req: AuthRequest,
+  res: Response,
+) => {
+  try {
+    const fromDomain = getDomainFromEmail(
+      process.env.SMTP_FROM || process.env.EMAIL_FROM || process.env.SMTP_USER || '',
+    )
+
+    const [totalsResult, complaintsResult, domainStatsResult, abResults] =
+      await Promise.all([
+        query(
+          `SELECT
+             COUNT(*)::int AS total,
+             COUNT(*) FILTER (WHERE status = 'sent')::int AS sent,
+             COUNT(*) FILTER (WHERE status = 'delivered')::int AS delivered,
+             COUNT(*) FILTER (WHERE status = 'bounced')::int AS bounced,
+             COUNT(*) FILTER (WHERE status = 'failed')::int AS failed
+           FROM email_messages
+           WHERE created_at >= NOW() - INTERVAL '30 days'`,
+        ),
+        query(
+          `SELECT COUNT(*)::int AS complaints
+           FROM email_complaints
+           WHERE created_at >= NOW() - INTERVAL '30 days'`,
+        ),
+        query(
+          `SELECT
+             split_part(lower(recipient_email), '@', 2) AS domain,
+             COUNT(*)::int AS total,
+             COUNT(*) FILTER (WHERE status IN ('sent', 'delivered'))::int AS sent,
+             COUNT(*) FILTER (WHERE status = 'bounced')::int AS bounced,
+             COUNT(*) FILTER (WHERE status = 'failed')::int AS failed
+           FROM email_messages
+           WHERE created_at >= NOW() - INTERVAL '30 days'
+           GROUP BY split_part(lower(recipient_email), '@', 2)
+           ORDER BY total DESC
+           LIMIT 8`,
+        ),
+        query(
+          `SELECT
+             variant_key,
+             COUNT(*)::int AS recipients,
+             COUNT(*) FILTER (WHERE status = 'sent')::int AS sent,
+             COUNT(*) FILTER (WHERE status = 'bounced')::int AS bounced,
+             COUNT(*) FILTER (WHERE status = 'opened')::int AS opened,
+             COUNT(*) FILTER (WHERE status = 'clicked')::int AS clicked
+           FROM newsletter_campaign_recipients
+           WHERE created_at >= NOW() - INTERVAL '30 days'
+           GROUP BY variant_key
+           ORDER BY variant_key ASC`,
+        ),
+      ])
+
+    const totals = totalsResult.rows[0] || {
+      total: 0,
+      sent: 0,
+      delivered: 0,
+      bounced: 0,
+      failed: 0,
+    }
+    const complaints = Number(complaintsResult.rows[0]?.complaints || 0)
+    const total = Number(totals.total || 0)
+    const bounced = Number(totals.bounced || 0)
+    const failed = Number(totals.failed || 0)
+
+    const bounceRate = total > 0 ? (bounced / total) * 100 : 0
+    const complaintRate = total > 0 ? (complaints / total) * 100 : 0
+
+    const spfRecords = fromDomain
+      ? await resolveTxtSafe(fromDomain)
+      : []
+    const dmarcRecords = fromDomain
+      ? await resolveTxtSafe(`_dmarc.${fromDomain}`)
+      : []
+    const dkimRecords = fromDomain
+      ? await resolveTxtSafe(`default._domainkey.${fromDomain}`)
+      : []
+
+    const hasSpf = spfRecords.some((record) => /v=spf1/i.test(record))
+    const hasDmarc = dmarcRecords.some((record) => /v=dmarc1/i.test(record))
+    const hasDkim = dkimRecords.some((record) => /v=dkim1|k=rsa/i.test(record))
+
+    const healthScore = Math.max(
+      0,
+      Math.min(
+        100,
+        Math.round(
+          100 - bounceRate * 7 - complaintRate * 14 +
+            (hasSpf ? 8 : -12) +
+            (hasDkim ? 8 : -10) +
+            (hasDmarc ? 8 : -8),
+        ),
+      ),
+    )
+
+    const healthLabel =
+      healthScore >= 80 ? 'healthy' : healthScore >= 55 ? 'warning' : 'critical'
+
+    res.json({
+      success: true,
+      data: {
+        dashboard: {
+          window: '30d',
+          totals: {
+            total,
+            sent: Number(totals.sent || 0),
+            delivered: Number(totals.delivered || 0),
+            bounced,
+            failed,
+            complaints,
+            bounceRate,
+            complaintRate,
+          },
+          domainHealth: {
+            fromDomain,
+            score: healthScore,
+            label: healthLabel,
+            checks: {
+              spf: hasSpf,
+              dkim: hasDkim,
+              dmarc: hasDmarc,
+            },
+          },
+          domains: domainStatsResult.rows,
+          abPerformance: abResults.rows,
+        },
+      },
+    })
+  } catch (error) {
+    logger.error('Get deliverability dashboard error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get deliverability dashboard',
+    })
+  }
+}
+
+export const recordComplaint = async (req: AuthRequest, res: Response) => {
+  try {
+    const { recipientEmail, campaignId, provider, reason, metadata } = req.body
+
+    if (!recipientEmail) {
+      return res.status(400).json({
+        success: false,
+        error: 'recipientEmail is required',
+      })
+    }
+
+    await query(
+      `INSERT INTO email_complaints
+        (recipient_email, campaign_id, provider, reason, metadata)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        String(recipientEmail).toLowerCase(),
+        campaignId || null,
+        provider || null,
+        reason || null,
+        metadata ? JSON.stringify(metadata) : null,
+      ],
+    )
+
+    res.status(201).json({
+      success: true,
+      message: 'Complaint recorded',
+    })
+  } catch (error) {
+    logger.error('Record complaint error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to record complaint',
     })
   }
 }

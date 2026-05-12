@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import {
   generateDraft,
+  generateCampaignDraft,
   listDrafts,
   approveDraft,
   rejectDraft,
@@ -34,6 +35,7 @@ const aiGenerationLimiter = rateLimit({
 // ─── Drafts ───────────────────────────────────────────────────
 router.get('/drafts', listDrafts)
 router.post('/drafts', aiGenerationLimiter, generateDraft)
+router.post('/campaigns/generate', aiGenerationLimiter, generateCampaignDraft)
 router.post('/drafts/:id/approve', approveDraft)
 router.post('/drafts/:id/reject', rejectDraft)
 

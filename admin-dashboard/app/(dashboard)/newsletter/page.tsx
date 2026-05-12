@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import newsletterService, {
+  DeliverabilityDashboard,
   NewsletterCampaign,
   NewsletterSubscriber,
   SubscriberFilters,
@@ -63,6 +64,9 @@ import {
   UserCheck,
   UserX,
   AlertTriangle,
+  ShieldCheck,
+  Gauge,
+  FlaskConical,
   TrendingUp,
   Calendar,
   Mail,
@@ -106,6 +110,14 @@ export default function NewsletterPage() {
   const [campaignText, setCampaignText] = useState('')
   const [campaignScheduleAt, setCampaignScheduleAt] = useState('')
   const [sendCampaignNow, setSendCampaignNow] = useState(true)
+  const [abTestEnabled, setAbTestEnabled] = useState(false)
+  const [campaignSubjectB, setCampaignSubjectB] = useState('')
+  const [campaignHtmlB, setCampaignHtmlB] = useState('')
+  const [campaignTextB, setCampaignTextB] = useState('')
+  const [segmentASources, setSegmentASources] = useState<string[]>([])
+  const [segmentAStatuses, setSegmentAStatuses] = useState<string[]>([])
+  const [segmentBSources, setSegmentBSources] = useState<string[]>([])
+  const [segmentBStatuses, setSegmentBStatuses] = useState<string[]>([])
   const [editForm, setEditForm] = useState({
     email: '',
     name: '',
@@ -138,9 +150,18 @@ export default function NewsletterPage() {
     staleTime: 30_000,
   })
 
+  const { data: deliverabilityResponse, isLoading: isLoadingDeliverability } =
+    useQuery({
+      queryKey: ['newsletter-deliverability'],
+      queryFn: () => newsletterService.getDeliverabilityDashboard(),
+      staleTime: 45_000,
+    })
+
   const subscribersData = subscribersResponse?.data
   const stats = statsResponse?.data?.stats
   const campaigns = campaignsResponse?.data?.campaigns || []
+  const deliverability =
+    deliverabilityResponse?.data?.dashboard as DeliverabilityDashboard | undefined
 
   // Update subscriber mutation
   const updateMutation = useMutation({
@@ -210,6 +231,21 @@ export default function NewsletterPage() {
         contentHtml: data.contentHtml,
         contentText: data.contentText || undefined,
         scheduledAt: data.scheduledAt || undefined,
+        abTestEnabled,
+        subjectA: data.subject,
+        subjectB: campaignSubjectB || undefined,
+        contentHtmlA: data.contentHtml,
+        contentHtmlB: campaignHtmlB || undefined,
+        contentTextA: data.contentText || undefined,
+        contentTextB: campaignTextB || undefined,
+        segmentA: {
+          sources: segmentASources,
+          statuses: segmentAStatuses,
+        },
+        segmentB: {
+          sources: segmentBSources,
+          statuses: segmentBStatuses,
+        },
       })
 
       const campaign = created.data?.campaign
@@ -234,6 +270,14 @@ export default function NewsletterPage() {
       setCampaignText('')
       setCampaignScheduleAt('')
       setSendCampaignNow(true)
+      setAbTestEnabled(false)
+      setCampaignSubjectB('')
+      setCampaignHtmlB('')
+      setCampaignTextB('')
+      setSegmentASources([])
+      setSegmentAStatuses([])
+      setSegmentBSources([])
+      setSegmentBStatuses([])
       await refetchCampaigns()
     },
     onError: (error: Error) => {
@@ -393,6 +437,100 @@ export default function NewsletterPage() {
           </Button>
         </div>
       </div>
+
+      {/* Deliverability dashboard */}
+      <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
+        <Card>
+          <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+            <CardTitle className='text-sm font-medium'>Domain Health</CardTitle>
+            <Gauge className='h-4 w-4 text-muted-foreground' />
+          </CardHeader>
+          <CardContent>
+            {isLoadingDeliverability ? (
+              <Skeleton className='h-8 w-24' />
+            ) : (
+              <>
+                <div className='text-2xl font-bold'>
+                  {deliverability?.domainHealth?.score ?? 0}
+                </div>
+                <p className='text-xs text-muted-foreground capitalize'>
+                  {deliverability?.domainHealth?.label || 'unknown'}
+                </p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+            <CardTitle className='text-sm font-medium'>Bounce Rate (30d)</CardTitle>
+            <AlertTriangle className='h-4 w-4 text-orange-500' />
+          </CardHeader>
+          <CardContent>
+            <div className='text-2xl font-bold'>
+              {(deliverability?.totals?.bounceRate ?? 0).toFixed(2)}%
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+            <CardTitle className='text-sm font-medium'>Complaint Rate (30d)</CardTitle>
+            <ShieldCheck className='h-4 w-4 text-red-500' />
+          </CardHeader>
+          <CardContent>
+            <div className='text-2xl font-bold'>
+              {(deliverability?.totals?.complaintRate ?? 0).toFixed(2)}%
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+            <CardTitle className='text-sm font-medium'>A/B Recipient Pool</CardTitle>
+            <FlaskConical className='h-4 w-4 text-blue-500' />
+          </CardHeader>
+          <CardContent>
+            <div className='text-2xl font-bold'>
+              {(deliverability?.abPerformance || []).reduce(
+                (sum, item) => sum + Number(item.recipients || 0),
+                0,
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {deliverability && (
+        <Card>
+          <CardHeader>
+            <CardTitle className='text-sm font-medium'>Domain Health Checks</CardTitle>
+            <CardDescription>
+              From domain: {deliverability.domainHealth.fromDomain || 'Not detected'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className='space-y-3'>
+            <div className='flex flex-wrap gap-3'>
+              <Badge variant={deliverability.domainHealth.checks.spf ? 'default' : 'destructive'}>
+                SPF {deliverability.domainHealth.checks.spf ? 'OK' : 'Missing'}
+              </Badge>
+              <Badge variant={deliverability.domainHealth.checks.dkim ? 'default' : 'destructive'}>
+                DKIM {deliverability.domainHealth.checks.dkim ? 'OK' : 'Missing'}
+              </Badge>
+              <Badge variant={deliverability.domainHealth.checks.dmarc ? 'default' : 'destructive'}>
+                DMARC {deliverability.domainHealth.checks.dmarc ? 'OK' : 'Missing'}
+              </Badge>
+            </div>
+            <div className='space-y-2'>
+              {deliverability.domains.map((domain) => (
+                <div key={domain.domain} className='flex items-center justify-between rounded border p-2 text-sm'>
+                  <span>{domain.domain || 'unknown'}</span>
+                  <span className='text-muted-foreground'>
+                    sent {domain.sent} / bounce {domain.bounced} / failed {domain.failed}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats Cards */}
       <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
@@ -927,6 +1065,138 @@ jane@example.com,Jane Smith'
                 onChange={(e) => setCampaignText(e.target.value)}
                 placeholder='Plain text fallback for email clients'
               />
+            </div>
+
+            <div className='rounded-lg border bg-muted/30 p-3 space-y-3'>
+              <div className='flex items-center gap-2'>
+                <input
+                  id='abTestEnabled'
+                  type='checkbox'
+                  checked={abTestEnabled}
+                  onChange={(e) => setAbTestEnabled(e.target.checked)}
+                  className='h-4 w-4'
+                />
+                <Label htmlFor='abTestEnabled' className='cursor-pointer'>
+                  Enable A/B subject/content variants per segment
+                </Label>
+              </div>
+
+              {abTestEnabled && (
+                <div className='grid gap-4 md:grid-cols-2'>
+                  <div className='space-y-2'>
+                    <Label htmlFor='campaignSubjectB'>Variant B Subject</Label>
+                    <Input
+                      id='campaignSubjectB'
+                      value={campaignSubjectB}
+                      onChange={(e) => setCampaignSubjectB(e.target.value)}
+                      placeholder='Alternative subject line for B'
+                    />
+                    <Label htmlFor='campaignHtmlB'>Variant B HTML</Label>
+                    <Textarea
+                      id='campaignHtmlB'
+                      className='min-h-24 font-mono text-sm'
+                      value={campaignHtmlB}
+                      onChange={(e) => setCampaignHtmlB(e.target.value)}
+                      placeholder='<h1>Variant B</h1><p>Alternative HTML.</p>'
+                    />
+                    <Label htmlFor='campaignTextB'>Variant B Text</Label>
+                    <Textarea
+                      id='campaignTextB'
+                      className='min-h-20 font-mono text-sm'
+                      value={campaignTextB}
+                      onChange={(e) => setCampaignTextB(e.target.value)}
+                      placeholder='Alternative plain text'
+                    />
+                  </div>
+
+                  <div className='space-y-3'>
+                    <div>
+                      <Label className='text-sm'>Segment A Sources</Label>
+                      <div className='mt-2 flex flex-wrap gap-3 text-sm'>
+                        {['website', 'checkout', 'popup', 'footer', 'import', 'admin'].map((source) => (
+                          <label key={`a-${source}`} className='flex items-center gap-1'>
+                            <input
+                              type='checkbox'
+                              checked={segmentASources.includes(source)}
+                              onChange={(e) =>
+                                setSegmentASources((prev) =>
+                                  e.target.checked
+                                    ? [...prev, source]
+                                    : prev.filter((s) => s !== source),
+                                )
+                              }
+                            />
+                            <span className='capitalize'>{source}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <Label className='text-sm'>Segment B Sources</Label>
+                      <div className='mt-2 flex flex-wrap gap-3 text-sm'>
+                        {['website', 'checkout', 'popup', 'footer', 'import', 'admin'].map((source) => (
+                          <label key={`b-${source}`} className='flex items-center gap-1'>
+                            <input
+                              type='checkbox'
+                              checked={segmentBSources.includes(source)}
+                              onChange={(e) =>
+                                setSegmentBSources((prev) =>
+                                  e.target.checked
+                                    ? [...prev, source]
+                                    : prev.filter((s) => s !== source),
+                                )
+                              }
+                            />
+                            <span className='capitalize'>{source}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <Label className='text-sm'>Segment A Statuses</Label>
+                      <div className='mt-2 flex flex-wrap gap-3 text-sm'>
+                        {['active', 'unsubscribed', 'bounced'].map((status) => (
+                          <label key={`as-${status}`} className='flex items-center gap-1'>
+                            <input
+                              type='checkbox'
+                              checked={segmentAStatuses.includes(status)}
+                              onChange={(e) =>
+                                setSegmentAStatuses((prev) =>
+                                  e.target.checked
+                                    ? [...prev, status]
+                                    : prev.filter((s) => s !== status),
+                                )
+                              }
+                            />
+                            <span className='capitalize'>{status}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <Label className='text-sm'>Segment B Statuses</Label>
+                      <div className='mt-2 flex flex-wrap gap-3 text-sm'>
+                        {['active', 'unsubscribed', 'bounced'].map((status) => (
+                          <label key={`bs-${status}`} className='flex items-center gap-1'>
+                            <input
+                              type='checkbox'
+                              checked={segmentBStatuses.includes(status)}
+                              onChange={(e) =>
+                                setSegmentBStatuses((prev) =>
+                                  e.target.checked
+                                    ? [...prev, status]
+                                    : prev.filter((s) => s !== status),
+                                )
+                              }
+                            />
+                            <span className='capitalize'>{status}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             <div className='grid gap-4 md:grid-cols-2'>
               <div className='space-y-2'>

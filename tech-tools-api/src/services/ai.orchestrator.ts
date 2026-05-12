@@ -64,6 +64,20 @@ export interface GenerateDraftInput {
   actorAgent?: string
 }
 
+export interface SegmentAwareCampaignInput {
+  prompt: string
+  actorId: string
+  actorIp?: string
+  actorAgent?: string
+  scheduledAt?: string
+  segment?: {
+    sources?: string[]
+    statuses?: string[]
+    includeUnsubscribed?: boolean
+  }
+  selectedProductIds?: string[]
+}
+
 export interface AiDraft {
   id: string
   channel: AiChannel
@@ -150,6 +164,20 @@ interface DraftContent {
   notes?: string
 }
 
+interface FeaturedProduct {
+  id: string
+  name: string
+  slug: string
+  price: number
+  imageUrl?: string | null
+}
+
+interface GuardrailResult {
+  score: number
+  pass: boolean
+  violations: string[]
+}
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
   if (typeof error === 'string') return error
@@ -157,6 +185,59 @@ function getErrorMessage(error: unknown): string {
     return JSON.stringify(error)
   } catch {
     return 'Unknown error'
+  }
+}
+
+function evaluatePolicyGuardrails(draft: Record<string, any>): GuardrailResult {
+  const violations: string[] = []
+  const subject = String(draft.subject || '')
+  const body = String(draft.body_text || '')
+  const combined = `${subject}\n${body}`.toLowerCase()
+
+  if (!body.trim()) {
+    violations.push('Message body is empty')
+  }
+
+  if (body.length > 1800) {
+    violations.push('Message body is excessively long')
+  }
+
+  if (!/[.!?]$/.test(body.trim())) {
+    violations.push('Message lacks clear completion punctuation')
+  }
+
+  if (
+    combined.includes('wire transfer') ||
+    combined.includes('gift card') ||
+    combined.includes('crypto wallet') ||
+    combined.includes('bank account')
+  ) {
+    violations.push('Potential risky payment or fraud wording detected')
+  }
+
+  if (/(password|otp|pin|credit card|cvv)/i.test(combined)) {
+    violations.push('Sensitive credential/payment request wording detected')
+  }
+
+  if (!combined.includes('techtools') && draft.channel !== 'whatsapp') {
+    violations.push('Brand signature is missing')
+  }
+
+  const confidence = Number(draft.confidence || 0)
+  if (confidence < 60) {
+    violations.push(`Low AI confidence (${confidence})`)
+  }
+
+  const score = Math.max(0, Math.min(100, 100 - violations.length * 18))
+  const threshold = Math.min(
+    Math.max(Number(process.env.AI_GUARDRAIL_MIN_SCORE) || 70, 40),
+    95,
+  )
+
+  return {
+    score,
+    pass: score >= threshold,
+    violations,
   }
 }
 
@@ -216,6 +297,275 @@ function isMissingAiTablesError(error: unknown): boolean {
     pgError.message?.includes('ai_drafts') === true ||
     pgError.message?.includes('communication_timeline') === true
   )
+}
+
+function escapeHtml(input: string): string {
+  return input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function toParagraphHtml(text: string): string {
+  return escapeHtml(text)
+    .split(/\n\s*\n/g)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => `<p style="margin:0 0 16px 0;line-height:1.6;color:#1f2937;">${p.replace(/\n/g, '<br/>')}</p>`)
+    .join('')
+}
+
+function resolveAssetUrl(pathOrUrl: string): string {
+  if (!pathOrUrl) return ''
+  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl
+  const base = (process.env.FRONTEND_URL || 'https://techtoolstore.com').replace(
+    /\/$/,
+    '',
+  )
+  return `${base}${pathOrUrl.startsWith('/') ? '' : '/'}${pathOrUrl}`
+}
+
+function buildProductsGrid(products: FeaturedProduct[]): string {
+  if (!products.length) return ''
+
+  return `
+    <div style="margin-top:28px;">
+      <h3 style="margin:0 0 14px 0;color:#111827;font-size:20px;">Featured products for you</h3>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;border-spacing:10px 10px;">
+        <tbody>
+          ${products
+            .map((product) => {
+              const productUrl = resolveAssetUrl(`/products/${product.slug}`)
+              return `
+                <tr>
+                  <td style="width:92px;vertical-align:top;">
+                    ${
+                      product.imageUrl
+                        ? `<a href="${productUrl}" style="text-decoration:none;"><img src="${escapeHtml(product.imageUrl)}" alt="${escapeHtml(product.name)}" width="88" height="88" style="display:block;border-radius:10px;object-fit:cover;border:1px solid #e5e7eb;"/></a>`
+                        : `<a href="${productUrl}" style="display:block;width:88px;height:88px;border-radius:10px;border:1px solid #e5e7eb;background:#f9fafb;text-decoration:none;"></a>`
+                    }
+                  </td>
+                  <td style="vertical-align:top;padding-right:4px;">
+                    <a href="${productUrl}" style="text-decoration:none;color:#111827;font-size:15px;font-weight:700;line-height:1.4;display:inline-block;">${escapeHtml(product.name)}</a>
+                    <div style="margin-top:6px;color:#ea580c;font-size:15px;font-weight:700;">$${product.price.toFixed(2)}</div>
+                    <div style="margin-top:8px;">
+                      <a href="${productUrl}" style="font-size:13px;color:#1d4ed8;text-decoration:none;font-weight:600;">View product</a>
+                    </div>
+                  </td>
+                </tr>
+              `
+            })
+            .join('')}
+        </tbody>
+      </table>
+    </div>
+  `
+}
+
+function buildBrandedEmailHtml(options: {
+  subject: string
+  bodyHtml?: string
+  bodyText: string
+  ctaLabel?: string
+  ctaUrl?: string
+  products?: FeaturedProduct[]
+}): string {
+  const brand = process.env.EMAIL_FROM_NAME || 'TechTools Store'
+  const logoUrl = process.env.EMAIL_LOGO_URL || resolveAssetUrl('/favicon.svg')
+  const headerLogo = logoUrl
+    ? `<img src="${escapeHtml(resolveAssetUrl(logoUrl))}" alt="${escapeHtml(brand)}" style="height:36px;max-width:180px;display:block;margin:0 auto 10px auto;"/>`
+    : `<div style="font-size:28px;font-weight:800;letter-spacing:0.2px;">${escapeHtml(brand)}</div>`
+
+  const mainBody = options.bodyHtml?.trim()
+    ? options.bodyHtml
+    : toParagraphHtml(options.bodyText)
+
+  const ctaBlock =
+    options.ctaLabel && options.ctaUrl
+      ? `<div style="margin:24px 0 4px 0;"><a href="${escapeHtml(options.ctaUrl)}" style="display:inline-block;padding:12px 18px;background:#ea580c;color:#ffffff;text-decoration:none;border-radius:10px;font-weight:700;font-size:14px;">${escapeHtml(options.ctaLabel)}</a></div>`
+      : ''
+
+  return `
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <title>${escapeHtml(options.subject)}</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:28px 14px;background:#f3f4f6;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e5e7eb;">
+            <tr>
+              <td style="background:linear-gradient(120deg,#f97316,#ea580c);padding:26px 22px;text-align:center;color:#ffffff;">
+                ${headerLogo}
+                <div style="font-size:14px;opacity:0.95;">Premium tech support and offers</div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 22px;">
+                ${mainBody}
+                ${ctaBlock}
+                ${buildProductsGrid(options.products || [])}
+                <hr style="border:none;border-top:1px solid #e5e7eb;margin:26px 0 16px;"/>
+                <p style="margin:0;color:#6b7280;font-size:12px;line-height:1.6;">
+                  You are receiving this email from ${escapeHtml(brand)}.<br/>
+                  Website: <a href="${escapeHtml(resolveAssetUrl('/'))}" style="color:#1d4ed8;text-decoration:none;">${escapeHtml(resolveAssetUrl('/'))}</a>
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`
+}
+
+async function loadFeaturedProducts(limit = 6): Promise<FeaturedProduct[]> {
+  const result = await db(
+    `SELECT p.id,
+            p.name,
+            p.slug,
+            COALESCE(p.sale_price, p.base_price, 0) AS price,
+            (
+              SELECT pm.url
+              FROM product_media pm
+              WHERE pm.product_id = p.id AND pm.type = 'image'
+              ORDER BY pm.is_primary DESC, pm.position ASC
+              LIMIT 1
+            ) AS image_url
+      FROM products p
+      WHERE p.is_active = true
+        AND p.deleted_at IS NULL
+      ORDER BY p.is_featured DESC, p.updated_at DESC
+      LIMIT $1`,
+    [Math.min(Math.max(limit, 1), 12)],
+  )
+
+  return result.rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    price: Number(row.price || 0),
+    imageUrl: row.image_url ? resolveAssetUrl(row.image_url) : null,
+  }))
+}
+
+async function loadProductsByIds(productIds: string[]): Promise<FeaturedProduct[]> {
+  if (!productIds.length) return []
+
+  const result = await db(
+    `SELECT p.id,
+            p.name,
+            p.slug,
+            COALESCE(p.sale_price, p.base_price, 0) AS price,
+            (
+              SELECT pm.url
+              FROM product_media pm
+              WHERE pm.product_id = p.id AND pm.type = 'image'
+              ORDER BY pm.is_primary DESC, pm.position ASC
+              LIMIT 1
+            ) AS image_url
+      FROM products p
+      WHERE p.id = ANY($1::uuid[])
+        AND p.is_active = true
+        AND p.deleted_at IS NULL
+      LIMIT 20`,
+    [productIds],
+  )
+
+  return result.rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    price: Number(row.price || 0),
+    imageUrl: row.image_url ? resolveAssetUrl(row.image_url) : null,
+  }))
+}
+
+function normalizeTextList(values?: string[]): string[] {
+  if (!Array.isArray(values)) return []
+  return values
+    .map((v) => String(v || '').trim().toLowerCase())
+    .filter(Boolean)
+}
+
+async function estimateNewsletterAudience(segment?: {
+  sources?: string[]
+  statuses?: string[]
+  includeUnsubscribed?: boolean
+}): Promise<number> {
+  const sources = normalizeTextList(segment?.sources)
+  const statuses = normalizeTextList(segment?.statuses)
+
+  const conditions: string[] = []
+  const params: unknown[] = []
+  let index = 1
+
+  if (sources.length > 0) {
+    conditions.push(`source = ANY($${index++}::text[])`)
+    params.push(sources)
+  }
+
+  if (statuses.length > 0) {
+    conditions.push(`status = ANY($${index++}::text[])`)
+    params.push(statuses)
+  } else if (!segment?.includeUnsubscribed) {
+    conditions.push(`status = 'active'`)
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
+  const result = await db(
+    `SELECT COUNT(*)::int AS total FROM newsletter_subscribers ${where}`,
+    params,
+  )
+
+  return Number(result.rows[0]?.total || 0)
+}
+
+export async function generateSegmentCampaignDraft(
+  input: SegmentAwareCampaignInput,
+): Promise<{ draft: AiDraft; audienceEstimate: number }> {
+  const selectedProductIds = Array.isArray(input.selectedProductIds)
+    ? input.selectedProductIds.slice(0, 20)
+    : []
+
+  const selectedProducts = await loadProductsByIds(selectedProductIds)
+  const featuredProducts =
+    selectedProducts.length > 0 ? selectedProducts : await loadFeaturedProducts(6)
+
+  const audienceEstimate = await estimateNewsletterAudience(input.segment)
+
+  const segmentSources = normalizeTextList(input.segment?.sources)
+  const segmentStatuses = normalizeTextList(input.segment?.statuses)
+
+  const segmentSummary = [
+    `Audience estimate: ${audienceEstimate} subscribers`,
+    `Sources: ${segmentSources.length > 0 ? segmentSources.join(', ') : 'all'}`,
+    `Statuses: ${segmentStatuses.length > 0 ? segmentStatuses.join(', ') : 'active only'}`,
+  ].join('\n')
+
+  const productSummary = featuredProducts
+    .map((p) => `- ${p.name} ($${p.price.toFixed(2)}) ${resolveAssetUrl(`/products/${p.slug}`)}`)
+    .join('\n')
+
+  const enrichedPrompt = `${input.prompt}\n\nCampaign segment context:\n${segmentSummary}\n\nProducts to feature:\n${productSummary}`
+
+  const draft = await generateDraft({
+    channel: 'newsletter',
+    prompt: enrichedPrompt,
+    scheduledAt: input.scheduledAt,
+    actorId: input.actorId,
+    actorIp: input.actorIp,
+    actorAgent: input.actorAgent,
+  })
+
+  return { draft, audienceEstimate }
 }
 
 // ─── Channel-aware system prompt builder ────────────────────
@@ -735,6 +1085,7 @@ export async function approveDraft(
   draftId: string,
   actorId: string,
   actorIp?: string,
+  options?: { forceSend?: boolean },
 ): Promise<{ sent: boolean; message: string }> {
   const result = await db(
     `SELECT * FROM ai_drafts WHERE id = $1 AND status = 'pending'`,
@@ -747,6 +1098,26 @@ export async function approveDraft(
 
   const draft = result.rows[0]
 
+  const guardrail = evaluatePolicyGuardrails(draft)
+  if (!guardrail.pass && !options?.forceSend) {
+    await db(
+      `INSERT INTO ai_audit_log (action, actor_id, draft_id, channel, customer_id, meta, ip_address)
+       VALUES ('guardrail_blocked', $1, $2, $3, $4, $5, $6)`,
+      [
+        actorId,
+        draftId,
+        draft.channel,
+        draft.customer_id,
+        JSON.stringify(guardrail),
+        actorIp ?? null,
+      ],
+    )
+
+    throw new Error(
+      `Policy guardrail blocked send (score=${guardrail.score}). Violations: ${guardrail.violations.join('; ')}`,
+    )
+  }
+
   // Mark as approved first
   await db(
     `UPDATE ai_drafts SET status = 'approved', approved_by = $1 WHERE id = $2`,
@@ -757,6 +1128,19 @@ export async function approveDraft(
     `INSERT INTO ai_audit_log (action, actor_id, draft_id, channel, customer_id, ip_address)
      VALUES ('draft_approved', $1, $2, $3, $4, $5)`,
     [actorId, draftId, draft.channel, draft.customer_id, actorIp ?? null],
+  )
+
+  await db(
+    `INSERT INTO ai_audit_log (action, actor_id, draft_id, channel, customer_id, meta, ip_address)
+     VALUES ('guardrail_scored', $1, $2, $3, $4, $5, $6)`,
+    [
+      actorId,
+      draftId,
+      draft.channel,
+      draft.customer_id,
+      JSON.stringify({ ...guardrail, forced: Boolean(options?.forceSend) }),
+      actorIp ?? null,
+    ],
   )
 
   // Delegate to channel-specific sender
@@ -945,11 +1329,25 @@ export async function getAiStats(): Promise<object> {
 async function sendEmailDraft(draft: Record<string, any>): Promise<void> {
   // Dynamic import to avoid circular dep at module load time
   const emailService = (await import('./email.service')).default
+  const subject = draft.subject || 'Message from TechTools'
+  const html = buildBrandedEmailHtml({
+    subject,
+    bodyHtml: draft.body_html,
+    bodyText: draft.body_text,
+    ctaLabel: 'Visit TechTools',
+    ctaUrl: resolveAssetUrl('/'),
+  })
   const result = await emailService.sendEmail({
     to: draft.recipient_email,
-    subject: draft.subject || 'Message from TechTools',
-    html: draft.body_html || draft.body_text,
+    subject,
+    html,
     text: draft.body_text,
+    emailType: draft.channel === 'contact_reply' ? 'custom' : 'promotional',
+    metadata: {
+      channel: draft.channel,
+      aiDraftId: draft.id,
+      confidence: draft.confidence,
+    },
   })
 
   if (!result.success) {
@@ -966,50 +1364,37 @@ async function sendWhatsAppDraft(draft: Record<string, any>): Promise<void> {
 }
 
 async function sendNewsletterDraft(draft: Record<string, any>): Promise<void> {
+  const featuredProducts = await loadFeaturedProducts(6)
+  const subject = draft.subject || 'Newsletter'
+  const html = buildBrandedEmailHtml({
+    subject,
+    bodyHtml: draft.body_html,
+    bodyText: draft.body_text,
+    ctaLabel: 'Shop New Arrivals',
+    ctaUrl: resolveAssetUrl('/products'),
+    products: featuredProducts,
+  })
+
   // Insert campaign record and send via email service to all active subscribers
   const camResult = await db(
-    `INSERT INTO newsletter_campaigns (name, subject, html_content, text_content, status)
-     VALUES ($1, $2, $3, $4, 'draft') RETURNING id`,
+    `INSERT INTO newsletter_campaigns
+      (name, subject, content_html, content_text, status, scheduled_at, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING id`,
     [
       `AI Campaign - ${new Date().toLocaleDateString()}`,
-      draft.subject || 'Newsletter',
-      draft.body_html || draft.body_text,
+      subject,
+      html,
       draft.body_text,
+      draft.scheduled_at ? 'scheduled' : 'draft',
+      draft.scheduled_at || null,
+      draft.created_by || null,
     ],
   )
   const campaignId = camResult.rows[0].id
 
-  // Mark campaign as sending and fetch active subscriber emails
-  await db(`UPDATE newsletter_campaigns SET status = 'sending' WHERE id = $1`, [
-    campaignId,
-  ])
-
-  const subscribersResult = await db(
-    `SELECT email FROM newsletter_subscribers WHERE status = 'active'`,
-  )
-
-  const emailService = (await import('./email.service')).default
-  // Send in batches to avoid overwhelming SMTP
-  const batchSize = 50
-  const emails = subscribersResult.rows.map((r: { email: string }) => r.email)
-  for (let i = 0; i < emails.length; i += batchSize) {
-    const batch = emails.slice(i, i + batchSize)
-    await Promise.allSettled(
-      batch.map((email: string) =>
-        emailService.sendEmail({
-          to: email,
-          subject: draft.subject || 'Newsletter',
-          html: draft.body_html || draft.body_text,
-          text: draft.body_text,
-        }),
-      ),
-    )
-  }
-
-  await db(
-    `UPDATE newsletter_campaigns SET status = 'sent', sent_at = NOW(), recipients_count = $1 WHERE id = $2`,
-    [emails.length, campaignId],
-  )
+  const { enqueueCampaign } = await import('./newsletter.queue')
+  await enqueueCampaign(campaignId)
 }
 
 async function addToTimeline(draft: Record<string, any>): Promise<void> {
@@ -1068,6 +1453,7 @@ function mapDraftRow(row: Record<string, any>): AiDraft {
 
 export default {
   generateDraft,
+  generateSegmentCampaignDraft,
   approveDraft,
   rejectDraft,
   listDrafts,

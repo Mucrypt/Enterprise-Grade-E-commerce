@@ -52,8 +52,65 @@ export interface NewsletterCampaign {
   bounced_count: number
   unsubscribed_count: number
   created_by?: string
+  rate_limit_per_minute?: number
+  max_retries?: number
+  retry_backoff_seconds?: number
+  ab_test_enabled?: boolean
+  subject_a?: string
+  subject_b?: string
+  content_html_a?: string
+  content_html_b?: string
+  content_text_a?: string
+  content_text_b?: string
+  segment_a?: {
+    sources?: string[]
+    statuses?: string[]
+  }
+  segment_b?: {
+    sources?: string[]
+    statuses?: string[]
+  }
   created_at: string
   updated_at: string
+}
+
+export interface DeliverabilityDashboard {
+  window: string
+  totals: {
+    total: number
+    sent: number
+    delivered: number
+    bounced: number
+    failed: number
+    complaints: number
+    bounceRate: number
+    complaintRate: number
+  }
+  domainHealth: {
+    fromDomain: string
+    score: number
+    label: 'healthy' | 'warning' | 'critical'
+    checks: {
+      spf: boolean
+      dkim: boolean
+      dmarc: boolean
+    }
+  }
+  domains: Array<{
+    domain: string
+    total: number
+    sent: number
+    bounced: number
+    failed: number
+  }>
+  abPerformance: Array<{
+    variant_key: 'A' | 'B'
+    recipients: number
+    sent: number
+    bounced: number
+    opened: number
+    clicked: number
+  }>
 }
 
 export interface NewsletterSettings {
@@ -259,6 +316,24 @@ class NewsletterService {
     contentHtml: string
     contentText?: string
     scheduledAt?: string
+    rateLimitPerMinute?: number
+    maxRetries?: number
+    retryBackoffSeconds?: number
+    abTestEnabled?: boolean
+    subjectA?: string
+    subjectB?: string
+    contentHtmlA?: string
+    contentHtmlB?: string
+    contentTextA?: string
+    contentTextB?: string
+    segmentA?: {
+      sources?: string[]
+      statuses?: string[]
+    }
+    segmentB?: {
+      sources?: string[]
+      statuses?: string[]
+    }
   }): Promise<ApiResponse<{ campaign: NewsletterCampaign }>> {
     return apiClient.post<ApiResponse<{ campaign: NewsletterCampaign }>>(
       '/newsletter/campaigns',
@@ -278,6 +353,24 @@ class NewsletterService {
       contentText?: string
       scheduledAt?: string
       status: string
+      rateLimitPerMinute?: number
+      maxRetries?: number
+      retryBackoffSeconds?: number
+      abTestEnabled?: boolean
+      subjectA?: string
+      subjectB?: string
+      contentHtmlA?: string
+      contentHtmlB?: string
+      contentTextA?: string
+      contentTextB?: string
+      segmentA?: {
+        sources?: string[]
+        statuses?: string[]
+      }
+      segmentB?: {
+        sources?: string[]
+        statuses?: string[]
+      }
     }>,
   ): Promise<ApiResponse<{ campaign: NewsletterCampaign }>> {
     return apiClient.put<ApiResponse<{ campaign: NewsletterCampaign }>>(
@@ -301,6 +394,27 @@ class NewsletterService {
   ): Promise<ApiResponse<{ totalRecipients: number }>> {
     return apiClient.post<ApiResponse<{ totalRecipients: number }>>(
       `/newsletter/campaigns/${id}/send`,
+    )
+  }
+
+  async getDeliverabilityDashboard(): Promise<
+    ApiResponse<{ dashboard: DeliverabilityDashboard }>
+  > {
+    return apiClient.get<ApiResponse<{ dashboard: DeliverabilityDashboard }>>(
+      '/newsletter/deliverability/dashboard',
+    )
+  }
+
+  async recordComplaint(data: {
+    recipientEmail: string
+    campaignId?: string
+    provider?: string
+    reason?: string
+    metadata?: Record<string, unknown>
+  }): Promise<ApiResponse<void>> {
+    return apiClient.post<ApiResponse<void>>(
+      '/newsletter/deliverability/complaints',
+      data,
     )
   }
 
