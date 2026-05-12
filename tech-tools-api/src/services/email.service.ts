@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer'
+import SMTPTransport from 'nodemailer/lib/smtp-transport'
 import logger from '../utils/logger'
 import { query } from '../database/connection'
 
@@ -254,15 +255,42 @@ class EmailService {
   private createTransporter(config?: Partial<EmailConfig>) {
     const useConfig = { ...this.defaultConfig, ...config }
 
-    return nodemailer.createTransport({
+    const parseTimeout = (raw: string | undefined, fallback: number) => {
+      const value = Number.parseInt(raw || '', 10)
+      return Number.isFinite(value) && value > 0 ? value : fallback
+    }
+
+    const connectionTimeout = parseTimeout(
+      process.env.SMTP_CONNECTION_TIMEOUT_MS,
+      15000,
+    )
+    const greetingTimeout = parseTimeout(
+      process.env.SMTP_GREETING_TIMEOUT_MS,
+      10000,
+    )
+    const socketTimeout = parseTimeout(
+      process.env.SMTP_SOCKET_TIMEOUT_MS,
+      30000,
+    )
+
+    const transportConfig: SMTPTransport.Options = {
       host: useConfig.host,
       port: useConfig.port,
       secure: useConfig.secure,
+      connectionTimeout,
+      greetingTimeout,
+      socketTimeout,
       auth: {
         user: useConfig.user,
         pass: useConfig.pass,
       },
-    })
+      tls: {
+        servername: useConfig.host,
+        minVersion: 'TLSv1.2',
+      },
+    }
+
+    return nodemailer.createTransport(transportConfig)
   }
 
   /**
@@ -273,6 +301,7 @@ class EmailService {
   ): Promise<{ success: boolean; messageId?: string; error?: string }> {
     // Create pending log entry
     let logId: string | null = null
+    let aliasConfig: Partial<EmailConfig> | undefined
 
     try {
       const hasMetadata = await this.supportsMessageMetadata()
@@ -342,7 +371,6 @@ class EmailService {
       }
 
       // Get alias config if specified
-      let aliasConfig: Partial<EmailConfig> | undefined
       let fromEmail = this.defaultConfig?.fromEmail
       let fromName = this.defaultConfig?.fromName
 
@@ -404,6 +432,12 @@ class EmailService {
         to: options.to,
         subject: options.subject,
         error: error.message,
+        code: error.code,
+        command: error.command,
+        responseCode: error.responseCode,
+        smtpHost: aliasConfig?.host || this.defaultConfig?.host,
+        smtpPort: aliasConfig?.port || this.defaultConfig?.port,
+        smtpSecure: aliasConfig?.secure ?? this.defaultConfig?.secure,
       })
 
       // Update log with failure
