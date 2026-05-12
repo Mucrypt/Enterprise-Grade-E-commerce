@@ -1,18 +1,28 @@
 'use client'
 
 import { useParams } from 'next/navigation'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { productService } from '@/services/product.service'
+import supplierService from '@/services/supplier.service'
 import { EnhancedProductForm } from '@/components/products/EnhancedProductForm'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Package } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import Link from 'next/link'
+import { useState } from 'react'
+import { toast } from 'sonner'
 
 export default function EditProductPage() {
   const params = useParams()
   const productId = params.id as string
+  const [adCostPerOrder, setAdCostPerOrder] = useState('')
+  const [paymentFee, setPaymentFee] = useState('')
+  const [expectedRefundCost, setExpectedRefundCost] = useState('')
+  const [marginFloorPercent, setMarginFloorPercent] = useState('10')
 
   const {
     data: productData,
@@ -25,6 +35,46 @@ export default function EditProductPage() {
       return response?.data?.product
     },
     enabled: !!productId,
+  })
+
+  const { data: economicsResponse, refetch: refetchEconomics } = useQuery({
+    queryKey: ['product-economics', productId],
+    queryFn: () => supplierService.getProductEconomics(productId),
+    enabled: Boolean(productId),
+    retry: false,
+  })
+
+  const recomputeMutation = useMutation({
+    mutationFn: () =>
+      supplierService.recomputeProductEconomics(productId, {
+        adCostPerOrder: adCostPerOrder ? Number(adCostPerOrder) : undefined,
+        paymentFee: paymentFee ? Number(paymentFee) : undefined,
+        expectedRefundCost: expectedRefundCost
+          ? Number(expectedRefundCost)
+          : undefined,
+      }),
+    onSuccess: () => {
+      toast.success('Product economics recomputed')
+      refetchEconomics()
+    },
+    onError: () => {
+      toast.error('Failed to recompute product economics')
+    },
+  })
+
+  const autoPauseMutation = useMutation({
+    mutationFn: () =>
+      supplierService.evaluateProductAutoPause(productId, {
+        marginFloorPercent: Number(marginFloorPercent || '10'),
+      }),
+    onSuccess: (response) => {
+      const paused = response?.data?.shouldPause
+      toast.success(paused ? 'Product auto-paused' : 'Product remains active')
+      refetchEconomics()
+    },
+    onError: () => {
+      toast.error('Failed to evaluate auto-pause')
+    },
   })
 
   if (isLoading) {
@@ -67,9 +117,116 @@ export default function EditProductPage() {
     )
   }
 
+  const economics = economicsResponse?.data?.economics
+  const flags = economicsResponse?.data?.flags
+
   return (
     <TooltipProvider>
-      <EnhancedProductForm product={productData} mode='edit' />
+      <div className='space-y-6'>
+        <Card>
+          <CardHeader>
+            <CardTitle className='text-base'>Product Economics</CardTitle>
+          </CardHeader>
+          <CardContent className='space-y-4'>
+            <div className='grid gap-3 md:grid-cols-4'>
+              <div className='space-y-1'>
+                <Label>Ad Cost / Order</Label>
+                <Input
+                  type='number'
+                  value={adCostPerOrder}
+                  onChange={(event) => setAdCostPerOrder(event.target.value)}
+                  placeholder='0.00'
+                />
+              </div>
+              <div className='space-y-1'>
+                <Label>Payment Fee</Label>
+                <Input
+                  type='number'
+                  value={paymentFee}
+                  onChange={(event) => setPaymentFee(event.target.value)}
+                  placeholder='0.00'
+                />
+              </div>
+              <div className='space-y-1'>
+                <Label>Expected Refund Cost</Label>
+                <Input
+                  type='number'
+                  value={expectedRefundCost}
+                  onChange={(event) => setExpectedRefundCost(event.target.value)}
+                  placeholder='0.00'
+                />
+              </div>
+              <div className='space-y-1'>
+                <Label>Auto-Pause Margin Floor %</Label>
+                <Input
+                  type='number'
+                  value={marginFloorPercent}
+                  onChange={(event) => setMarginFloorPercent(event.target.value)}
+                  placeholder='10'
+                />
+              </div>
+            </div>
+
+            <div className='flex flex-wrap gap-2'>
+              <Button
+                type='button'
+                variant='outline'
+                onClick={() => recomputeMutation.mutate()}
+                disabled={recomputeMutation.isPending}
+              >
+                {recomputeMutation.isPending ? 'Recomputing...' : 'Recompute Economics'}
+              </Button>
+              <Button
+                type='button'
+                onClick={() => autoPauseMutation.mutate()}
+                disabled={autoPauseMutation.isPending}
+              >
+                {autoPauseMutation.isPending
+                  ? 'Evaluating...'
+                  : 'Evaluate Auto-Pause'}
+              </Button>
+            </div>
+
+            <div className='grid gap-3 md:grid-cols-4 text-sm'>
+              <div className='rounded border p-3'>
+                <p className='text-muted-foreground'>Sell Price</p>
+                <p className='font-semibold'>
+                  ${Number(economics?.sell_price || 0).toFixed(2)}
+                </p>
+              </div>
+              <div className='rounded border p-3'>
+                <p className='text-muted-foreground'>Landed Cost</p>
+                <p className='font-semibold'>
+                  ${Number(economics?.landed_cost || 0).toFixed(2)}
+                </p>
+              </div>
+              <div className='rounded border p-3'>
+                <p className='text-muted-foreground'>Contribution Margin</p>
+                <p className='font-semibold'>
+                  ${Number(economics?.contribution_margin || 0).toFixed(2)}
+                </p>
+              </div>
+              <div className='rounded border p-3'>
+                <p className='text-muted-foreground'>Margin %</p>
+                <p className='font-semibold'>
+                  {Number(economics?.margin_percent || 0).toFixed(2)}%
+                </p>
+              </div>
+            </div>
+
+            <div className='rounded border p-3 text-sm'>
+              <p>
+                Auto-pause: <span className='font-semibold'>{flags?.auto_pause ? 'Yes' : 'No'}</span>
+              </p>
+              {flags?.pause_reason && (
+                <p className='text-muted-foreground mt-1'>{flags.pause_reason}</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <EnhancedProductForm product={productData} mode='edit' />
+      </div>
     </TooltipProvider>
   )
 }

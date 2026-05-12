@@ -79,6 +79,11 @@ const navigation: NavItem[] = [
         href: '/brands',
         icon: Tag,
       },
+      {
+        title: 'Suppliers',
+        href: '/suppliers',
+        icon: Truck,
+      },
     ],
   },
   {

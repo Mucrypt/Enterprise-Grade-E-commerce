@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { productService, ProductFilters } from '@/services/product.service'
 import { categoryService } from '@/services/category.service'
+import supplierService from '@/services/supplier.service'
 import { getAbsoluteMediaUrl } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -69,6 +70,7 @@ import {
   Image as ImageIcon,
   Box,
   Star,
+  AlertTriangle,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
@@ -203,10 +205,22 @@ export default function ProductsPage() {
     },
   })
 
+  const { data: autoPausedData } = useQuery({
+    queryKey: ['products-auto-paused-badges'],
+    queryFn: async () => {
+      const response = await supplierService.getAutoPausedProducts(500)
+      return response?.data?.items || []
+    },
+  })
+
   const products = productsData?.items || []
   const totalProducts = productsData?.pagination?.total || 0
   const totalPages = productsData?.pagination?.pages || 1
   const categories = categoriesData || []
+  const autoPausedProductIds = useMemo(
+    () => new Set((autoPausedData || []).map((item: any) => item.product_id)),
+    [autoPausedData],
+  )
 
   // Filter products by search (client-side for immediate feedback)
   const filteredProducts = useMemo(() => {
@@ -939,6 +953,12 @@ export default function ProductsPage() {
                           {product.isFeatured && (
                             <Badge className='bg-yellow-100 text-yellow-800'>
                               Featured
+                            </Badge>
+                          )}
+                          {product.id && autoPausedProductIds.has(product.id) && (
+                            <Badge className='bg-red-100 text-red-800'>
+                              <AlertTriangle className='mr-1 h-3 w-3' />
+                              Guardrail Paused
                             </Badge>
                           )}
                         </div>

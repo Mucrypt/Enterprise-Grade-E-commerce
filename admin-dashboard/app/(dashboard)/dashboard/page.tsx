@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { productService } from '@/services/product.service'
 import { categoryService } from '@/services/category.service'
+import supplierService from '@/services/supplier.service'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Package,
@@ -32,6 +33,14 @@ export default function DashboardPage() {
       return response?.data?.categories || []
     },
   })
+
+  const { data: autoPausedResponse, isLoading: autoPausedLoading } = useQuery({
+    queryKey: ['ops-auto-paused-products'],
+    queryFn: () => supplierService.getAutoPausedProducts(8),
+    staleTime: 30_000,
+  })
+
+  const autoPausedItems = autoPausedResponse?.data?.items || []
 
   const stats = [
     {
@@ -151,6 +160,44 @@ export default function DashboardPage() {
 
       {/* Recent Activity */}
       <div className='grid grid-cols-1 lg:grid-cols-2 gap-6'>
+        <Card>
+          <CardHeader>
+            <CardTitle>Ops Auto-Pause Guard</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {autoPausedLoading ? (
+              <div className='space-y-2'>
+                <Skeleton className='h-8 w-full' />
+                <Skeleton className='h-8 w-full' />
+              </div>
+            ) : autoPausedItems.length === 0 ? (
+              <p className='text-sm text-muted-foreground'>
+                No products are currently auto-paused.
+              </p>
+            ) : (
+              <div className='space-y-2'>
+                {autoPausedItems.map((item: any) => (
+                  <div
+                    key={item.product_id}
+                    className='rounded border p-2 text-sm'
+                  >
+                    <p className='font-medium'>{item.product_name}</p>
+                    <p className='text-xs text-muted-foreground'>
+                      SKU {item.sku} · Margin {Number(item.margin_percent || 0).toFixed(2)}% · Contribution ${' '}
+                      {Number(item.contribution_margin || 0).toFixed(2)}
+                    </p>
+                    {item.pause_reason && (
+                      <p className='mt-1 text-xs text-muted-foreground'>
+                        {item.pause_reason}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Recent Products</CardTitle>

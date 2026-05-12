@@ -8,6 +8,10 @@ import {
   startNewsletterQueueWorker,
   stopNewsletterQueueWorker,
 } from './services/newsletter.queue'
+import {
+  startSupplierGuardrailsWorker,
+  stopSupplierGuardrailsWorker,
+} from './services/supplier.guardrails'
 import logger from './utils/logger'
 
 const PORT = process.env.PORT || 9000
@@ -24,6 +28,7 @@ async function startServer() {
 
     // Start background newsletter queue worker
     startNewsletterQueueWorker()
+    startSupplierGuardrailsWorker()
 
     // Start server
     app.listen(PORT, () => {
@@ -43,11 +48,13 @@ startServer()
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received. Shutting down gracefully...')
   stopNewsletterQueueWorker()
+  stopSupplierGuardrailsWorker()
   process.exit(0)
 })
 
 process.on('SIGINT', () => {
   logger.info('SIGINT received. Shutting down gracefully...')
   stopNewsletterQueueWorker()
+  stopSupplierGuardrailsWorker()
   process.exit(0)
 })
