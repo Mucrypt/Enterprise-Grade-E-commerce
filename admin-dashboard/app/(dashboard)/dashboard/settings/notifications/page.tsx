@@ -25,17 +25,21 @@ export default function NotificationSettingsPage() {
   const { data: preferences, isLoading } = useQuery({
     queryKey: ['notification-preferences'],
     queryFn: async () => {
-      const response = await apiClient.get('/settings/notification-preferences')
-      setFormData(response.data)
-      return response.data as NotificationPreference
+      const data = await apiClient.get<NotificationPreference>(
+        '/settings/notification-preferences',
+      )
+      setFormData(data)
+      return data
     },
   })
 
   // Update preferences mutation
   const updateMutation = useMutation({
     mutationFn: async (data: Partial<NotificationPreference>) => {
-      const response = await apiClient.put('/settings/notification-preferences', data)
-      return response.data
+      return apiClient.put<NotificationPreference>(
+        '/settings/notification-preferences',
+        data,
+      )
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notification-preferences'] })
@@ -51,7 +55,9 @@ export default function NotificationSettingsPage() {
       <div className='flex items-center justify-center min-h-screen'>
         <div className='text-center'>
           <div className='animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4'></div>
-          <p className='text-muted-foreground'>Loading notification settings...</p>
+          <p className='text-muted-foreground'>
+            Loading notification settings...
+          </p>
         </div>
       </div>
     )
@@ -61,7 +67,9 @@ export default function NotificationSettingsPage() {
     <div className='space-y-6'>
       <div>
         <h1 className='text-3xl font-bold'>Notification Settings</h1>
-        <p className='text-muted-foreground'>Configure how you receive alert notifications</p>
+        <p className='text-muted-foreground'>
+          Configure how you receive alert notifications
+        </p>
       </div>
 
       {/* Severity Threshold */}
@@ -93,7 +101,8 @@ export default function NotificationSettingsPage() {
               <option value='low'>ℹ️ All Alerts</option>
             </select>
             <p className='text-xs text-muted-foreground mt-2'>
-              Higher thresholds reduce notification frequency but may miss important alerts.
+              Higher thresholds reduce notification frequency but may miss
+              important alerts.
             </p>
           </div>
         </CardContent>
@@ -120,12 +129,16 @@ export default function NotificationSettingsPage() {
               }
               className='rounded'
             />
-            <span className='text-sm font-medium'>Enable email notifications</span>
+            <span className='text-sm font-medium'>
+              Enable email notifications
+            </span>
           </label>
 
           {formData.emailEnabled && (
             <div>
-              <label className='text-sm font-medium text-gray-700'>Email Address</label>
+              <label className='text-sm font-medium text-gray-700'>
+                Email Address
+              </label>
               <input
                 type='email'
                 value={formData.emailAddress || ''}
@@ -142,7 +155,8 @@ export default function NotificationSettingsPage() {
           )}
 
           <p className='text-xs text-muted-foreground'>
-            📧 Receive detailed alert notifications with context and actionable links to the dashboard
+            📧 Receive detailed alert notifications with context and actionable
+            links to the dashboard
           </p>
         </CardContent>
       </Card>
@@ -168,12 +182,16 @@ export default function NotificationSettingsPage() {
               }
               className='rounded'
             />
-            <span className='text-sm font-medium'>Enable Slack notifications</span>
+            <span className='text-sm font-medium'>
+              Enable Slack notifications
+            </span>
           </label>
 
           {formData.slackEnabled && (
             <div>
-              <label className='text-sm font-medium text-gray-700'>Slack Channel</label>
+              <label className='text-sm font-medium text-gray-700'>
+                Slack Channel
+              </label>
               <input
                 type='text'
                 value={formData.slackChannel || ''}
@@ -193,7 +211,8 @@ export default function NotificationSettingsPage() {
           )}
 
           <p className='text-xs text-muted-foreground'>
-            💬 Get instant Slack messages with rich formatting and quick action buttons
+            💬 Get instant Slack messages with rich formatting and quick action
+            buttons
           </p>
         </CardContent>
       </Card>
@@ -219,12 +238,16 @@ export default function NotificationSettingsPage() {
               }
               className='rounded'
             />
-            <span className='text-sm font-medium'>Enable SMS notifications</span>
+            <span className='text-sm font-medium'>
+              Enable SMS notifications
+            </span>
           </label>
 
           {formData.smsEnabled && (
             <div>
-              <label className='text-sm font-medium text-gray-700'>Phone Number</label>
+              <label className='text-sm font-medium text-gray-700'>
+                Phone Number
+              </label>
               <input
                 type='tel'
                 value={formData.phoneNumber || ''}
@@ -238,13 +261,15 @@ export default function NotificationSettingsPage() {
                 className='w-full mt-1 px-3 py-2 border rounded-md'
               />
               <p className='text-xs text-muted-foreground mt-1'>
-                Include country code. SMS only sent for CRITICAL and HIGH severity alerts to minimize costs.
+                Include country code. SMS only sent for CRITICAL and HIGH
+                severity alerts to minimize costs.
               </p>
             </div>
           )}
 
           <p className='text-xs text-muted-foreground'>
-            📱 Receive text messages for the most critical alerts (requires Twilio integration)
+            📱 Receive text messages for the most critical alerts (requires
+            Twilio integration)
           </p>
         </CardContent>
       </Card>
@@ -264,7 +289,9 @@ export default function NotificationSettingsPage() {
       {updateMutation.isSuccess && (
         <div className='p-4 bg-green-50 border border-green-200 rounded-md flex items-center gap-3'>
           <div className='h-2 w-2 bg-green-600 rounded-full'></div>
-          <p className='text-sm text-green-700'>Notification settings updated successfully</p>
+          <p className='text-sm text-green-700'>
+            Notification settings updated successfully
+          </p>
         </div>
       )}
     </div>
