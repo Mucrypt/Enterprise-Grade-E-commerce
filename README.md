@@ -4,6 +4,7 @@ Enterprise-grade B2B/B2C e-commerce platform with API, admin dashboard, and cust
 
 ## 🏗️ Architecture
 
+- **Database**: PostgreSQL + Redis
 - **API**: Node.js + Express + TypeScript + PostgreSQL + Redis
 - **Admin Dashboard**: Next.js 16 + TypeScript + Tailwind + shadcn/ui
 - **Customer Marketplace**: React 19 + Vite + TypeScript
