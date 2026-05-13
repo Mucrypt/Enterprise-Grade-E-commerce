@@ -4,28 +4,47 @@
  * Emits events to the backend analytics API
  */
 
-import { AnyEvent, EventSource, EventContext } from '../types/events';
+type EventSource = 'web_store' | 'mobile_app' | 'admin_dashboard' | 'api'
+
+interface EventContext {
+  userAgent?: string
+  referrer?: string
+  source?: EventSource
+  [key: string]: unknown
+}
+
+interface AnyEvent {
+  eventType: string
+  source?: EventSource
+  timestamp?: Date
+  sessionId?: string
+  payload?: Record<string, unknown>
+  [key: string]: unknown
+}
 
 interface EventQueueItem {
-  event: AnyEvent;
-  context?: EventContext;
-  retries: number;
+  event: AnyEvent
+  context?: EventContext
+  retries: number
 }
 
 export class EventTrackingService {
-  private apiUrl: string;
-  private sessionId: string;
-  private userId: string | null = null;
-  private eventQueue: EventQueueItem[] = [];
-  private isOnline: boolean = navigator.onLine;
-  private batchSize: number = 10;
-  private batchTimeout: number = 5000; // 5 seconds
-  private batchTimer: NodeJS.Timeout | null = null;
+  private apiUrl: string
+  private sessionId: string
+  private userId: string | null = null
+  private eventQueue: EventQueueItem[] = []
+  private isOnline: boolean = navigator.onLine
+  private batchSize: number = 10
+  private batchTimeout: number = 5000 // 5 seconds
+  private batchTimer: ReturnType<typeof setTimeout> | null = null
 
-  constructor(apiUrl: string = process.env.REACT_APP_API_URL || 'http://localhost:3001') {
-    this.apiUrl = apiUrl;
-    this.sessionId = this.generateSessionId();
-    this.initializeOnlineListeners();
+  constructor(
+    apiUrl: string = (import.meta.env.VITE_API_URL as string | undefined) ||
+      'http://localhost:9000',
+  ) {
+    this.apiUrl = apiUrl
+    this.sessionId = this.generateSessionId()
+    this.initializeOnlineListeners()
   }
 
   /**
@@ -34,18 +53,18 @@ export class EventTrackingService {
   trackEvent(event: AnyEvent, context?: EventContext): void {
     // Add session info to event if not present
     if (!event.sessionId) {
-      event.sessionId = this.sessionId;
+      event.sessionId = this.sessionId
     }
     if (!event.source) {
-      event.source = 'web_store' as EventSource;
+      event.source = 'web_store' as EventSource
     }
     if (!event.timestamp) {
-      event.timestamp = new Date();
+      event.timestamp = new Date()
     }
 
     // Add context if not provided
     if (!context) {
-      context = this.getDefaultContext();
+      context = this.getDefaultContext()
     }
 
     // Queue the event
@@ -53,14 +72,14 @@ export class EventTrackingService {
       event,
       context,
       retries: 0,
-    });
+    })
 
     // Flush queue if batch size reached
     if (this.eventQueue.length >= this.batchSize) {
-      this.flushEvents();
+      this.flushEvents()
     } else {
       // Set timer to flush if no more events come in
-      this.setFlushTimer();
+      this.setFlushTimer()
     }
   }
 
@@ -68,14 +87,14 @@ export class EventTrackingService {
    * Set user ID for tracking logged-in users
    */
   setUserId(userId: string): void {
-    this.userId = userId;
+    this.userId = userId
   }
 
   /**
    * Clear user ID for logout
    */
   clearUserId(): void {
-    this.userId = null;
+    this.userId = null
   }
 
   /**
@@ -83,20 +102,22 @@ export class EventTrackingService {
    */
   async flushEvents(): Promise<void> {
     if (this.eventQueue.length === 0) {
-      return;
+      return
     }
 
     if (!this.isOnline) {
-      console.warn('Offline: Events will be sent when connection is restored');
-      return;
+      console.warn('Offline: Events will be sent when connection is restored')
+      return
     }
 
-    clearTimeout(this.batchTimer as NodeJS.Timeout);
-    this.batchTimer = null;
+    if (this.batchTimer) {
+      clearTimeout(this.batchTimer)
+      this.batchTimer = null
+    }
 
     // Take a copy of the queue
-    const eventsToSend = [...this.eventQueue];
-    this.eventQueue = [];
+    const eventsToSend = [...this.eventQueue]
+    this.eventQueue = []
 
     try {
       const response = await fetch(`${this.apiUrl}/api/v1/events/batch`, {
@@ -111,29 +132,34 @@ export class EventTrackingService {
             userId: this.userId,
           })),
         }),
-      });
+      })
 
       if (!response.ok) {
-        throw new Error(`Failed to send events: ${response.status}`);
+        throw new Error(`Failed to send events: ${response.status}`)
       }
 
-      console.debug(`Sent ${eventsToSend.length} events to analytics`);
+      console.debug(`Sent ${eventsToSend.length} events to analytics`)
     } catch (error) {
-      console.error('Error sending events:', error);
+      console.error('Error sending events:', error)
       // Re-queue events with retry logic
-      eventsToSend.forEach(item => {
+      eventsToSend.forEach((item) => {
         if (item.retries < 3) {
-          item.retries++;
-          this.eventQueue.push(item);
+          item.retries++
+          this.eventQueue.push(item)
         }
-      });
+      })
     }
   }
 
   /**
    * Track product view
    */
-  trackProductView(productId: string, productName: string, sku?: string, price?: number): void {
+  trackProductView(
+    productId: string,
+    productName: string,
+    sku?: string,
+    price?: number,
+  ): void {
     this.trackEvent({
       eventType: 'product_view',
       source: 'web_store',
@@ -144,13 +170,17 @@ export class EventTrackingService {
         sku,
         price,
       },
-    });
+    })
   }
 
   /**
    * Track search
    */
-  trackSearch(searchQuery: string, resultsCount: number, filters?: Record<string, any>): void {
+  trackSearch(
+    searchQuery: string,
+    resultsCount: number,
+    filters?: Record<string, any>,
+  ): void {
     this.trackEvent({
       eventType: 'search',
       source: 'web_store',
@@ -160,7 +190,7 @@ export class EventTrackingService {
         resultsCount,
         filters,
       },
-    });
+    })
   }
 
   /**
@@ -171,7 +201,7 @@ export class EventTrackingService {
     productName: string,
     price: number,
     quantity: number,
-    cartValue?: number
+    cartValue?: number,
   ): void {
     this.trackEvent({
       eventType: 'add_to_cart',
@@ -184,7 +214,7 @@ export class EventTrackingService {
         quantity,
         cartValue,
       },
-    });
+    })
   }
 
   /**
@@ -195,7 +225,7 @@ export class EventTrackingService {
     productName: string,
     price: number,
     quantity: number,
-    reason?: 'user_action' | 'expiry' | 'out_of_stock'
+    reason?: 'user_action' | 'expiry' | 'out_of_stock',
   ): void {
     this.trackEvent({
       eventType: 'remove_from_cart',
@@ -208,7 +238,7 @@ export class EventTrackingService {
         quantity,
         reason,
       },
-    });
+    })
   }
 
   /**
@@ -217,7 +247,7 @@ export class EventTrackingService {
   trackCheckoutStart(
     cartValue: number,
     itemCount: number,
-    items: Array<{ productId: string; quantity: number; price: number }>
+    items: Array<{ productId: string; quantity: number; price: number }>,
   ): void {
     this.trackEvent({
       eventType: 'checkout_start',
@@ -228,7 +258,7 @@ export class EventTrackingService {
         itemCount,
         items,
       },
-    });
+    })
   }
 
   /**
@@ -238,7 +268,7 @@ export class EventTrackingService {
     orderId: string,
     orderValue: number,
     itemCount: number,
-    paymentMethod: 'card' | 'wallet' | 'bank_transfer' | 'other'
+    paymentMethod: 'card' | 'wallet' | 'bank_transfer' | 'other',
   ): void {
     this.trackEvent({
       eventType: 'payment_success',
@@ -250,13 +280,17 @@ export class EventTrackingService {
         itemCount,
         paymentMethod,
       },
-    });
+    })
   }
 
   /**
    * Track category view
    */
-  trackCategoryView(categoryId: string, categoryName: string, parentCategoryId?: string): void {
+  trackCategoryView(
+    categoryId: string,
+    categoryName: string,
+    parentCategoryId?: string,
+  ): void {
     this.trackEvent({
       eventType: 'category_view',
       source: 'web_store',
@@ -266,13 +300,17 @@ export class EventTrackingService {
         categoryName,
         parentCategoryId,
       },
-    });
+    })
   }
 
   /**
    * Track promo code applied
    */
-  trackPromoCodeApplied(promoCode: string, discountAmount: number, cartValue: number): void {
+  trackPromoCodeApplied(
+    promoCode: string,
+    discountAmount: number,
+    cartValue: number,
+  ): void {
     this.trackEvent({
       eventType: 'promo_code_applied',
       source: 'web_store',
@@ -282,58 +320,58 @@ export class EventTrackingService {
         discountAmount,
         cartValue,
       },
-    });
+    })
   }
 
   // Private helpers
 
   private generateSessionId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
   }
 
   private getDefaultContext(): EventContext {
     return {
       userAgent: navigator.userAgent,
       referrer: document.referrer,
-    };
+    }
   }
 
   private setFlushTimer(): void {
-    if (this.batchTimer) return;
+    if (this.batchTimer) return
 
     this.batchTimer = setTimeout(() => {
-      this.flushEvents();
-    }, this.batchTimeout);
+      this.flushEvents()
+    }, this.batchTimeout)
   }
 
   private initializeOnlineListeners(): void {
     window.addEventListener('online', () => {
-      this.isOnline = true;
+      this.isOnline = true
       // Flush any queued events when coming back online
       if (this.eventQueue.length > 0) {
-        this.flushEvents();
+        this.flushEvents()
       }
-    });
+    })
 
     window.addEventListener('offline', () => {
-      this.isOnline = false;
-    });
+      this.isOnline = false
+    })
   }
 }
 
 // Export singleton instance
-let instance: EventTrackingService | null = null;
+let instance: EventTrackingService | null = null
 
 export function initializeEventTracking(apiUrl?: string): EventTrackingService {
   if (!instance) {
-    instance = new EventTrackingService(apiUrl);
+    instance = new EventTrackingService(apiUrl)
   }
-  return instance;
+  return instance
 }
 
 export function getEventTracker(): EventTrackingService {
   if (!instance) {
-    instance = new EventTrackingService();
+    instance = new EventTrackingService()
   }
-  return instance;
+  return instance
 }

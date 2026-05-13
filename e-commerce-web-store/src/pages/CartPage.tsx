@@ -3,7 +3,6 @@
 // ============================================
 
 import { Link, useNavigate } from 'react-router-dom'
-import { useCallback } from 'react'
 import {
   ShoppingBag,
   Trash2,

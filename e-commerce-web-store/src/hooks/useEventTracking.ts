@@ -5,7 +5,6 @@
 
 import { useEffect, useCallback } from 'react'
 import { getEventTracker } from '../services/event-tracking'
-import type { EventPayload, EventSource } from '../services/event-tracking'
 
 export function useEventTracking() {
   const tracker = getEventTracker()
@@ -32,8 +31,11 @@ export function useEventTracking() {
       price: number,
       discount?: number,
     ) => {
-      tracker.trackProductView(
-        { productId, productName, sku, categoryId, price, discount },
+      tracker.trackEvent(
+        {
+          eventType: 'product_view',
+          payload: { productId, productName, sku, categoryId, price, discount },
+        },
         { source: 'web_store' },
       )
     },
@@ -43,8 +45,9 @@ export function useEventTracking() {
   const trackSearch = useCallback(
     (query: string, resultsCount: number, category?: string) => {
       tracker.trackSearch(
-        { query, resultsCount, category },
-        { source: 'web_store' },
+        query,
+        resultsCount,
+        category ? { category } : undefined,
       )
     },
     [tracker],
@@ -52,8 +55,11 @@ export function useEventTracking() {
 
   const trackFilterApplied = useCallback(
     (filterType: string, filterValue: string, resultsCount: number) => {
-      tracker.trackFilterApplied(
-        { filterType, filterValue, resultsCount },
+      tracker.trackEvent(
+        {
+          eventType: 'filter_applied',
+          payload: { filterType, filterValue, resultsCount },
+        },
         { source: 'web_store' },
       )
     },
@@ -68,8 +74,11 @@ export function useEventTracking() {
       price: number,
       quantity: number,
     ) => {
-      tracker.trackAddToCart(
-        { productId, productName, sku, price, quantity },
+      tracker.trackEvent(
+        {
+          eventType: 'add_to_cart',
+          payload: { productId, productName, sku, price, quantity },
+        },
         { source: 'web_store' },
       )
     },
@@ -84,8 +93,11 @@ export function useEventTracking() {
       price: number,
       quantity: number,
     ) => {
-      tracker.trackRemoveFromCart(
-        { productId, productName, sku, price, quantity },
+      tracker.trackEvent(
+        {
+          eventType: 'remove_from_cart',
+          payload: { productId, productName, sku, price, quantity },
+        },
         { source: 'web_store' },
       )
     },
@@ -94,8 +106,11 @@ export function useEventTracking() {
 
   const trackCheckoutStart = useCallback(
     (cartTotal: number, itemCount: number, currency: string = 'EUR') => {
-      tracker.trackCheckoutStart(
-        { cartTotal, itemCount, currency },
+      tracker.trackEvent(
+        {
+          eventType: 'checkout_start',
+          payload: { cartTotal, itemCount, currency },
+        },
         { source: 'web_store' },
       )
     },
@@ -109,8 +124,11 @@ export function useEventTracking() {
       itemCount: number,
       currency: string = 'EUR',
     ) => {
-      tracker.trackPaymentSuccess(
-        { orderId, cartTotal, itemCount, currency },
+      tracker.trackEvent(
+        {
+          eventType: 'payment_success',
+          payload: { orderId, cartTotal, itemCount, currency },
+        },
         { source: 'web_store' },
       )
     },
@@ -119,8 +137,11 @@ export function useEventTracking() {
 
   const trackCategoryView = useCallback(
     (categoryId: string, categoryName: string, productsCount: number) => {
-      tracker.trackCategoryView(
-        { categoryId, categoryName, productsCount },
+      tracker.trackEvent(
+        {
+          eventType: 'category_view',
+          payload: { categoryId, categoryName, productsCount },
+        },
         { source: 'web_store' },
       )
     },
@@ -133,8 +154,11 @@ export function useEventTracking() {
       discountAmount: number,
       discountPercentage?: number,
     ) => {
-      tracker.trackPromoCodeApplied(
-        { promoCode, discountAmount, discountPercentage },
+      tracker.trackEvent(
+        {
+          eventType: 'promo_code_applied',
+          payload: { promoCode, discountAmount, discountPercentage },
+        },
         { source: 'web_store' },
       )
     },
