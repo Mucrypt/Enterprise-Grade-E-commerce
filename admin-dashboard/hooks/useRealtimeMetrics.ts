@@ -5,7 +5,20 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { io, Socket } from 'socket.io-client'
-import type { DashboardMetrics } from '@/services/websocket.service'
+
+interface DashboardMetrics {
+  activeUsers: number
+  eventsPerSecond: number
+  lastHourRevenue: number
+  lastHourOrders: number
+  conversionRate: number
+  activeAlerts: {
+    critical: number
+    high: number
+    medium: number
+    low: number
+  }
+}
 
 interface UseRealtimeMetricsReturn {
   metrics: DashboardMetrics | null
