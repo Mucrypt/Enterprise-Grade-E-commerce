@@ -29,6 +29,7 @@ import { productsApi } from '../api'
 import { useCartStore, useWishlistStore } from '../stores'
 import { cn, formatPrice, calculateDiscount, getProductImage } from '../utils'
 import ProductCard from '../components/common/ProductCard'
+import { useEventTracking } from '../hooks/useEventTracking'
 
 export default function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>()
@@ -43,6 +44,8 @@ export default function ProductDetailPage() {
 
   const { addItem } = useCartStore()
   const { toggleItem, isInWishlist } = useWishlistStore()
+  const { trackProductView, trackAddToCart, trackProductFavorite } =
+    useEventTracking()
 
   useEffect(() => {
     if (slug) {
@@ -55,6 +58,16 @@ export default function ProductDetailPage() {
     try {
       const data = await productsApi.getBySlug(productSlug)
       setProduct(data)
+
+      // Track product view event
+      trackProductView(
+        data.id,
+        data.name,
+        data.sku || '',
+        data.category_id || '',
+        Number(data.base_price),
+        calculateDiscount(data.base_price, data.sale_price || 0),
+      )
 
       // Load related products
       try {
@@ -75,6 +88,13 @@ export default function ProductDetailPage() {
   const handleAddToCart = () => {
     if (product) {
       addItem(product, quantity)
+      trackAddToCart(
+        product.id,
+        product.name,
+        product.sku || '',
+        Number(product.sale_price || product.base_price),
+        quantity,
+      )
     }
   }
 
@@ -126,7 +146,7 @@ export default function ProductDetailPage() {
     product.sale_price || 0,
   )
   const inWishlist = isInWishlist(product.id)
-  
+
   // Build gallery items from media (includes both images and videos)
   const galleryItems: ProductMedia[] = product.media?.length
     ? product.media.sort((a, b) => {
@@ -136,18 +156,22 @@ export default function ProductDetailPage() {
         return (a.position || 0) - (b.position || 0)
       })
     : product.images?.length
-      ? product.images.map(img => ({ ...img, type: 'image' as const, position: img.display_order || 0 }))
-      : [
-          {
-            url: getProductImage(product),
-            is_primary: true,
-            id: '1',
-            alt_text: product.name,
-            position: 0,
-            type: 'image' as const,
-          },
-        ]
-  
+    ? product.images.map((img) => ({
+        ...img,
+        type: 'image' as const,
+        position: img.display_order || 0,
+      }))
+    : [
+        {
+          url: getProductImage(product),
+          is_primary: true,
+          id: '1',
+          alt_text: product.name,
+          position: 0,
+          type: 'image' as const,
+        },
+      ]
+
   // For backwards compatibility
   const images = galleryItems
 
@@ -201,7 +225,9 @@ export default function ProductDetailPage() {
                 </video>
               ) : (
                 <img
-                  src={galleryItems[selectedImage]?.url || getProductImage(product)}
+                  src={
+                    galleryItems[selectedImage]?.url || getProductImage(product)
+                  }
                   alt={product.name}
                   className='w-full h-full object-contain p-6'
                 />
@@ -248,7 +274,10 @@ export default function ProductDetailPage() {
               {/* Wishlist & Share */}
               <div className='absolute top-4 right-4 flex flex-col gap-2'>
                 <button
-                  onClick={() => toggleItem(product)}
+                  onClick={() => {
+                    toggleItem(product)
+                    trackProductFavorite(product.id, product.name, !inWishlist)
+                  }}
                   className={cn(
                     'w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-colors',
                     inWishlist

@@ -17,6 +17,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { AnimatedSplashOverlay } from '@/components/animated-icon'
 import MobileNotificationService from '@/services/notification.service'
 import { useAuthStore } from '@/stores'
+import { initializeEventTracking } from '@/services/event-tracking'
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync()
@@ -30,6 +31,9 @@ export default function RootLayout() {
     let cleanupNotifications: (() => void) | undefined
 
     const init = async () => {
+      // Initialize event tracking on app launch
+      initializeEventTracking()
+
       await initialize()
       cleanupNotifications = await MobileNotificationService.init((path) => {
         router.push(path as never)

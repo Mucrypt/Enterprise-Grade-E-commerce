@@ -23,6 +23,7 @@ import { paymentsApi, ordersApiNew } from '../api'
 import { StripeElementsWrapper } from '../contexts/StripeContext'
 import StripePaymentForm from '../components/checkout/StripePaymentForm'
 import { countriesSortedByName } from '../data/countries'
+import { useEventTracking } from '../hooks/useEventTracking'
 
 // Step types
 type CheckoutStep = 'shipping' | 'payment' | 'review'
@@ -67,6 +68,7 @@ export default function CheckoutPage() {
   const navigate = useNavigate()
   const { items, getSubtotal, clearCart } = useCartStore()
   const { isAuthenticated, user } = useAuthStore()
+  const { trackPaymentSuccess } = useEventTracking()
 
   const [currentStep, setCurrentStep] = useState<CheckoutStep>('shipping')
   const [shipping, setShipping] = useState<ShippingAddress>(initialShipping)
@@ -244,6 +246,14 @@ export default function CheckoutPage() {
           paymentMethod: 'card',
         })
       }
+
+      // Track payment success event
+      trackPaymentSuccess(
+        order.id,
+        Number(order.grand_total),
+        items.length,
+        'EUR',
+      )
 
       setPaymentComplete(true)
 

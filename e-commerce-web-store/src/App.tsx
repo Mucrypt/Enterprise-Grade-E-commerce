@@ -2,11 +2,13 @@
 // TechTools E-Commerce Store - Main App
 // ============================================
 
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { StripeProvider } from './contexts/StripeContext'
 import Layout from './components/layout/Layout'
 import ScrollToTop from './components/common/ScrollToTop'
+import { initializeEventTracking } from './services/event-tracking'
 import HomePage from './pages/HomePage'
 import ProductsPage from './pages/ProductsPage'
 import ProductDetailPage from './pages/ProductDetailPage'
@@ -49,6 +51,11 @@ const queryClient = new QueryClient({
 })
 
 function App() {
+  useEffect(() => {
+    // Initialize event tracking on app load
+    initializeEventTracking()
+  }, [])
+
   return (
     <QueryClientProvider client={queryClient}>
       <StripeProvider>

@@ -1,6 +1,7 @@
 import { apiClient } from '@/lib/api-client'
 import type { ProductCollection } from './collection.service'
 import type { Brand } from './brand.service'
+import type { RevenueTrendPoint, ConversionFunnelStep, TopProductMetric, CheckoutMetrics } from '@/types/events'
 
 // ============================================
 // Trending Service Types
@@ -41,22 +42,233 @@ export interface UpdateTrendingSettingsDTO {
   displayPriority?: number
 }
 
+export interface AnalyticsData {
+  period: string
+  data: RevenueTrendPoint[]
+  summary: {
+    totalViews: number
+    totalClicks: number
+    totalSales: number
+    totalRevenue: number
+    avgConversionRate: number
+  }
+}
+
 // ============================================
-// Trending Service
+// Trending Service - REAL ANALYTICS
 // ============================================
 
 export const trendingService = {
   /**
-   * Get trending stats for dashboard
+   * Get revenue trend (replaces mock data with real API)
+   */
+  async getRevenueTrend(days: number = 7) {
+    try {
+      const response = await apiClient.get('/analytics/revenue-trend', {
+        params: { days },
+      }) as any
+
+      return {
+        period: response?.period || `${days}_days`,
+        data: response?.data || [],
+        summary: response?.summary || { totalRevenue: 0, totalOrders: 0, averageRevenue: 0 },
+      }
+    } catch (error) {
+      console.error('Error fetching revenue trend:', error)
+      return {
+        period: `${days}_days`,
+        data: [],
+        summary: { totalRevenue: 0, totalOrders: 0, averageRevenue: 0 },
+      }
+    }
+  },
+
+  /**
+   * Get conversion funnel (replaces mock data with real API)
+   */
+  async getConversionFunnel(days: number = 7) {
+    try {
+      const response = await apiClient.get('/analytics/conversion-funnel', {
+        params: { days },
+      }) as any
+
+      return {
+        period: response?.period || `${days}_days`,
+        funnel: response?.funnel || [],
+        summary: response?.summary || {
+          topOfFunnelUsers: 0,
+          paymentSuccessUsers: 0,
+          overallConversionRate: 0,
+        },
+      }
+    } catch (error) {
+      console.error('Error fetching conversion funnel:', error)
+      return {
+        period: `${days}_days`,
+        funnel: [],
+        summary: {
+          topOfFunnelUsers: 0,
+          paymentSuccessUsers: 0,
+          overallConversionRate: 0,
+        },
+      }
+    }
+  },
+
+  /**
+   * Get top products (replaces mock data with real API)
+   */
+  async getTopProducts(days: number = 7, limit: number = 10) {
+    try {
+      const response = await apiClient.get('/analytics/top-products', {
+        params: { days, limit },
+      }) as any
+
+      return {
+        period: response?.period || `${days}_days`,
+        topProducts: response?.topProducts || [],
+        summary: response?.summary || {
+          totalViews: 0,
+          totalPurchases: 0,
+          totalRevenue: 0,
+        },
+      }
+    } catch (error) {
+      console.error('Error fetching top products:', error)
+      return {
+        period: `${days}_days`,
+        topProducts: [],
+        summary: { totalViews: 0, totalPurchases: 0, totalRevenue: 0 },
+      }
+    }
+  },
+
+  /**
+   * Get search metrics (zero-result searches)
+   */
+  async getSearchMetrics(days: number = 7) {
+    try {
+      const response = await apiClient.get('/analytics/search-metrics', {
+        params: { days },
+      }) as any
+
+      return {
+        period: response?.period || `${days}_days`,
+        totalSearches: response?.totalSearches || 0,
+        zeroResultSearches: response?.zeroResultSearches || 0,
+        zeroResultRate: response?.zeroResultRate || 0,
+        uniqueSearchUsers: response?.uniqueSearchUsers || 0,
+      }
+    } catch (error) {
+      console.error('Error fetching search metrics:', error)
+      return {
+        period: `${days}_days`,
+        totalSearches: 0,
+        zeroResultSearches: 0,
+        zeroResultRate: 0,
+        uniqueSearchUsers: 0,
+      }
+    }
+  },
+
+  /**
+   * Get refund rate metrics
+   */
+  async getRefundRate(days: number = 30) {
+    try {
+      const response = await apiClient.get('/analytics/refund-rate', {
+        params: { days },
+      }) as any
+
+      return {
+        period: response?.period || `${days}_days`,
+        totalOrders: response?.totalOrders || 0,
+        totalRefunds: response?.totalRefunds || 0,
+        refundRate: response?.refundRate || 0,
+        totalRefundAmount: response?.totalRefundAmount || 0,
+        avgRefundAmount: response?.avgRefundAmount || 0,
+      }
+    } catch (error) {
+      console.error('Error fetching refund rate:', error)
+      return {
+        period: `${days}_days`,
+        totalOrders: 0,
+        totalRefunds: 0,
+        refundRate: 0,
+        totalRefundAmount: 0,
+        avgRefundAmount: 0,
+      }
+    }
+  },
+
+  /**
+   * Get return rate metrics
+   */
+  async getReturnRate(days: number = 30) {
+    try {
+      const response = await apiClient.get('/analytics/return-rate', {
+        params: { days },
+      }) as any
+
+      return {
+        period: response?.period || `${days}_days`,
+        totalShipped: response?.totalShipped || 0,
+        totalReturns: response?.totalReturns || 0,
+        returnRate: response?.returnRate || 0,
+      }
+    } catch (error) {
+      console.error('Error fetching return rate:', error)
+      return {
+        period: `${days}_days`,
+        totalShipped: 0,
+        totalReturns: 0,
+        returnRate: 0,
+      }
+    }
+  },
+
+  /**
+   * Get checkout abandonment metrics
+   */
+  async getCheckoutAbandonment(days: number = 7) {
+    try {
+      const response = await apiClient.get('/analytics/checkout-abandonment', {
+        params: { days },
+      }) as any
+
+      return {
+        period: response?.period || `${days}_days`,
+        checkoutStartCount: response?.checkoutStartCount || 0,
+        paymentSuccessCount: response?.paymentSuccessCount || 0,
+        abandonmentCount: response?.abandonmentCount || 0,
+        abandonmentRate: response?.abandonmentRate || 0,
+        estimatedAbandonedValue: response?.estimatedAbandonedValue || 0,
+      }
+    } catch (error) {
+      console.error('Error fetching checkout abandonment:', error)
+      return {
+        period: `${days}_days`,
+        checkoutStartCount: 0,
+        paymentSuccessCount: 0,
+        abandonmentCount: 0,
+        abandonmentRate: 0,
+        estimatedAbandonedValue: 0,
+      }
+    }
+  },
+
+  /**
+   * Get trending stats for dashboard (now using real API data)
    */
   async getStats(): Promise<TrendingStats> {
     try {
-      // For now, aggregate stats from collections and brands
-      const [collectionsRes, brandsRes] = await Promise.all([
+      const [collectionsRes, brandsRes, revenueTrendRes, funnelRes] = await Promise.all([
         apiClient.get('/collections/products', {
           params: { limit: 100 },
         }) as Promise<any>,
         apiClient.get('/brands', { params: { limit: 100 } }) as Promise<any>,
+        this.getRevenueTrend(7),
+        this.getConversionFunnel(7),
       ])
 
       const collections =
@@ -70,9 +282,9 @@ export const trendingService = {
           .length,
         totalBrands: brands.length,
         featuredBrands: brands.filter((b: any) => b.is_featured).length,
-        totalViews: Math.floor(Math.random() * 50000) + 10000,
-        totalSales: Math.floor(Math.random() * 5000) + 1000,
-        conversionRate: Math.random() * 5 + 2,
+        totalViews: revenueTrendRes?.summary?.totalOrders || 0,
+        totalSales: revenueTrendRes?.summary?.totalRevenue || 0,
+        conversionRate: funnelRes?.summary?.overallConversionRate || 0,
       }
     } catch (error) {
       console.error('Error fetching trending stats:', error)
@@ -187,35 +399,46 @@ export const trendingService = {
   },
 
   /**
-   * Get trending analytics
+   * Get comprehensive trending analytics (now using real data from API)
    */
-  async getAnalytics(period: 'day' | 'week' | 'month' = 'week') {
-    // Mock analytics data - in production, this would come from analytics service
-    const days = period === 'day' ? 1 : period === 'week' ? 7 : 30
-    const data = []
+  async getAnalytics(period: 'day' | 'week' | 'month' = 'week'): Promise<AnalyticsData> {
+    try {
+      const days = period === 'day' ? 1 : period === 'week' ? 7 : 30
+      const revenueTrend = await this.getRevenueTrend(days)
 
-    for (let i = days; i >= 0; i--) {
-      const date = new Date()
-      date.setDate(date.getDate() - i)
-      data.push({
-        date: date.toISOString().split('T')[0],
-        views: Math.floor(Math.random() * 5000) + 1000,
-        clicks: Math.floor(Math.random() * 2500) + 500,
-        sales: Math.floor(Math.random() * 500) + 50,
-        revenue: Math.floor(Math.random() * 50000) + 5000,
-      })
-    }
+      // Transform revenue trend data to match old format
+      const data = revenueTrend.data.map((point: RevenueTrendPoint) => ({
+        date: point.date,
+        views: 0, // Not tracked in revenue endpoint
+        clicks: point.orderCount,
+        sales: point.orderCount,
+        revenue: point.revenue,
+      }))
 
-    return {
-      period,
-      data,
-      summary: {
-        totalViews: data.reduce((acc, d) => acc + d.views, 0),
-        totalClicks: data.reduce((acc, d) => acc + d.clicks, 0),
-        totalSales: data.reduce((acc, d) => acc + d.sales, 0),
-        totalRevenue: data.reduce((acc, d) => acc + d.revenue, 0),
-        avgConversionRate: 3.5,
-      },
+      return {
+        period,
+        data,
+        summary: {
+          totalViews: data.reduce((acc: number, d: any) => acc + d.views, 0),
+          totalClicks: data.reduce((acc: number, d: any) => acc + d.clicks, 0),
+          totalSales: data.reduce((acc: number, d: any) => acc + d.sales, 0),
+          totalRevenue: data.reduce((acc: number, d: any) => acc + d.revenue, 0),
+          avgConversionRate: (revenueTrend.summary as any).averageRevenue || 0,
+        },
+      }
+    } catch (error) {
+      console.error('Error fetching trending analytics:', error)
+      return {
+        period,
+        data: [],
+        summary: {
+          totalViews: 0,
+          totalClicks: 0,
+          totalSales: 0,
+          totalRevenue: 0,
+          avgConversionRate: 0,
+        },
+      }
     }
   },
 }

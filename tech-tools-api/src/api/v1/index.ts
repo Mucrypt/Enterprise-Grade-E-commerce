@@ -21,6 +21,8 @@ import whatsappRoutes from './whatsapp/whatsapp.routes'
 import emailRoutes from './emails/email.routes'
 import contactRoutes from './contact/contact.routes'
 import newsletterRoutes from './newsletter/newsletter.routes'
+import analyticsRoutes from './analytics/analytics.routes'
+import alertsRoutes from './alerts/alerts.routes'
 import { blogRoutes } from './blog'
 import aiRoutes from './ai/ai.routes'
 
@@ -59,6 +61,8 @@ router.use('/whatsapp', whatsappRoutes)
 router.use('/emails', emailRoutes)
 router.use('/contact', contactRoutes)
 router.use('/newsletter', newsletterRoutes)
+router.use('/analytics', analyticsRoutes)
+router.use('/alerts', alertsRoutes)
 router.use('/blog', blogRoutes)
 router.use('/ai', aiRoutes)
 

@@ -18,6 +18,7 @@ import type { Product, Category, Brand, ProductFilters } from '../types'
 import { productsApi, categoriesApi, brandsApi } from '../api'
 import ProductCard from '../components/common/ProductCard'
 import { cn, formatPrice } from '../utils'
+import { useEventTracking } from '../hooks/useEventTracking'
 
 type SortByValue = ProductFilters['sortBy']
 
@@ -49,6 +50,9 @@ export default function ProductsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [showFilters, setShowFilters] = useState(false)
   const [gridView, setGridView] = useState<'grid' | 'large'>('grid')
+
+  const { trackSearch, trackFilterApplied, trackCategoryView } =
+    useEventTracking()
 
   // Determine if we're on a category or brand route
   const isCategoryRoute = location.pathname.startsWith('/category/')
@@ -109,6 +113,38 @@ export default function ProductsPage() {
       })
       setProducts(result.products)
       setTotalProducts(result.pagination?.total || result.products.length)
+
+      // Track search event if there's a search query
+      if (filters.search) {
+        trackSearch(
+          filters.search,
+          result.products.length,
+          filters.category || 'all',
+        )
+      }
+
+      // Track category view if browsing a specific category
+      if (filters.category && isCategoryRoute) {
+        const category = categories.find((c) => c.slug === filters.category)
+        if (category) {
+          trackCategoryView(category.id, category.name, result.products.length)
+        }
+      }
+
+      // Track filter applied events
+      if (filters.minPrice || filters.maxPrice) {
+        trackFilterApplied(
+          'price',
+          `${filters.minPrice || 0}-${filters.maxPrice || 'any'}`,
+          result.products.length,
+        )
+      }
+      if (filters.sortBy && filters.sortBy !== 'newest') {
+        trackFilterApplied('sort', filters.sortBy, result.products.length)
+      }
+      if (filters.inStock) {
+        trackFilterApplied('stock', 'in-stock', result.products.length)
+      }
     } catch (error) {
       console.error('Failed to load products:', error)
     } finally {

@@ -34,6 +34,7 @@ import {
 } from '@/utils'
 import { useCartStore, useWishlistStore } from '@/stores'
 import { ProductCard } from '@/components'
+import { useEventTracking } from '@/hooks/useEventTracking'
 
 const { width } = Dimensions.get('window')
 
@@ -48,12 +49,27 @@ export default function ProductDetailScreen() {
 
   const addToCart = useCartStore((state) => state.addItem)
   const { isInWishlist, toggleItem } = useWishlistStore()
+  const { trackProductView, trackProductFavorite, trackAddToCart } =
+    useEventTracking()
 
   useEffect(() => {
     const fetchProduct = async () => {
       try {
         const productData = await productsApi.getBySlug(slug as string)
         setProduct(productData)
+
+        // Track product view event
+        trackProductView(
+          productData.id,
+          productData.name,
+          productData.sku || '',
+          productData.category_id || '',
+          Number(productData.base_price),
+          calculateDiscount(
+            productData.base_price,
+            productData.sale_price || 0,
+          ),
+        )
 
         // Fetch related products
         const related = await productsApi.getRelated(productData.id, 6)
@@ -135,11 +151,25 @@ export default function ProductDetailScreen() {
 
   const handleAddToCart = () => {
     addToCart(product, quantity)
+    trackAddToCart(
+      product.id,
+      product.name,
+      product.sku || '',
+      Number(product.sale_price || product.base_price),
+      quantity,
+    )
     // Show toast or feedback
   }
 
   const handleBuyNow = () => {
     addToCart(product, quantity)
+    trackAddToCart(
+      product.id,
+      product.name,
+      product.sku || '',
+      Number(product.sale_price || product.base_price),
+      quantity,
+    )
     router.push('/cart')
   }
 
@@ -157,7 +187,14 @@ export default function ProductDetailScreen() {
           <View style={styles.headerActions}>
             <TouchableOpacity
               style={styles.headerButton}
-              onPress={() => toggleItem(product)}
+              onPress={() => {
+                toggleItem(product)
+                trackProductFavorite(
+                  product.id,
+                  product.name,
+                  !isInWishlist(product.id),
+                )
+              }}
             >
               <Ionicons
                 name={inWishlist ? 'heart' : 'heart-outline'}

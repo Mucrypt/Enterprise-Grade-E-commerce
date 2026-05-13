@@ -3,6 +3,7 @@
 // ============================================
 
 import { Link, useNavigate } from 'react-router-dom'
+import { useCallback } from 'react'
 import {
   ShoppingBag,
   Trash2,
@@ -17,11 +18,14 @@ import {
 } from 'lucide-react'
 import { useCartStore } from '../stores'
 import { formatPrice, getProductImage, cn } from '../utils'
+import { useEventTracking } from '../hooks/useEventTracking'
 
 export default function CartPage() {
   const navigate = useNavigate()
   const { items, updateQuantity, removeItem, getSubtotal, clearCart } =
     useCartStore()
+  const { trackAddToCart, trackRemoveFromCart, trackCheckoutStart } =
+    useEventTracking()
 
   const subtotal = getSubtotal()
   const shipping = subtotal >= 50 ? 0 : 5.99
@@ -143,9 +147,22 @@ export default function CartPage() {
                     <div className='flex items-center justify-between mt-4'>
                       <div className='flex items-center gap-2'>
                         <button
-                          onClick={() =>
-                            updateQuantity(item.id, item.quantity - 1)
-                          }
+                          onClick={() => {
+                            if (item.quantity > 1) {
+                              updateQuantity(item.id, item.quantity - 1)
+                              const price = Number(
+                                item.product.sale_price ||
+                                  item.product.base_price,
+                              )
+                              trackRemoveFromCart(
+                                item.product.id,
+                                item.product.name,
+                                item.product.sku || '',
+                                price,
+                                1,
+                              )
+                            }
+                          }}
                           className='w-8 h-8 flex items-center justify-center border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors'
                         >
                           <Minus className='w-4 h-4' />
@@ -154,16 +171,39 @@ export default function CartPage() {
                           {item.quantity}
                         </span>
                         <button
-                          onClick={() =>
+                          onClick={() => {
                             updateQuantity(item.id, item.quantity + 1)
-                          }
+                            const price = Number(
+                              item.product.sale_price ||
+                                item.product.base_price,
+                            )
+                            trackAddToCart(
+                              item.product.id,
+                              item.product.name,
+                              item.product.sku || '',
+                              price,
+                              1,
+                            )
+                          }}
                           className='w-8 h-8 flex items-center justify-center border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors'
                         >
                           <Plus className='w-4 h-4' />
                         </button>
                       </div>
                       <button
-                        onClick={() => removeItem(item.id)}
+                        onClick={() => {
+                          removeItem(item.id)
+                          const price = Number(
+                            item.product.sale_price || item.product.base_price,
+                          )
+                          trackRemoveFromCart(
+                            item.product.id,
+                            item.product.name,
+                            item.product.sku || '',
+                            price,
+                            item.quantity,
+                          )
+                        }}
                         className='flex items-center gap-1 text-red-500 hover:text-red-600 text-sm font-medium transition-colors'
                       >
                         <Trash2 className='w-4 h-4' />
@@ -263,13 +303,16 @@ export default function CartPage() {
               )}
 
               {/* Checkout Button */}
-              <Link
-                to='/checkout'
+              <button
+                onClick={() => {
+                  trackCheckoutStart(subtotal, items.length, 'EUR')
+                  navigate('/checkout')
+                }}
                 className='mt-6 w-full flex items-center justify-center gap-2 py-4 bg-orange-500 text-white font-bold rounded-xl hover:bg-orange-600 transition-colors'
               >
                 Proceed to Checkout
                 <ChevronRight className='w-5 h-5' />
-              </Link>
+              </button>
 
               {/* Trust Badges */}
               <div className='mt-6 grid grid-cols-3 gap-2 text-center'>
