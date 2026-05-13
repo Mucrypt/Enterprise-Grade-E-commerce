@@ -223,7 +223,7 @@ export default function AnalyticsPage() {
                   </div>
                   <div className='w-full bg-muted rounded-full h-3 overflow-hidden'>
                     <div
-                      className='bg-gradient-to-r from-blue-500 to-blue-600 h-full'
+                      className='bg-linear-to-r from-blue-500 to-blue-600 h-full'
                       style={{
                         width: `${Math.min((step.eventCount / (conversionFunnel.funnel[0]?.eventCount || 1)) * 100, 100)}%`,
                       }}
@@ -339,7 +339,7 @@ export default function AnalyticsPage() {
                   </div>
                   <div className='w-full bg-muted rounded-full h-2 overflow-hidden'>
                     <div
-                      className='bg-gradient-to-r from-emerald-500 to-emerald-600 h-full'
+                      className='bg-linear-to-r from-emerald-500 to-emerald-600 h-full'
                       style={{
                         width: `${Math.min((product.conversionRate / 100) * 100, 100)}%`,
                       }}

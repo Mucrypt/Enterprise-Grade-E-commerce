@@ -25,6 +25,15 @@ interface AlertThreshold {
   description: string
 }
 
+interface AlertThresholdsResponse {
+  thresholds: AlertThreshold[]
+}
+
+interface AlertThresholdMutationResponse {
+  threshold?: AlertThreshold
+  message?: string
+}
+
 const severityConfig = {
   critical: { bg: 'bg-red-50', text: 'text-red-600', border: 'border-red-200', icon: AlertOctagon },
   high: { bg: 'bg-orange-50', text: 'text-orange-600', border: 'border-orange-200', icon: AlertTriangle },
@@ -41,16 +50,15 @@ export default function AlertThresholdsPage() {
   const { data: thresholdsData, isLoading, error } = useQuery({
     queryKey: ['alert-thresholds'],
     queryFn: async () => {
-      const response = await apiClient.get('/settings/alert-thresholds')
-      return response.data.thresholds as AlertThreshold[]
+      const response = await apiClient.get<AlertThresholdsResponse>('/settings/alert-thresholds')
+      return response.thresholds
     },
   })
 
   // Update threshold mutation
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<AlertThreshold> }) => {
-      const response = await apiClient.put(`/settings/alert-thresholds/${id}`, data)
-      return response.data
+      return apiClient.put<AlertThresholdMutationResponse>(`/settings/alert-thresholds/${id}`, data)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['alert-thresholds'] })
@@ -62,8 +70,7 @@ export default function AlertThresholdsPage() {
   // Reset threshold mutation
   const resetMutation = useMutation({
     mutationFn: async (id: string) => {
-      const response = await apiClient.post(`/settings/alert-thresholds/${id}/reset`)
-      return response.data
+      return apiClient.post<AlertThresholdMutationResponse>(`/settings/alert-thresholds/${id}/reset`)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['alert-thresholds'] })
@@ -132,7 +139,7 @@ export default function AlertThresholdsPage() {
       <Card className='bg-blue-50 border-blue-200'>
         <CardContent className='pt-6'>
           <div className='flex gap-3'>
-            <Info className='h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5' />
+            <Info className='h-5 w-5 text-blue-600 shrink-0 mt-0.5' />
             <div>
               <p className='font-semibold text-blue-900'>How thresholds work</p>
               <p className='text-sm text-blue-700 mt-1'>
