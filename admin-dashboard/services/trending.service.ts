@@ -1,7 +1,12 @@
 import { apiClient } from '@/lib/api-client'
 import type { ProductCollection } from './collection.service'
 import type { Brand } from './brand.service'
-import type { RevenueTrendPoint, ConversionFunnelStep, TopProductMetric, CheckoutMetrics } from '@/types/events'
+import type {
+  RevenueTrendPoint,
+  ConversionFunnelStep,
+  TopProductMetric,
+  CheckoutMetrics,
+} from '@/types/events'
 
 // ============================================
 // Trending Service Types
@@ -42,9 +47,17 @@ export interface UpdateTrendingSettingsDTO {
   displayPriority?: number
 }
 
+export interface AnalyticsChartPoint {
+  date: string
+  views: number
+  clicks: number
+  sales: number
+  revenue?: number
+}
+
 export interface AnalyticsData {
   period: string
-  data: RevenueTrendPoint[]
+  data: AnalyticsChartPoint[]
   summary: {
     totalViews: number
     totalClicks: number
@@ -64,14 +77,18 @@ export const trendingService = {
    */
   async getRevenueTrend(days: number = 7) {
     try {
-      const response = await apiClient.get('/analytics/revenue-trend', {
+      const response = (await apiClient.get('/analytics/revenue-trend', {
         params: { days },
-      }) as any
+      })) as any
 
       return {
         period: response?.period || `${days}_days`,
         data: response?.data || [],
-        summary: response?.summary || { totalRevenue: 0, totalOrders: 0, averageRevenue: 0 },
+        summary: response?.summary || {
+          totalRevenue: 0,
+          totalOrders: 0,
+          averageRevenue: 0,
+        },
       }
     } catch (error) {
       console.error('Error fetching revenue trend:', error)
@@ -88,9 +105,9 @@ export const trendingService = {
    */
   async getConversionFunnel(days: number = 7) {
     try {
-      const response = await apiClient.get('/analytics/conversion-funnel', {
+      const response = (await apiClient.get('/analytics/conversion-funnel', {
         params: { days },
-      }) as any
+      })) as any
 
       return {
         period: response?.period || `${days}_days`,
@@ -120,9 +137,9 @@ export const trendingService = {
    */
   async getTopProducts(days: number = 7, limit: number = 10) {
     try {
-      const response = await apiClient.get('/analytics/top-products', {
+      const response = (await apiClient.get('/analytics/top-products', {
         params: { days, limit },
-      }) as any
+      })) as any
 
       return {
         period: response?.period || `${days}_days`,
@@ -148,9 +165,9 @@ export const trendingService = {
    */
   async getSearchMetrics(days: number = 7) {
     try {
-      const response = await apiClient.get('/analytics/search-metrics', {
+      const response = (await apiClient.get('/analytics/search-metrics', {
         params: { days },
-      }) as any
+      })) as any
 
       return {
         period: response?.period || `${days}_days`,
@@ -176,9 +193,9 @@ export const trendingService = {
    */
   async getRefundRate(days: number = 30) {
     try {
-      const response = await apiClient.get('/analytics/refund-rate', {
+      const response = (await apiClient.get('/analytics/refund-rate', {
         params: { days },
-      }) as any
+      })) as any
 
       return {
         period: response?.period || `${days}_days`,
@@ -206,9 +223,9 @@ export const trendingService = {
    */
   async getReturnRate(days: number = 30) {
     try {
-      const response = await apiClient.get('/analytics/return-rate', {
+      const response = (await apiClient.get('/analytics/return-rate', {
         params: { days },
-      }) as any
+      })) as any
 
       return {
         period: response?.period || `${days}_days`,
@@ -232,9 +249,9 @@ export const trendingService = {
    */
   async getCheckoutAbandonment(days: number = 7) {
     try {
-      const response = await apiClient.get('/analytics/checkout-abandonment', {
+      const response = (await apiClient.get('/analytics/checkout-abandonment', {
         params: { days },
-      }) as any
+      })) as any
 
       return {
         period: response?.period || `${days}_days`,
@@ -262,14 +279,15 @@ export const trendingService = {
    */
   async getStats(): Promise<TrendingStats> {
     try {
-      const [collectionsRes, brandsRes, revenueTrendRes, funnelRes] = await Promise.all([
-        apiClient.get('/collections/products', {
-          params: { limit: 100 },
-        }) as Promise<any>,
-        apiClient.get('/brands', { params: { limit: 100 } }) as Promise<any>,
-        this.getRevenueTrend(7),
-        this.getConversionFunnel(7),
-      ])
+      const [collectionsRes, brandsRes, revenueTrendRes, funnelRes] =
+        await Promise.all([
+          apiClient.get('/collections/products', {
+            params: { limit: 100 },
+          }) as Promise<any>,
+          apiClient.get('/brands', { params: { limit: 100 } }) as Promise<any>,
+          this.getRevenueTrend(7),
+          this.getConversionFunnel(7),
+        ])
 
       const collections =
         collectionsRes?.data?.collections || collectionsRes?.collections || []
@@ -401,7 +419,9 @@ export const trendingService = {
   /**
    * Get comprehensive trending analytics (now using real data from API)
    */
-  async getAnalytics(period: 'day' | 'week' | 'month' = 'week'): Promise<AnalyticsData> {
+  async getAnalytics(
+    period: 'day' | 'week' | 'month' = 'week',
+  ): Promise<AnalyticsData> {
     try {
       const days = period === 'day' ? 1 : period === 'week' ? 7 : 30
       const revenueTrend = await this.getRevenueTrend(days)
@@ -422,7 +442,10 @@ export const trendingService = {
           totalViews: data.reduce((acc: number, d: any) => acc + d.views, 0),
           totalClicks: data.reduce((acc: number, d: any) => acc + d.clicks, 0),
           totalSales: data.reduce((acc: number, d: any) => acc + d.sales, 0),
-          totalRevenue: data.reduce((acc: number, d: any) => acc + d.revenue, 0),
+          totalRevenue: data.reduce(
+            (acc: number, d: any) => acc + d.revenue,
+            0,
+          ),
           avgConversionRate: (revenueTrend.summary as any).averageRevenue || 0,
         },
       }
