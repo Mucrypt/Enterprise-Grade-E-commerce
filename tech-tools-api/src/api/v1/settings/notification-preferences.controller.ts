@@ -3,10 +3,10 @@
  * Manages admin notification settings
  */
 
-import { query } from '../database/connection'
+import { query } from '../../../database/connection'
 import { Response } from 'express'
-import { AuthRequest } from '../middleware/auth'
-import logger from '../utils/logger'
+import { AuthRequest } from '../../../middleware/auth'
+import logger from '../../../utils/logger'
 
 interface NotificationPreference {
   emailEnabled: boolean

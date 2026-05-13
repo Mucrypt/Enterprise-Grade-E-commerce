@@ -6,7 +6,7 @@
 
 import { Pool, QueryResult } from 'pg';
 import { AnyEvent, EventContext, EventType, EventSource } from '../types/events';
-import { logger } from '../utils/logger';
+import logger from '../utils/logger';
 
 export class EventService {
   constructor(private db: Pool) {}
@@ -76,6 +76,7 @@ export class EventService {
     const orderId = this.extractId(eventPayload, 'orderId');
     const supplierId = this.extractId(eventPayload, 'supplierId');
     const categoryId = this.extractId(eventPayload, 'categoryId');
+    const sku = this.extractId(eventPayload, 'sku');
 
     const result = await this.db.query(query, [
       event.eventType,
@@ -84,7 +85,7 @@ export class EventService {
       event.source,
       event.deviceType || 'unknown',
       productId,
-      eventPayload.sku || null,
+      sku,
       categoryId,
       orderId,
       supplierId,

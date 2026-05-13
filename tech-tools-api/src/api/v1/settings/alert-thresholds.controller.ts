@@ -3,10 +3,10 @@
  * Manages anomaly detection threshold settings for admins
  */
 
-import { query } from '../database/connection'
+import { query } from '../../../database/connection'
 import { Response } from 'express'
-import logger from '../utils/logger'
-import { AuthRequest } from '../middleware/auth'
+import logger from '../../../utils/logger'
+import { AuthRequest } from '../../../middleware/auth'
 
 interface AlertThreshold {
   id: string
