@@ -222,10 +222,11 @@ services:
     image: dpage/pgadmin4:latest
     container_name: techtools-pgadmin-prod
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@techtoolstore.com}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-ChangeMe123!}
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
       PGADMIN_CONFIG_CONSOLE_LOG_LEVEL: 10
-      SCRIPT_NAME: /pgadmin
+    ports:
+      - '127.0.0.1:5050:80'
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     networks:

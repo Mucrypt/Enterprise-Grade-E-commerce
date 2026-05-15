@@ -41,19 +41,32 @@ add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; prelo
 
 ### 1.2 pgAdmin Public Exposure
 
-**Status:** ⏳ Partially secured via Cloudflare — awaiting screenshots to confirm full coverage  
+**Status:** ✅ Hardened (private-only access model)  
 **Risk:** pgAdmin at `/pgadmin` gives direct database GUI access to the public internet. If credentials are weak or leaked, entire database is exposed.  
-**Current:** Cloudflare + admin dashboard protection in place (user confirmed).  
-**Remaining actions after screenshot review:**
+**Implemented hardening:**
 
-- Confirm Cloudflare Access rule blocks `/pgadmin` from public IPs
-- Confirm pgAdmin is NOT reachable without Cloudflare (direct IP `46.225.126.93/pgadmin` must 403)
-- Consider moving pgAdmin off public nginx entirely and access via SSH tunnel only:
-  ```bash
-  ssh -L 5050:localhost:5050 root@46.225.126.93
-  # Then open http://localhost:5050 locally
-  ```
-  **Effort:** 30 minutes (after screenshot review)
+- Public nginx route `/pgadmin` now returns `404` (no reverse proxy exposure)
+- pgAdmin is bound to localhost only (`127.0.0.1:5050:80`) in production compose
+- Insecure fallback credentials removed; `PGADMIN_EMAIL` and `PGADMIN_PASSWORD` are now required
+
+**Secure access method (super admin only):**
+
+```bash
+ssh -L 5050:localhost:5050 root@46.225.126.93
+# then open http://localhost:5050
+```
+
+**Verification checks on live server:**
+
+```bash
+# Must be NOT found publicly
+curl -I https://techtoolstore.com/pgadmin
+
+# Must show localhost-only binding (not 0.0.0.0)
+docker ps --format '{{.Names}}\t{{.Ports}}' | grep pgadmin
+```
+
+Expected: `/pgadmin` returns `404`, and pgAdmin port mapping is `127.0.0.1:5050->80/tcp`.
 
 ---
 
@@ -492,6 +505,10 @@ cd ~/Enterprise-Grade-E-commerce && ./server-scripts/status.sh
 ./server-scripts/logs.sh api
 ./server-scripts/logs.sh nginx
 
+# Private pgAdmin access (SSH tunnel)
+ssh -L 5050:localhost:5050 root@46.225.126.93
+# then open http://localhost:5050
+
 # Manual database backup
 ./server-scripts/backup-db.sh
 
@@ -503,28 +520,28 @@ docker system prune -f && docker image prune -f && docker builder prune -f
 
 ## Completion Tracker
 
-| #   | Task                                      | Priority       | Status     | Est. Effort |
-| --- | ----------------------------------------- | -------------- | ---------- | ----------- |
-| 1.1 | Enable HSTS in nginx                      | 🔴 Critical    | ⬜ Todo    | 5 min       |
-| 1.2 | pgAdmin security (post-screenshot review) | ⏳             | ⏳ Pending | 30 min      |
-| 1.3 | Tighten auth rate limits                  | 🔴 Critical    | ⬜ Todo    | 15 min      |
-| 1.4 | Verify live server `.env` secrets         | 🔴 Critical    | ⬜ Todo    | 10 min      |
-| 2.1 | Free up disk space                        | 🟠 High        | ⬜ Todo    | 20 min      |
-| 2.2 | Confirm/add backup cron                   | 🟠 High        | ⬜ Todo    | 30 min      |
-| 2.3 | Fix real API health check in nginx        | 🟠 High        | ⬜ Todo    | 10 min      |
-| 2.4 | Apply pending server restart              | 🟠 High        | ⬜ Todo    | 5 min       |
-| 2.5 | Confirm Cloudflare CDN active for media   | 🟠 High        | ⏳ Pending | 1–2 hr      |
-| 3.1 | Add OG meta tags to web store             | 🟡 Medium      | ⬜ Todo    | 2–3 hr      |
-| 3.2 | Add sitemap.xml + robots.txt              | 🟡 Medium      | ⬜ Todo    | 3–4 hr      |
-| 3.3 | Fix flash deals to use real DB data       | 🟡 Medium      | ⬜ Todo    | 4–6 hr      |
-| 3.4 | Fix mobile versionCode in app.json        | 🟠 High        | ⬜ Todo    | 5 min       |
-| 3.5 | Move web store tokens to httpOnly cookies | 🟡 Medium      | ⬜ Todo    | 6–8 hr      |
-| 3.6 | Add ad pixels (Meta, TikTok, GA4)         | 🟡 Medium      | ⬜ Todo    | 8–12 hr     |
-| 4.1 | Product image WebP optimization           | 🟢 Enhancement | ⬜ Todo    | 4 hr        |
-| 4.2 | Redis cache for product listing APIs      | 🟢 Enhancement | ⬜ Todo    | 3–4 hr      |
-| 4.3 | PostgreSQL connection pool tuning         | 🟢 Enhancement | ⬜ Todo    | 30 min      |
-| 5.1 | Push notification deep links (mobile)     | 🟢 Enhancement | ⬜ Todo    | 3–4 hr      |
-| 5.2 | iOS App Store submission                  | 🟡 Medium      | ⬜ Todo    | varies      |
+| #   | Task                                            | Priority       | Status     | Est. Effort |
+| --- | ----------------------------------------------- | -------------- | ---------- | ----------- |
+| 1.1 | Enable HSTS in nginx                            | 🔴 Critical    | ⬜ Todo    | 5 min       |
+| 1.2 | pgAdmin private access (localhost + SSH tunnel) | 🔴 Critical    | ✅ Done    | 30 min      |
+| 1.3 | Tighten auth rate limits                        | 🔴 Critical    | ⬜ Todo    | 15 min      |
+| 1.4 | Verify live server `.env` secrets               | 🔴 Critical    | ⬜ Todo    | 10 min      |
+| 2.1 | Free up disk space                              | 🟠 High        | ⬜ Todo    | 20 min      |
+| 2.2 | Confirm/add backup cron                         | 🟠 High        | ⬜ Todo    | 30 min      |
+| 2.3 | Fix real API health check in nginx              | 🟠 High        | ⬜ Todo    | 10 min      |
+| 2.4 | Apply pending server restart                    | 🟠 High        | ⬜ Todo    | 5 min       |
+| 2.5 | Confirm Cloudflare CDN active for media         | 🟠 High        | ⏳ Pending | 1–2 hr      |
+| 3.1 | Add OG meta tags to web store                   | 🟡 Medium      | ⬜ Todo    | 2–3 hr      |
+| 3.2 | Add sitemap.xml + robots.txt                    | 🟡 Medium      | ⬜ Todo    | 3–4 hr      |
+| 3.3 | Fix flash deals to use real DB data             | 🟡 Medium      | ⬜ Todo    | 4–6 hr      |
+| 3.4 | Fix mobile versionCode in app.json              | 🟠 High        | ⬜ Todo    | 5 min       |
+| 3.5 | Move web store tokens to httpOnly cookies       | 🟡 Medium      | ⬜ Todo    | 6–8 hr      |
+| 3.6 | Add ad pixels (Meta, TikTok, GA4)               | 🟡 Medium      | ⬜ Todo    | 8–12 hr     |
+| 4.1 | Product image WebP optimization                 | 🟢 Enhancement | ⬜ Todo    | 4 hr        |
+| 4.2 | Redis cache for product listing APIs            | 🟢 Enhancement | ⬜ Todo    | 3–4 hr      |
+| 4.3 | PostgreSQL connection pool tuning               | 🟢 Enhancement | ⬜ Todo    | 30 min      |
+| 5.1 | Push notification deep links (mobile)           | 🟢 Enhancement | ⬜ Todo    | 3–4 hr      |
+| 5.2 | iOS App Store submission                        | 🟡 Medium      | ⬜ Todo    | varies      |
 
 ---
 
