@@ -112,6 +112,7 @@ class EmailService {
     'billing@techtoolstore.com',
   ]
 
+
   constructor() {
     this.loadConfig()
   }
