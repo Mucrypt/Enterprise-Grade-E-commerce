@@ -23,19 +23,24 @@
 
 ## PHASE 1 — Critical Security (Before Any Ad Spend)
 
-### 1.1 Enable HSTS in Nginx
+### 1.1 Enable HSTS + Security Headers
 
-**Status:** 🔴 Not done  
+**Status:** ✅ Done  
 **Risk:** Without HSTS, browsers can be downgraded from HTTPS to HTTP on repeat visits (man-in-the-middle attack vector).  
-**File:** `infrastructure/nginx/prod.conf`  
-**Fix:** Uncomment this line inside the `server { listen 443 ... }` block:
+**Implemented:**
 
-```nginx
-add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
-```
+- HSTS header enabled: `max-age=31536000; includeSubDomains; preload`
+- Additional security headers:
+  - `X-Frame-Options: SAMEORIGIN` (prevent clickjacking)
+  - `X-Content-Type-Options: nosniff` (prevent MIME sniffing)
+  - `X-XSS-Protection: 1; mode=block` (XSS protection)
+  - `Referrer-Policy: strict-origin-when-cross-origin` (privacy)
+  - `Permissions-Policy: geolocation/microphone/camera/payment disabled`
+  - `Content-Security-Policy: restrictive default sources`
 
-**After:** Submit domain to https://hstspreload.org  
-**Effort:** 5 minutes · Requires nginx reload on server (`./server-scripts/nginx-reload.sh`)
+**Deployed:** `/infrastructure/nginx/prod.conf` (lines 32-46)  
+**Next action:** Submit domain to https://hstspreload.org for permanent browser preload list.  
+**Effort:** ✅ 5 minutes (nginx reload already applied)
 
 ---
 
@@ -70,46 +75,131 @@ Expected: `/pgadmin` returns `404`, and pgAdmin port mapping is `127.0.0.1:5050-
 
 ---
 
-### 1.3 Tighten Auth Rate Limits
+### 1.3 Tighten Auth Rate Limits + Account Lockout
 
-**Status:** 🔴 Too loose  
-**Risk:** Current config allows ~300 login attempts/hour per IP. Brute-force attacks on customer accounts are trivial.  
-**File:** `infrastructure/nginx/nginx.prod.conf`  
-**Current:**
+**Status:** ✅ Done  
+**Risk:** Brute-force attacks on customer accounts.  
+**Implemented:**
 
-```nginx
-limit_req_zone $binary_remote_addr zone=auth_limit:10m rate=5r/m;
-```
+**Nginx Level:**
 
-**Fix (in `nginx.prod.conf`):**
+- Rate limit: 5 requests/minute per IP
+- Burst: Reduced from 3 → 2 (very tight)
+- Config: `/infrastructure/nginx/prod.conf` (line 111)
 
-```nginx
-limit_req_zone $binary_remote_addr zone=auth_limit:10m rate=5r/m;
-```
+**API Level (Account-Level Lockout):**
 
-**Fix (in `prod.conf` — update burst):**
+- After 5 failed login attempts, account is locked for 30 minutes
+- Lock tracked in database: `users.locked_until` timestamp
+- On unlock: `failed_login_attempts` reset to 0
+- On successful login: Counter and lock automatically reset
 
-```nginx
-location ~ ^/api/v1/auth/(login|register) {
-    limit_req zone=auth_limit burst=2 nodelay;
-    ...
-}
-```
+**Database:** Schema migration 002_admin_management_schema.sql added columns:
 
-Change `burst=3` → `burst=2` to only allow 2 immediate bursts instead of 3.  
-Add lockout logic in the API for 5 failed attempts (account-level, not just IP-level).  
-**Effort:** 15 minutes
+- `failed_login_attempts INTEGER DEFAULT 0`
+- `locked_until TIMESTAMP WITH TIME ZONE`
+
+**Code:** `/tech-tools-api/src/api/v1/auth/auth.controller.ts`
+
+- Login handler now checks account lockout
+- Returns `429 Too Many Requests` if locked
+- Increments counter on failed attempt
+- Locks account after 5 fails
+
+**Admin Management Endpoints:**
+
+- `POST /api/v1/admin/unlock-account` — Unlock a specific user account
+- `GET /api/v1/admin/locked-accounts` — View all currently locked accounts
+- Config: `/tech-tools-api/src/api/v1/admin/lockout.routes.ts`
+
+**Verification:** Login 6 times with wrong password, expect `429` on 6th attempt.  
+**Effort:** ✅ 20 minutes (code deployed)
 
 ---
 
-### 1.4 Confirm Live Server `.env` Has Real Secrets
+### 1.4 Firewall Lockdown — Block Direct Server IP Access
+
+**Status:** ✅ Done (ready for deployment)  
+**Risk:** Server IP (100.92.116.9) is directly accessible on ports 80/443, bypassing Cloudflare protection. Any threat actor can scan and find vulnerabilities without triggering Cloudflare WAF/rate limiting.  
+**Implemented:**
+
+**Firewall Setup Script:** `/infra/scripts/setup-firewall.sh`
+
+- Uses UFW (Uncomplicated Firewall) to define strict rules
+- Allows SSH (port 22) from anywhere
+- Allows HTTP/HTTPS (80/443) from Cloudflare IPs only
+- Blocks all other incoming traffic (default deny policy)
+- Auto-updates Cloudflare IP list daily via cron job
+
+**Daily IP Update Script:** `/infra/scripts/update-cloudflare-ips.sh`
+
+- Runs via cron at 2 AM UTC
+- Fetches latest Cloudflare IP ranges from: https://www.cloudflare.com/ips-v4 and https://www.cloudflare.com/ips-v6
+- Logs updates to `/var/log/cloudflare-ips-update.log`
+
+**Deployment (on live server):**
+
+```bash
+ssh root@100.92.116.9
+chmod +x /root/Enterprise-Grade-E-commerce/infra/scripts/setup-firewall.sh
+sudo /root/Enterprise-Grade-E-commerce/infra/scripts/setup-firewall.sh
+
+# This will:
+# 1. Install UFW if needed
+# 2. Reset UFW (clears existing rules)
+# 3. Set default deny incoming, allow outgoing
+# 4. Allow SSH on 22
+# 5. Fetch Cloudflare IPs and allow 80/443 from those ranges
+# 6. Enable UFW
+# 7. Setup daily cron job for IP updates
+
+# Verify rules:
+sudo ufw status numbered
+
+# Test from your machine:
+curl -H "Host: techtoolstore.com" http://100.92.116.9
+# Expected: connection refused or timeout (NOT 200 OK)
+
+curl https://techtoolstore.com
+# Expected: 200 OK (via Cloudflare)
+```
+
+**Verification:**
+
+```bash
+# On live server, check UFW status
+sudo ufw status
+
+# Should show:
+# To Action From
+# -- ------ ----
+# 22 ALLOW Anywhere
+# 80 ALLOW Cloudflare IP range 1
+# 443 ALLOW Cloudflare IP range 1
+# ... (multiple Cloudflare IP ranges)
+# Anywhere DENY Anywhere (v6)
+```
+
+**Why this matters:**
+
+- Direct IP access bypasses Cloudflare WAF, rate limiting, and DDoS protection
+- Firewall lockdown ensures ALL traffic goes through Cloudflare
+- If Cloudflare is down, site is down (safe failure vs. exposing raw origin)
+- Prevents reconnaissance scans on the raw server
+
+**Effort:** ✅ 5 minutes (script handles everything)  
+**Rollback:** `sudo ufw disable` if issues arise
+
+---
+
+### 1.5 Confirm Live Server `.env` Has Real Secrets
 
 **Status:** 🔴 Must verify  
 **Risk:** The `tech-tools-api/.env` file in the repo contains placeholder values. If the live server accidentally uses this file, the entire app is running with default/known-public secrets.  
 **Action on live server:**
 
 ```bash
-ssh root@46.225.126.93
+ssh root@100.92.116.9
 grep JWT_SECRET /root/Enterprise-Grade-E-commerce/tech-tools-api/.env
 grep DB_PASSWORD /root/Enterprise-Grade-E-commerce/tech-tools-api/.env
 grep STRIPE_SECRET_KEY /root/Enterprise-Grade-E-commerce/tech-tools-api/.env

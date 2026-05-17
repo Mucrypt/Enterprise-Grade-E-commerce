@@ -9,6 +9,7 @@ import {
   getAdminActivityLogs,
   getAdminPermissions,
 } from './admin.controller'
+import { unlockUserAccount, getLockedAccounts } from './lockout.routes'
 import { authenticate, authorize } from '../../../middleware/auth'
 
 const router = Router()
@@ -40,5 +41,9 @@ router.get('/logs/activity', getAdminActivityLogs)
 
 // Permissions
 router.get('/permissions/:role', getAdminPermissions)
+
+// Account Lockout Management
+router.get('/locked-accounts', getLockedAccounts)
+router.post('/unlock-account', unlockUserAccount)
 
 export default router

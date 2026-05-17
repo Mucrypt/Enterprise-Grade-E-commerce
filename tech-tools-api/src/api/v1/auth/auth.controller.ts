@@ -142,10 +142,11 @@ export const login = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body
 
-    // Find user
+    // Find user (include lockout fields)
     const result = await query(
       `SELECT id, email, password_hash, first_name, last_name, 
-       user_type, is_active, email_verified, created_at
+       user_type, is_active, email_verified, created_at,
+       failed_login_attempts, locked_until
        FROM users WHERE email = $1`,
       [email],
     )
@@ -159,6 +160,20 @@ export const login = async (req: Request, res: Response) => {
 
     const user = result.rows[0]
 
+    // Check if account is locked
+    if (user.locked_until && new Date(user.locked_until) > new Date()) {
+      const lockTimeRemaining = Math.ceil(
+        (new Date(user.locked_until).getTime() - new Date().getTime()) / 60000,
+      )
+      logger.warn(
+        `Account locked: ${email}. Remaining: ${lockTimeRemaining}min`,
+      )
+      return res.status(429).json({
+        success: false,
+        error: `Account is temporarily locked. Try again in ${lockTimeRemaining} minutes.`,
+      })
+    }
+
     // Check if user is active
     if (!user.is_active) {
       return res.status(403).json({
@@ -171,6 +186,38 @@ export const login = async (req: Request, res: Response) => {
     const isValidPassword = await bcrypt.compare(password, user.password_hash)
 
     if (!isValidPassword) {
+      // Increment failed attempts
+      const newFailedAttempts = (user.failed_login_attempts || 0) + 1
+      const MAX_ATTEMPTS = 5
+      const LOCKOUT_MINUTES = 30
+
+      if (newFailedAttempts >= MAX_ATTEMPTS) {
+        // Lock account for 30 minutes
+        const lockUntil = new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000)
+        await query(
+          `UPDATE users 
+           SET failed_login_attempts = $1, locked_until = $2 
+           WHERE id = $3`,
+          [newFailedAttempts, lockUntil, user.id],
+        )
+        logger.warn(
+          `Account locked after ${newFailedAttempts} failed attempts: ${email}`,
+        )
+        return res.status(429).json({
+          success: false,
+          error: `Too many failed login attempts. Account locked for ${LOCKOUT_MINUTES} minutes.`,
+        })
+      } else {
+        // Just increment counter
+        await query(
+          `UPDATE users SET failed_login_attempts = $1 WHERE id = $2`,
+          [newFailedAttempts, user.id],
+        )
+        logger.warn(
+          `Failed login attempt (${newFailedAttempts}/${MAX_ATTEMPTS}): ${email}`,
+        )
+      }
+
       return res.status(401).json({
         success: false,
         error: 'Invalid credentials',
@@ -198,8 +245,13 @@ export const login = async (req: Request, res: Response) => {
       EX: 7 * 24 * 60 * 60,
     })
 
-    // Update last login
-    await query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id])
+    // Update last login and reset failed attempts on successful login
+    await query(
+      `UPDATE users 
+       SET last_login = NOW(), failed_login_attempts = 0, locked_until = NULL 
+       WHERE id = $1`,
+      [user.id],
+    )
 
     logger.info('User logged in:', { email, userId: user.id })
 
