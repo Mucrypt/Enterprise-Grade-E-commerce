@@ -612,9 +612,9 @@ docker system prune -f && docker image prune -f && docker builder prune -f
 
 | #   | Task                                            | Priority       | Status     | Est. Effort |
 | --- | ----------------------------------------------- | -------------- | ---------- | ----------- |
-| 1.1 | Enable HSTS in nginx                            | 🔴 Critical    | ⬜ Todo    | 5 min       |
+| 1.1 | Enable HSTS in nginx                            | 🔴 Critical    | ✅ Done    | 5 min       |
 | 1.2 | pgAdmin private access (localhost + SSH tunnel) | 🔴 Critical    | ✅ Done    | 30 min      |
-| 1.3 | Tighten auth rate limits                        | 🔴 Critical    | ⬜ Todo    | 15 min      |
+| 1.3 | Tighten auth rate limits                        | 🔴 Critical    | ✅ Done    | 15 min      |
 | 1.4 | Verify live server `.env` secrets               | 🔴 Critical    | ⬜ Todo    | 10 min      |
 | 2.1 | Free up disk space                              | 🟠 High        | ⬜ Todo    | 20 min      |
 | 2.2 | Confirm/add backup cron                         | 🟠 High        | ⬜ Todo    | 30 min      |
