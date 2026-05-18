@@ -1499,20 +1499,14 @@ export const uploadPostMedia = async (req: AuthRequest, res: Response) => {
       fileSize = file.size
       mimeType = file.mimetype
 
-      const uploadDir = process.env.UPLOAD_DIR || 'uploads'
-      const blogDir = path.join(uploadDir, 'blog')
-
-      // Create directories if needed
-      await fs.mkdir(path.join(blogDir, 'images'), { recursive: true })
-      await fs.mkdir(path.join(blogDir, 'thumbnails'), { recursive: true })
-      await fs.mkdir(path.join(blogDir, 'videos'), { recursive: true })
-
       if (media_type === 'image' || file.mimetype.startsWith('image/')) {
-        const { imagePath, thumbnailPath, dimensions } = await processBlogImage(
-          file,
-        )
-        url = `/media/blog/images/${path.basename(imagePath)}`
-        thumbnailUrl = `/media/blog/thumbnails/${path.basename(thumbnailPath)}`
+        const {
+          imageUrl,
+          thumbnailUrl: processedThumbnailUrl,
+          dimensions,
+        } = await processBlogImage(file)
+        url = imageUrl
+        thumbnailUrl = processedThumbnailUrl
         width = dimensions.width
         height = dimensions.height
       } else if (media_type === 'video' || file.mimetype.startsWith('video/')) {

@@ -14,6 +14,10 @@ export function getAbsoluteMediaUrl(
 ): string | null {
   if (!path) return null
 
+  if (/^https?:\/\//i.test(path)) {
+    return path
+  }
+
   const mediaBase =
     process.env.NEXT_PUBLIC_MEDIA_URL || 'https://techtoolstore.com/media'
 

@@ -4,6 +4,12 @@ import path from 'path'
 import fs from 'fs/promises'
 import { v4 as uuidv4 } from 'uuid'
 import mime from 'mime-types'
+import {
+  deleteStoredMedia,
+  isAbsoluteMediaUrl,
+  storeMediaBuffer,
+  storeMediaFile,
+} from '../services/media-storage.service'
 
 // =====================================================
 // CONFIGURATION
@@ -52,6 +58,10 @@ export async function ensureUploadDirectories() {
     `${UPLOAD_DIR}/categories/images`,
     `${UPLOAD_DIR}/categories/videos`,
     `${UPLOAD_DIR}/categories/thumbnails`,
+    `${UPLOAD_DIR}/blog`,
+    `${UPLOAD_DIR}/blog/images`,
+    `${UPLOAD_DIR}/blog/thumbnails`,
+    `${UPLOAD_DIR}/blog/videos`,
     `${UPLOAD_DIR}/temp`,
   ]
 
@@ -140,6 +150,11 @@ export async function optimizeImage(
   await ensureUploadDirectories()
 
   const results: { [key: string]: OptimizedImage } = {}
+  const normalizedFolder = destinationFolder.replace(/\\/g, '/')
+  const storageFolder = normalizedFolder.startsWith(`${UPLOAD_DIR}/`)
+    ? normalizedFolder.slice(UPLOAD_DIR.length + 1)
+    : normalizedFolder.replace(/^uploads\/?/, '')
+  const cacheControl = 'public, max-age=31536000, immutable'
 
   // Get original image metadata
   const metadata = await sharp(filePath).metadata()
@@ -148,36 +163,46 @@ export async function optimizeImage(
 
   // Create optimized versions for each size
   for (const [sizeName, config] of Object.entries(IMAGE_SIZES)) {
-    const outputPath = `${destinationFolder}/${sizeName}-${filename}`
-
-    await sharp(filePath)
+    const outputKey = `${storageFolder}/${sizeName}-${filename}`
+    const optimizedBuffer = await sharp(filePath)
       .resize(config.width, config.height, { fit: config.fit })
       .webp({ quality: 85 }) // Convert to WebP for better compression
-      .toFile(outputPath)
+      .toBuffer()
 
-    const stats = await fs.stat(outputPath)
-    const optimizedMetadata = await sharp(outputPath).metadata()
+    const stored = await storeMediaBuffer({
+      key: outputKey,
+      body: optimizedBuffer,
+      contentType: 'image/webp',
+      cacheControl,
+      resourceType: 'image',
+    })
+
+    const optimizedMetadata = await sharp(optimizedBuffer).metadata()
 
     results[sizeName] = {
       size: sizeName,
-      url: outputPath.replace(/^uploads/, '/media'), // Convert to URL path
+      url: stored.url,
       width: optimizedMetadata.width || 0,
       height: optimizedMetadata.height || 0,
-      fileSize: stats.size,
+      fileSize: optimizedBuffer.length,
     }
   }
 
   // Also save the original (but optimized with WebP)
-  const originalOutputPath = `${destinationFolder}/original-${filename}`
-  await sharp(filePath).webp({ quality: 90 }).toFile(originalOutputPath)
-
-  const originalStats = await fs.stat(originalOutputPath)
+  const originalBuffer = await sharp(filePath).webp({ quality: 90 }).toBuffer()
+  const storedOriginal = await storeMediaBuffer({
+    key: `${storageFolder}/original-${filename}`,
+    body: originalBuffer,
+    contentType: 'image/webp',
+    cacheControl,
+    resourceType: 'image',
+  })
   const original: OptimizedImage = {
     size: 'original',
-    url: originalOutputPath.replace(/^uploads/, '/media'),
+    url: storedOriginal.url,
     width: originalWidth,
     height: originalHeight,
-    fileSize: originalStats.size,
+    fileSize: originalBuffer.length,
   }
 
   return { original, optimized: results }
@@ -217,21 +242,14 @@ export async function processCategoryImage(file: Express.Multer.File) {
  * Process blog image upload
  */
 export async function processBlogImage(file: Express.Multer.File): Promise<{
-  imagePath: string
-  thumbnailPath: string
+  imageUrl: string
+  thumbnailUrl: string
   dimensions: { width: number; height: number }
 }> {
   const imageId = uuidv4()
   const filename = `${imageId}.webp`
   const thumbnailFilename = `thumb-${imageId}.webp`
-  const imagesFolder = `${UPLOAD_DIR}/blog/images`
-  const thumbnailsFolder = `${UPLOAD_DIR}/blog/thumbnails`
-
-  await fs.mkdir(imagesFolder, { recursive: true })
-  await fs.mkdir(thumbnailsFolder, { recursive: true })
-
-  const imagePath = `${imagesFolder}/${filename}`
-  const thumbnailPath = `${thumbnailsFolder}/${thumbnailFilename}`
+  const cacheControl = 'public, max-age=31536000, immutable'
 
   // Get original dimensions
   const metadata = await sharp(file.path).metadata()
@@ -241,21 +259,41 @@ export async function processBlogImage(file: Express.Multer.File): Promise<{
   }
 
   // Optimize main image
-  await sharp(file.path)
+  const imageBuffer = await sharp(file.path)
     .resize(1920, 1080, { fit: 'inside', withoutEnlargement: true })
     .webp({ quality: 85 })
-    .toFile(imagePath)
+    .toBuffer()
+
+  const uploadedImage = await storeMediaBuffer({
+    key: `blog/images/${filename}`,
+    body: imageBuffer,
+    contentType: 'image/webp',
+    cacheControl,
+    resourceType: 'image',
+  })
 
   // Create thumbnail
-  await sharp(file.path)
+  const thumbnailBuffer = await sharp(file.path)
     .resize(400, 300, { fit: 'cover' })
     .webp({ quality: 80 })
-    .toFile(thumbnailPath)
+    .toBuffer()
+
+  const uploadedThumbnail = await storeMediaBuffer({
+    key: `blog/thumbnails/${thumbnailFilename}`,
+    body: thumbnailBuffer,
+    contentType: 'image/webp',
+    cacheControl,
+    resourceType: 'image',
+  })
 
   // Delete temp file
   await fs.unlink(file.path)
 
-  return { imagePath, thumbnailPath, dimensions }
+  return {
+    imageUrl: uploadedImage.url,
+    thumbnailUrl: uploadedThumbnail.url,
+    dimensions,
+  }
 }
 
 /**
@@ -271,16 +309,19 @@ export async function processBlogVideo(file: Express.Multer.File): Promise<{
   const videoId = uuidv4()
   const ext = path.extname(file.originalname)
   const fileName = `${videoId}${ext}`
-  const destinationFolder = `${UPLOAD_DIR}/blog/videos`
-  const videoPath = `${destinationFolder}/${fileName}`
+  const stats = await fs.stat(file.path)
+  const uploadedVideo = await storeMediaFile({
+    localPath: file.path,
+    key: `blog/videos/${fileName}`,
+    contentType: file.mimetype,
+    cacheControl: 'public, max-age=31536000, immutable',
+    resourceType: 'video',
+  })
 
-  await fs.mkdir(destinationFolder, { recursive: true })
-  await fs.rename(file.path, videoPath)
-
-  const stats = await fs.stat(videoPath)
+  await fs.unlink(file.path).catch(() => undefined)
 
   return {
-    url: videoPath.replace(/^uploads/, '/media'),
+    url: uploadedVideo.url,
     thumbnailUrl: '', // Placeholder - would use FFmpeg in production
     fileName,
     fileSize: stats.size,
@@ -310,24 +351,25 @@ export async function processVideo(
   const videoId = uuidv4()
   const ext = path.extname(file.originalname)
   const fileName = `${videoId}${ext}`
-  const destinationFolder = `${UPLOAD_DIR}/${type}s/videos`
-  const videoPath = `${destinationFolder}/${fileName}`
+  const stats = await fs.stat(file.path)
+  const uploadedVideo = await storeMediaFile({
+    localPath: file.path,
+    key: `${type}s/videos/${fileName}`,
+    contentType: file.mimetype,
+    cacheControl: 'public, max-age=31536000, immutable',
+    resourceType: 'video',
+  })
 
-  // Move video to permanent location
-  await fs.mkdir(destinationFolder, { recursive: true })
-  await fs.rename(file.path, videoPath)
-
-  const stats = await fs.stat(videoPath)
+  await fs.unlink(file.path).catch(() => undefined)
 
   // For thumbnail generation, in a real-world scenario you'd use FFmpeg
   // For now, we'll return a placeholder
-  const thumbnailPath = `${UPLOAD_DIR}/${type}s/thumbnails/thumb-${videoId}.jpg`
   // TODO: Implement FFmpeg thumbnail extraction
   // For now, create a placeholder response
 
   return {
-    url: videoPath.replace(/^uploads/, '/media'),
-    thumbnailUrl: thumbnailPath.replace(/^uploads/, '/media'),
+    url: uploadedVideo.url,
+    thumbnailUrl: '',
     fileName,
     fileSize: stats.size,
     format: mime.extension(file.mimetype) || ext.replace('.', ''),
@@ -403,50 +445,78 @@ export function validateVideoFile(file: Express.Multer.File): {
  */
 export async function deleteMediaFile(url: string): Promise<void> {
   try {
-    const filePath = url.replace(/^\/media/, 'uploads')
+    if (!url) return
 
-    // If it's an image, delete all optimized versions
-    if (filePath.includes('/images/')) {
-      const dirname = path.dirname(filePath)
-      const basename = path.basename(filePath)
+    const deleteTargets = new Set<string>()
+    deleteTargets.add(url)
 
-      // Delete all size variations
-      for (const sizeName of Object.keys(IMAGE_SIZES)) {
-        const sizePath = `${dirname}/${sizeName}-${basename}`
-        try {
-          await fs.unlink(sizePath)
-        } catch {
-          // Ignore if file doesn't exist
-        }
-      }
-
-      // Delete original
-      try {
-        await fs.unlink(filePath)
-      } catch {
-        // Ignore if file doesn't exist
-      }
-    } else {
-      // For videos, just delete the file
-      await fs.unlink(filePath)
-
-      // If there's a thumbnail, delete it too
-      if (filePath.includes('/videos/')) {
-        const videoId = path.basename(filePath, path.extname(filePath))
-        const thumbnailPath = filePath
-          .replace('/videos/', '/thumbnails/')
-          .replace(path.basename(filePath), `thumb-${videoId}.jpg`)
-        try {
-          await fs.unlink(thumbnailPath)
-        } catch {
-          // Ignore if thumbnail doesn't exist
-        }
+    if (url.includes('/images/')) {
+      for (const variantUrl of buildImageVariantUrls(url)) {
+        deleteTargets.add(variantUrl)
       }
     }
+
+    if (url.includes('/videos/')) {
+      deleteTargets.add(buildVideoThumbnailUrl(url))
+    }
+
+    await Promise.all(
+      Array.from(deleteTargets)
+        .filter(Boolean)
+        .map((target) => deleteStoredMedia(target).catch(() => undefined)),
+    )
   } catch (error) {
     console.error('Error deleting media file:', error)
     // Don't throw - file might already be deleted
   }
+}
+
+function buildImageVariantUrls(url: string): string[] {
+  const prefixes = ['thumbnail', 'small', 'medium', 'large', 'original']
+
+  if (isAbsoluteMediaUrl(url)) {
+    const parsed = new URL(url)
+    const pathname = parsed.pathname
+    const basename = path.posix.basename(pathname)
+    const suffix = basename.replace(
+      /^(thumbnail|small|medium|large|original)-/,
+      '',
+    )
+    const dir = path.posix.dirname(pathname)
+
+    return prefixes.map((prefix) => {
+      const clone = new URL(url)
+      clone.pathname = `${dir}/${prefix}-${suffix}`
+      return clone.toString()
+    })
+  }
+
+  const basename = path.posix.basename(url)
+  const suffix = basename.replace(
+    /^(thumbnail|small|medium|large|original)-/,
+    '',
+  )
+  const dir = path.posix.dirname(url)
+
+  return prefixes.map((prefix) => `${dir}/${prefix}-${suffix}`)
+}
+
+function buildVideoThumbnailUrl(url: string): string {
+  if (isAbsoluteMediaUrl(url)) {
+    const parsed = new URL(url)
+    const basename = path.posix.basename(parsed.pathname)
+    const videoId = basename.replace(path.extname(basename), '')
+    const dir = path.posix
+      .dirname(parsed.pathname)
+      .replace('/videos', '/thumbnails')
+    parsed.pathname = `${dir}/thumb-${videoId}.jpg`
+    return parsed.toString()
+  }
+
+  const basename = path.posix.basename(url)
+  const videoId = basename.replace(path.extname(basename), '')
+  const dir = path.posix.dirname(url).replace('/videos', '/thumbnails')
+  return `${dir}/thumb-${videoId}.jpg`
 }
 
 // =====================================================
@@ -461,18 +531,31 @@ export function generateCdnUrls(
   baseUrl: string,
   optimizedImages?: { [key: string]: OptimizedImage },
 ): any {
-  const cdnDomain =
-    process.env.CDN_DOMAIN || process.env.API_URL || 'http://localhost:9000'
+  const resolveUrl = (value: string) => {
+    if (!value) return value
+    if (isAbsoluteMediaUrl(value)) return value
 
-  if (!optimizedImages) {
-    return {
-      original: `${cdnDomain}${baseUrl}`,
-    }
+    const cdnDomain =
+      process.env.MEDIA_CDN_BASE_URL ||
+      process.env.CDN_DOMAIN ||
+      process.env.API_URL ||
+      'http://localhost:9000'
+
+    return `${cdnDomain.replace(/\/$/, '')}${
+      value.startsWith('/') ? value : `/${value}`
+    }`
   }
 
-  const cdnUrls: any = {}
+  const cdnUrls: any = {
+    original: resolveUrl(baseUrl),
+  }
+
+  if (!optimizedImages) {
+    return cdnUrls
+  }
+
   for (const [size, image] of Object.entries(optimizedImages)) {
-    cdnUrls[size] = `${cdnDomain}${image.url}`
+    cdnUrls[size] = resolveUrl(image.url)
   }
 
   return cdnUrls
