@@ -4,19 +4,27 @@
  * Rules: revenue drop, high refund rate, high return rate, checkout abandonment, etc.
  */
 
-import { query } from '../database/connection';
-import { webSocketService } from './websocket.service';
-import { notificationDispatcher } from './notification-dispatcher.service';
-import logger from '../utils/logger';
+import { query } from '../database/connection'
+import { webSocketService } from './websocket.service'
+import { notificationDispatcher } from './notification-dispatcher.service'
+import logger from '../utils/logger'
+
+async function tableExists(tableName: string): Promise<boolean> {
+  const result = await query('SELECT to_regclass($1) IS NOT NULL AS exists', [
+    tableName,
+  ])
+
+  return Boolean(result.rows[0]?.exists)
+}
 
 export interface AnomalyThresholds {
-  revenueDropPercentage: number; // e.g., 20% drop from 7-day average
-  refundRatePercentage: number; // e.g., 5%
-  returnRatePercentage: number; // e.g., 3%
-  checkoutAbandonmentPercentage: number; // e.g., 40%
-  searchZeroResultPercentage: number; // e.g., 10%
-  supplierLateRatePercentage: number; // e.g., 10%
-  productMarginErosion: number; // e.g., 2%
+  revenueDropPercentage: number // e.g., 20% drop from 7-day average
+  refundRatePercentage: number // e.g., 5%
+  returnRatePercentage: number // e.g., 3%
+  checkoutAbandonmentPercentage: number // e.g., 40%
+  searchZeroResultPercentage: number // e.g., 10%
+  supplierLateRatePercentage: number // e.g., 10%
+  productMarginErosion: number // e.g., 2%
 }
 
 export const DEFAULT_THRESHOLDS: AnomalyThresholds = {
@@ -27,13 +35,13 @@ export const DEFAULT_THRESHOLDS: AnomalyThresholds = {
   searchZeroResultPercentage: 10,
   supplierLateRatePercentage: 10,
   productMarginErosion: 2,
-};
+}
 
 export class AnomalyDetector {
-  private thresholds: AnomalyThresholds;
+  private thresholds: AnomalyThresholds
 
   constructor(thresholds: Partial<AnomalyThresholds> = {}) {
-    this.thresholds = { ...DEFAULT_THRESHOLDS, ...thresholds };
+    this.thresholds = { ...DEFAULT_THRESHOLDS, ...thresholds }
   }
 
   /**
@@ -42,7 +50,7 @@ export class AnomalyDetector {
    */
   async detectAnomalies(): Promise<void> {
     try {
-      logger.info('Starting anomaly detection checks...');
+      logger.info('Starting anomaly detection checks...')
 
       await Promise.all([
         this.checkRevenueDropAnomaly(),
@@ -51,11 +59,11 @@ export class AnomalyDetector {
         this.checkCheckoutAbandonmentAnomaly(),
         this.checkSearchZeroResultsAnomaly(),
         this.checkSupplierLateRateAnomaly(),
-      ]);
+      ])
 
-      logger.info('Anomaly detection checks completed');
+      logger.info('Anomaly detection checks completed')
     } catch (error) {
-      logger.error('Error during anomaly detection:', error);
+      logger.error('Error during anomaly detection:', error)
     }
   }
 
@@ -71,7 +79,7 @@ export class AnomalyDetector {
             SUM(o.total_amount) as daily_revenue
           FROM orders o
           WHERE o.created_at >= NOW() - INTERVAL '8 days'
-          AND o.status IN ('completed', 'shipped', 'delivered')
+          AND o.order_status IN ('confirmed', 'processing', 'ready_to_ship', 'shipped', 'delivered')
           GROUP BY DATE(o.created_at)
         ),
         baseline AS (
@@ -89,10 +97,10 @@ export class AnomalyDetector {
             ELSE 0
           END as drop_percentage
         FROM baseline b, today t;
-      `;
+      `
 
-      const result = await query(queryText);
-      const row = result.rows[0];
+      const result = await query(queryText)
+      const row = result.rows[0]
 
       if (row && row.drop_percentage >= this.thresholds.revenueDropPercentage) {
         await this.createAlert({
@@ -101,13 +109,15 @@ export class AnomalyDetector {
           title: `Revenue Drop Alert: ${row.drop_percentage}% below baseline`,
           message: `Today's revenue ($${row.today_revenue}) is ${row.drop_percentage}% below the 7-day average ($${row.baseline_revenue})`,
           currentValue: row.today_revenue,
-          thresholdValue: row.baseline_revenue * (1 - this.thresholds.revenueDropPercentage / 100),
+          thresholdValue:
+            row.baseline_revenue *
+            (1 - this.thresholds.revenueDropPercentage / 100),
           baselineValue: row.baseline_revenue,
           resourceType: 'revenue',
-        });
+        })
       }
     } catch (error) {
-      logger.warn('Error checking revenue drop anomaly:', error);
+      logger.warn('Error checking revenue drop anomaly:', error)
     }
   }
 
@@ -116,6 +126,13 @@ export class AnomalyDetector {
    */
   private async checkRefundRateAnomaly(): Promise<void> {
     try {
+      if (!(await tableExists('public.refunds'))) {
+        logger.warn(
+          'Skipping refund-rate anomaly check: refunds table is missing',
+        )
+        return
+      }
+
       const queryText = `
         WITH metrics AS (
           SELECT
@@ -128,13 +145,13 @@ export class AnomalyDetector {
           FROM orders o
           LEFT JOIN refunds r ON o.id = r.order_id AND r.status = 'completed'
           WHERE o.created_at >= NOW() - INTERVAL '24 hours'
-          AND o.status IN ('completed', 'shipped', 'delivered')
+          AND o.order_status IN ('confirmed', 'processing', 'ready_to_ship', 'shipped', 'delivered')
         )
         SELECT * FROM metrics;
-      `;
+      `
 
-      const result = await query(queryText);
-      const row = result.rows[0];
+      const result = await query(queryText)
+      const row = result.rows[0]
 
       if (row && row.refund_rate >= this.thresholds.refundRatePercentage) {
         await this.createAlert({
@@ -145,10 +162,10 @@ export class AnomalyDetector {
           currentValue: row.refund_rate,
           thresholdValue: this.thresholds.refundRatePercentage,
           resourceType: 'refund',
-        });
+        })
       }
     } catch (error) {
-      logger.warn('Error checking refund rate anomaly:', error);
+      logger.warn('Error checking refund rate anomaly:', error)
     }
   }
 
@@ -157,6 +174,13 @@ export class AnomalyDetector {
    */
   private async checkReturnRateAnomaly(): Promise<void> {
     try {
+      if (!(await tableExists('public.returns'))) {
+        logger.warn(
+          'Skipping return-rate anomaly check: returns table is missing',
+        )
+        return
+      }
+
       const queryText = `
         WITH metrics AS (
           SELECT
@@ -169,13 +193,13 @@ export class AnomalyDetector {
           FROM orders o
           LEFT JOIN returns rt ON o.id = rt.order_id
           WHERE o.created_at >= NOW() - INTERVAL '7 days'
-          AND o.status IN ('shipped', 'delivered')
+          AND o.order_status IN ('shipped', 'delivered')
         )
         SELECT * FROM metrics;
-      `;
+      `
 
-      const result = await query(queryText);
-      const row = result.rows[0];
+      const result = await query(queryText)
+      const row = result.rows[0]
 
       if (row && row.return_rate >= this.thresholds.returnRatePercentage) {
         await this.createAlert({
@@ -186,10 +210,10 @@ export class AnomalyDetector {
           currentValue: row.return_rate,
           thresholdValue: this.thresholds.returnRatePercentage,
           resourceType: 'return',
-        });
+        })
       }
     } catch (error) {
-      logger.warn('Error checking return rate anomaly:', error);
+      logger.warn('Error checking return rate anomaly:', error)
     }
   }
 
@@ -216,24 +240,31 @@ export class AnomalyDetector {
           WHERE event_time >= NOW() - INTERVAL '24 hours'
         )
         SELECT * FROM metrics;
-      `;
+      `
 
-      const result = await query(queryText);
-      const row = result.rows[0];
+      const result = await query(queryText)
+      const row = result.rows[0]
 
-      if (row && row.abandonment_rate >= this.thresholds.checkoutAbandonmentPercentage) {
+      if (
+        row &&
+        row.abandonment_rate >= this.thresholds.checkoutAbandonmentPercentage
+      ) {
         await this.createAlert({
           alertType: 'checkout_abandonment',
           severity: row.abandonment_rate > 60 ? 'critical' : 'high',
           title: `High Checkout Abandonment Alert: ${row.abandonment_rate}%`,
-          message: `Checkout abandonment rate in last 24 hours is ${row.abandonment_rate}% (${row.checkout_starts - row.payment_success}/${row.checkout_starts}). Threshold: ${this.thresholds.checkoutAbandonmentPercentage}%`,
+          message: `Checkout abandonment rate in last 24 hours is ${
+            row.abandonment_rate
+          }% (${row.checkout_starts - row.payment_success}/${
+            row.checkout_starts
+          }). Threshold: ${this.thresholds.checkoutAbandonmentPercentage}%`,
           currentValue: row.abandonment_rate,
           thresholdValue: this.thresholds.checkoutAbandonmentPercentage,
           resourceType: 'checkout',
-        });
+        })
       }
     } catch (error) {
-      logger.warn('Error checking checkout abandonment anomaly:', error);
+      logger.warn('Error checking checkout abandonment anomaly:', error)
     }
   }
 
@@ -256,12 +287,15 @@ export class AnomalyDetector {
           AND event_time >= NOW() - INTERVAL '24 hours'
         )
         SELECT * FROM metrics WHERE total_searches > 0;
-      `;
+      `
 
-      const result = await query(queryText);
-      const row = result.rows[0];
+      const result = await query(queryText)
+      const row = result.rows[0]
 
-      if (row && row.zero_result_rate >= this.thresholds.searchZeroResultPercentage) {
+      if (
+        row &&
+        row.zero_result_rate >= this.thresholds.searchZeroResultPercentage
+      ) {
         await this.createAlert({
           alertType: 'search_zero_results',
           severity: 'medium',
@@ -270,10 +304,10 @@ export class AnomalyDetector {
           currentValue: row.zero_result_rate,
           thresholdValue: this.thresholds.searchZeroResultPercentage,
           resourceType: 'search',
-        });
+        })
       }
     } catch (error) {
-      logger.warn('Error checking search zero-results anomaly:', error);
+      logger.warn('Error checking search zero-results anomaly:', error)
     }
   }
 
@@ -287,10 +321,10 @@ export class AnomalyDetector {
           SELECT
             s.id,
             s.company_name,
-            COUNT(*) as total_orders,
-            COUNT(CASE WHEN o.created_at + INTERVAL '1 day' * s.lead_time_days < o.shipped_at THEN 1 END) as late_orders,
+            COUNT(DISTINCT o.id) as total_orders,
+            COUNT(DISTINCT CASE WHEN oi.shipped_at IS NOT NULL AND o.created_at + INTERVAL '1 day' * s.lead_time_days < oi.shipped_at THEN o.id END) as late_orders,
             ROUND(
-              (COUNT(CASE WHEN o.created_at + INTERVAL '1 day' * s.lead_time_days < o.shipped_at THEN 1 END)::NUMERIC / COUNT(*)) * 100,
+              (COUNT(DISTINCT CASE WHEN oi.shipped_at IS NOT NULL AND o.created_at + INTERVAL '1 day' * s.lead_time_days < oi.shipped_at THEN o.id END)::NUMERIC / NULLIF(COUNT(DISTINCT o.id), 0)) * 100,
               2
             ) as late_rate
           FROM suppliers s
@@ -301,9 +335,11 @@ export class AnomalyDetector {
           GROUP BY s.id, s.company_name
         )
         SELECT * FROM supplier_metrics WHERE late_rate >= $1;
-      `;
+      `
 
-      const result = await query(queryText, [this.thresholds.supplierLateRatePercentage]);
+      const result = await query(queryText, [
+        this.thresholds.supplierLateRatePercentage,
+      ])
 
       for (const row of result.rows) {
         await this.createAlert({
@@ -315,10 +351,10 @@ export class AnomalyDetector {
           thresholdValue: this.thresholds.supplierLateRatePercentage,
           resourceType: 'supplier',
           resourceId: row.id,
-        });
+        })
       }
     } catch (error) {
-      logger.warn('Error checking supplier late rate anomaly:', error);
+      logger.warn('Error checking supplier late rate anomaly:', error)
     }
   }
 
@@ -326,15 +362,15 @@ export class AnomalyDetector {
    * Helper: Create an alert
    */
   private async createAlert(alert: {
-    alertType: string;
-    severity: string;
-    title: string;
-    message: string;
-    currentValue: number;
-    thresholdValue: number;
-    baselineValue?: number;
-    resourceType?: string;
-    resourceId?: string;
+    alertType: string
+    severity: string
+    title: string
+    message: string
+    currentValue: number
+    thresholdValue: number
+    baselineValue?: number
+    resourceType?: string
+    resourceId?: string
   }): Promise<void> {
     try {
       // Check if similar active alert exists
@@ -346,17 +382,17 @@ export class AnomalyDetector {
         AND is_active = true
         AND triggered_at > NOW() - INTERVAL '1 hour'
         LIMIT 1;
-      `;
+      `
 
       const existing = await query(existingQuery, [
         alert.alertType,
         alert.resourceType || null,
         alert.resourceId || null,
-      ]);
+      ])
 
       // Skip if recent alert exists
       if (existing.rows.length > 0) {
-        return;
+        return
       }
 
       // Insert new alert
@@ -367,7 +403,7 @@ export class AnomalyDetector {
           resource_type, resource_id, is_active, triggered_at
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, CURRENT_TIMESTAMP);
-      `;
+      `
 
       await query(insertQuery, [
         alert.alertType,
@@ -379,9 +415,9 @@ export class AnomalyDetector {
         alert.baselineValue || null,
         alert.resourceType,
         alert.resourceId || null,
-      ]);
+      ])
 
-      logger.info(`Alert created: ${alert.alertType} - ${alert.title}`);
+      logger.info(`Alert created: ${alert.alertType} - ${alert.title}`)
 
       // Dispatch notifications to all admins
       try {
@@ -394,16 +430,18 @@ export class AnomalyDetector {
           currentValue: alert.currentValue,
           thresholdValue: alert.thresholdValue,
           triggeredAt: new Date(),
-        });
+        })
       } catch (error) {
-        logger.error('Error dispatching alert notifications:', error);
+        logger.error('Error dispatching alert notifications:', error)
       }
     } catch (error) {
-      logger.error('Error creating alert:', error);
+      logger.error('Error creating alert:', error)
     }
   }
 }
 
-export function createAnomalyDetector(thresholds?: Partial<AnomalyThresholds>): AnomalyDetector {
-  return new AnomalyDetector(thresholds);
+export function createAnomalyDetector(
+  thresholds?: Partial<AnomalyThresholds>,
+): AnomalyDetector {
+  return new AnomalyDetector(thresholds)
 }

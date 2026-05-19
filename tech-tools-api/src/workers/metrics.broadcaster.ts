@@ -5,7 +5,10 @@
  */
 
 import { query } from '../database/connection'
-import { webSocketService, type DashboardMetrics } from '../services/websocket.service'
+import {
+  webSocketService,
+  type DashboardMetrics,
+} from '../services/websocket.service'
 import logger from '../utils/logger'
 
 let metricsInterval: NodeJS.Timeout | null = null
@@ -18,7 +21,7 @@ async function getActiveUsers(): Promise<number> {
     const result = await query(
       `SELECT COUNT(DISTINCT user_id) as active_users 
        FROM user_sessions 
-       WHERE end_time IS NULL OR end_time > NOW() - INTERVAL '5 minutes'`
+       WHERE end_time IS NULL OR end_time > NOW() - INTERVAL '5 minutes'`,
     )
     return result.rows[0]?.active_users || 0
   } catch (error) {
@@ -35,7 +38,7 @@ async function getEventsPerSecond(): Promise<number> {
     const result = await query(
       `SELECT COUNT(*) as event_count 
        FROM events_core 
-       WHERE event_time > NOW() - INTERVAL '1 minute'`
+       WHERE event_time > NOW() - INTERVAL '1 minute'`,
     )
     const eventCount = result.rows[0]?.event_count || 0
     return Number((eventCount / 60).toFixed(2))
@@ -54,7 +57,7 @@ async function getLastHourRevenue(): Promise<number> {
       `SELECT SUM(o.grand_total) as revenue
        FROM orders o
        WHERE o.created_at > NOW() - INTERVAL '1 hour'
-       AND o.status IN ('completed', 'shipped', 'delivered')`
+      AND o.order_status IN ('confirmed', 'processing', 'ready_to_ship', 'shipped', 'delivered')`,
     )
     return result.rows[0]?.revenue ? Number(result.rows[0].revenue) : 0
   } catch (error) {
@@ -72,7 +75,7 @@ async function getLastHourOrders(): Promise<number> {
       `SELECT COUNT(*) as order_count
        FROM orders
        WHERE created_at > NOW() - INTERVAL '1 hour'
-       AND status IN ('completed', 'shipped', 'delivered')`
+      AND order_status IN ('confirmed', 'processing', 'ready_to_ship', 'shipped', 'delivered')`,
     )
     return result.rows[0]?.order_count || 0
   } catch (error) {
@@ -91,7 +94,7 @@ async function getConversionRate(): Promise<number> {
         COUNT(DISTINCT CASE WHEN event_type = 'product_view' THEN user_id END) as viewers,
         COUNT(DISTINCT CASE WHEN event_type = 'payment_success' THEN user_id END) as buyers
        FROM events_core
-       WHERE event_time > NOW() - INTERVAL '24 hours'`
+       WHERE event_time > NOW() - INTERVAL '24 hours'`,
     )
     const { viewers = 0, buyers = 0 } = result.rows[0] || {}
     if (viewers === 0) return 0
@@ -119,7 +122,7 @@ async function getActiveAlertStats(): Promise<{
         COUNT(*) FILTER (WHERE severity = 'medium') as medium,
         COUNT(*) FILTER (WHERE severity = 'low') as low
        FROM alerts
-       WHERE is_active = true`
+       WHERE is_active = true`,
     )
     const row = result.rows[0] || {}
     return {
@@ -139,15 +142,21 @@ async function getActiveAlertStats(): Promise<{
  */
 async function fetchAndBroadcastMetrics(): Promise<void> {
   try {
-    const [activeUsers, eventsPerSecond, lastHourRevenue, lastHourOrders, conversionRate, activeAlerts] =
-      await Promise.all([
-        getActiveUsers(),
-        getEventsPerSecond(),
-        getLastHourRevenue(),
-        getLastHourOrders(),
-        getConversionRate(),
-        getActiveAlertStats(),
-      ])
+    const [
+      activeUsers,
+      eventsPerSecond,
+      lastHourRevenue,
+      lastHourOrders,
+      conversionRate,
+      activeAlerts,
+    ] = await Promise.all([
+      getActiveUsers(),
+      getEventsPerSecond(),
+      getLastHourRevenue(),
+      getLastHourOrders(),
+      getConversionRate(),
+      getActiveAlertStats(),
+    ])
 
     const metrics: DashboardMetrics = {
       activeUsers,
@@ -172,14 +181,18 @@ async function fetchAndBroadcastMetrics(): Promise<void> {
 export function startMetricsBroadcaster(): void {
   try {
     // Broadcast immediately
-    fetchAndBroadcastMetrics().catch(err => logger.error('Error in initial metrics broadcast:', err))
+    fetchAndBroadcastMetrics().catch((err) =>
+      logger.error('Error in initial metrics broadcast:', err),
+    )
 
     // Then broadcast periodically
     metricsInterval = setInterval(async () => {
       await fetchAndBroadcastMetrics()
     }, 30 * 1000) // Every 30 seconds
 
-    logger.info('✅ Real-time metrics broadcaster started (updates every 30 seconds)')
+    logger.info(
+      '✅ Real-time metrics broadcaster started (updates every 30 seconds)',
+    )
   } catch (error) {
     logger.error('Failed to start metrics broadcaster:', error)
   }
