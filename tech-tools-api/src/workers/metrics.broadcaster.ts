@@ -131,7 +131,12 @@ async function getActiveAlertStats(): Promise<{
       medium: row.medium || 0,
       low: row.low || 0,
     }
-  } catch (error) {
+  } catch (error: any) {
+    // Gracefully handle missing alerts table
+    if (error?.code === '42P01') {
+      logger.warn('Skipping alert stats: alerts table is missing')
+      return { critical: 0, high: 0, medium: 0, low: 0 }
+    }
     logger.error('Error getting alert stats:', error)
     return { critical: 0, high: 0, medium: 0, low: 0 }
   }
