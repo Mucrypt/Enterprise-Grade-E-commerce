@@ -6,23 +6,24 @@ Quick reference for all production server scripts. Run these from the server at 
 
 ## 📋 Quick Reference Table
 
-| Script             | Purpose                                       | Usage                                   |
-| ------------------ | --------------------------------------------- | --------------------------------------- |
-| `migrate.sh`       | Database migrations                           | `./server-scripts/migrate.sh up`        |
-| `update.sh`        | Full update (pull + build + deploy + migrate) | `./server-scripts/update.sh [service]`  |
-| `rebuild.sh`       | Force rebuild from scratch                    | `./server-scripts/rebuild.sh [service]` |
-| `restart.sh`       | Quick restart (no rebuild)                    | `./server-scripts/restart.sh [service]` |
-| `pull.sh`          | Pull code only (no rebuild)                   | `./server-scripts/pull.sh`              |
-| `status.sh`        | System health check                           | `./server-scripts/status.sh`            |
-| `logs.sh`          | View container logs                           | `./server-scripts/logs.sh [service]`    |
-| `backup-db.sh`     | Backup database                               | `./server-scripts/backup-db.sh`         |
-| `restore-db.sh`    | Restore from backup                           | `./server-scripts/restore-db.sh <file>` |
-| `db-shell.sh`      | PostgreSQL shell                              | `./server-scripts/db-shell.sh`          |
-| `redis-shell.sh`   | Redis CLI                                     | `./server-scripts/redis-shell.sh`       |
-| `nginx-reload.sh`  | Reload nginx config                           | `./server-scripts/nginx-reload.sh`      |
-| `nginx-restart.sh` | Restart nginx container                       | `./server-scripts/nginx-restart.sh`     |
-| `ssl-renew.sh`     | Renew SSL certificates                        | `./server-scripts/ssl-renew.sh`         |
-| `cleanup.sh`       | Clean Docker resources                        | `./server-scripts/cleanup.sh`           |
+| Script               | Purpose                                       | Usage                                   |
+| -------------------- | --------------------------------------------- | --------------------------------------- |
+| `migrate.sh`         | Database migrations                           | `./server-scripts/migrate.sh up`        |
+| `update.sh`          | Full update (pull + build + deploy + migrate) | `./server-scripts/update.sh [service]`  |
+| `rebuild.sh`         | Force rebuild from scratch                    | `./server-scripts/rebuild.sh [service]` |
+| `restart.sh`         | Quick restart (no rebuild)                    | `./server-scripts/restart.sh [service]` |
+| `pull.sh`            | Pull code only (no rebuild)                   | `./server-scripts/pull.sh`              |
+| `status.sh`          | System health check                           | `./server-scripts/status.sh`            |
+| `logs.sh`            | View container logs                           | `./server-scripts/logs.sh [service]`    |
+| `backup-db.sh`       | Backup database                               | `./server-scripts/backup-db.sh`         |
+| `restore-db.sh`      | Restore from backup                           | `./server-scripts/restore-db.sh <file>` |
+| `db-shell.sh`        | PostgreSQL shell                              | `./server-scripts/db-shell.sh`          |
+| `redis-shell.sh`     | Redis CLI                                     | `./server-scripts/redis-shell.sh`       |
+| `nginx-reload.sh`    | Reload nginx config                           | `./server-scripts/nginx-reload.sh`      |
+| `nginx-restart.sh`   | Restart nginx container                       | `./server-scripts/nginx-restart.sh`     |
+| `ssl-renew.sh`       | Renew SSL certificates                        | `./server-scripts/ssl-renew.sh`         |
+| `cleanup.sh`         | Clean Docker resources                        | `./server-scripts/cleanup.sh`           |
+| `ops-maintenance.sh` | Long-term ops actions (pgAdmin + cron jobs)   | `./server-scripts/ops-maintenance.sh`   |
 
 ---
 
@@ -144,6 +145,33 @@ Fetches and pulls latest code without building or deploying.
 ---
 
 ## 📊 Monitoring Scripts
+
+### `ops-maintenance.sh` - Long-Term Ops Maintenance
+
+Safe utilities for recurring production maintenance (without stopping app services).
+
+```bash
+# Apply both optimizations in one pass
+./server-scripts/ops-maintenance.sh apply-safe
+
+# Stop pgAdmin to save RAM
+./server-scripts/ops-maintenance.sh pgadmin-stop
+
+# Re-enable pgAdmin when needed
+./server-scripts/ops-maintenance.sh pgadmin-start
+
+# Install weekly Docker build-cache prune cron
+./server-scripts/ops-maintenance.sh cron-install
+
+# Check cron and server summary
+./server-scripts/ops-maintenance.sh all-status
+```
+
+**When to use:**
+
+- Reduce memory usage by disabling pgAdmin unless actively needed
+- Prevent future disk bloat from Docker build cache
+- Standardize maintenance actions for long-term support
 
 ### `status.sh` - System Health Check
 
