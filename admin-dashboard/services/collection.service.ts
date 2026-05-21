@@ -60,6 +60,7 @@ export const collectionService = {
     limit?: number
     visibility?: string
     isActive?: boolean
+    search?: string
   }) {
     const data = await apiClient.get('/collections/products', { params })
     return data
@@ -139,6 +140,7 @@ export const collectionService = {
     limit?: number
     visibility?: string
     isActive?: boolean
+    search?: string
   }) {
     const data = await apiClient.get('/collections/categories', { params })
     return data

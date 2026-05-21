@@ -1,5 +1,41 @@
 import { Request, Response } from 'express'
 import { query as dbQuery, getClient } from '../../../database/connection'
+import { AuthRequest } from '../../../middleware/auth'
+
+const COLLECTION_UPDATE_FIELD_MAP: Record<string, string> = {
+  name: 'name',
+  slug: 'slug',
+  description: 'description',
+  shortDescription: 'short_description',
+  short_description: 'short_description',
+  imageUrl: 'image_url',
+  image_url: 'image_url',
+  bannerUrl: 'banner_url',
+  banner_url: 'banner_url',
+  isActive: 'is_active',
+  is_active: 'is_active',
+  isFeatured: 'is_featured',
+  is_featured: 'is_featured',
+  visibility: 'visibility',
+  position: 'position',
+  displayOrder: 'display_order',
+  display_order: 'display_order',
+  metaTitle: 'meta_title',
+  meta_title: 'meta_title',
+  metaDescription: 'meta_description',
+  meta_description: 'meta_description',
+  metaKeywords: 'meta_keywords',
+  meta_keywords: 'meta_keywords',
+  startsAt: 'starts_at',
+  starts_at: 'starts_at',
+  endsAt: 'ends_at',
+  ends_at: 'ends_at',
+}
+
+const isAdminRequest = (req: Request): boolean => {
+  const userType = (req as AuthRequest).user?.userType
+  return userType === 'admin' || userType === 'super_admin'
+}
 
 // =====================================================
 // CREATE PRODUCT COLLECTION
@@ -105,8 +141,12 @@ export const getAllProductCollections = async (req: Request, res: Response) => {
       visibility,
       isActive,
       isFeatured,
+      active,
+      featured,
+      slug,
       search,
     } = req.query
+    const adminRequest = isAdminRequest(req)
 
     const offset = (Number(page) - 1) * Number(limit)
 
@@ -118,16 +158,28 @@ export const getAllProductCollections = async (req: Request, res: Response) => {
     if (visibility) {
       query += ` AND visibility = $${paramCount++}`
       params.push(visibility)
+    } else if (!adminRequest) {
+      query += ` AND visibility = $${paramCount++}`
+      params.push('public')
     }
 
-    if (isActive !== undefined) {
+    const activeFilter = isActive ?? active
+    if (activeFilter !== undefined) {
       query += ` AND is_active = $${paramCount++}`
-      params.push(isActive === 'true')
+      params.push(activeFilter === 'true')
+    } else if (!adminRequest) {
+      query += ` AND is_active = true`
     }
 
-    if (isFeatured !== undefined) {
+    const featuredFilter = isFeatured ?? featured
+    if (featuredFilter !== undefined) {
       query += ` AND is_featured = $${paramCount++}`
-      params.push(isFeatured === 'true')
+      params.push(featuredFilter === 'true')
+    }
+
+    if (slug) {
+      query += ` AND slug = $${paramCount++}`
+      params.push(slug)
     }
 
     if (search) {
@@ -136,9 +188,10 @@ export const getAllProductCollections = async (req: Request, res: Response) => {
       paramCount++
     }
 
-    // Add date filters for active collections
-    query += ' AND (starts_at IS NULL OR starts_at <= CURRENT_TIMESTAMP)'
-    query += ' AND (ends_at IS NULL OR ends_at > CURRENT_TIMESTAMP)'
+    if (!adminRequest) {
+      query += ' AND (starts_at IS NULL OR starts_at <= CURRENT_TIMESTAMP)'
+      query += ' AND (ends_at IS NULL OR ends_at > CURRENT_TIMESTAMP)'
+    }
 
     // Get total count
     const countResult = await dbQuery(
@@ -160,6 +213,7 @@ export const getAllProductCollections = async (req: Request, res: Response) => {
       pagination: {
         page: Number(page),
         limit: Number(limit),
+        total: totalItems,
         totalItems,
         totalPages: Math.ceil(totalItems / Number(limit)),
       },
@@ -182,6 +236,7 @@ export const getProductCollectionById = async (req: Request, res: Response) => {
   try {
     const { collectionId } = req.params
     const { includeProducts = 'true' } = req.query
+    const adminRequest = isAdminRequest(req)
 
     // Determine if collectionId is a UUID or slug
     const isUUID =
@@ -190,12 +245,10 @@ export const getProductCollectionById = async (req: Request, res: Response) => {
       )
 
     // Get collection details - support both ID and slug lookup
-    const collectionResult = await dbQuery(
-      isUUID
-        ? 'SELECT * FROM product_collections WHERE id = $1'
-        : 'SELECT * FROM product_collections WHERE slug = $1',
-      [collectionId],
-    )
+    const collectionQuery = isUUID
+      ? 'SELECT * FROM product_collections WHERE id = $1'
+      : 'SELECT * FROM product_collections WHERE slug = $1'
+    const collectionResult = await dbQuery(collectionQuery, [collectionId])
 
     if (collectionResult.rows.length === 0) {
       return res.status(404).json({
@@ -206,6 +259,19 @@ export const getProductCollectionById = async (req: Request, res: Response) => {
 
     const collection = collectionResult.rows[0]
 
+    if (
+      !adminRequest &&
+      (collection.visibility !== 'public' ||
+        !collection.is_active ||
+        (collection.starts_at && new Date(collection.starts_at) > new Date()) ||
+        (collection.ends_at && new Date(collection.ends_at) <= new Date()))
+    ) {
+      return res.status(404).json({
+        success: false,
+        message: 'Collection not found',
+      })
+    }
+
     // Get products if requested
     if (includeProducts === 'true') {
       const productsResult = await dbQuery(
@@ -213,6 +279,8 @@ export const getProductCollectionById = async (req: Request, res: Response) => {
          FROM products p
          JOIN product_collection_items pci ON p.id = pci.product_id
          WHERE pci.collection_id = $1
+           AND p.is_active = TRUE
+           AND p.deleted_at IS NULL
          ORDER BY pci.position ASC`,
         [collection.id],
       )
@@ -261,30 +329,19 @@ export const updateProductCollection = async (req: Request, res: Response) => {
     const values: any[] = []
     let paramCount = 1
 
-    const allowedFields = [
-      'name',
-      'slug',
-      'description',
-      'short_description',
-      'image_url',
-      'banner_url',
-      'is_active',
-      'is_featured',
-      'visibility',
-      'position',
-      'display_order',
-      'meta_title',
-      'meta_description',
-      'meta_keywords',
-      'starts_at',
-      'ends_at',
-    ]
+    const appliedFields = new Set<string>()
 
-    for (const field of allowedFields) {
-      const snakeField = field
-      if (updates[field] !== undefined) {
-        fields.push(`${snakeField} = $${paramCount++}`)
-        values.push(updates[field])
+    for (const [inputField, dbField] of Object.entries(
+      COLLECTION_UPDATE_FIELD_MAP,
+    )) {
+      if (appliedFields.has(dbField)) {
+        continue
+      }
+
+      if (updates[inputField] !== undefined) {
+        fields.push(`${dbField} = $${paramCount++}`)
+        values.push(updates[inputField])
+        appliedFields.add(dbField)
       }
     }
 
@@ -505,7 +562,7 @@ export const reorderProductsInCollection = async (
 ) => {
   try {
     const { collectionId } = req.params
-    const { productOrder } = req.body // Array of { productId, position }
+    const productOrder = req.body.productOrder || req.body.items
 
     if (!Array.isArray(productOrder) || productOrder.length === 0) {
       return res.status(400).json({

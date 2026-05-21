@@ -9,7 +9,11 @@ import {
   removeCategoryFromCollection,
   reorderCategoriesInCollection,
 } from './category-collections.controller'
-import { authenticate, authorize } from '../../../middleware/auth'
+import {
+  authenticate,
+  authenticateIfPresent,
+  authorize,
+} from '../../../middleware/auth'
 
 const router = Router()
 
@@ -28,10 +32,10 @@ router.post(
 )
 
 // Get all category collections (public with filters)
-router.get('/', getAllCategoryCollections)
+router.get('/', authenticateIfPresent, getAllCategoryCollections)
 
 // Get single category collection by ID (public)
-router.get('/:collectionId', getCategoryCollectionById)
+router.get('/:collectionId', authenticateIfPresent, getCategoryCollectionById)
 
 // Update category collection
 router.put(

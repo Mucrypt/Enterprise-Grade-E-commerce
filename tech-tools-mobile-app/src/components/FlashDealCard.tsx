@@ -25,16 +25,19 @@ const CARD_WIDTH = width * 0.42;
 interface FlashDealCardProps {
   product: Product;
   badge?: 'HOT' | 'FLASH' | 'DEAL';
-  endTime?: Date;
+  endTime?: Date | string | null;
 }
 
 export default function FlashDealCard({ product, badge = 'FLASH', endTime }: FlashDealCardProps) {
   const router = useRouter();
   const addToCart = useCartStore((state) => state.addItem);
-  const [countdown, setCountdown] = useState(formatCountdown(endTime || new Date(Date.now() + 3600000 * 6)));
+  const [countdown, setCountdown] = useState(formatCountdown(endTime));
 
   useEffect(() => {
-    if (!endTime) return;
+    if (!endTime) {
+      setCountdown({ hours: 0, minutes: 0, seconds: 0 });
+      return;
+    }
     
     const timer = setInterval(() => {
       setCountdown(formatCountdown(endTime));

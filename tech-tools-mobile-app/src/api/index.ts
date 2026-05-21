@@ -1093,15 +1093,17 @@ export const collectionsApi = {
       `/collections/products?${params.toString()}`,
     )
     const data = response.data.data || response.data
+    const collections = Array.isArray(data) ? data : data.collections || []
+    const pagination = data.pagination || {
+      page: 1,
+      limit: 20,
+      total: collections.length,
+      totalPages: 1,
+    }
 
     return {
-      collections: data.collections || data,
-      pagination: data.pagination || {
-        page: 1,
-        limit: 20,
-        total: data.collections?.length || 0,
-        totalPages: 1,
-      },
+      collections,
+      pagination,
     }
   },
 
@@ -1116,6 +1118,10 @@ export const collectionsApi = {
     const response = await apiClient.get(`/collections/products/${id}`)
     const data = response.data.data || response.data
     return data.collection || data
+  },
+
+  getBySlug: async (slug: string): Promise<ProductCollection> => {
+    return collectionsApi.getById(slug)
   },
 
   // Get products in a collection
@@ -1135,11 +1141,11 @@ export const collectionsApi = {
     const data = response.data.data || response.data
 
     return {
-      products: data.products || [],
+      products: data.products || data.collection?.products || [],
       pagination: data.pagination || {
         page: 1,
         limit: 20,
-        total: data.products?.length || 0,
+        total: (data.products || data.collection?.products || []).length,
         totalPages: 1,
       },
     }

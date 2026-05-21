@@ -55,6 +55,43 @@ export const authenticate = async (
   }
 }
 
+export const authenticateIfPresent = async (
+  req: AuthRequest,
+  _res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const authHeader = req.headers.authorization
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return next()
+    }
+
+    const token = authHeader.split(' ')[1]
+
+    try {
+      const decoded = jwt.verify(
+        token,
+        process.env.JWT_SECRET!,
+      ) as jwt.JwtPayload
+
+      req.user = {
+        id: decoded.userId,
+        userId: decoded.userId,
+        email: decoded.email,
+        userType: decoded.userType,
+      }
+    } catch {
+      // Ignore invalid tokens on public routes.
+    }
+
+    next()
+  } catch (error) {
+    logger.error('Optional authentication error:', error)
+    next(error)
+  }
+}
+
 export const authorize = (...allowedRoles: string[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user) {

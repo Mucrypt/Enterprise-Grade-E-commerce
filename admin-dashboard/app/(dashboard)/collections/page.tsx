@@ -123,6 +123,7 @@ export default function CollectionsPage() {
     queryFn: async () => {
       const params: any = { page, limit: 20 }
       if (visibilityFilter !== 'all') params.visibility = visibilityFilter
+      if (search.trim()) params.search = search.trim()
       const response = (await collectionService.getProductCollections(
         params,
       )) as { data: any; pagination: any }
@@ -141,6 +142,7 @@ export default function CollectionsPage() {
     queryFn: async () => {
       const params: any = { page, limit: 20 }
       if (visibilityFilter !== 'all') params.visibility = visibilityFilter
+      if (search.trim()) params.search = search.trim()
       const response = (await collectionService.getCategoryCollections(
         params,
       )) as { data: any; pagination: any }
@@ -481,6 +483,22 @@ export default function CollectionsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className='border-orange-200 bg-orange-50/60'>
+        <CardContent className='pt-6'>
+          <div className='flex items-start gap-3'>
+            <TrendingUp className='h-5 w-5 text-orange-600 mt-0.5' />
+            <div className='space-y-1'>
+              <p className='font-medium text-orange-950'>
+                Flash deals storefront source
+              </p>
+              <p className='text-sm text-orange-900/80'>
+                Create a product collection with the slug <strong>flash-deals</strong>, keep it public and active, set its start and end dates, then use Manage Items to choose the products shown on web and mobile.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Main Content with Tabs */}
       <Card>

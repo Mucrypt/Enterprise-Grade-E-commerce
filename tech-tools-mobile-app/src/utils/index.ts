@@ -187,10 +187,19 @@ export const generateStarRating = (
  * Format countdown time
  */
 export const formatCountdown = (
-  endTime: Date,
+  endTime: Date | string | null | undefined,
 ): { hours: number; minutes: number; seconds: number } => {
+  if (!endTime) {
+    return { hours: 0, minutes: 0, seconds: 0 }
+  }
+
+  const target = endTime instanceof Date ? endTime : new Date(endTime)
+  if (Number.isNaN(target.getTime())) {
+    return { hours: 0, minutes: 0, seconds: 0 }
+  }
+
   const now = new Date()
-  const diff = endTime.getTime() - now.getTime()
+  const diff = target.getTime() - now.getTime()
 
   if (diff <= 0) {
     return { hours: 0, minutes: 0, seconds: 0 }

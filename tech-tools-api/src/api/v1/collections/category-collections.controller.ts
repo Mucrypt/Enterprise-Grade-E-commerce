@@ -1,5 +1,41 @@
 import { Request, Response } from 'express'
 import { query as dbQuery, getClient } from '../../../database/connection'
+import { AuthRequest } from '../../../middleware/auth'
+
+const CATEGORY_COLLECTION_UPDATE_FIELD_MAP: Record<string, string> = {
+  name: 'name',
+  slug: 'slug',
+  description: 'description',
+  shortDescription: 'short_description',
+  short_description: 'short_description',
+  imageUrl: 'image_url',
+  image_url: 'image_url',
+  bannerUrl: 'banner_url',
+  banner_url: 'banner_url',
+  isActive: 'is_active',
+  is_active: 'is_active',
+  isFeatured: 'is_featured',
+  is_featured: 'is_featured',
+  visibility: 'visibility',
+  position: 'position',
+  displayOrder: 'display_order',
+  display_order: 'display_order',
+  metaTitle: 'meta_title',
+  meta_title: 'meta_title',
+  metaDescription: 'meta_description',
+  meta_description: 'meta_description',
+  metaKeywords: 'meta_keywords',
+  meta_keywords: 'meta_keywords',
+  startsAt: 'starts_at',
+  starts_at: 'starts_at',
+  endsAt: 'ends_at',
+  ends_at: 'ends_at',
+}
+
+const isAdminRequest = (req: Request): boolean => {
+  const userType = (req as AuthRequest).user?.userType
+  return userType === 'admin' || userType === 'super_admin'
+}
 
 // =====================================================
 // CREATE CATEGORY COLLECTION
@@ -108,8 +144,11 @@ export const getAllCategoryCollections = async (
       visibility,
       isActive,
       isFeatured,
+      active,
+      featured,
       search,
     } = req.query
+    const adminRequest = isAdminRequest(req)
 
     const offset = (Number(page) - 1) * Number(limit)
 
@@ -121,16 +160,23 @@ export const getAllCategoryCollections = async (
     if (visibility) {
       query += ` AND visibility = $${paramCount++}`
       params.push(visibility)
+    } else if (!adminRequest) {
+      query += ` AND visibility = $${paramCount++}`
+      params.push('public')
     }
 
-    if (isActive !== undefined) {
+    const activeFilter = isActive ?? active
+    if (activeFilter !== undefined) {
       query += ` AND is_active = $${paramCount++}`
-      params.push(isActive === 'true')
+      params.push(activeFilter === 'true')
+    } else if (!adminRequest) {
+      query += ' AND is_active = true'
     }
 
-    if (isFeatured !== undefined) {
+    const featuredFilter = isFeatured ?? featured
+    if (featuredFilter !== undefined) {
       query += ` AND is_featured = $${paramCount++}`
-      params.push(isFeatured === 'true')
+      params.push(featuredFilter === 'true')
     }
 
     if (search) {
@@ -139,9 +185,10 @@ export const getAllCategoryCollections = async (
       paramCount++
     }
 
-    // Add date filters for active collections
-    query += ' AND (starts_at IS NULL OR starts_at <= CURRENT_TIMESTAMP)'
-    query += ' AND (ends_at IS NULL OR ends_at > CURRENT_TIMESTAMP)'
+    if (!adminRequest) {
+      query += ' AND (starts_at IS NULL OR starts_at <= CURRENT_TIMESTAMP)'
+      query += ' AND (ends_at IS NULL OR ends_at > CURRENT_TIMESTAMP)'
+    }
 
     // Get total count
     const countResult = await dbQuery(
@@ -163,6 +210,7 @@ export const getAllCategoryCollections = async (
       pagination: {
         page: Number(page),
         limit: Number(limit),
+        total: totalItems,
         totalItems,
         totalPages: Math.ceil(totalItems / Number(limit)),
       },
@@ -188,6 +236,7 @@ export const getCategoryCollectionById = async (
   try {
     const { collectionId } = req.params
     const { includeCategories = 'true' } = req.query
+    const adminRequest = isAdminRequest(req)
 
     // Get collection details
     const collectionResult = await dbQuery(
@@ -203,6 +252,19 @@ export const getCategoryCollectionById = async (
     }
 
     const collection = collectionResult.rows[0]
+
+    if (
+      !adminRequest &&
+      (collection.visibility !== 'public' ||
+        !collection.is_active ||
+        (collection.starts_at && new Date(collection.starts_at) > new Date()) ||
+        (collection.ends_at && new Date(collection.ends_at) <= new Date()))
+    ) {
+      return res.status(404).json({
+        success: false,
+        message: 'Collection not found',
+      })
+    }
 
     // Get categories if requested
     if (includeCategories === 'true') {
@@ -259,30 +321,19 @@ export const updateCategoryCollection = async (req: Request, res: Response) => {
     const values: any[] = []
     let paramCount = 1
 
-    const allowedFields = [
-      'name',
-      'slug',
-      'description',
-      'short_description',
-      'image_url',
-      'banner_url',
-      'is_active',
-      'is_featured',
-      'visibility',
-      'position',
-      'display_order',
-      'meta_title',
-      'meta_description',
-      'meta_keywords',
-      'starts_at',
-      'ends_at',
-    ]
+    const appliedFields = new Set<string>()
 
-    for (const field of allowedFields) {
-      const snakeField = field
-      if (updates[field] !== undefined) {
-        fields.push(`${snakeField} = $${paramCount++}`)
-        values.push(updates[field])
+    for (const [inputField, dbField] of Object.entries(
+      CATEGORY_COLLECTION_UPDATE_FIELD_MAP,
+    )) {
+      if (appliedFields.has(dbField)) {
+        continue
+      }
+
+      if (updates[inputField] !== undefined) {
+        fields.push(`${dbField} = $${paramCount++}`)
+        values.push(updates[inputField])
+        appliedFields.add(dbField)
       }
     }
 
@@ -506,7 +557,7 @@ export const reorderCategoriesInCollection = async (
 ) => {
   try {
     const { collectionId } = req.params
-    const { categoryOrder } = req.body // Array of { categoryId, position }
+    const categoryOrder = req.body.categoryOrder || req.body.items
 
     if (!Array.isArray(categoryOrder) || categoryOrder.length === 0) {
       return res.status(400).json({

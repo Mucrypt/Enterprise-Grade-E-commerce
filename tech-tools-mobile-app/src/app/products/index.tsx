@@ -17,7 +17,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { ProductCard, SearchBar } from '@/components'
 import { AppColors, AppSpacing, AppBorderRadius } from '@/constants/appTheme'
-import { productsApi } from '@/api'
+import { productsApi, collectionsApi } from '@/api'
 import { Product, ProductFilters } from '@/types'
 
 const { width } = Dimensions.get('window')
@@ -45,6 +45,16 @@ export default function ProductsScreen() {
   const fetchProducts = useCallback(
     async (pageNum = 1, refresh = false) => {
       try {
+        if (typeof params.collection === 'string' && params.collection) {
+          const collection = await collectionsApi.getBySlug(params.collection)
+          const collectionProducts = collection.products || []
+
+          setProducts(collectionProducts)
+          setHasMore(false)
+          setPage(1)
+          return
+        }
+
         const filters: ProductFilters & { page: number; limit: number } = {
           page: pageNum,
           limit: 20,
@@ -71,7 +81,7 @@ export default function ProductsScreen() {
         setRefreshing(false)
       }
     },
-    [sortBy, searchQuery, params.category, params.featured],
+    [sortBy, searchQuery, params.category, params.featured, params.collection],
   )
 
   useEffect(() => {

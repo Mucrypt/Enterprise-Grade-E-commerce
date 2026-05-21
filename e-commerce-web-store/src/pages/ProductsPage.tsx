@@ -14,8 +14,14 @@ import {
   Star,
   Check,
 } from 'lucide-react'
-import type { Product, Category, Brand, ProductFilters } from '../types'
-import { productsApi, categoriesApi, brandsApi } from '../api'
+import type {
+  Product,
+  Category,
+  Brand,
+  ProductFilters,
+  ProductCollection,
+} from '../types'
+import { productsApi, categoriesApi, brandsApi, collectionsApi } from '../api'
 import ProductCard from '../components/common/ProductCard'
 import { cn, formatPrice } from '../utils'
 import { useEventTracking } from '../hooks/useEventTracking'
@@ -47,6 +53,8 @@ export default function ProductsPage() {
   const [brands, setBrands] = useState<Brand[]>([])
   const [loading, setLoading] = useState(true)
   const [totalProducts, setTotalProducts] = useState(0)
+  const [activeCollection, setActiveCollection] =
+    useState<ProductCollection | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [showFilters, setShowFilters] = useState(false)
   const [gridView, setGridView] = useState<'grid' | 'large'>('grid')
@@ -73,6 +81,7 @@ export default function ProductsPage() {
       sortBy: (searchParams.get('sortBy') || 'newest') as SortByValue,
       search: searchParams.get('search') || '',
       inStock: searchParams.get('inStock') === 'true',
+      collection: searchParams.get('collection') || '',
     }),
     [searchParams, slug, isCategoryRoute, isBrandRoute],
   )
@@ -106,6 +115,17 @@ export default function ProductsPage() {
   async function loadProducts() {
     setLoading(true)
     try {
+      if (filters.collection) {
+        const collection = await collectionsApi.getBySlug(filters.collection)
+        const collectionProducts = collection.products || []
+
+        setActiveCollection(collection)
+        setProducts(collectionProducts)
+        setTotalProducts(collectionProducts.length)
+        return
+      }
+
+      setActiveCollection(null)
       const result = await productsApi.getAll({
         ...filters,
         page: currentPage,
@@ -169,6 +189,7 @@ export default function ProductsPage() {
   const clearAllFilters = () => {
     setSearchParams({})
     setCurrentPage(1)
+    setActiveCollection(null)
   }
 
   const activeFiltersCount = [
@@ -177,6 +198,7 @@ export default function ProductsPage() {
     !isBrandRoute && filters.brand,
     filters.minPrice,
     filters.inStock,
+    filters.collection,
   ].filter(Boolean).length
 
   // Get current category or brand name for display
@@ -188,6 +210,7 @@ export default function ProductsPage() {
   // Generate page title
   const getPageTitle = () => {
     if (filters.search) return `Results for "${filters.search}"`
+    if (activeCollection) return activeCollection.name
     if (currentCategory) return currentCategory.name
     if (currentBrand) return currentBrand.name
     if (isCategoryRoute && slug)
@@ -236,7 +259,9 @@ export default function ProductsPage() {
               </>
             )}
             {!isCategoryRoute && !isBrandRoute && (
-              <span className='text-gray-900'>All Products</span>
+              <span className='text-gray-900'>
+                {activeCollection?.name || 'All Products'}
+              </span>
             )}
           </nav>
         </div>

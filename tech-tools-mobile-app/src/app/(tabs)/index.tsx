@@ -29,8 +29,15 @@ import {
   PromoBanner,
 } from '@/components'
 import { AppColors, AppSpacing, PromoBanners } from '@/constants/appTheme'
-import { productsApi, categoriesApi, brandsApi, blogApi } from '@/api'
-import { Product, Category, Brand, BlogPost } from '@/types'
+import {
+  productsApi,
+  categoriesApi,
+  brandsApi,
+  blogApi,
+  collectionsApi,
+} from '@/api'
+import { Product, Category, Brand, BlogPost, ProductCollection } from '@/types'
+import { formatCountdown } from '@/utils'
 
 // Premium brand gradients
 const BRAND_GRADIENTS: [string, string][] = [
@@ -53,6 +60,11 @@ export default function HomeTabScreen() {
 
   // Data states
   const [flashDeals, setFlashDeals] = useState<Product[]>([])
+  const [flashDealsCollection, setFlashDealsCollection] =
+    useState<ProductCollection | null>(null)
+  const [flashDealsCountdown, setFlashDealsCountdown] = useState(
+    formatCountdown(null),
+  )
   const [categories, setCategories] = useState<Category[]>([])
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([])
   const [newArrivals, setNewArrivals] = useState<Product[]>([])
@@ -64,8 +76,9 @@ export default function HomeTabScreen() {
 
   const fetchData = async () => {
     try {
-      const [categoriesRes, featuredRes, newRes, brandsRes, blogRes] =
+      const [flashDealsRes, categoriesRes, featuredRes, newRes, brandsRes, blogRes] =
         await Promise.all([
+          collectionsApi.getBySlug('flash-deals').catch(() => null),
           categoriesApi.getAll(),
           productsApi.getFeatured(8),
           productsApi.getNewArrivals(8),
@@ -73,9 +86,16 @@ export default function HomeTabScreen() {
           blogApi.getFeaturedPosts(4),
         ])
 
+      const liveFlashDeals =
+        flashDealsRes && isCollectionLive(flashDealsRes)
+          ? flashDealsRes
+          : null
+
+      setFlashDealsCollection(liveFlashDeals)
+      setFlashDeals(liveFlashDeals?.products?.slice(0, 8) || [])
+      setFlashDealsCountdown(formatCountdown(liveFlashDeals?.ends_at))
       setCategories(categoriesRes.slice(0, 10))
       setFeaturedProducts(featuredRes)
-      setFlashDeals(featuredRes.slice(0, 8))
       setNewArrivals(newRes)
       setBrands(brandsRes.slice(0, 8))
       setBlogPosts(blogRes)
@@ -90,13 +110,27 @@ export default function HomeTabScreen() {
     fetchData()
   }, [])
 
+  useEffect(() => {
+    if (!flashDealsCollection?.ends_at) {
+      setFlashDealsCountdown(formatCountdown(null))
+      return
+    }
+
+    const timer = setInterval(() => {
+      setFlashDealsCountdown(formatCountdown(flashDealsCollection.ends_at))
+    }, 1000)
+
+    setFlashDealsCountdown(formatCountdown(flashDealsCollection.ends_at))
+
+    return () => clearInterval(timer)
+  }, [flashDealsCollection?.ends_at])
+
   const onRefresh = async () => {
     setRefreshing(true)
     await fetchData()
     setRefreshing(false)
   }
 
-  const dealEndTime = new Date(Date.now() + 6 * 60 * 60 * 1000)
   const badges: ('HOT' | 'FLASH' | 'DEAL')[] = [
     'HOT',
     'FLASH',
@@ -132,28 +166,30 @@ export default function HomeTabScreen() {
         <HeroSection />
 
         {/* Flash Deals Section */}
-        <View style={styles.section}>
-          <SectionHeader
-            title='Flash Deals'
-            subtitle='Ends in 6 hours'
-            icon='flash'
-            onAction={() => router.push('/products?deals=true')}
-          />
-          <FlatList
-            horizontal
-            data={flashDeals}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item, index }) => (
-              <FlashDealCard
-                product={item}
-                badge={badges[index % badges.length]}
-                endTime={dealEndTime}
-              />
-            )}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.horizontalList}
-          />
-        </View>
+        {flashDeals.length > 0 && flashDealsCollection && (
+          <View style={styles.section}>
+            <SectionHeader
+              title='Flash Deals'
+              subtitle={`Ends in ${String(flashDealsCountdown.hours).padStart(2, '0')}h ${String(flashDealsCountdown.minutes).padStart(2, '0')}m`}
+              icon='flash'
+              onAction={() => router.push('/products?collection=flash-deals')}
+            />
+            <FlatList
+              horizontal
+              data={flashDeals}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item, index }) => (
+                <FlashDealCard
+                  product={item}
+                  badge={badges[index % badges.length]}
+                  endTime={flashDealsCollection.ends_at}
+                />
+              )}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalList}
+            />
+          </View>
+        )}
 
         {/* Categories Section */}
         <View style={styles.section}>
@@ -367,6 +403,18 @@ export default function HomeTabScreen() {
       </ScrollView>
     </SafeAreaView>
   )
+}
+
+function isCollectionLive(collection: ProductCollection) {
+  const now = new Date()
+  const startsAt = collection.starts_at ? new Date(collection.starts_at) : null
+  const endsAt = collection.ends_at ? new Date(collection.ends_at) : null
+
+  if (!collection.is_active) return false
+  if (startsAt && startsAt > now) return false
+  if (endsAt && endsAt <= now) return false
+
+  return true
 }
 
 const styles = StyleSheet.create({

@@ -9,7 +9,11 @@ import {
   removeProductFromCollection,
   reorderProductsInCollection,
 } from './product-collections.controller'
-import { authenticate, authorize } from '../../../middleware/auth'
+import {
+  authenticate,
+  authenticateIfPresent,
+  authorize,
+} from '../../../middleware/auth'
 
 const router = Router()
 
@@ -28,10 +32,10 @@ router.post(
 )
 
 // Get all product collections (public with filters)
-router.get('/', getAllProductCollections)
+router.get('/', authenticateIfPresent, getAllProductCollections)
 
 // Get single product collection by ID (public)
-router.get('/:collectionId', getProductCollectionById)
+router.get('/:collectionId', authenticateIfPresent, getProductCollectionById)
 
 // Update product collection
 router.put(

@@ -5,8 +5,8 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Clock, Zap, ChevronRight, Flame } from 'lucide-react'
-import type { Product } from '../../types'
-import { productsApi } from '../../api'
+import type { Product, ProductCollection } from '../../types'
+import { collectionsApi } from '../../api'
 import ProductCard from '../common/ProductCard'
 import { cn } from '../../utils'
 
@@ -19,41 +19,54 @@ interface TimeLeft {
 export default function FlashDealsSection() {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
+  const [flashDealCollection, setFlashDealCollection] =
+    useState<ProductCollection | null>(null)
   const [timeLeft, setTimeLeft] = useState<TimeLeft>({
-    hours: 5,
-    minutes: 27,
-    seconds: 13,
+    hours: 0,
+    minutes: 0,
+    seconds: 0,
   })
+
+  const endsAt = flashDealCollection?.ends_at
 
   useEffect(() => {
     loadProducts()
   }, [])
 
   useEffect(() => {
+    if (!endsAt) return
+
     const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev.seconds > 0) {
-          return { ...prev, seconds: prev.seconds - 1 }
-        } else if (prev.minutes > 0) {
-          return { ...prev, minutes: prev.minutes - 1, seconds: 59 }
-        } else if (prev.hours > 0) {
-          return { hours: prev.hours - 1, minutes: 59, seconds: 59 }
-        }
-        return prev
-      })
+      setTimeLeft(getTimeLeft(endsAt))
     }, 1000)
+
+    setTimeLeft(getTimeLeft(endsAt))
     return () => clearInterval(timer)
-  }, [])
+  }, [endsAt])
 
   async function loadProducts() {
     try {
-      const data = await productsApi.getFeatured(8)
-      setProducts(data.slice(0, 8))
+      const collection = await collectionsApi.getBySlug('flash-deals')
+
+      if (!isCollectionLive(collection)) {
+        setFlashDealCollection(null)
+        setProducts([])
+        return
+      }
+
+      setFlashDealCollection(collection)
+      setProducts((collection.products || []).slice(0, 8))
     } catch (error) {
       console.error('Failed to load flash deals:', error)
+      setFlashDealCollection(null)
+      setProducts([])
     } finally {
       setLoading(false)
     }
+  }
+
+  if (!loading && (!flashDealCollection || products.length === 0)) {
+    return null
   }
 
   const TimeBlock = ({ value, label }: { value: number; label: string }) => (
@@ -144,7 +157,7 @@ export default function FlashDealsSection() {
         {/* View All Button */}
         <div className='mt-8 text-center'>
           <Link
-            to='/sale'
+            to='/sale?collection=flash-deals'
             className='inline-flex items-center gap-2 px-8 py-3 bg-linear-to-r from-red-500 to-orange-500 text-white font-bold rounded-full hover:from-red-600 hover:to-orange-600 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5'
           >
             View All Deals
@@ -154,4 +167,30 @@ export default function FlashDealsSection() {
       </div>
     </section>
   )
+}
+
+function isCollectionLive(collection: ProductCollection) {
+  const now = new Date()
+  const startsAt = collection.starts_at ? new Date(collection.starts_at) : null
+  const endsAt = collection.ends_at ? new Date(collection.ends_at) : null
+
+  if (!collection.is_active) return false
+  if (startsAt && startsAt > now) return false
+  if (endsAt && endsAt <= now) return false
+
+  return true
+}
+
+function getTimeLeft(endAt: string): TimeLeft {
+  const diff = new Date(endAt).getTime() - Date.now()
+
+  if (diff <= 0) {
+    return { hours: 0, minutes: 0, seconds: 0 }
+  }
+
+  const hours = Math.floor(diff / (1000 * 60 * 60))
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+  const seconds = Math.floor((diff % (1000 * 60)) / 1000)
+
+  return { hours, minutes, seconds }
 }

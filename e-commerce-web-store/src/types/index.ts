@@ -131,9 +131,14 @@ export interface ProductCollection extends BaseEntity {
   description: string
   short_description: string
   image_url: string | null
+  banner_url?: string | null
   is_active: boolean
   is_featured: boolean
+  visibility?: 'public' | 'private' | 'hidden'
   position: number
+  items_count?: number
+  starts_at?: string | null
+  ends_at?: string | null
   products?: Product[]
 }
 

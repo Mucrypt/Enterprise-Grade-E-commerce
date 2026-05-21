@@ -169,11 +169,20 @@ export const brandsApi = {
 // ============================================
 export const collectionsApi = {
   // Get all product collections
-  async getAll() {
+  async getAll(filters?: {
+    featured?: boolean
+    limit?: number
+    search?: string
+  }) {
+    const params = new URLSearchParams()
+    if (filters?.featured) params.set('featured', 'true')
+    if (filters?.limit) params.set('limit', String(filters.limit))
+    if (filters?.search) params.set('search', filters.search)
+
     const response = await api.get<{
       success: boolean
       data: ProductCollection[]
-    }>('/collections/products')
+    }>(`/collections/products?${params.toString()}`)
     return response.data.data
   },
 
@@ -186,12 +195,8 @@ export const collectionsApi = {
   },
 
   // Get featured collections
-  async getFeatured() {
-    const response = await api.get<{
-      success: boolean
-      data: ProductCollection[]
-    }>('/collections/products?featured=true')
-    return response.data.data
+  async getFeatured(limit = 10) {
+    return collectionsApi.getAll({ featured: true, limit })
   },
 }
 
