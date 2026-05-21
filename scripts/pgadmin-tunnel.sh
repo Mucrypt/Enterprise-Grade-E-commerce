@@ -12,7 +12,7 @@
 set -euo pipefail
 
 SERVER_USER="${PGADMIN_SSH_USER:-root}"
-SERVER_HOST="${PGADMIN_SSH_HOST:-46.225.126.93}"
+SERVER_HOST="${PGADMIN_SSH_HOST:-100.92.116.9}"
 SSH_KEY="${PGADMIN_SSH_KEY:-$HOME/.ssh/hetzner_nexusai}"
 LOCAL_PORT="${PGADMIN_LOCAL_PORT:-5050}"
 REMOTE_PORT="${PGADMIN_REMOTE_PORT:-5050}"
@@ -52,6 +52,7 @@ start_tunnel() {
   ssh \
     -i "$SSH_KEY" \
     -o ExitOnForwardFailure=yes \
+    -o ConnectTimeout=10 \
     -o ServerAliveInterval=60 \
     -o ServerAliveCountMax=3 \
     -N \
@@ -68,6 +69,7 @@ start_tunnel() {
     open_browser
   else
     echo "Failed to start tunnel. See log: $LOG_FILE"
+    tail -n 5 "$LOG_FILE" 2>/dev/null || true
     exit 1
   fi
 }
