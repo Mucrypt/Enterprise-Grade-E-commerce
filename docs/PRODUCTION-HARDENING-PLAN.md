@@ -57,7 +57,12 @@
 **Secure access method (super admin only):**
 
 ```bash
-ssh -L 5050:localhost:5050 root@46.225.126.93
+# Recommended local helper (from repo root on your machine)
+./scripts/pgadmin-tunnel.sh start
+./scripts/pgadmin-tunnel.sh status
+
+# Fallback raw command (private host path)
+ssh -i ~/.ssh/hetzner_nexusai -L 5050:localhost:5050 root@100.92.116.9
 # then open http://localhost:5050
 ```
 
