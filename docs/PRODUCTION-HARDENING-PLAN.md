@@ -595,9 +595,12 @@ cd ~/Enterprise-Grade-E-commerce && ./server-scripts/status.sh
 ./server-scripts/logs.sh api
 ./server-scripts/logs.sh nginx
 
-# Private pgAdmin access (SSH tunnel)
-ssh -L 5050:localhost:5050 root@46.225.126.93
+# Private pgAdmin access (local helper script)
+./scripts/pgadmin-tunnel.sh start
+./scripts/pgadmin-tunnel.sh status
 # then open http://localhost:5050
+# stop later:
+./scripts/pgadmin-tunnel.sh stop
 
 # Manual database backup
 ./server-scripts/backup-db.sh
