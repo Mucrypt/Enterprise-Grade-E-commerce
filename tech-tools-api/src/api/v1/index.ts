@@ -25,6 +25,8 @@ import analyticsRoutes from './analytics/analytics.routes'
 import alertsRoutes from './alerts/alerts.routes'
 import { blogRoutes } from './blog'
 import aiRoutes from './ai/ai.routes'
+import booksRoutes from './books/books.routes'
+import creatorRoutes from './creator/creator.routes'
 
 const router = Router()
 
@@ -65,6 +67,8 @@ router.use('/analytics', analyticsRoutes)
 router.use('/alerts', alertsRoutes)
 router.use('/blog', blogRoutes)
 router.use('/ai', aiRoutes)
+router.use('/books', booksRoutes)
+router.use('/creator', creatorRoutes)
 
 // Documentation route
 router.get('/docs', (_req, res) => {
@@ -150,6 +154,19 @@ router.get('/docs', (_req, res) => {
           'Remove category (admin)',
         'PUT /api/v1/collections/categories/:collectionId/categories/reorder':
           'Reorder categories (admin)',
+      },
+      books: {
+        'GET /api/v1/books': 'Get published books list',
+        'GET /api/v1/books/:id': 'Get book by ID or slug',
+      },
+      creator: {
+        'GET /api/v1/creator/profiles/:handle': 'Get public creator profile',
+        'GET /api/v1/creator/profile/me':
+          'Get own creator profile (authenticated)',
+        'PUT /api/v1/creator/profile/me':
+          'Create or update own creator profile (authenticated)',
+        'POST /api/v1/creator/books':
+          'Create a digital book product (authenticated)',
       },
     },
   })

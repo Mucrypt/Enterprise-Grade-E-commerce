@@ -49,22 +49,27 @@ start_tunnel() {
   fi
 
   echo "Starting pgAdmin tunnel on localhost:$LOCAL_PORT -> $SERVER_HOST:$REMOTE_PORT"
+  : > "$LOG_FILE"
   ssh \
     -i "$SSH_KEY" \
     -o ExitOnForwardFailure=yes \
     -o ConnectTimeout=10 \
     -o ServerAliveInterval=60 \
     -o ServerAliveCountMax=3 \
+    -f \
     -N \
     -L "$LOCAL_PORT:localhost:$REMOTE_PORT" \
     "$SERVER_USER@$SERVER_HOST" \
-    >>"$LOG_FILE" 2>&1 &
+    >>"$LOG_FILE" 2>&1
 
-  local pid=$!
   sleep 1
 
-  if kill -0 "$pid" >/dev/null 2>&1 && is_listening; then
-    echo "$pid" > "$PID_FILE"
+  if is_listening; then
+    local pid=""
+    pid=$(pgrep -f "ssh .*${LOCAL_PORT}:localhost:${REMOTE_PORT}.*${SERVER_USER}@${SERVER_HOST}" | head -n 1 || true)
+    if [[ -n "$pid" ]]; then
+      echo "$pid" > "$PID_FILE"
+    fi
     echo "Tunnel started (PID $pid)"
     open_browser
   else
