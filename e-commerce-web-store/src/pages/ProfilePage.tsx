@@ -26,6 +26,7 @@ import {
   HelpCircle,
   MessageCircle,
   Star,
+  Store,
 } from 'lucide-react'
 import { supportApi } from '../api'
 import { SupportConcierge } from '../components/layout/SupportConcierge'
@@ -131,6 +132,7 @@ export default function ProfilePage() {
     { label: 'Track Order', icon: Package, href: '/track-order' },
     { label: 'Returns', icon: MessageCircle, href: '/returns' },
     { label: 'Payment Methods', icon: CreditCard, href: '/payment-methods' },
+    { label: 'Seller Hub', icon: Store, href: '/seller-hub' },
     { label: 'Settings', icon: Settings, href: '/settings' },
   ]
 

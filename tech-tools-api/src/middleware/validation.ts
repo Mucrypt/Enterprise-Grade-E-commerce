@@ -66,6 +66,14 @@ export const userSchemas = {
     companyName: Joi.string().max(255),
   }),
 
+  activateBusinessMode: Joi.object({
+    displayName: Joi.string().max(140),
+    handle: Joi.string().max(80),
+    companyName: Joi.string().max(255),
+    businessType: Joi.string().max(50),
+    source: Joi.string().max(50),
+  }),
+
   updateAddress: Joi.object({
     addressType: Joi.string().valid('shipping', 'billing').default('shipping'),
     fullName: Joi.string().max(200),
@@ -113,5 +121,78 @@ export const productSchemas = {
     isFeatured: Joi.boolean(),
     minOrderQuantity: Joi.number().integer().min(1),
     maxOrderQuantity: Joi.number().integer().min(1),
+  }),
+}
+
+export const adminBookSchemas = {
+  createBook: Joi.object({
+    name: Joi.string().max(255).required(),
+    slug: Joi.string().max(255),
+    description: Joi.string().allow('', null),
+    shortDescription: Joi.string().max(500).allow('', null),
+    basePrice: Joi.number().min(0).required(),
+    salePrice: Joi.number().min(0),
+    format: Joi.string().valid('pdf', 'epub', 'mobi', 'azw3', 'html', 'audio'),
+    fileUrl: Joi.string().uri(),
+    previewUrl: Joi.string().uri(),
+    coverImageUrl: Joi.string().uri(),
+    languageCode: Joi.string().max(10),
+    pageCount: Joi.number().integer().min(1),
+    isbn: Joi.string().max(32),
+    publisherName: Joi.string().max(255),
+    publicationDate: Joi.string().isoDate(),
+    drmEnabled: Joi.boolean(),
+    metadata: Joi.object().unknown(true),
+    publicationAction: Joi.string().valid('draft', 'submit', 'publish'),
+    moderationNotes: Joi.string().max(2000),
+    idempotencyKey: Joi.string().min(8).max(128),
+  }),
+
+  submitBook: Joi.object({
+    notes: Joi.string().max(2000),
+  }),
+
+  publishBook: Joi.object({
+    moderationNotes: Joi.string().max(2000),
+  }),
+}
+
+export const sellerSchemas = {
+  onboard: Joi.object({
+    displayName: Joi.string().max(140),
+    handle: Joi.string().max(80),
+    bio: Joi.string().max(3000),
+    avatarUrl: Joi.string().uri(),
+    bannerUrl: Joi.string().uri(),
+    metadata: Joi.object().unknown(true),
+    source: Joi.string().max(60),
+    termsAccepted: Joi.boolean(),
+  }),
+
+  requestVerification: Joi.object({
+    requestedTier: Joi.string()
+      .valid('basic', 'trusted', 'pro')
+      .default('basic'),
+    documentsSubmitted: Joi.array().items(Joi.object().unknown(true)).max(20),
+    notes: Joi.string().max(4000),
+  }),
+}
+
+export const adminSellerSchemas = {
+  approveVerification: Joi.object({
+    adminNotes: Joi.string().max(4000),
+    decisionReason: Joi.string().max(2000),
+    phoneVerified: Joi.boolean(),
+    idVerified: Joi.boolean(),
+    paymentMethodVerified: Joi.boolean(),
+  }),
+
+  rejectVerification: Joi.object({
+    adminNotes: Joi.string().max(4000),
+    decisionReason: Joi.string().max(2000),
+  }),
+
+  suspendSeller: Joi.object({
+    suspensionReason: Joi.string().max(4000).required(),
   }),
 }

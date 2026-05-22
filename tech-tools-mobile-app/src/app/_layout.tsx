@@ -179,6 +179,13 @@ export default function RootLayout() {
               }}
             />
             <Stack.Screen
+              name='profile/seller'
+              options={{
+                headerShown: false,
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
               name='orders/index'
               options={{
                 headerShown: false,

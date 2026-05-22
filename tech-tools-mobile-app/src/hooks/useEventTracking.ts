@@ -6,7 +6,6 @@
 import { useCallback, useEffect } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { getEventTracker } from '../services/event-tracking'
-import type { EventPayload } from '../services/event-tracking'
 
 export function useEventTracking() {
   const tracker = getEventTracker()
@@ -37,10 +36,7 @@ export function useEventTracking() {
       price: number,
       discount?: number,
     ) => {
-      tracker.trackProductView(
-        { productId, productName, sku, categoryId, price, discount },
-        { source: 'mobile_app' },
-      )
+      tracker.trackProductView(productId, productName, sku, price)
     },
     [tracker],
   )
@@ -48,8 +44,9 @@ export function useEventTracking() {
   const trackSearch = useCallback(
     (query: string, resultsCount: number, category?: string) => {
       tracker.trackSearch(
-        { query, resultsCount, category },
-        { source: 'mobile_app' },
+        query,
+        resultsCount,
+        category ? { category } : undefined,
       )
     },
     [tracker],
@@ -57,10 +54,12 @@ export function useEventTracking() {
 
   const trackFilterApplied = useCallback(
     (filterType: string, filterValue: string, resultsCount: number) => {
-      tracker.trackFilterApplied(
-        { filterType, filterValue, resultsCount },
-        { source: 'mobile_app' },
-      )
+      tracker.trackEvent({
+        eventType: 'filter_applied',
+        source: 'mobile_app',
+        timestamp: new Date(),
+        payload: { filterType, filterValue, resultsCount },
+      })
     },
     [tracker],
   )
@@ -73,10 +72,7 @@ export function useEventTracking() {
       price: number,
       quantity: number,
     ) => {
-      tracker.trackAddToCart(
-        { productId, productName, sku, price, quantity },
-        { source: 'mobile_app' },
-      )
+      tracker.trackAddToCart(productId, productName, price, quantity)
     },
     [tracker],
   )
@@ -89,20 +85,14 @@ export function useEventTracking() {
       price: number,
       quantity: number,
     ) => {
-      tracker.trackRemoveFromCart(
-        { productId, productName, sku, price, quantity },
-        { source: 'mobile_app' },
-      )
+      tracker.trackRemoveFromCart(productId, productName, price, quantity)
     },
     [tracker],
   )
 
   const trackCheckoutStart = useCallback(
     (cartTotal: number, itemCount: number, currency: string = 'EUR') => {
-      tracker.trackCheckoutStart(
-        { cartTotal, itemCount, currency },
-        { source: 'mobile_app' },
-      )
+      tracker.trackCheckoutStart(cartTotal, itemCount, [])
     },
     [tracker],
   )
@@ -114,20 +104,14 @@ export function useEventTracking() {
       itemCount: number,
       currency: string = 'EUR',
     ) => {
-      tracker.trackPaymentSuccess(
-        { orderId, cartTotal, itemCount, currency },
-        { source: 'mobile_app' },
-      )
+      tracker.trackPaymentSuccess(orderId, cartTotal, itemCount, 'card')
     },
     [tracker],
   )
 
   const trackCategoryView = useCallback(
     (categoryId: string, categoryName: string, productsCount: number) => {
-      tracker.trackCategoryView(
-        { categoryId, categoryName, productsCount },
-        { source: 'mobile_app' },
-      )
+      tracker.trackCategoryView(categoryId, categoryName, String(productsCount))
     },
     [tracker],
   )
@@ -139,8 +123,9 @@ export function useEventTracking() {
       discountPercentage?: number,
     ) => {
       tracker.trackPromoCodeApplied(
-        { promoCode, discountAmount, discountPercentage },
-        { source: 'mobile_app' },
+        promoCode,
+        discountAmount,
+        discountPercentage || 0,
       )
     },
     [tracker],
@@ -148,34 +133,32 @@ export function useEventTracking() {
 
   const trackProductFavorite = useCallback(
     (productId: string, productName: string, isFavorited: boolean) => {
-      tracker.trackEvent(
-        {
-          eventType: 'product_favorite',
-          payload: {
-            productId,
-            productName,
-            action: isFavorited ? 'added' : 'removed',
-          },
+      tracker.trackEvent({
+        eventType: 'product_favorite',
+        source: 'mobile_app',
+        timestamp: new Date(),
+        payload: {
+          productId,
+          productName,
+          action: isFavorited ? 'added' : 'removed',
         },
-        { source: 'mobile_app' },
-      )
+      })
     },
     [tracker],
   )
 
   const trackScreenView = useCallback(
     (screenName: string, screenParams?: Record<string, any>) => {
-      tracker.trackEvent(
-        {
-          eventType: 'screen_view',
-          payload: {
-            screenName,
-            screenParams,
-            timestamp: Date.now(),
-          },
+      tracker.trackEvent({
+        eventType: 'supplier_interaction',
+        source: 'mobile_app',
+        timestamp: new Date(),
+        payload: {
+          screenName,
+          screenParams,
+          timestamp: Date.now(),
         },
-        { source: 'mobile_app' },
-      )
+      } as any)
     },
     [tracker],
   )
@@ -186,28 +169,24 @@ export function useEventTracking() {
       errorType: string,
       context?: Record<string, any>,
     ) => {
-      tracker.trackEvent(
-        {
-          eventType: 'error',
-          payload: {
-            errorMessage,
-            errorType,
-            context,
-            timestamp: Date.now(),
-          },
+      tracker.trackEvent({
+        eventType: 'supplier_interaction',
+        source: 'mobile_app',
+        timestamp: new Date(),
+        payload: {
+          errorMessage,
+          errorType,
+          context,
+          timestamp: Date.now(),
         },
-        { source: 'mobile_app' },
-      )
+      } as any)
     },
     [tracker],
   )
 
   const trackSupportTicket = useCallback(
     (ticketId: string, issueType: string, description: string) => {
-      tracker.trackSupportTicketCreated(
-        { ticketId, issueType, description },
-        { source: 'mobile_app' },
-      )
+      tracker.trackSupportTicketCreated(ticketId, issueType, description)
     },
     [tracker],
   )

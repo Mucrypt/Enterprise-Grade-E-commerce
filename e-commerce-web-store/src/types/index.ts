@@ -199,7 +199,63 @@ export interface User {
   phone: string | null
   avatar_url: string | null
   is_verified: boolean
+  user_type?: string
+  is_business_account?: boolean
+  business_mode_activated_at?: string | null
   created_at: string
+}
+
+export type SellerTier = 'unverified' | 'basic' | 'trusted' | 'pro'
+export type SellerVerificationStatus =
+  | 'none'
+  | 'pending'
+  | 'approved'
+  | 'rejected'
+  | 'suspended'
+
+export interface SellerProfile {
+  id: string
+  user_id: string
+  display_name?: string | null
+  handle?: string | null
+  bio?: string | null
+  tier: SellerTier
+  verification_status: SellerVerificationStatus
+  max_active_listings: number
+  max_product_price?: number | string | null
+  is_active: boolean
+  is_suspended: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface SellerVerificationRequest {
+  id: string
+  user_id: string
+  seller_profile_id: string
+  requested_tier: SellerTier
+  status: SellerVerificationStatus
+  documents_submitted?: unknown[] | null
+  notes?: string | null
+  reviewed_by_admin_id?: string | null
+  reviewed_at?: string | null
+  admin_notes?: string | null
+  admin_decision_reason?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SellerTierConfig {
+  tier: SellerTier
+  max_active_listings: number
+  max_product_price?: number | string | null
+  commission_rate?: number | string | null
+  requires_phone_verification?: boolean
+  requires_id_verification?: boolean
+  requires_payment_method?: boolean
+  requires_admin_approval?: boolean
+  buyer_protection_level?: string | null
+  description?: string | null
 }
 
 export interface SupportQuickAction {

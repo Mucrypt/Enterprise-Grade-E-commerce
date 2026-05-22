@@ -29,6 +29,8 @@ import booksRoutes from './books/books.routes'
 import creatorRoutes from './creator/creator.routes'
 import libraryRoutes from './library/library.routes'
 import adminBooksRoutes from './admin/books.routes'
+import sellerRoutes from './seller/seller.routes'
+import adminSellersRoutes from './admin/sellers.routes'
 
 const router = Router()
 
@@ -45,9 +47,11 @@ router.get('/health', (_req, res) => {
 // API routes
 router.use('/auth', authRoutes)
 router.use('/admin/customers', customersRoutes) // Must be before /admin to avoid /:adminId catching "customers"
+router.use('/admin/sellers', adminSellersRoutes)
 router.use('/admin', adminRoutes)
 router.use('/admin/books', adminBooksRoutes)
 router.use('/users', userRoutes)
+router.use('/seller', sellerRoutes)
 router.use('/products', productRoutes)
 router.use('/products', productMediaRoutes) // Product media endpoints
 router.use('/categories', categoryRoutes)
@@ -88,6 +92,8 @@ router.get('/docs', (_req, res) => {
       users: {
         'GET /api/v1/users/profile': 'Get user profile',
         'PUT /api/v1/users/profile': 'Update user profile',
+        'POST /api/v1/users/business-mode/activate':
+          'Activate business mode and bootstrap creator profile (authenticated)',
         'GET /api/v1/users/addresses': 'Get user addresses',
         'POST /api/v1/users/addresses': 'Add user address',
       },
@@ -182,9 +188,38 @@ router.get('/docs', (_req, res) => {
         'GET /api/v1/creator/dashboard/metrics':
           'Get creator activation and first-sale KPI metrics (authenticated)',
       },
+      seller: {
+        'GET /api/v1/seller/tiers': 'Get seller tier configuration',
+        'GET /api/v1/seller/me':
+          'Get current user seller profile and eligibility (authenticated)',
+        'POST /api/v1/seller/onboard':
+          'Create or update current user seller profile (authenticated)',
+        'GET /api/v1/seller/verification-requests':
+          'Get current user verification requests (authenticated)',
+        'POST /api/v1/seller/verification-requests':
+          'Submit seller verification request (authenticated)',
+      },
+      adminSellers: {
+        'GET /api/v1/admin/sellers/verification-queue':
+          'Get seller verification moderation queue (admin)',
+        'POST /api/v1/admin/sellers/verification-requests/:requestId/approve':
+          'Approve seller verification request (admin)',
+        'POST /api/v1/admin/sellers/verification-requests/:requestId/reject':
+          'Reject seller verification request (admin)',
+        'POST /api/v1/admin/sellers/:sellerProfileId/suspend':
+          'Suspend seller profile (admin)',
+      },
       adminBooks: {
         'GET /api/v1/admin/books/review-queue':
           'Get moderation review queue (admin)',
+        'POST /api/v1/admin/books':
+          'Create admin-origin book metadata (admin/super_admin)',
+        'POST /api/v1/admin/books/:bookId/assets':
+          'Upload admin-origin book assets (admin/super_admin)',
+        'POST /api/v1/admin/books/:bookId/submit':
+          'Submit admin-origin book for moderation (admin/super_admin)',
+        'POST /api/v1/admin/books/:bookId/publish':
+          'Directly publish admin-origin book (super_admin)',
         'POST /api/v1/admin/books/:bookId/approve':
           'Approve or publish book (admin)',
         'POST /api/v1/admin/books/:bookId/reject': 'Reject book (admin)',

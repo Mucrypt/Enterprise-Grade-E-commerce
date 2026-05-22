@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
   Bell,
+  Briefcase,
   CreditCard,
   HelpCircle,
   Lock,
@@ -12,9 +13,11 @@ import {
   Shield,
   Settings,
   Smartphone,
+  Store,
   UserCircle2,
 } from 'lucide-react'
 import { useAuthStore } from '../stores'
+import { sellerApi, userApi } from '../api'
 
 function ToggleRow({
   label,
@@ -60,11 +63,24 @@ export default function SettingsPage() {
     hasHydrated,
     isLoading: authLoading,
     logout,
+    updateUser,
   } = useAuthStore()
   const [emailOffers, setEmailOffers] = useState(true)
   const [orderUpdates, setOrderUpdates] = useState(true)
   const [smsAlerts, setSmsAlerts] = useState(false)
   const [twoFactor, setTwoFactor] = useState(true)
+  const [isActivatingBusiness, setIsActivatingBusiness] = useState(false)
+  const [isOnboardingSeller, setIsOnboardingSeller] = useState(false)
+  const [isRequestingVerification, setIsRequestingVerification] =
+    useState(false)
+  const [sellerTier, setSellerTier] = useState<string>('unverified')
+  const [sellerVerificationStatus, setSellerVerificationStatus] =
+    useState<string>('none')
+  const [businessError, setBusinessError] = useState('')
+  const [businessSuccess, setBusinessSuccess] = useState('')
+
+  const creatorHubUrl =
+    import.meta.env.VITE_CREATOR_HUB_URL || 'https://techtoolstore.com/admin'
 
   useEffect(() => {
     if (hasHydrated && !isAuthenticated && !authLoading) {
@@ -72,9 +88,121 @@ export default function SettingsPage() {
     }
   }, [authLoading, hasHydrated, isAuthenticated, navigate])
 
+  useEffect(() => {
+    const loadSellerProfile = async () => {
+      if (!isAuthenticated || !user?.is_business_account) {
+        return
+      }
+
+      try {
+        const result = await sellerApi.getMyProfile()
+        if (result.sellerProfile) {
+          setSellerTier(result.sellerProfile.tier)
+          setSellerVerificationStatus(result.sellerProfile.verification_status)
+        }
+      } catch {
+        // Best effort only for settings display.
+      }
+    }
+
+    loadSellerProfile()
+  }, [isAuthenticated, user?.is_business_account])
+
   const handleLogout = () => {
     logout()
     navigate('/')
+  }
+
+  const handleActivateBusinessMode = async () => {
+    setBusinessError('')
+    setBusinessSuccess('')
+    setIsActivatingBusiness(true)
+
+    try {
+      const result = await userApi.activateBusinessMode({
+        source: 'web_store_settings',
+      })
+
+      updateUser({
+        is_business_account: result.user.isBusinessAccount,
+        user_type: result.user.userType,
+        business_mode_activated_at: result.user.businessModeActivatedAt || null,
+      })
+
+      setBusinessSuccess(
+        'Business mode activated. Your creator/seller tools are now available.',
+      )
+
+      try {
+        const onboarded = await sellerApi.onboard({
+          termsAccepted: true,
+          source: 'web_store_settings',
+        })
+
+        setSellerTier(onboarded.sellerProfile.tier)
+        setSellerVerificationStatus(onboarded.sellerProfile.verification_status)
+      } catch {
+        // Keep business activation successful even if onboarding retry is needed.
+      }
+    } catch (error: any) {
+      setBusinessError(
+        error?.response?.data?.error ||
+          'Could not activate business mode right now. Please try again.',
+      )
+    } finally {
+      setIsActivatingBusiness(false)
+    }
+  }
+
+  const handleOnboardSeller = async () => {
+    setBusinessError('')
+    setBusinessSuccess('')
+    setIsOnboardingSeller(true)
+
+    try {
+      const result = await sellerApi.onboard({
+        termsAccepted: true,
+        source: 'web_store_settings',
+      })
+
+      setSellerTier(result.sellerProfile.tier)
+      setSellerVerificationStatus(result.sellerProfile.verification_status)
+      setBusinessSuccess(
+        'Seller profile created. You can now request verification upgrades anytime.',
+      )
+    } catch (error: any) {
+      setBusinessError(
+        error?.response?.data?.error ||
+          'Could not create seller profile right now. Please try again.',
+      )
+    } finally {
+      setIsOnboardingSeller(false)
+    }
+  }
+
+  const handleRequestBasicVerification = async () => {
+    setBusinessError('')
+    setBusinessSuccess('')
+    setIsRequestingVerification(true)
+
+    try {
+      await sellerApi.requestVerification({
+        requestedTier: 'basic',
+        notes: 'Requested from web settings onboarding flow.',
+      })
+
+      setSellerVerificationStatus('pending')
+      setBusinessSuccess(
+        'Verification request submitted. You can continue selling while review is in progress.',
+      )
+    } catch (error: any) {
+      setBusinessError(
+        error?.response?.data?.error ||
+          'Could not submit verification request right now.',
+      )
+    } finally {
+      setIsRequestingVerification(false)
+    }
   }
 
   if (authLoading || !hasHydrated) {
@@ -219,6 +347,21 @@ export default function SettingsPage() {
                 </Link>
 
                 <Link
+                  to='/seller-hub'
+                  className='rounded-2xl border border-gray-200 p-4 transition hover:border-orange-200 hover:bg-orange-50/40'
+                >
+                  <div className='flex items-center gap-3'>
+                    <Store className='h-5 w-5 text-orange-500' />
+                    <div>
+                      <p className='font-semibold text-gray-900'>Seller hub</p>
+                      <p className='text-sm text-gray-500'>
+                        Manage business mode, seller verification, and trust tiers.
+                      </p>
+                    </div>
+                  </div>
+                </Link>
+
+                <Link
                   to='/support'
                   className='rounded-2xl border border-gray-200 p-4 transition hover:border-orange-200 hover:bg-orange-50/40'
                 >
@@ -289,6 +432,90 @@ export default function SettingsPage() {
                 <Shield className='h-4 w-4' />
                 Toggle two-factor note
               </button>
+            </div>
+
+            <div className='rounded-2xl bg-white p-6 shadow-sm'>
+              <h2 className='text-xl font-bold text-gray-900'>
+                Seller and creator mode
+              </h2>
+              <p className='mt-1 text-sm text-gray-500'>
+                Upgrade this account to business mode to publish and sell books.
+              </p>
+
+              {user.is_business_account ? (
+                <div className='mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4'>
+                  <p className='text-sm font-semibold text-emerald-700'>
+                    Business mode is active
+                  </p>
+                  <p className='mt-1 text-sm text-emerald-700/90'>
+                    You can now access seller entry points and creator
+                    publishing tools.
+                  </p>
+                  <p className='mt-2 text-xs font-medium text-emerald-800'>
+                    Seller tier: {sellerTier} | Verification:{' '}
+                    {sellerVerificationStatus}
+                  </p>
+                  <div className='mt-3 flex flex-wrap gap-2'>
+                    <button
+                      type='button'
+                      onClick={handleOnboardSeller}
+                      disabled={isOnboardingSeller}
+                      className='inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-70'
+                    >
+                      {isOnboardingSeller
+                        ? 'Preparing seller profile...'
+                        : 'Prepare Seller Profile'}
+                    </button>
+                    <button
+                      type='button'
+                      onClick={handleRequestBasicVerification}
+                      disabled={
+                        isRequestingVerification ||
+                        sellerVerificationStatus === 'pending'
+                      }
+                      className='inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-70'
+                    >
+                      {isRequestingVerification
+                        ? 'Submitting verification...'
+                        : sellerVerificationStatus === 'pending'
+                        ? 'Verification Pending'
+                        : 'Request Basic Verification'}
+                    </button>
+                  </div>
+                  <a
+                    href={creatorHubUrl}
+                    target='_blank'
+                    rel='noreferrer'
+                    className='mt-3 inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100'
+                  >
+                    <Store className='h-4 w-4' />
+                    Open Creator Hub
+                  </a>
+                </div>
+              ) : (
+                <div className='mt-5'>
+                  <button
+                    type='button'
+                    onClick={handleActivateBusinessMode}
+                    disabled={isActivatingBusiness}
+                    className='inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-70'
+                  >
+                    <Briefcase className='h-4 w-4' />
+                    {isActivatingBusiness
+                      ? 'Activating business mode...'
+                      : 'Switch To Business Mode'}
+                  </button>
+                </div>
+              )}
+
+              {businessSuccess && (
+                <p className='mt-3 text-sm text-emerald-700'>
+                  {businessSuccess}
+                </p>
+              )}
+              {businessError && (
+                <p className='mt-3 text-sm text-red-600'>{businessError}</p>
+              )}
             </div>
           </div>
 

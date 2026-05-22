@@ -19,6 +19,9 @@ import type {
   ApiResponse,
   Pagination,
   SupportProfile,
+  SellerProfile,
+  SellerTierConfig,
+  SellerVerificationRequest,
 } from '../types'
 
 // API Configuration
@@ -286,6 +289,9 @@ export const authApi = {
         phone: null,
         avatar_url: null,
         is_verified: apiUser.emailVerified,
+        user_type: apiUser.userType,
+        is_business_account: false,
+        business_mode_activated_at: null,
         created_at: apiUser.createdAt,
       } as User,
       token: tokens.accessToken,
@@ -331,6 +337,9 @@ export const authApi = {
         phone: null,
         avatar_url: null,
         is_verified: false,
+        user_type: apiUser.userType,
+        is_business_account: false,
+        business_mode_activated_at: null,
         created_at: apiUser.createdAt,
       } as User,
       token: tokens.accessToken,
@@ -364,6 +373,9 @@ export const authApi = {
       phone: null,
       avatar_url: null,
       is_verified: apiUser.emailVerified,
+      user_type: apiUser.userType,
+      is_business_account: false,
+      business_mode_activated_at: null,
       created_at: apiUser.createdAt,
     } as User
   },
@@ -446,6 +458,113 @@ export const userApi = {
       { currentPassword, newPassword },
     )
     return response.data
+  },
+
+  // Activate business mode and bootstrap creator profile
+  async activateBusinessMode(payload?: {
+    displayName?: string
+    handle?: string
+    companyName?: string
+    businessType?: string
+    source?: string
+  }) {
+    const response = await api.post<{
+      success: boolean
+      data: {
+        user: {
+          id: string
+          email: string
+          userType: string
+          companyName?: string | null
+          businessType?: string | null
+          isBusinessAccount: boolean
+          businessModeActivatedAt?: string | null
+        }
+        creatorProfile?: {
+          id: string
+          user_id: string
+          handle: string
+          display_name: string
+          verification_status: string
+        } | null
+      }
+    }>('/users/business-mode/activate', {
+      source: 'web_store_settings',
+      ...(payload || {}),
+    })
+
+    return response.data.data
+  },
+}
+
+export const sellerApi = {
+  async getTierConfig() {
+    const response = await api.get<{
+      success: boolean
+      data: {
+        tiers: SellerTierConfig[]
+      }
+    }>('/seller/tiers')
+
+    return response.data.data.tiers
+  },
+
+  async getMyProfile() {
+    const response = await api.get<{
+      success: boolean
+      data: {
+        sellerProfile: SellerProfile | null
+        eligible: boolean
+      }
+    }>('/seller/me')
+
+    return response.data.data
+  },
+
+  async onboard(payload: {
+    displayName?: string
+    handle?: string
+    bio?: string
+    termsAccepted: boolean
+    source?: string
+  }) {
+    const response = await api.post<{
+      success: boolean
+      data: {
+        sellerProfile: SellerProfile
+      }
+    }>('/seller/onboard', {
+      source: 'web_store_settings',
+      ...payload,
+    })
+
+    return response.data.data
+  },
+
+  async requestVerification(payload: {
+    requestedTier: 'basic' | 'trusted' | 'pro'
+    notes?: string
+    documentsSubmitted?: unknown[]
+  }) {
+    const response = await api.post<{
+      success: boolean
+      data: {
+        request: SellerVerificationRequest
+      }
+    }>('/seller/verification-requests', payload)
+
+    return response.data.data
+  },
+
+  async getVerificationRequests() {
+    const response = await api.get<{
+      success: boolean
+      data: {
+        requests: SellerVerificationRequest[]
+      }
+    }>('/seller/verification-requests')
+
+    return response.data.data.requests
   },
 }
 

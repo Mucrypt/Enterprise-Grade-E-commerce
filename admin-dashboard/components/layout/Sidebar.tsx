@@ -33,6 +33,7 @@ import {
   Send,
   Megaphone,
   Bot,
+  UserCheck,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -91,6 +92,12 @@ const navigation: NavItem[] = [
     title: 'Books',
     href: '/books',
     icon: BookOpen,
+    badge: 'New',
+  },
+  {
+    title: 'Sellers',
+    href: '/sellers',
+    icon: UserCheck,
     badge: 'New',
   },
   {

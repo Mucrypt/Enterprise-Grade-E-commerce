@@ -13,8 +13,9 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import * as SecureStore from 'expo-secure-store'
 import { type Href, useRouter } from 'expo-router'
+import * as Linking from 'expo-linking'
 
-import { securityApi } from '@/api'
+import { securityApi, sellerApi, userApi } from '@/api'
 import {
   AppBorderRadius,
   AppColors,
@@ -45,11 +46,24 @@ export default function AccountSettingsScreen() {
     isAuthenticated,
     hasHydrated,
     isLoading: authLoading,
+    user,
+    updateUser,
     logout,
   } = useAuthStore()
 
   const [settings, setSettings] = useState<LocalSettings>(defaultSettings)
   const [isLoading, setIsLoading] = useState(true)
+  const [isActivatingBusiness, setIsActivatingBusiness] = useState(false)
+  const [isOnboardingSeller, setIsOnboardingSeller] = useState(false)
+  const [isRequestingVerification, setIsRequestingVerification] =
+    useState(false)
+  const [sellerTier, setSellerTier] = useState('unverified')
+  const [sellerVerificationStatus, setSellerVerificationStatus] =
+    useState('none')
+  const [businessMessage, setBusinessMessage] = useState('')
+
+  const creatorHubUrl =
+    process.env.EXPO_PUBLIC_CREATOR_HUB_URL || 'https://techtoolstore.com/admin'
 
   useEffect(() => {
     if (hasHydrated && !isAuthenticated && !authLoading) {
@@ -93,6 +107,26 @@ export default function AccountSettingsScreen() {
     loadSettings()
   }, [authLoading, hasHydrated, isAuthenticated, router])
 
+  useEffect(() => {
+    const loadSeller = async () => {
+      if (!user?.is_business_account) {
+        return
+      }
+
+      try {
+        const result = await sellerApi.getMyProfile()
+        if (result.sellerProfile) {
+          setSellerTier(result.sellerProfile.tier)
+          setSellerVerificationStatus(result.sellerProfile.verification_status)
+        }
+      } catch {
+        // Best effort display only.
+      }
+    }
+
+    loadSeller()
+  }, [user?.is_business_account])
+
   const persistSettings = async (next: LocalSettings) => {
     setSettings(next)
 
@@ -131,6 +165,115 @@ export default function AccountSettingsScreen() {
         },
       },
     ])
+  }
+
+  const activateBusinessMode = async () => {
+    if (isActivatingBusiness) {
+      return
+    }
+
+    setBusinessMessage('')
+    setIsActivatingBusiness(true)
+
+    try {
+      const result = await userApi.activateBusinessMode({
+        source: 'mobile_settings',
+      })
+
+      updateUser({
+        user_type: result.user.userType,
+        is_business_account: result.user.isBusinessAccount,
+        business_mode_activated_at: result.user.businessModeActivatedAt || null,
+      })
+
+      setBusinessMessage(
+        'Business mode is active. Seller tools are now available for this account.',
+      )
+      Alert.alert('Business mode enabled', 'You can now access seller tools.')
+
+      try {
+        const onboarded = await sellerApi.onboard({
+          termsAccepted: true,
+          source: 'mobile_settings',
+        })
+        setSellerTier(onboarded.sellerProfile.tier)
+        setSellerVerificationStatus(onboarded.sellerProfile.verification_status)
+      } catch {
+        // Keep activation successful even when onboarding retries are needed.
+      }
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.error ||
+        'Could not switch to business mode right now. Please try again.'
+      setBusinessMessage(message)
+      Alert.alert('Activation failed', message)
+    } finally {
+      setIsActivatingBusiness(false)
+    }
+  }
+
+  const onboardSeller = async () => {
+    if (isOnboardingSeller) {
+      return
+    }
+
+    setIsOnboardingSeller(true)
+    setBusinessMessage('')
+
+    try {
+      const result = await sellerApi.onboard({
+        termsAccepted: true,
+        source: 'mobile_settings',
+      })
+
+      setSellerTier(result.sellerProfile.tier)
+      setSellerVerificationStatus(result.sellerProfile.verification_status)
+      setBusinessMessage(
+        'Seller profile is ready. You can request verification when you are ready.',
+      )
+    } catch (error: any) {
+      setBusinessMessage(
+        error?.response?.data?.error ||
+          'Could not prepare seller profile right now. Please try again.',
+      )
+    } finally {
+      setIsOnboardingSeller(false)
+    }
+  }
+
+  const requestBasicVerification = async () => {
+    if (isRequestingVerification || sellerVerificationStatus === 'pending') {
+      return
+    }
+
+    setIsRequestingVerification(true)
+    setBusinessMessage('')
+
+    try {
+      await sellerApi.requestVerification({
+        requestedTier: 'basic',
+        notes: 'Submitted from mobile settings onboarding.',
+      })
+      setSellerVerificationStatus('pending')
+      setBusinessMessage(
+        'Verification request sent. You can continue listing while review is in progress.',
+      )
+    } catch (error: any) {
+      setBusinessMessage(
+        error?.response?.data?.error ||
+          'Could not submit verification request right now.',
+      )
+    } finally {
+      setIsRequestingVerification(false)
+    }
+  }
+
+  const openCreatorHub = async () => {
+    try {
+      await Linking.openURL(creatorHubUrl)
+    } catch {
+      Alert.alert('Unavailable', 'Could not open creator tools right now.')
+    }
   }
 
   if (!hasHydrated || authLoading || isLoading) {
@@ -284,6 +427,92 @@ export default function AccountSettingsScreen() {
               color={AppColors.gray500}
             />
           </TouchableOpacity>
+
+          <View style={styles.businessModeWrap}>
+            <Text style={styles.businessModeTitle}>
+              Seller and creator mode
+            </Text>
+            <Text style={styles.businessModeSubtitle}>
+              Upgrade this account to business mode to publish and sell books.
+            </Text>
+
+            {user?.is_business_account ? (
+              <>
+                <Text style={styles.businessModeSuccess}>
+                  Business mode is active for this account.
+                </Text>
+                <Text style={styles.businessModeMeta}>
+                  Seller tier: {sellerTier} | Verification:{' '}
+                  {sellerVerificationStatus}
+                </Text>
+                <TouchableOpacity
+                  style={styles.creatorHubButton}
+                  onPress={onboardSeller}
+                  disabled={isOnboardingSeller}
+                >
+                  <Text style={styles.creatorHubButtonText}>
+                    {isOnboardingSeller
+                      ? 'Preparing seller profile...'
+                      : 'Prepare Seller Profile'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.creatorHubButton}
+                  onPress={requestBasicVerification}
+                  disabled={
+                    isRequestingVerification ||
+                    sellerVerificationStatus === 'pending'
+                  }
+                >
+                  <Text style={styles.creatorHubButtonText}>
+                    {isRequestingVerification
+                      ? 'Submitting verification...'
+                      : sellerVerificationStatus === 'pending'
+                      ? 'Verification Pending'
+                      : 'Request Basic Verification'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.creatorHubButton}
+                  onPress={openCreatorHub}
+                >
+                  <Text style={styles.creatorHubButtonText}>
+                    Open Creator Hub
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.creatorHubButton}
+                  onPress={() => router.push('/profile/seller' as Href)}
+                >
+                  <Text style={styles.creatorHubButtonText}>Open Seller Hub</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <TouchableOpacity
+                style={styles.activateBusinessButton}
+                onPress={activateBusinessMode}
+                disabled={isActivatingBusiness}
+              >
+                <Text style={styles.activateBusinessButtonText}>
+                  {isActivatingBusiness
+                    ? 'Activating business mode...'
+                    : 'Switch To Business Mode'}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {businessMessage ? (
+              <Text
+                style={
+                  user?.is_business_account
+                    ? styles.businessModeSuccess
+                    : styles.businessModeError
+                }
+              >
+                {businessMessage}
+              </Text>
+            ) : null}
+          </View>
         </View>
 
         <TouchableOpacity style={styles.signOutButton} onPress={confirmLogout}>
@@ -388,6 +617,68 @@ const styles = StyleSheet.create({
   linkText: {
     fontSize: 14,
     color: AppColors.gray800,
+    fontWeight: '600',
+  },
+  businessModeWrap: {
+    marginTop: AppSpacing.base,
+    paddingTop: AppSpacing.base,
+    borderTopWidth: 1,
+    borderTopColor: AppColors.gray100,
+  },
+  businessModeTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: AppColors.gray900,
+  },
+  businessModeSubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    color: AppColors.gray500,
+  },
+  businessModeMeta: {
+    marginTop: AppSpacing.xs,
+    fontSize: 12,
+    color: AppColors.gray700,
+    fontWeight: '600',
+  },
+  activateBusinessButton: {
+    marginTop: AppSpacing.sm,
+    minHeight: 42,
+    borderRadius: AppBorderRadius.md,
+    backgroundColor: AppColors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activateBusinessButtonText: {
+    color: AppColors.white,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  creatorHubButton: {
+    marginTop: AppSpacing.sm,
+    minHeight: 42,
+    borderRadius: AppBorderRadius.md,
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+    backgroundColor: '#F0FDF4',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  creatorHubButtonText: {
+    color: '#166534',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  businessModeSuccess: {
+    marginTop: AppSpacing.sm,
+    fontSize: 12,
+    color: '#166534',
+    fontWeight: '600',
+  },
+  businessModeError: {
+    marginTop: AppSpacing.sm,
+    fontSize: 12,
+    color: AppColors.error,
     fontWeight: '600',
   },
   signOutButton: {

@@ -27,6 +27,9 @@ import {
   ProductCollection,
   Book,
   BookSampleAccess,
+  SellerProfile,
+  SellerTierConfig,
+  SellerVerificationRequest,
 } from '../types'
 
 // API Configuration
@@ -149,9 +152,7 @@ const toSafeArray = <T>(value: unknown): T[] =>
 const getPayloadKeys = (payload: unknown): string[] =>
   isRecord(payload) ? Object.keys(payload).slice(0, 25) : []
 
-const readRequestId = (
-  source: unknown,
-): string | undefined => {
+const readRequestId = (source: unknown): string | undefined => {
   if (!source) return undefined
 
   if (isRecord(source)) {
@@ -182,9 +183,7 @@ const readRequestId = (
   return undefined
 }
 
-const getRequestIdFromResponse = (
-  response: unknown,
-): string => {
+const getRequestIdFromResponse = (response: unknown): string => {
   if (!isRecord(response)) {
     return createRequestId()
   }
@@ -230,11 +229,7 @@ const logNormalizationIssue = (
 
 const normalizeAuthUser = (rawUser: unknown, endpoint: string): User => {
   if (!isRecord(rawUser)) {
-    logNormalizationIssue(
-      endpoint,
-      'Expected user object payload',
-      rawUser,
-    )
+    logNormalizationIssue(endpoint, 'Expected user object payload', rawUser)
     return {
       id: '',
       email: '',
@@ -255,6 +250,14 @@ const normalizeAuthUser = (rawUser: unknown, endpoint: string): User => {
     phone: toSafeNullableString(rawUser.phone),
     avatar_url: toSafeNullableString(rawUser.avatarUrl ?? rawUser.avatar_url),
     is_verified: toSafeBoolean(rawUser.isVerified ?? rawUser.is_verified),
+    user_type: toSafeString(rawUser.userType ?? rawUser.user_type, 'customer'),
+    is_business_account: toSafeBoolean(
+      rawUser.isBusinessAccount ?? rawUser.is_business_account,
+      false,
+    ),
+    business_mode_activated_at: toSafeNullableString(
+      rawUser.businessModeActivatedAt ?? rawUser.business_mode_activated_at,
+    ),
     created_at:
       toSafeString(rawUser.createdAt ?? rawUser.created_at) ||
       new Date().toISOString(),
@@ -272,11 +275,14 @@ apiClient.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
     const requestId = createRequestId()
 
-    ;(config as InternalAxiosRequestConfig & { _requestId?: string })._requestId =
-      requestId
+    ;(
+      config as InternalAxiosRequestConfig & { _requestId?: string }
+    )._requestId = requestId
 
     const headers = config.headers as
-      | (Record<string, string> & { set?: (name: string, value: string) => void })
+      | (Record<string, string> & {
+          set?: (name: string, value: string) => void
+        })
       | undefined
 
     if (headers?.set) {
@@ -502,6 +508,9 @@ interface UserProfilePayload {
     phone: string | null
     userType: string
     companyName: string | null
+    businessType?: string | null
+    isBusinessAccount: boolean
+    businessModeActivatedAt: string | null
     emailVerified: boolean
     phoneVerified: boolean
     isActive: boolean
@@ -529,11 +538,13 @@ const normalizeAddress = (address: any): UserAddress => ({
   updated_at: address.updated_at,
 })
 
-const normalizeProfileUser = (
-  rawUser: unknown,
-): UserProfilePayload['user'] => {
+const normalizeProfileUser = (rawUser: unknown): UserProfilePayload['user'] => {
   if (!isRecord(rawUser)) {
-    logNormalizationIssue('/users/profile', 'Missing profile user object', rawUser)
+    logNormalizationIssue(
+      '/users/profile',
+      'Missing profile user object',
+      rawUser,
+    )
     return {
       id: '',
       email: '',
@@ -542,6 +553,9 @@ const normalizeProfileUser = (
       phone: null,
       userType: 'customer',
       companyName: null,
+      businessType: null,
+      isBusinessAccount: false,
+      businessModeActivatedAt: null,
       emailVerified: false,
       phoneVerified: false,
       isActive: true,
@@ -558,7 +572,19 @@ const normalizeProfileUser = (
     lastName: toSafeString(rawUser.lastName ?? rawUser.last_name),
     phone: toSafeNullableString(rawUser.phone),
     userType: toSafeString(rawUser.userType ?? rawUser.user_type, 'customer'),
-    companyName: toSafeNullableString(rawUser.companyName ?? rawUser.company_name),
+    companyName: toSafeNullableString(
+      rawUser.companyName ?? rawUser.company_name,
+    ),
+    businessType: toSafeNullableString(
+      rawUser.businessType ?? rawUser.business_type,
+    ),
+    isBusinessAccount: toSafeBoolean(
+      rawUser.isBusinessAccount ?? rawUser.is_business_account,
+      false,
+    ),
+    businessModeActivatedAt: toSafeNullableString(
+      rawUser.businessModeActivatedAt ?? rawUser.business_mode_activated_at,
+    ),
     emailVerified: toSafeBoolean(
       rawUser.emailVerified ?? rawUser.email_verified,
     ),
@@ -619,6 +645,154 @@ export const userApi = {
     }
 
     return normalizeProfileUser(isRecord(data) ? data.user || data : data)
+  },
+
+  activateBusinessMode: async (payload?: {
+    displayName?: string
+    handle?: string
+    companyName?: string
+    businessType?: string
+    source?: string
+  }): Promise<{
+    user: {
+      id: string
+      email: string
+      userType: string
+      companyName?: string | null
+      businessType?: string | null
+      isBusinessAccount: boolean
+      businessModeActivatedAt?: string | null
+    }
+    creatorProfile?: {
+      id: string
+      user_id: string
+      handle: string
+      display_name: string
+      verification_status: string
+    } | null
+  }> => {
+    const response = await apiClient.post('/users/business-mode/activate', {
+      source: 'mobile_settings',
+      ...(payload || {}),
+    })
+    const data = response.data.data || response.data
+
+    if (!isRecord(data) || !isRecord(data.user)) {
+      logNormalizationIssue(
+        '/users/business-mode/activate',
+        'Unexpected business mode activation payload shape',
+        data,
+        getRequestIdFromResponse(response),
+      )
+    }
+
+    const rawUser = isRecord(data) ? data.user : null
+    const rawCreator = isRecord(data) ? data.creatorProfile : null
+
+    return {
+      user: {
+        id: toSafeString(isRecord(rawUser) ? rawUser.id : ''),
+        email: toSafeString(isRecord(rawUser) ? rawUser.email : ''),
+        userType: toSafeString(
+          isRecord(rawUser) ? rawUser.userType ?? rawUser.user_type : '',
+          'customer',
+        ),
+        companyName: toSafeNullableString(
+          isRecord(rawUser)
+            ? rawUser.companyName ?? rawUser.company_name
+            : null,
+        ),
+        businessType: toSafeNullableString(
+          isRecord(rawUser)
+            ? rawUser.businessType ?? rawUser.business_type
+            : null,
+        ),
+        isBusinessAccount: toSafeBoolean(
+          isRecord(rawUser)
+            ? rawUser.isBusinessAccount ?? rawUser.is_business_account
+            : false,
+          false,
+        ),
+        businessModeActivatedAt: toSafeNullableString(
+          isRecord(rawUser)
+            ? rawUser.businessModeActivatedAt ??
+                rawUser.business_mode_activated_at
+            : null,
+        ),
+      },
+      creatorProfile: isRecord(rawCreator)
+        ? {
+            id: toSafeString(rawCreator.id),
+            user_id: toSafeString(rawCreator.user_id),
+            handle: toSafeString(rawCreator.handle),
+            display_name: toSafeString(rawCreator.display_name),
+            verification_status: toSafeString(rawCreator.verification_status),
+          }
+        : null,
+    }
+  },
+}
+
+export const sellerApi = {
+  getTierConfig: async (): Promise<SellerTierConfig[]> => {
+    const response = await apiClient.get('/seller/tiers')
+    const data = response.data?.data || response.data
+
+    return (data?.tiers || []) as SellerTierConfig[]
+  },
+
+  getMyProfile: async (): Promise<{
+    sellerProfile: SellerProfile | null
+    eligible: boolean
+  }> => {
+    const response = await apiClient.get('/seller/me')
+    const data = response.data?.data || response.data
+
+    return {
+      sellerProfile: (data?.sellerProfile || null) as SellerProfile | null,
+      eligible: Boolean(data?.eligible),
+    }
+  },
+
+  onboard: async (payload: {
+    displayName?: string
+    handle?: string
+    bio?: string
+    termsAccepted: boolean
+    source?: string
+  }): Promise<{ sellerProfile: SellerProfile }> => {
+    const response = await apiClient.post('/seller/onboard', {
+      source: 'mobile_settings',
+      ...payload,
+    })
+    const data = response.data?.data || response.data
+
+    return {
+      sellerProfile: data.sellerProfile as SellerProfile,
+    }
+  },
+
+  requestVerification: async (payload: {
+    requestedTier: 'basic' | 'trusted' | 'pro'
+    notes?: string
+    documentsSubmitted?: unknown[]
+  }): Promise<{ request: SellerVerificationRequest }> => {
+    const response = await apiClient.post(
+      '/seller/verification-requests',
+      payload,
+    )
+    const data = response.data?.data || response.data
+
+    return {
+      request: data.request as SellerVerificationRequest,
+    }
+  },
+
+  getVerificationRequests: async (): Promise<SellerVerificationRequest[]> => {
+    const response = await apiClient.get('/seller/verification-requests')
+    const data = response.data?.data || response.data
+
+    return (data?.requests || []) as SellerVerificationRequest[]
   },
 }
 
@@ -1529,8 +1703,7 @@ export const ordersApiNew = {
         ? rawOrder.shipping_address
         : {},
       items: normalizedItems,
-      created_at:
-        toSafeString(rawOrder.created_at) || new Date().toISOString(),
+      created_at: toSafeString(rawOrder.created_at) || new Date().toISOString(),
     }
   },
 
@@ -1580,20 +1753,19 @@ export const ordersApiNew = {
 
     return {
       orders: normalizedOrders,
-      pagination:
-        (isRecord(data) && isRecord(data.pagination)
-          ? {
-              page: toSafeNumber(data.pagination.page, 1),
-              limit: toSafeNumber(data.pagination.limit, limit),
-              total: toSafeNumber(data.pagination.total, normalizedOrders.length),
-              totalPages: toSafeNumber(data.pagination.totalPages, 1),
-            }
-          : {
-              page: 1,
-              limit,
-              total: normalizedOrders.length,
-              totalPages: 1,
-            }) as Pagination,
+      pagination: (isRecord(data) && isRecord(data.pagination)
+        ? {
+            page: toSafeNumber(data.pagination.page, 1),
+            limit: toSafeNumber(data.pagination.limit, limit),
+            total: toSafeNumber(data.pagination.total, normalizedOrders.length),
+            totalPages: toSafeNumber(data.pagination.totalPages, 1),
+          }
+        : {
+            page: 1,
+            limit,
+            total: normalizedOrders.length,
+            totalPages: 1,
+          }) as Pagination,
     }
   },
 

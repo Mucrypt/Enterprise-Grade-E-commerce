@@ -3,6 +3,44 @@ import { AuthRequest } from '../../../middleware/auth'
 import { query } from '../../../database/connection'
 import logger from '../../../utils/logger'
 
+const isBusinessModeSwitchEnabled = () =>
+  String(process.env.ENABLE_BUSINESS_MODE_SWITCH || 'false').toLowerCase() ===
+  'true'
+
+const toSlug = (value: string) =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+
+const tableExists = async (tableName: string) => {
+  const result = await query(`SELECT to_regclass($1) AS regclass`, [
+    `public.${tableName}`,
+  ])
+
+  return Boolean(result.rows[0]?.regclass)
+}
+
+const createUniqueHandle = async (preferred: string) => {
+  const base = toSlug(preferred).slice(0, 60) || 'creator'
+
+  for (let index = 0; index < 20; index++) {
+    const candidate = index === 0 ? base : `${base}-${index + 1}`
+    const exists = await query(
+      'SELECT id FROM creator_profiles WHERE handle = $1 LIMIT 1',
+      [candidate],
+    )
+
+    if (exists.rows.length === 0) {
+      return candidate
+    }
+  }
+
+  return `${base}-${Date.now()}`
+}
+
 export const getProfile = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId
@@ -11,6 +49,7 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
       `SELECT 
         id, email, first_name, last_name, phone, 
         user_type, company_name, tax_id, business_type,
+        is_business_account, business_mode_activated_at,
         email_verified, phone_verified, is_active,
         last_login, created_at, updated_at
        FROM users 
@@ -46,6 +85,8 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
           companyName: user.company_name,
           taxId: user.tax_id,
           businessType: user.business_type,
+          isBusinessAccount: Boolean(user.is_business_account),
+          businessModeActivatedAt: user.business_mode_activated_at,
           emailVerified: user.email_verified,
           phoneVerified: user.phone_verified,
           isActive: user.is_active,
@@ -78,7 +119,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
            company_name = COALESCE($4, company_name),
            updated_at = NOW()
        WHERE id = $5
-       RETURNING id, email, first_name, last_name, phone, user_type, company_name`,
+       RETURNING id, email, first_name, last_name, phone, user_type, company_name, is_business_account, business_mode_activated_at`,
       [firstName, lastName, phone, companyName, userId],
     )
 
@@ -104,6 +145,8 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
           phone: user.phone,
           userType: user.user_type,
           companyName: user.company_name,
+          isBusinessAccount: Boolean(user.is_business_account),
+          businessModeActivatedAt: user.business_mode_activated_at,
         },
       },
     })
@@ -112,6 +155,141 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Failed to update profile',
+    })
+  }
+}
+
+export const activateBusinessMode = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!isBusinessModeSwitchEnabled()) {
+      return res.status(404).json({
+        success: false,
+        error: 'Business mode switching is not enabled',
+      })
+    }
+
+    const userId = req.user?.userId
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required',
+      })
+    }
+
+    const { displayName, handle, companyName, businessType, source } = req.body
+
+    const userResult = await query(
+      `SELECT id, email, first_name, last_name, user_type, is_business_account,
+              company_name, business_type
+       FROM users
+       WHERE id = $1
+       LIMIT 1`,
+      [userId],
+    )
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found',
+      })
+    }
+
+    const user = userResult.rows[0]
+
+    await query(
+      `UPDATE users
+       SET is_business_account = true,
+           business_mode_activated_at = COALESCE(business_mode_activated_at, CURRENT_TIMESTAMP),
+           business_mode_source = COALESCE($1, business_mode_source),
+           company_name = COALESCE($2, company_name),
+           business_type = COALESCE($3, business_type),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $4`,
+      [source || 'self_service', companyName || null, businessType || null, userId],
+    )
+
+    let profile: any = null
+    const creatorTableReady = await tableExists('creator_profiles')
+
+    if (creatorTableReady) {
+      const existingProfile = await query(
+        `SELECT id, user_id, handle, display_name, verification_status, is_public, created_at
+         FROM creator_profiles
+         WHERE user_id = $1
+         LIMIT 1`,
+        [userId],
+      )
+
+      if (existingProfile.rows.length > 0) {
+        profile = existingProfile.rows[0]
+      } else {
+        const preferredHandle =
+          String(handle || '').trim() ||
+          String(user.email || '').split('@')[0] ||
+          `${user.first_name || ''}-${user.last_name || ''}`
+
+        const normalizedHandle = await createUniqueHandle(preferredHandle)
+        const resolvedDisplayName =
+          String(displayName || '').trim() ||
+          [user.first_name, user.last_name].filter(Boolean).join(' ') ||
+          normalizedHandle
+
+        const created = await query(
+          `INSERT INTO creator_profiles (
+             user_id, handle, display_name, verification_status, is_public, updated_at
+           )
+           VALUES ($1, $2, $3, 'pending', true, CURRENT_TIMESTAMP)
+           RETURNING id, user_id, handle, display_name, verification_status, is_public, created_at`,
+          [userId, normalizedHandle, resolvedDisplayName],
+        )
+
+        profile = created.rows[0]
+      }
+    }
+
+    const auditReady = await tableExists('user_business_mode_audit')
+    if (auditReady) {
+      await query(
+        `INSERT INTO user_business_mode_audit
+          (user_id, action, metadata, ip_address, user_agent)
+         VALUES ($1, 'activate_business_mode', $2::jsonb, $3, $4)`,
+        [
+          userId,
+          JSON.stringify({
+            source: source || 'self_service',
+            hasCreatorProfile: Boolean(profile),
+          }),
+          req.ip || null,
+          req.headers['user-agent'] || null,
+        ],
+      )
+    }
+
+    logger.info('Business mode activated', {
+      userId,
+      source: source || 'self_service',
+      hasCreatorProfile: Boolean(profile),
+    })
+
+    return res.json({
+      success: true,
+      data: {
+        user: {
+          id: user.id,
+          email: user.email,
+          userType: user.user_type,
+          companyName: companyName || user.company_name,
+          businessType: businessType || user.business_type,
+          isBusinessAccount: true,
+        },
+        creatorProfile: profile,
+      },
+    })
+  } catch (error) {
+    logger.error('Activate business mode error:', error)
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to activate business mode',
     })
   }
 }

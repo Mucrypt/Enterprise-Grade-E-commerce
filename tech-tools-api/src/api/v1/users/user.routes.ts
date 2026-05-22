@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import {
+  activateBusinessMode,
   getProfile,
   updateProfile,
   getUserAddresses,
@@ -10,8 +11,20 @@ import {
 import { authenticate, authorize } from '../../../middleware/auth'
 import { validate } from '../../../middleware/validation'
 import { userSchemas } from '../../../middleware/validation'
+import rateLimit from 'express-rate-limit'
 
 const router = Router()
+
+const businessModeLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: 'Too many business mode activation attempts. Please try again later.',
+  },
+})
 
 // All routes require authentication
 router.use(authenticate)
@@ -19,6 +32,12 @@ router.use(authenticate)
 // Profile routes
 router.get('/profile', getProfile)
 router.put('/profile', validate(userSchemas.updateProfile), updateProfile)
+router.post(
+  '/business-mode/activate',
+  businessModeLimiter,
+  validate(userSchemas.activateBusinessMode),
+  activateBusinessMode,
+)
 
 // Address routes
 router.get('/addresses', getUserAddresses)

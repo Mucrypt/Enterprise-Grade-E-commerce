@@ -17,11 +17,14 @@ const BooksPage = lazy(() => import('./pages/BooksPage'))
 const BookDetailPage = lazy(() => import('./pages/BookDetailPage'))
 const CartPage = lazy(() => import('./pages/CartPage'))
 const CheckoutPage = lazy(() => import('./pages/CheckoutPage'))
-const OrderConfirmationPage = lazy(() => import('./pages/OrderConfirmationPage'))
+const OrderConfirmationPage = lazy(
+  () => import('./pages/OrderConfirmationPage'),
+)
 const PaymentCancelPage = lazy(() => import('./pages/PaymentCancelPage'))
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const RegisterPage = lazy(() => import('./pages/RegisterPage'))
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
+const SellerHubPage = lazy(() => import('./pages/SellerHubPage'))
 const OrdersPage = lazy(() => import('./pages/OrdersPage'))
 const WishlistPage = lazy(() => import('./pages/WishlistPage'))
 const PaymentMethodsPage = lazy(() => import('./pages/PaymentMethodsPage'))
@@ -73,66 +76,73 @@ function App() {
           <Suspense fallback={routeFallback}>
             <Routes>
               <Route path='/' element={<Layout />}>
-              {/* Home */}
-              <Route index element={<HomePage />} />
+                {/* Home */}
+                <Route index element={<HomePage />} />
 
-              {/* Products */}
-              <Route path='products' element={<ProductsPage />} />
-              <Route path='product/:slug' element={<ProductDetailPage />} />
-              <Route path='category/:slug' element={<ProductsPage />} />
-              <Route path='brand/:slug' element={<ProductsPage />} />
-              <Route path='books' element={<BooksPage />} />
-              <Route path='books/:id' element={<BookDetailPage />} />
-              <Route path='sale' element={<ProductsPage />} />
-              <Route path='new-arrivals' element={<ProductsPage />} />
-              <Route path='trending' element={<TrendingPage />} />
-              <Route path='search' element={<ProductsPage />} />
+                {/* Products */}
+                <Route path='products' element={<ProductsPage />} />
+                <Route path='product/:slug' element={<ProductDetailPage />} />
+                <Route path='category/:slug' element={<ProductsPage />} />
+                <Route path='brand/:slug' element={<ProductsPage />} />
+                <Route path='books' element={<BooksPage />} />
+                <Route path='books/:id' element={<BookDetailPage />} />
+                <Route path='sale' element={<ProductsPage />} />
+                <Route path='new-arrivals' element={<ProductsPage />} />
+                <Route path='trending' element={<TrendingPage />} />
+                <Route path='search' element={<ProductsPage />} />
 
-              {/* Cart & Checkout */}
-              <Route path='cart' element={<CartPage />} />
-              <Route path='checkout' element={<CheckoutPage />} />
-              <Route
-                path='order-confirmation'
-                element={<OrderConfirmationPage />}
-              />
-              <Route path='payment-cancelled' element={<PaymentCancelPage />} />
+                {/* Cart & Checkout */}
+                <Route path='cart' element={<CartPage />} />
+                <Route path='checkout' element={<CheckoutPage />} />
+                <Route
+                  path='order-confirmation'
+                  element={<OrderConfirmationPage />}
+                />
+                <Route
+                  path='payment-cancelled'
+                  element={<PaymentCancelPage />}
+                />
 
-              {/* Auth */}
-              <Route path='login' element={<LoginPage />} />
-              <Route path='register' element={<RegisterPage />} />
+                {/* Auth */}
+                <Route path='login' element={<LoginPage />} />
+                <Route path='register' element={<RegisterPage />} />
 
-              {/* User Profile */}
-              <Route path='profile' element={<ProfilePage />} />
-              <Route path='orders' element={<OrdersPage />} />
-              <Route path='wishlist' element={<WishlistPage />} />
-              <Route path='payment-methods' element={<PaymentMethodsPage />} />
-              <Route path='settings' element={<SettingsPage />} />
+                {/* User Profile */}
+                <Route path='profile' element={<ProfilePage />} />
+                <Route path='seller-hub' element={<SellerHubPage />} />
+                <Route path='orders' element={<OrdersPage />} />
+                <Route path='wishlist' element={<WishlistPage />} />
+                <Route
+                  path='payment-methods'
+                  element={<PaymentMethodsPage />}
+                />
+                <Route path='settings' element={<SettingsPage />} />
 
-              {/* Legal Pages */}
-              <Route path='privacy' element={<PrivacyPolicyPage />} />
-              <Route path='terms' element={<TermsOfServicePage />} />
-              <Route path='cookies' element={<CookiePolicyPage />} />
+                {/* Legal Pages */}
+                <Route path='privacy' element={<PrivacyPolicyPage />} />
+                <Route path='terms' element={<TermsOfServicePage />} />
+                <Route path='cookies' element={<CookiePolicyPage />} />
 
-              {/* Support Pages */}
-              <Route path='support' element={<SupportPage />} />
-              <Route path='contact' element={<ContactPage />} />
-              <Route path='faq' element={<FAQPage />} />
-              <Route path='shipping' element={<ShippingInfoPage />} />
-              <Route path='returns' element={<ReturnsPage />} />
-              <Route path='track-order' element={<TrackOrderPage />} />
+                {/* Support Pages */}
+                <Route path='support' element={<SupportPage />} />
+                <Route path='contact' element={<ContactPage />} />
+                <Route path='faq' element={<FAQPage />} />
+                <Route path='shipping' element={<ShippingInfoPage />} />
+                <Route path='returns' element={<ReturnsPage />} />
+                <Route path='track-order' element={<TrackOrderPage />} />
 
-              {/* Company Pages */}
-              <Route path='about' element={<AboutPage />} />
-              <Route path='careers' element={<CareersPage />} />
-              <Route path='press' element={<PressPage />} />
-              <Route path='affiliates' element={<AffiliatePage />} />
+                {/* Company Pages */}
+                <Route path='about' element={<AboutPage />} />
+                <Route path='careers' element={<CareersPage />} />
+                <Route path='press' element={<PressPage />} />
+                <Route path='affiliates' element={<AffiliatePage />} />
 
-              {/* Blog */}
-              <Route path='blog' element={<BlogPage />} />
-              <Route path='blog/:slug' element={<BlogPostPage />} />
+                {/* Blog */}
+                <Route path='blog' element={<BlogPage />} />
+                <Route path='blog/:slug' element={<BlogPostPage />} />
 
-              {/* 404 - Fallback to Home */}
-              <Route path='*' element={<HomePage />} />
+                {/* 404 - Fallback to Home */}
+                <Route path='*' element={<HomePage />} />
               </Route>
             </Routes>
           </Suspense>

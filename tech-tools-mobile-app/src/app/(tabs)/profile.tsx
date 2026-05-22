@@ -305,6 +305,12 @@ export default function ProfileTabScreen() {
 
         <MenuSection title='My Account'>
           <MenuItem
+            icon='storefront-outline'
+            title='Seller Hub'
+            subtitle='Manage business mode, seller profile, and verification'
+            onPress={() => router.push('/profile/seller' as Href)}
+          />
+          <MenuItem
             icon='person-outline'
             title='Edit Profile'
             onPress={() => router.push('/profile/edit' as Href)}

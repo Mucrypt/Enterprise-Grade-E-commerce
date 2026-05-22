@@ -14,7 +14,7 @@ import {
   TouchableOpacity,
   Image,
 } from 'react-native'
-import { useRouter } from 'expo-router'
+import { type Href, useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
@@ -23,11 +23,13 @@ import { booksApi } from '@/api'
 import type { Book } from '@/types'
 
 const extractBooks = (payload: unknown): Book[] => {
-  const data = payload as {
-    books?: Book[]
-    items?: Book[]
-    data?: Book[]
-  } | undefined
+  const data = payload as
+    | {
+        books?: Book[]
+        items?: Book[]
+        data?: Book[]
+      }
+    | undefined
 
   return data?.books || data?.items || data?.data || []
 }
@@ -63,8 +65,8 @@ export default function BooksTabScreen() {
   const formatOptions = useMemo(() => {
     const formats = new Set<string>()
     books.forEach((book) => {
-      ;(book.available_formats || book.availableFormats || []).forEach((format) =>
-        formats.add(format),
+      ;(book.available_formats || book.availableFormats || []).forEach(
+        (format) => formats.add(format),
       )
     })
     return ['all', ...Array.from(formats)]
@@ -110,18 +112,18 @@ export default function BooksTabScreen() {
             <Ionicons name='book-outline' size={14} color={AppColors.white} />
             <Text style={styles.heroBadgeText}>Books marketplace</Text>
           </View>
-          <Text style={styles.heroTitle}>Creator-powered books, ready for mobile reading.</Text>
+          <Text style={styles.heroTitle}>
+            Creator-powered books, ready for mobile reading.
+          </Text>
           <Text style={styles.heroSubtitle}>
-            Browse digital releases, open sample previews, and move faster from discovery to purchase-ready intent.
+            Browse digital releases, open sample previews, and move faster from
+            discovery to purchase-ready intent.
           </Text>
           <TouchableOpacity
             style={styles.heroButton}
             onPress={() =>
               highlightedBook
-                ? router.push({
-                    pathname: '/book/[id]',
-                    params: { id: highlightedBook.id },
-                  })
+                ? router.push(`/book/${highlightedBook.id}` as Href)
                 : undefined
             }
             disabled={!highlightedBook}
@@ -172,9 +174,7 @@ export default function BooksTabScreen() {
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={styles.featuredCard}
-                  onPress={() =>
-                    router.push({ pathname: '/book/[id]', params: { id: item.id } })
-                  }
+                  onPress={() => router.push(`/book/${item.id}` as Href)}
                 >
                   <View style={styles.coverWrap}>
                     {item.cover_image_url || item.coverImageUrl ? (
@@ -189,7 +189,11 @@ export default function BooksTabScreen() {
                         colors={['#0F172A', '#C2410C']}
                         style={styles.coverFallback}
                       >
-                        <Ionicons name='book' size={28} color={AppColors.white} />
+                        <Ionicons
+                          name='book'
+                          size={28}
+                          color={AppColors.white}
+                        />
                       </LinearGradient>
                     )}
                   </View>
@@ -212,9 +216,7 @@ export default function BooksTabScreen() {
               <TouchableOpacity
                 key={item.id}
                 style={styles.gridCard}
-                onPress={() =>
-                  router.push({ pathname: '/book/[id]', params: { id: item.id } })
-                }
+                onPress={() => router.push(`/book/${item.id}` as Href)}
                 activeOpacity={0.9}
               >
                 <View style={styles.gridCoverWrap}>
