@@ -25,6 +25,8 @@ import {
   BlogAuthor,
   BlogFilters,
   ProductCollection,
+  Book,
+  BookSampleAccess,
 } from '../types'
 
 // API Configuration
@@ -1149,6 +1151,70 @@ export const collectionsApi = {
         totalPages: 1,
       },
     }
+  },
+}
+
+// ============================================
+// Books API
+// ============================================
+export const booksApi = {
+  getAll: async (filters?: {
+    page?: number
+    limit?: number
+    search?: string
+    format?: string
+  }): Promise<{ books: Book[]; pagination: Pagination }> => {
+    const params = new URLSearchParams()
+
+    if (filters?.page) params.set('page', String(filters.page))
+    if (filters?.limit) params.set('limit', String(filters.limit))
+    if (filters?.search) params.set('search', filters.search)
+    if (filters?.format) params.set('format', filters.format)
+
+    const query = params.toString()
+    const response = await apiClient.get(query ? `/books?${query}` : '/books')
+    const data = response.data.data || response.data
+
+    if (Array.isArray(data)) {
+      return {
+        books: data,
+        pagination: {
+          page: filters?.page || 1,
+          limit: filters?.limit || data.length || 20,
+          total: data.length,
+          totalPages: 1,
+        },
+      }
+    }
+
+    const books = data.books || data.items || data.data || []
+
+    return {
+      books,
+      pagination: data.pagination || {
+        page: filters?.page || 1,
+        limit: filters?.limit || books.length || 20,
+        total: books.length,
+        totalPages: 1,
+      },
+    }
+  },
+
+  getById: async (id: string): Promise<Book> => {
+    const response = await apiClient.get(`/books/${id}`)
+    const data = response.data.data || response.data
+    return data.book || data
+  },
+
+  getSampleAccess: async (id: string): Promise<BookSampleAccess | null> => {
+    const response = await apiClient.get(`/books/${id}/sample`)
+    const data = response.data.data || response.data
+
+    if (!data) {
+      return null
+    }
+
+    return data.access || data
   },
 }
 

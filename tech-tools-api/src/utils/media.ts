@@ -18,6 +18,9 @@ import {
 const UPLOAD_DIR = process.env.UPLOAD_DIR || 'uploads'
 const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || '10485760') // 10MB default
 const MAX_VIDEO_SIZE = parseInt(process.env.MAX_VIDEO_SIZE || '104857600') // 100MB default
+const MAX_BOOK_ASSET_SIZE = parseInt(
+  process.env.MAX_BOOK_ASSET_SIZE || '52428800',
+) // 50MB default
 
 // Image sizes for optimization
 const IMAGE_SIZES = {
@@ -41,6 +44,22 @@ const ALLOWED_VIDEO_TYPES = [
   'video/quicktime',
   'video/x-msvideo',
 ]
+const ALLOWED_BOOK_ASSET_TYPES = [
+  'application/pdf',
+  'application/epub+zip',
+  'application/x-epub+zip',
+  'application/x-mobipocket-ebook',
+  'application/vnd.amazon.ebook',
+  'application/zip',
+  'application/x-zip-compressed',
+  'text/plain',
+  'text/markdown',
+  'application/octet-stream',
+  'application/x-fictionbook+xml',
+  'application/xhtml+xml',
+  'audio/mpeg',
+  'audio/mp4',
+]
 
 // =====================================================
 // FILESYSTEM SETUP
@@ -62,6 +81,12 @@ export async function ensureUploadDirectories() {
     `${UPLOAD_DIR}/blog/images`,
     `${UPLOAD_DIR}/blog/thumbnails`,
     `${UPLOAD_DIR}/blog/videos`,
+    `${UPLOAD_DIR}/books`,
+    `${UPLOAD_DIR}/books/assets`,
+    `${UPLOAD_DIR}/books/assets/full`,
+    `${UPLOAD_DIR}/books/assets/sample`,
+    `${UPLOAD_DIR}/books/assets/cover`,
+    `${UPLOAD_DIR}/books/assets/audio`,
     `${UPLOAD_DIR}/temp`,
   ]
 
@@ -120,6 +145,56 @@ export const upload = multer({
   fileFilter,
   limits: {
     fileSize: MAX_VIDEO_SIZE, // Use max video size as the upper limit
+  },
+})
+
+const bookAssetFileFilter = (
+  _req: any,
+  file: Express.Multer.File,
+  cb: multer.FileFilterCallback,
+) => {
+  const extension = path.extname(file.originalname).toLowerCase()
+  const allowedExtensions = new Set([
+    '.pdf',
+    '.epub',
+    '.mobi',
+    '.azw',
+    '.azw3',
+    '.fb2',
+    '.xml',
+    '.xhtml',
+    '.html',
+    '.htm',
+    '.txt',
+    '.md',
+    '.mp3',
+    '.m4a',
+    '.m4b',
+    '.zip',
+  ])
+
+  if (
+    ALLOWED_BOOK_ASSET_TYPES.includes(file.mimetype) ||
+    allowedExtensions.has(extension)
+  ) {
+    cb(null, true)
+    return
+  }
+
+  cb(
+    new Error(
+      `Invalid book asset type. Allowed types: ${[
+        ...ALLOWED_BOOK_ASSET_TYPES,
+      ].join(', ')}`,
+    ),
+  )
+}
+
+export const uploadBookAssets = multer({
+  storage,
+  fileFilter: bookAssetFileFilter,
+  limits: {
+    fileSize: MAX_BOOK_ASSET_SIZE,
   },
 })
 
@@ -434,6 +509,111 @@ export function validateVideoFile(file: Express.Multer.File): {
   }
 
   return { valid: true }
+}
+
+/**
+ * Validate book asset file
+ */
+export function validateBookAssetFile(file: Express.Multer.File): {
+  valid: boolean
+  error?: string
+} {
+  const extension = path.extname(file.originalname).toLowerCase()
+  const allowedExtensions = new Set([
+    '.pdf',
+    '.epub',
+    '.mobi',
+    '.azw',
+    '.azw3',
+    '.fb2',
+    '.xml',
+    '.xhtml',
+    '.html',
+    '.htm',
+    '.txt',
+    '.md',
+    '.mp3',
+    '.m4a',
+    '.m4b',
+    '.zip',
+  ])
+
+  if (
+    !ALLOWED_BOOK_ASSET_TYPES.includes(file.mimetype) &&
+    !allowedExtensions.has(extension)
+  ) {
+    return {
+      valid: false,
+      error: `Invalid book asset type. Allowed types: ${[
+        ...ALLOWED_BOOK_ASSET_TYPES,
+      ].join(', ')}`,
+    }
+  }
+
+  if (file.size > MAX_BOOK_ASSET_SIZE) {
+    return {
+      valid: false,
+      error: `Book asset size exceeds maximum allowed size of ${
+        MAX_BOOK_ASSET_SIZE / 1024 / 1024
+      }MB`,
+    }
+  }
+
+  return { valid: true }
+}
+
+function normalizeBookFormatKey(value: string): string | null {
+  const normalized = (value || '').trim().toLowerCase()
+  const supported = ['pdf', 'epub', 'mobi', 'azw3', 'html', 'audio', 'fb2', 'txt']
+  return supported.includes(normalized) ? normalized : null
+}
+
+export function inferBookAssetFormat(file: Express.Multer.File): string | null {
+  const extension = path.extname(file.originalname).toLowerCase().replace(/^\./, '')
+  const mimeExtension = mime.extension(file.mimetype)
+  return normalizeBookFormatKey(extension || mimeExtension || '')
+}
+
+export async function processBookAsset(file: Express.Multer.File, options?: {
+  productId?: string
+  formatKey?: string | null
+  assetType?: 'full' | 'sample' | 'cover' | 'audio'
+  variantName?: string | null
+}): Promise<{
+  url: string
+  fileName: string
+  fileSize: number
+  format: string | null
+  mimeType: string
+}> {
+  await ensureUploadDirectories()
+
+  const stats = await fs.stat(file.path)
+  const ext = path.extname(file.originalname).toLowerCase() || '.bin'
+  const resolvedFormat =
+    options?.formatKey || inferBookAssetFormat(file) || ext.replace(/^\./, '')
+  const safeFormat = normalizeBookFormatKey(resolvedFormat) || 'pdf'
+  const assetType = options?.assetType || 'full'
+  const fileName = `${uuidv4()}${ext}`
+  const productFolder = options?.productId || 'unassigned'
+
+  const stored = await storeMediaFile({
+    localPath: file.path,
+    key: `books/assets/${assetType}/${productFolder}/${safeFormat}/${fileName}`,
+    contentType: file.mimetype,
+    cacheControl: 'public, max-age=31536000, immutable',
+    resourceType: 'raw',
+  })
+
+  await fs.unlink(file.path).catch(() => undefined)
+
+  return {
+    url: stored.url,
+    fileName,
+    fileSize: stats.size,
+    format: safeFormat,
+    mimeType: file.mimetype,
+  }
 }
 
 // =====================================================

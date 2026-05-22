@@ -6,6 +6,7 @@
 import Stripe from 'stripe'
 import { query } from '../database/connection'
 import logger from '../utils/logger'
+import digitalEntitlementsService from './digital-entitlements.service'
 
 // Initialize Stripe with latest API version
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
@@ -450,12 +451,18 @@ class StripeService {
         [paymentIntent.id, orderId],
       )
 
-      // Create payment record
+      // Create payment record (idempotent on Stripe transaction_id)
       await query(
         `INSERT INTO payments (
           order_id, payment_method, payment_gateway, transaction_id,
           amount, currency, status, gateway_response, paid_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+        ON CONFLICT (transaction_id)
+        DO UPDATE SET
+          status = EXCLUDED.status,
+          gateway_response = EXCLUDED.gateway_response,
+          paid_at = COALESCE(payments.paid_at, EXCLUDED.paid_at),
+          updated_at = NOW()`,
         [
           orderId,
           paymentIntent.payment_method_types?.[0] || 'card',
@@ -471,6 +478,9 @@ class StripeService {
           }),
         ],
       )
+
+      // Grant digital entitlements for paid orders (idempotent).
+      await digitalEntitlementsService.grantEntitlementsForPaidOrder(orderId)
 
       logger.info(`Payment succeeded for order ${orderId}`)
     } catch (error) {

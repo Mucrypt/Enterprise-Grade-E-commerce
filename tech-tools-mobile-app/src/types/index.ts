@@ -106,6 +106,38 @@ export interface Brand {
   is_active: boolean
 }
 
+export interface Book {
+  id: string
+  title: string
+  subtitle?: string | null
+  slug?: string | null
+  author_name?: string | null
+  authorName?: string | null
+  description?: string | null
+  excerpt?: string | null
+  cover_image_url?: string | null
+  coverImageUrl?: string | null
+  price?: number | string | null
+  currency?: string | null
+  publication_status?: string | null
+  publicationStatus?: string | null
+  available_formats?: string[]
+  availableFormats?: string[]
+  sample_url?: string | null
+  sampleUrl?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export interface BookSampleAccess {
+  accessUrl?: string
+  access_url?: string
+  token?: string
+  expiresAt?: string
+  expires_at?: string
+  format?: string
+}
+
 export interface User {
   id: string
   email: string

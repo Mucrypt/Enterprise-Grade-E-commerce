@@ -5,8 +5,8 @@
 
 import { useCallback, useEffect } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { getEventTracker } from './event-tracking'
-import type { EventPayload } from './event-tracking'
+import { getEventTracker } from '../services/event-tracking'
+import type { EventPayload } from '../services/event-tracking'
 
 export function useEventTracking() {
   const tracker = getEventTracker()

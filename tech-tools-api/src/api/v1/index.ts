@@ -27,6 +27,8 @@ import { blogRoutes } from './blog'
 import aiRoutes from './ai/ai.routes'
 import booksRoutes from './books/books.routes'
 import creatorRoutes from './creator/creator.routes'
+import libraryRoutes from './library/library.routes'
+import adminBooksRoutes from './admin/books.routes'
 
 const router = Router()
 
@@ -44,6 +46,7 @@ router.get('/health', (_req, res) => {
 router.use('/auth', authRoutes)
 router.use('/admin/customers', customersRoutes) // Must be before /admin to avoid /:adminId catching "customers"
 router.use('/admin', adminRoutes)
+router.use('/admin/books', adminBooksRoutes)
 router.use('/users', userRoutes)
 router.use('/products', productRoutes)
 router.use('/products', productMediaRoutes) // Product media endpoints
@@ -69,6 +72,7 @@ router.use('/blog', blogRoutes)
 router.use('/ai', aiRoutes)
 router.use('/books', booksRoutes)
 router.use('/creator', creatorRoutes)
+router.use('/library', libraryRoutes)
 
 // Documentation route
 router.get('/docs', (_req, res) => {
@@ -158,6 +162,10 @@ router.get('/docs', (_req, res) => {
       books: {
         'GET /api/v1/books': 'Get published books list',
         'GET /api/v1/books/:id': 'Get book by ID or slug',
+        'GET /api/v1/books/:id/sample':
+          'Get short-lived sample access URL (rate-limited)',
+        'GET /api/v1/books/samples/access/:assetId?token=...':
+          'Resolve sample access URL to sample asset',
       },
       creator: {
         'GET /api/v1/creator/profiles/:handle': 'Get public creator profile',
@@ -167,6 +175,29 @@ router.get('/docs', (_req, res) => {
           'Create or update own creator profile (authenticated)',
         'POST /api/v1/creator/books':
           'Create a digital book product (authenticated)',
+        'POST /api/v1/creator/books/:bookId/assets':
+          'Upload creator book files by format (authenticated)',
+        'POST /api/v1/creator/books/:bookId/submit':
+          'Submit book to moderation review queue (authenticated)',
+        'GET /api/v1/creator/dashboard/metrics':
+          'Get creator activation and first-sale KPI metrics (authenticated)',
+      },
+      adminBooks: {
+        'GET /api/v1/admin/books/review-queue':
+          'Get moderation review queue (admin)',
+        'POST /api/v1/admin/books/:bookId/approve':
+          'Approve or publish book (admin)',
+        'POST /api/v1/admin/books/:bookId/reject': 'Reject book (admin)',
+      },
+      library: {
+        'GET /api/v1/library/me':
+          'Get current user digital library (authenticated)',
+        'GET /api/v1/library/me/:productId/access-url':
+          'Get signed access URL for entitled book (authenticated)',
+        'GET /api/v1/library/access/:assetId?token=...':
+          'Resolve signed access URL to digital asset',
+        'PUT /api/v1/library/me/:productId/progress':
+          'Update reading progress (authenticated)',
       },
     },
   })

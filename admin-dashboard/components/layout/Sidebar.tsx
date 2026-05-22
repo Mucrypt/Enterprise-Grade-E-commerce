@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import {
   LayoutDashboard,
   Package,
+  BookOpen,
   FolderTree,
   Images,
   Layers,
@@ -85,6 +86,12 @@ const navigation: NavItem[] = [
         icon: Truck,
       },
     ],
+  },
+  {
+    title: 'Books',
+    href: '/books',
+    icon: BookOpen,
+    badge: 'New',
   },
   {
     title: 'Media Library',

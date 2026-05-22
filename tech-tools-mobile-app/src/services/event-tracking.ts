@@ -305,7 +305,7 @@ export class MobileEventTrackingService {
         osName: DeviceInfo.osName,
         osVersion: DeviceInfo.osVersion,
         modelName: DeviceInfo.modelName,
-        isTablet: DeviceInfo.isTablet,
+        isTablet: DeviceInfo.deviceType === DeviceInfo.DeviceType.TABLET,
       };
     } catch (error) {
       console.warn('[EventTracking] Could not initialize device info:', error);

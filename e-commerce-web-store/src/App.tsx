@@ -12,6 +12,8 @@ import { initializeEventTracking } from './services/event-tracking'
 import HomePage from './pages/HomePage'
 import ProductsPage from './pages/ProductsPage'
 import ProductDetailPage from './pages/ProductDetailPage'
+import BooksPage from './pages/BooksPage'
+import BookDetailPage from './pages/BookDetailPage'
 import CartPage from './pages/CartPage'
 import CheckoutPage from './pages/CheckoutPage'
 import OrderConfirmationPage from './pages/OrderConfirmationPage'
@@ -71,6 +73,8 @@ function App() {
               <Route path='product/:slug' element={<ProductDetailPage />} />
               <Route path='category/:slug' element={<ProductsPage />} />
               <Route path='brand/:slug' element={<ProductsPage />} />
+              <Route path='books' element={<BooksPage />} />
+              <Route path='books/:id' element={<BookDetailPage />} />
               <Route path='sale' element={<ProductsPage />} />
               <Route path='new-arrivals' element={<ProductsPage />} />
               <Route path='trending' element={<TrendingPage />} />

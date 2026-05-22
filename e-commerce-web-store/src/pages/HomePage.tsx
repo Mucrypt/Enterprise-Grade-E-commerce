@@ -7,6 +7,7 @@ import {
   FlashDealsSection,
   CategoryGridSection,
   FeaturedProductsSection,
+  BooksShowcaseSection,
   BrandShowcase,
   PromoBanners,
   NewsletterSection,
@@ -29,6 +30,9 @@ export default function HomePage() {
 
       {/* Featured/Popular Products */}
       <FeaturedProductsSection />
+
+      {/* Books Marketplace Spotlight */}
+      <BooksShowcaseSection />
 
       {/* Top Brands */}
       <BrandShowcase />

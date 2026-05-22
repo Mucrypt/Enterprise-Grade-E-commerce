@@ -9,6 +9,8 @@ import type {
   Category,
   Brand,
   ProductCollection,
+  Book,
+  BookSampleAccess,
   ProductFilters,
   User,
   Order,
@@ -197,6 +199,51 @@ export const collectionsApi = {
   // Get featured collections
   async getFeatured(limit = 10) {
     return collectionsApi.getAll({ featured: true, limit })
+  },
+}
+
+// ============================================
+// Books API
+// ============================================
+export const booksApi = {
+  async getAll(filters?: {
+    page?: number
+    limit?: number
+    search?: string
+    format?: string
+  }) {
+    const params = new URLSearchParams()
+
+    if (filters?.page) params.set('page', String(filters.page))
+    if (filters?.limit) params.set('limit', String(filters.limit))
+    if (filters?.search) params.set('search', filters.search)
+    if (filters?.format) params.set('format', filters.format)
+
+    const query = params.toString()
+    const response = await api.get<{
+      success: boolean
+      data: { books?: Book[]; items?: Book[]; data?: Book[] } | Book[]
+    }>(query ? `/books?${query}` : '/books')
+
+    return response.data.data
+  },
+
+  async getById(id: string) {
+    const response = await api.get<{
+      success: boolean
+      data: Book
+    }>(`/books/${id}`)
+
+    return response.data.data
+  },
+
+  async getSampleAccess(id: string) {
+    const response = await api.get<{
+      success: boolean
+      data: BookSampleAccess | { access?: BookSampleAccess }
+    }>(`/books/${id}/sample`)
+
+    return response.data.data
   },
 }
 
