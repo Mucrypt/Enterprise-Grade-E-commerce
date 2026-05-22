@@ -202,8 +202,7 @@ export default function CheckoutPage() {
 
       if (isGuestCheckout) {
         // Guest checkout - call guest order endpoint
-        const api = (await import('../api')).ordersApiNew
-        order = await (api as any).createGuestOrder({
+        order = await ordersApiNew.createGuestOrder({
           items: items.map((item) => ({
             productId: item.product.id,
             quantity: item.quantity,
@@ -265,7 +264,10 @@ export default function CheckoutPage() {
           orderId: order.id,
           total: order.grand_total,
           email: guestEmail || shipping.email,
-          checkoutToken: order.checkoutToken,
+          checkoutToken:
+            isGuestCheckout && 'checkoutToken' in order
+              ? order.checkoutToken
+              : undefined,
           isGuest: isGuestCheckout,
         },
       })

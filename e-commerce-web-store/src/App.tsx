@@ -2,45 +2,46 @@
 // TechTools E-Commerce Store - Main App
 // ============================================
 
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { StripeProvider } from './contexts/StripeContext'
 import Layout from './components/layout/Layout'
 import ScrollToTop from './components/common/ScrollToTop'
 import { initializeEventTracking } from './services/event-tracking'
-import HomePage from './pages/HomePage'
-import ProductsPage from './pages/ProductsPage'
-import ProductDetailPage from './pages/ProductDetailPage'
-import BooksPage from './pages/BooksPage'
-import BookDetailPage from './pages/BookDetailPage'
-import CartPage from './pages/CartPage'
-import CheckoutPage from './pages/CheckoutPage'
-import OrderConfirmationPage from './pages/OrderConfirmationPage'
-import PaymentCancelPage from './pages/PaymentCancelPage'
-import LoginPage from './pages/LoginPage'
-import RegisterPage from './pages/RegisterPage'
-import ProfilePage from './pages/ProfilePage'
-import OrdersPage from './pages/OrdersPage'
-import WishlistPage from './pages/WishlistPage'
-import PaymentMethodsPage from './pages/PaymentMethodsPage'
-import SettingsPage from './pages/SettingsPage'
-import SupportPage from './pages/SupportPage'
-import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
-import TermsOfServicePage from './pages/TermsOfServicePage'
-import CookiePolicyPage from './pages/CookiePolicyPage'
-import ContactPage from './pages/ContactPage'
-import FAQPage from './pages/FAQPage'
-import ShippingInfoPage from './pages/ShippingInfoPage'
-import ReturnsPage from './pages/ReturnsPage'
-import TrackOrderPage from './pages/TrackOrderPage'
-import AboutPage from './pages/AboutPage'
-import CareersPage from './pages/CareersPage'
-import PressPage from './pages/PressPage'
-import AffiliatePage from './pages/AffiliatePage'
-import BlogPage from './pages/BlogPage'
-import BlogPostPage from './pages/BlogPostPage'
-import TrendingPage from './pages/TrendingPage'
+
+const HomePage = lazy(() => import('./pages/HomePage'))
+const ProductsPage = lazy(() => import('./pages/ProductsPage'))
+const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage'))
+const BooksPage = lazy(() => import('./pages/BooksPage'))
+const BookDetailPage = lazy(() => import('./pages/BookDetailPage'))
+const CartPage = lazy(() => import('./pages/CartPage'))
+const CheckoutPage = lazy(() => import('./pages/CheckoutPage'))
+const OrderConfirmationPage = lazy(() => import('./pages/OrderConfirmationPage'))
+const PaymentCancelPage = lazy(() => import('./pages/PaymentCancelPage'))
+const LoginPage = lazy(() => import('./pages/LoginPage'))
+const RegisterPage = lazy(() => import('./pages/RegisterPage'))
+const ProfilePage = lazy(() => import('./pages/ProfilePage'))
+const OrdersPage = lazy(() => import('./pages/OrdersPage'))
+const WishlistPage = lazy(() => import('./pages/WishlistPage'))
+const PaymentMethodsPage = lazy(() => import('./pages/PaymentMethodsPage'))
+const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const SupportPage = lazy(() => import('./pages/SupportPage'))
+const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'))
+const TermsOfServicePage = lazy(() => import('./pages/TermsOfServicePage'))
+const CookiePolicyPage = lazy(() => import('./pages/CookiePolicyPage'))
+const ContactPage = lazy(() => import('./pages/ContactPage'))
+const FAQPage = lazy(() => import('./pages/FAQPage'))
+const ShippingInfoPage = lazy(() => import('./pages/ShippingInfoPage'))
+const ReturnsPage = lazy(() => import('./pages/ReturnsPage'))
+const TrackOrderPage = lazy(() => import('./pages/TrackOrderPage'))
+const AboutPage = lazy(() => import('./pages/AboutPage'))
+const CareersPage = lazy(() => import('./pages/CareersPage'))
+const PressPage = lazy(() => import('./pages/PressPage'))
+const AffiliatePage = lazy(() => import('./pages/AffiliatePage'))
+const BlogPage = lazy(() => import('./pages/BlogPage'))
+const BlogPostPage = lazy(() => import('./pages/BlogPostPage'))
+const TrendingPage = lazy(() => import('./pages/TrendingPage'))
 
 // Create React Query client
 const queryClient = new QueryClient({
@@ -58,13 +59,20 @@ function App() {
     initializeEventTracking()
   }, [])
 
+  const routeFallback = (
+    <div className='min-h-[40vh] flex items-center justify-center text-gray-500'>
+      Loading...
+    </div>
+  )
+
   return (
     <QueryClientProvider client={queryClient}>
       <StripeProvider>
         <BrowserRouter>
           <ScrollToTop />
-          <Routes>
-            <Route path='/' element={<Layout />}>
+          <Suspense fallback={routeFallback}>
+            <Routes>
+              <Route path='/' element={<Layout />}>
               {/* Home */}
               <Route index element={<HomePage />} />
 
@@ -125,8 +133,9 @@ function App() {
 
               {/* 404 - Fallback to Home */}
               <Route path='*' element={<HomePage />} />
-            </Route>
-          </Routes>
+              </Route>
+            </Routes>
+          </Suspense>
         </BrowserRouter>
       </StripeProvider>
     </QueryClientProvider>

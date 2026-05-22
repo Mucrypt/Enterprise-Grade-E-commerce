@@ -1,0 +1,66 @@
+name: Web Store Performance CI
+
+'on':
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'e-commerce-web-store/**'
+      - '.github/workflows/web-store-performance-ci.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'e-commerce-web-store/**'
+      - '.github/workflows/web-store-performance-ci.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: web-store-performance-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  performance:
+    name: Analyze Bundles and Enforce Budgets
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build with bundle analyzer
+        run: npm run build:analyze --workspace e-commerce-web-store
+
+      - name: Enforce chunk performance budgets
+        run: npm run perf:budget --workspace e-commerce-web-store
+
+      - name: Publish performance summary
+        if: always()
+        run: |
+          if [ -f e-commerce-web-store/dist/bundle-budget-report.md ]; then
+            cat e-commerce-web-store/dist/bundle-budget-report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No bundle budget report found." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload bundle analysis artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-store-bundle-analysis-${{ github.run_number }}
+          path: |
+            e-commerce-web-store/dist/stats.html
+            e-commerce-web-store/dist/stats.json
+            e-commerce-web-store/dist/bundle-budget-report.md
+          if-no-files-found: warn
