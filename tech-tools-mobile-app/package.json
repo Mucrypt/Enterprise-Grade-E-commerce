@@ -33,25 +33,25 @@
     "@react-navigation/native": "^7.1.28",
     "@stripe/stripe-react-native": "0.63.0",
     "axios": "^1.7.0",
-    "expo": "~55.0.23",
+    "expo": "~55.0.26",
     "expo-av": "^16.0.8",
     "expo-constants": "~55.0.7",
-    "expo-dev-client": "~55.0.32",
-    "expo-device": "~55.0.16",
-    "expo-font": "~55.0.4",
+    "expo-dev-client": "~55.0.35",
+    "expo-device": "~55.0.17",
+    "expo-font": "~55.0.8",
     "expo-glass-effect": "~55.0.11",
-    "expo-image": "~55.0.10",
-    "expo-linear-gradient": "~55.0.13",
+    "expo-image": "~55.0.11",
+    "expo-linear-gradient": "~55.0.14",
     "expo-linking": "~55.0.15",
-    "expo-notifications": "~55.0.22",
-    "expo-router": "~55.0.14",
-    "expo-secure-store": "~55.0.13",
-    "expo-splash-screen": "~55.0.20",
+    "expo-notifications": "~55.0.23",
+    "expo-router": "~55.0.16",
+    "expo-secure-store": "~55.0.14",
+    "expo-splash-screen": "~55.0.21",
     "expo-status-bar": "~55.0.6",
-    "expo-symbols": "~55.0.8",
-    "expo-system-ui": "~55.0.17",
-    "expo-updates": "~55.0.21",
-    "expo-web-browser": "~55.0.15",
+    "expo-symbols": "~55.0.9",
+    "expo-system-ui": "~55.0.18",
+    "expo-updates": "~55.0.24",
+    "expo-web-browser": "~55.0.16",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-native": "0.83.6",
@@ -67,6 +67,15 @@
   "devDependencies": {
     "@types/react": "~19.2.2",
     "typescript": "~5.9.2"
+  },
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": [
+          "expo-av"
+        ]
+      }
+    }
   },
   "private": true
 }
