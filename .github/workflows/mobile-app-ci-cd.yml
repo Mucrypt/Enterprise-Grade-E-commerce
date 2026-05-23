@@ -174,7 +174,30 @@ jobs:
           echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}' > google-service-account.json
 
       - name: Build Production AAB
-        run: eas build --platform android --profile production --non-interactive --auto-submit
+        run: eas build --platform android --profile production --non-interactive
+
+      - name: Submit to Play Store (Retry on transient failures)
+        run: |
+          set -euo pipefail
+
+          max_attempts=3
+          attempt=1
+          while [ "$attempt" -le "$max_attempts" ]; do
+            echo "Submit attempt $attempt/$max_attempts"
+            if eas submit --platform android --latest --profile production --non-interactive; then
+              echo "Play Store submission succeeded"
+              exit 0
+            fi
+
+            if [ "$attempt" -lt "$max_attempts" ]; then
+              echo "Submission failed (likely transient). Retrying in 30 seconds..."
+              sleep 30
+            fi
+            attempt=$((attempt + 1))
+          done
+
+          echo "Submission failed after $max_attempts attempts"
+          exit 1
 
       - name: Cleanup Service Account Key
         if: always()
