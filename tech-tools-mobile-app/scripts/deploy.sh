@@ -105,15 +105,12 @@ if [[ -n $(git status -s) ]]; then
     echo ""
     echo -e "${YELLOW}Uncommitted changes detected:${NC}"
     git status -s
-    echo ""
-    read -p "Enter commit message (or press Enter for default): " commit_msg
-    
-    if [[ -z "$commit_msg" ]]; then
-        commit_msg="feat(mobile): update features"
-    fi
+
+    COMMIT_MSG="${DEPLOY_COMMIT_MSG:-chore(mobile): pre-deploy updates}"
+    echo -e "${BLUE}Using commit message:${NC} $COMMIT_MSG"
     
     git add .
-    git commit -m "$commit_msg"
+    git commit -m "$COMMIT_MSG"
 fi
 
 # Push to remote
@@ -134,9 +131,10 @@ echo "5) Build iOS Production (App Store)"
 echo "6) Submit Latest iOS Build"
 echo "7) Cancel"
 echo ""
-read -p "Select option [1-7]: " option
+while true; do
+read -r -p "Select option [1-7]: " option
 
-case $option in
+case "$option" in
     1)
         echo ""
         echo -e "${BLUE}Building Production AAB with auto-submit...${NC}"
@@ -149,6 +147,7 @@ case $option in
         echo -e "${GREEN}✓ Build queued successfully with auto-submit enabled.${NC}"
         echo "Track progress with: npx --yes eas-cli@latest build:list --platform android --status in-progress --limit 1"
         echo "View latest build details with: npx --yes eas-cli@latest build:list --platform android --limit 1"
+        break
         ;;
     2)
         echo ""
@@ -157,6 +156,7 @@ case $option in
         echo ""
         echo -e "${GREEN}✓ Build complete!${NC}"
         echo "Submit later with: npx eas submit --platform android --latest"
+        break
         ;;
     3)
         echo ""
@@ -164,6 +164,7 @@ case $option in
         run_eas submit --platform android --latest --non-interactive
         echo ""
         echo -e "${GREEN}✓ Submitted!${NC}"
+        break
         ;;
     4)
         echo ""
@@ -172,6 +173,7 @@ case $option in
         echo ""
         echo -e "${GREEN}✓ Preview APK built!${NC}"
         echo "Download link will be shown above."
+        break
         ;;
     5)
         echo ""
@@ -180,6 +182,7 @@ case $option in
         echo ""
         echo -e "${GREEN}✓ iOS build started!${NC}"
         echo "Submit with: npx eas submit --platform ios --profile production"
+        break
         ;;
     6)
         echo ""
@@ -187,6 +190,7 @@ case $option in
         run_eas submit --platform ios --profile production
         echo ""
         echo -e "${GREEN}✓ iOS submit started!${NC}"
+        break
         ;;
     7)
         echo "Cancelled."
@@ -194,9 +198,10 @@ case $option in
         ;;
     *)
         echo -e "${RED}Invalid option${NC}"
-        exit 1
+        echo "Please select a number from 1 to 7."
         ;;
 esac
+done
 
 echo ""
 echo -e "${BLUE}========================================${NC}"
