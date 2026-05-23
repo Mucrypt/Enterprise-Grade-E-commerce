@@ -76,21 +76,21 @@ export default function SellerHubScreen() {
       try {
         const [tierData, profileData, requestData, activityData] =
           await Promise.all([
-          sellerApi.getTierConfig().catch(() => []),
-          sellerApi
-            .getMyProfile()
-            .catch(() => ({ sellerProfile: null, eligible: false })),
-          sellerApi.getVerificationRequests().catch(() => []),
-          creatorApi.getDashboardActivity().catch(() => ({
-            items: [],
-            pagination: {
-              hasMore: false,
-              nextCursor: null,
-              limit: 10,
-            },
-            generatedAt: new Date().toISOString(),
-          })),
-        ])
+            sellerApi.getTierConfig().catch(() => []),
+            sellerApi
+              .getMyProfile()
+              .catch(() => ({ sellerProfile: null, eligible: false })),
+            sellerApi.getVerificationRequests().catch(() => []),
+            creatorApi.getDashboardActivity().catch(() => ({
+              items: [],
+              pagination: {
+                hasMore: false,
+                nextCursor: null,
+                limit: 10,
+              },
+              generatedAt: new Date().toISOString(),
+            })),
+          ])
 
         setTiers(tierData)
         setSellerProfile(profileData.sellerProfile)
@@ -260,11 +260,16 @@ export default function SellerHubScreen() {
     setMessage('')
 
     try {
-      const result = await creatorApi.getDashboardActivity(10, activityNextCursor)
+      const result = await creatorApi.getDashboardActivity(
+        10,
+        activityNextCursor,
+      )
 
       setActivityFeed((current) => {
         const existingIds = new Set(current.map((item) => item.id))
-        const newItems = result.items.filter((item) => !existingIds.has(item.id))
+        const newItems = result.items.filter(
+          (item) => !existingIds.has(item.id),
+        )
         return [...current, ...newItems]
       })
 
@@ -475,7 +480,9 @@ export default function SellerHubScreen() {
                   <View style={styles.activityDot} />
                   <View style={styles.activityContent}>
                     <Text style={styles.activityTitle}>{item.title}</Text>
-                    <Text style={styles.activityDetail}>{item.description}</Text>
+                    <Text style={styles.activityDetail}>
+                      {item.description}
+                    </Text>
                     <Text style={styles.activityTime}>
                       {item.occurredAt
                         ? new Date(item.occurredAt).toLocaleString()

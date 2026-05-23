@@ -810,7 +810,9 @@ export const creatorApi = {
       params.set('cursor', cursor)
     }
 
-    const response = await apiClient.get(`/creator/dashboard/activity?${params.toString()}`)
+    const response = await apiClient.get(
+      `/creator/dashboard/activity?${params.toString()}`,
+    )
     const data = response.data?.data || response.data
 
     return {
