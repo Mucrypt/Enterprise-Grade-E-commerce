@@ -62,9 +62,6 @@ export default function AccountSettingsScreen() {
     useState('none')
   const [businessMessage, setBusinessMessage] = useState('')
 
-  const creatorHubUrl =
-    process.env.EXPO_PUBLIC_CREATOR_HUB_URL || 'https://techtoolstore.com/admin'
-
   useEffect(() => {
     if (hasHydrated && !isAuthenticated && !authLoading) {
       router.replace('/(auth)/login')
@@ -270,9 +267,9 @@ export default function AccountSettingsScreen() {
 
   const openCreatorHub = async () => {
     try {
-      await Linking.openURL(creatorHubUrl)
+      await Linking.openURL('https://techtoolstore.com/creator-dashboard')
     } catch {
-      Alert.alert('Unavailable', 'Could not open creator tools right now.')
+      Alert.alert('Unavailable', 'Could not open creator dashboard right now.')
     }
   }
 
@@ -484,7 +481,9 @@ export default function AccountSettingsScreen() {
                   style={styles.creatorHubButton}
                   onPress={() => router.push('/profile/seller' as Href)}
                 >
-                  <Text style={styles.creatorHubButtonText}>Open Seller Hub</Text>
+                  <Text style={styles.creatorHubButtonText}>
+                    Open Seller Hub
+                  </Text>
                 </TouchableOpacity>
               </>
             ) : (

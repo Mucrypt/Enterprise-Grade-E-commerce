@@ -15,7 +15,7 @@ import {
   ActivityIndicator,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { useRouter } from 'expo-router'
+import { type Href, useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { CategoryCard, ProductCard } from '@/components'
@@ -167,6 +167,42 @@ export default function ExploreTabScreen() {
         </View>
       ) : (
         <ScrollView showsVerticalScrollIndicator={false}>
+          {/* Quick Access */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Quick Access</Text>
+            <TouchableOpacity
+              style={styles.booksShortcutCard}
+              onPress={() => router.push('/(tabs)/books' as Href)}
+              activeOpacity={0.9}
+            >
+              <LinearGradient
+                colors={['#0F172A', '#C2410C']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.booksShortcutGradient}
+              >
+                <View style={styles.booksShortcutIconWrap}>
+                  <Ionicons
+                    name='book-outline'
+                    size={24}
+                    color={AppColors.white}
+                  />
+                </View>
+                <View style={styles.booksShortcutTextWrap}>
+                  <Text style={styles.booksShortcutTitle}>Books Library</Text>
+                  <Text style={styles.booksShortcutSubtitle}>
+                    Discover curated digital books and creator releases.
+                  </Text>
+                </View>
+                <Ionicons
+                  name='chevron-forward'
+                  size={20}
+                  color='rgba(255,255,255,0.9)'
+                />
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+
           {/* Trending Searches */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Trending Searches</Text>
@@ -346,6 +382,40 @@ const styles = StyleSheet.create({
   section: {
     marginTop: AppSpacing.lg,
     paddingHorizontal: AppSpacing.base,
+  },
+  booksShortcutCard: {
+    marginTop: AppSpacing.md,
+    borderRadius: AppBorderRadius.xl,
+    overflow: 'hidden',
+  },
+  booksShortcutGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: AppSpacing.lg,
+    paddingVertical: AppSpacing.lg,
+  },
+  booksShortcutIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: AppSpacing.md,
+  },
+  booksShortcutTextWrap: {
+    flex: 1,
+  },
+  booksShortcutTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: AppColors.white,
+  },
+  booksShortcutSubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 18,
+    color: 'rgba(255,255,255,0.85)',
   },
   lastSection: {
     marginBottom: 100,

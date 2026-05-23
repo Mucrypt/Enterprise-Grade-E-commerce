@@ -27,6 +27,7 @@ import {
   MessageCircle,
   Star,
   Store,
+  BookOpen,
 } from 'lucide-react'
 import { supportApi } from '../api'
 import { SupportConcierge } from '../components/layout/SupportConcierge'
@@ -128,11 +129,13 @@ export default function ProfilePage() {
 
   const quickLinks = [
     { label: 'My Orders', icon: Package, href: '/orders', count: 5 },
+    { label: 'Books Library', icon: BookOpen, href: '/books' },
     { label: 'Wishlist', icon: Heart, href: '/wishlist', count: 12 },
     { label: 'Track Order', icon: Package, href: '/track-order' },
     { label: 'Returns', icon: MessageCircle, href: '/returns' },
     { label: 'Payment Methods', icon: CreditCard, href: '/payment-methods' },
     { label: 'Seller Hub', icon: Store, href: '/seller-hub' },
+    { label: 'Creator Dashboard', icon: Store, href: '/creator-dashboard' },
     { label: 'Settings', icon: Settings, href: '/settings' },
   ]
 
@@ -284,6 +287,48 @@ export default function ProfilePage() {
                 <p className='text-sm text-red-600'>{error}</p>
               </div>
             )}
+
+            <div className='mb-6 grid grid-cols-1 gap-4 md:grid-cols-2'>
+              <Link
+                to='/books'
+                className='group rounded-2xl bg-linear-to-br from-slate-950 via-slate-900 to-orange-700 p-5 text-white shadow-sm transition hover:shadow-lg'
+              >
+                <div className='flex items-center justify-between gap-4'>
+                  <div className='flex items-start gap-3'>
+                    <span className='inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white/15'>
+                      <BookOpen className='h-5 w-5' />
+                    </span>
+                    <div>
+                      <p className='text-lg font-bold'>Books Library</p>
+                      <p className='mt-1 text-sm text-orange-100/90'>
+                        Browse curated digital books and creator releases.
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronRight className='h-5 w-5 text-orange-100 transition group-hover:text-white' />
+                </div>
+              </Link>
+
+              <Link
+                to='/seller-hub'
+                className='group rounded-2xl border border-orange-100 bg-orange-50 p-5 text-slate-900 shadow-sm transition hover:shadow-lg'
+              >
+                <div className='flex items-center justify-between gap-4'>
+                  <div className='flex items-start gap-3'>
+                    <span className='inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-orange-100'>
+                      <Store className='h-5 w-5 text-orange-600' />
+                    </span>
+                    <div>
+                      <p className='text-lg font-bold'>Seller Hub</p>
+                      <p className='mt-1 text-sm text-slate-600'>
+                        Manage business mode and seller verification tiers.
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronRight className='h-5 w-5 text-orange-500 transition group-hover:text-orange-700' />
+                </div>
+              </Link>
+            </div>
 
             {/* Profile Tab */}
             {activeTab === 'profile' && (

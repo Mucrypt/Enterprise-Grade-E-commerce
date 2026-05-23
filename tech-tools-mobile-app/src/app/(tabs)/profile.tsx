@@ -280,6 +280,54 @@ export default function ProfileTabScreen() {
           </View>
         </LinearGradient>
 
+        <View style={styles.quickAccessSection}>
+          <TouchableOpacity
+            style={styles.quickAccessPrimaryCard}
+            onPress={() => router.push('/(tabs)/books' as Href)}
+            activeOpacity={0.9}
+          >
+            <View style={styles.quickAccessIconWrapPrimary}>
+              <Ionicons name='book-outline' size={22} color={AppColors.white} />
+            </View>
+            <View style={styles.quickAccessTextWrap}>
+              <Text style={styles.quickAccessPrimaryTitle}>Books Library</Text>
+              <Text style={styles.quickAccessPrimarySubtitle}>
+                Discover digital books and creator releases.
+              </Text>
+            </View>
+            <Ionicons
+              name='chevron-forward'
+              size={18}
+              color='rgba(255,255,255,0.9)'
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.quickAccessSecondaryCard}
+            onPress={() => router.push('/profile/seller' as Href)}
+            activeOpacity={0.9}
+          >
+            <View style={styles.quickAccessIconWrapSecondary}>
+              <Ionicons
+                name='storefront-outline'
+                size={22}
+                color={AppColors.primary}
+              />
+            </View>
+            <View style={styles.quickAccessTextWrap}>
+              <Text style={styles.quickAccessSecondaryTitle}>Seller Hub</Text>
+              <Text style={styles.quickAccessSecondarySubtitle}>
+                Manage business mode and trust tiers.
+              </Text>
+            </View>
+            <Ionicons
+              name='chevron-forward'
+              size={18}
+              color={AppColors.primary}
+            />
+          </TouchableOpacity>
+        </View>
+
         {/* Menu Sections */}
         <MenuSection title='My Orders'>
           <MenuItem
@@ -304,6 +352,12 @@ export default function ProfileTabScreen() {
         </MenuSection>
 
         <MenuSection title='My Account'>
+          <MenuItem
+            icon='book-outline'
+            title='Books Library'
+            subtitle='Browse and buy digital books'
+            onPress={() => router.push('/books' as Href)}
+          />
           <MenuItem
             icon='storefront-outline'
             title='Seller Hub'
@@ -461,6 +515,72 @@ const styles = StyleSheet.create({
     paddingBottom: AppSpacing.lg,
     paddingHorizontal: AppSpacing.base,
     alignItems: 'center',
+  },
+  quickAccessSection: {
+    paddingHorizontal: AppSpacing.base,
+    marginTop: AppSpacing.lg,
+    gap: AppSpacing.md,
+  },
+  quickAccessPrimaryCard: {
+    backgroundColor: '#0F172A',
+    borderRadius: AppBorderRadius.xl,
+    padding: AppSpacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: AppSpacing.md,
+    ...AppShadows.sm,
+  },
+  quickAccessSecondaryCard: {
+    backgroundColor: '#FFF7ED',
+    borderRadius: AppBorderRadius.xl,
+    padding: AppSpacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: AppSpacing.md,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+    ...AppShadows.sm,
+  },
+  quickAccessIconWrapPrimary: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  quickAccessIconWrapSecondary: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#FFEDD5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  quickAccessTextWrap: {
+    flex: 1,
+  },
+  quickAccessPrimaryTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: AppColors.white,
+  },
+  quickAccessPrimarySubtitle: {
+    marginTop: 3,
+    fontSize: 12,
+    lineHeight: 18,
+    color: 'rgba(255,255,255,0.85)',
+  },
+  quickAccessSecondaryTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: AppColors.gray900,
+  },
+  quickAccessSecondarySubtitle: {
+    marginTop: 3,
+    fontSize: 12,
+    lineHeight: 18,
+    color: AppColors.gray500,
   },
   avatarContainer: {
     position: 'relative',

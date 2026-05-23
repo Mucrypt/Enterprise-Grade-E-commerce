@@ -258,6 +258,57 @@ export interface SellerTierConfig {
   description?: string | null
 }
 
+export interface CreatorProfile {
+  id: string
+  user_id: string
+  handle: string
+  display_name: string
+  bio?: string | null
+  avatar_url?: string | null
+  website_url?: string | null
+  social_links?: Record<string, unknown> | null
+  payout_address?: string | null
+  verification_status?: string | null
+  is_public?: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface CreatorDashboardMetrics {
+  activation: {
+    creatorProfileCreatedAt: string
+    creatorActivated: boolean
+    totalBooks: number
+    publishedBooks: number
+    pendingReviewBooks: number
+    rejectedBooks: number
+    firstBookCreatedAt?: string | null
+    firstSubmittedForReviewAt?: string | null
+  }
+  sales: {
+    unitsSold: number
+    grossSales: number
+    grossSales30d: number
+    paidOrders: number
+    booksSoldCount: number
+    firstSaleAt?: string | null
+    timeToFirstSaleHours?: number | null
+  }
+}
+
+export interface CreatorBookDraftInput {
+  name: string
+  slug?: string
+  description?: string
+  shortDescription?: string
+  basePrice: number
+  salePrice?: number
+  format?: string
+  fileUrl?: string
+  previewUrl?: string
+  coverImageUrl?: string
+}
+
 export interface SupportQuickAction {
   type: string
   label: string

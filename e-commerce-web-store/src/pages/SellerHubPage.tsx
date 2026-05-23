@@ -175,7 +175,9 @@ export default function SellerHubPage() {
           : current,
       )
       setSuccess(
-        `${formatTier(requestedTier)} verification submitted. You can keep selling while review is in progress.`,
+        `${formatTier(
+          requestedTier,
+        )} verification submitted. You can keep selling while review is in progress.`,
       )
     } catch (actionError: any) {
       setError(
@@ -207,10 +209,14 @@ export default function SellerHubPage() {
                 <Store className='h-4 w-4' /> Seller Hub
               </div>
               <h1 className='mt-4 text-3xl font-black tracking-tight sm:text-4xl'>
-                Start small, build trust, and grow into a protected marketplace seller.
+                Start small, build trust, and grow into a protected marketplace
+                seller.
               </h1>
               <p className='mt-3 max-w-2xl text-sm leading-6 text-orange-50/85'>
-                This rollout is designed for fast onboarding with layered trust controls. Users can activate business mode quickly, begin with capped limits, and unlock higher tiers through lightweight verification.
+                This rollout is designed for fast onboarding with layered trust
+                controls. Users can activate business mode quickly, begin with
+                capped limits, and unlock higher tiers through lightweight
+                verification.
               </p>
             </div>
 
@@ -221,14 +227,12 @@ export default function SellerHubPage() {
               >
                 <ArrowLeft className='h-4 w-4' /> Back to profile
               </Link>
-              <a
-                href='https://techtoolstore.com/admin'
-                target='_blank'
-                rel='noreferrer'
+              <Link
+                to='/creator-dashboard'
                 className='inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-orange-50'
               >
-                <Briefcase className='h-4 w-4' /> Creator tools
-              </a>
+                <Briefcase className='h-4 w-4' /> Creator dashboard
+              </Link>
             </div>
           </div>
         </div>
@@ -269,11 +273,18 @@ export default function SellerHubPage() {
             </div>
 
             <div className='rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5'>
-              <h2 className='text-xl font-bold text-slate-900'>Activation flow</h2>
+              <h2 className='text-xl font-bold text-slate-900'>
+                Activation flow
+              </h2>
               <div className='mt-5 space-y-4'>
                 <div className='rounded-2xl border border-gray-100 p-4'>
-                  <p className='font-semibold text-slate-900'>1. Switch to business mode</p>
-                  <p className='mt-1 text-sm text-gray-500'>Required once. This keeps buying flows intact while unlocking creator and seller tools.</p>
+                  <p className='font-semibold text-slate-900'>
+                    1. Switch to business mode
+                  </p>
+                  <p className='mt-1 text-sm text-gray-500'>
+                    Required once. This keeps buying flows intact while
+                    unlocking creator and seller tools.
+                  </p>
                   {!user.is_business_account ? (
                     <button
                       type='button'
@@ -281,29 +292,44 @@ export default function SellerHubPage() {
                       disabled={busyAction === 'activate'}
                       className='mt-4 inline-flex items-center rounded-2xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60'
                     >
-                      {busyAction === 'activate' ? 'Activating...' : 'Activate business mode'}
+                      {busyAction === 'activate'
+                        ? 'Activating...'
+                        : 'Activate business mode'}
                     </button>
                   ) : (
                     <p className='mt-3 inline-flex items-center gap-2 text-sm font-medium text-emerald-700'>
-                      <BadgeCheck className='h-4 w-4' /> Business mode is already active.
+                      <BadgeCheck className='h-4 w-4' /> Business mode is
+                      already active.
                     </p>
                   )}
                 </div>
 
                 <div className='rounded-2xl border border-gray-100 p-4'>
-                  <p className='font-semibold text-slate-900'>2. Prepare seller profile</p>
-                  <p className='mt-1 text-sm text-gray-500'>This creates your protected seller profile with safe listing and price caps for early-stage trust building.</p>
+                  <p className='font-semibold text-slate-900'>
+                    2. Prepare seller profile
+                  </p>
+                  <p className='mt-1 text-sm text-gray-500'>
+                    This creates your protected seller profile with safe listing
+                    and price caps for early-stage trust building.
+                  </p>
                   {!sellerProfile ? (
                     <button
                       type='button'
                       onClick={handleOnboardSeller}
-                      disabled={!user.is_business_account || busyAction === 'onboard'}
+                      disabled={
+                        !user.is_business_account || busyAction === 'onboard'
+                      }
                       className='mt-4 inline-flex items-center rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60'
                     >
-                      {busyAction === 'onboard' ? 'Preparing...' : 'Create seller profile'}
+                      {busyAction === 'onboard'
+                        ? 'Preparing...'
+                        : 'Create seller profile'}
                     </button>
                   ) : (
-                    <p className='mt-3 text-sm text-emerald-700'>Seller profile ready with initial marketplace protection rules applied.</p>
+                    <p className='mt-3 text-sm text-emerald-700'>
+                      Seller profile ready with initial marketplace protection
+                      rules applied.
+                    </p>
                   )}
                 </div>
               </div>
@@ -312,19 +338,28 @@ export default function SellerHubPage() {
             <div className='rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5'>
               <div className='flex items-center justify-between gap-4'>
                 <div>
-                  <h2 className='text-xl font-bold text-slate-900'>Trust tiers</h2>
-                  <p className='mt-1 text-sm text-gray-500'>Higher trust unlocks better limits while strengthening buyer protection.</p>
+                  <h2 className='text-xl font-bold text-slate-900'>
+                    Trust tiers
+                  </h2>
+                  <p className='mt-1 text-sm text-gray-500'>
+                    Higher trust unlocks better limits while strengthening buyer
+                    protection.
+                  </p>
                 </div>
                 {pendingRequest ? (
-                  <span className='rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700'>Pending review</span>
+                  <span className='rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700'>
+                    Pending review
+                  </span>
                 ) : null}
               </div>
 
               <div className='mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4'>
                 {tiers.map((tier) => {
                   const isCurrent = sellerProfile?.tier === tier.tier
-                  const isLocked = Boolean(pendingRequest) || !sellerProfile || isCurrent
-                  const isUpgrade = tierOrder.indexOf(tier.tier) > currentTierIndex
+                  const isLocked =
+                    Boolean(pendingRequest) || !sellerProfile || isCurrent
+                  const isUpgrade =
+                    tierOrder.indexOf(tier.tier) > currentTierIndex
 
                   return (
                     <div
@@ -347,21 +382,28 @@ export default function SellerHubPage() {
                       </div>
 
                       <p className='mt-2 text-sm leading-6 text-gray-500'>
-                        {tier.description || 'Controlled seller access with marketplace safeguards.'}
+                        {tier.description ||
+                          'Controlled seller access with marketplace safeguards.'}
                       </p>
 
                       <div className='mt-5 space-y-3 text-sm text-slate-700'>
                         <div className='flex items-center justify-between gap-4'>
                           <span>Max active listings</span>
-                          <span className='font-semibold'>{tier.max_active_listings}</span>
+                          <span className='font-semibold'>
+                            {tier.max_active_listings}
+                          </span>
                         </div>
                         <div className='flex items-center justify-between gap-4'>
                           <span>Max price</span>
-                          <span className='font-semibold'>{formatMoney(tier.max_product_price)}</span>
+                          <span className='font-semibold'>
+                            {formatMoney(tier.max_product_price)}
+                          </span>
                         </div>
                         <div className='flex items-center justify-between gap-4'>
                           <span>Buyer protection</span>
-                          <span className='font-semibold'>{tier.buyer_protection_level || 'standard'}</span>
+                          <span className='font-semibold'>
+                            {tier.buyer_protection_level || 'standard'}
+                          </span>
                         </div>
                       </div>
 
@@ -391,22 +433,37 @@ export default function SellerHubPage() {
           <div className='space-y-6'>
             <div className='rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5'>
               <h2 className='flex items-center gap-2 text-xl font-bold text-slate-900'>
-                <ShieldCheck className='h-5 w-5 text-emerald-600' /> Safety model
+                <ShieldCheck className='h-5 w-5 text-emerald-600' /> Safety
+                model
               </h2>
               <ul className='mt-4 space-y-3 text-sm leading-6 text-gray-600'>
-                <li>Every seller starts with controlled listing and price limits.</li>
-                <li>Verification raises trust progressively instead of blocking growth upfront.</li>
-                <li>Audit trails, moderation, and suspension controls protect buyers and the platform.</li>
+                <li>
+                  Every seller starts with controlled listing and price limits.
+                </li>
+                <li>
+                  Verification raises trust progressively instead of blocking
+                  growth upfront.
+                </li>
+                <li>
+                  Audit trails, moderation, and suspension controls protect
+                  buyers and the platform.
+                </li>
               </ul>
             </div>
 
             <div className='rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5'>
-              <h2 className='text-xl font-bold text-slate-900'>Seller snapshot</h2>
+              <h2 className='text-xl font-bold text-slate-900'>
+                Seller snapshot
+              </h2>
               <div className='mt-4 space-y-4 text-sm text-gray-600'>
                 <div className='flex items-center justify-between gap-4'>
                   <span>Display name</span>
                   <span className='font-semibold text-slate-900'>
-                    {sellerProfile?.display_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email}
+                    {sellerProfile?.display_name ||
+                      `${user.first_name || ''} ${
+                        user.last_name || ''
+                      }`.trim() ||
+                      user.email}
                   </span>
                 </div>
                 <div className='flex items-center justify-between gap-4'>
@@ -421,23 +478,25 @@ export default function SellerHubPage() {
                     {sellerProfile?.max_active_listings ?? 0}
                   </span>
                 </div>
-                <a
-                  href='https://techtoolstore.com/admin'
-                  target='_blank'
-                  rel='noreferrer'
+                <Link
+                  to='/creator-dashboard'
                   className='mt-2 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800'
                 >
-                  <CircleDollarSign className='h-4 w-4' /> Open creator tools
-                </a>
+                  <CircleDollarSign className='h-4 w-4' /> Open creator
+                  dashboard
+                </Link>
               </div>
             </div>
 
             <div className='rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5'>
-              <h2 className='text-xl font-bold text-slate-900'>Verification timeline</h2>
+              <h2 className='text-xl font-bold text-slate-900'>
+                Verification timeline
+              </h2>
               <div className='mt-4 space-y-3'>
                 {verificationRequests.length === 0 ? (
                   <div className='rounded-2xl border border-dashed border-gray-200 px-4 py-6 text-sm text-gray-500'>
-                    No verification requests yet. Start with Basic when you are ready.
+                    No verification requests yet. Start with Basic when you are
+                    ready.
                   </div>
                 ) : (
                   verificationRequests.map((request) => (
@@ -454,7 +513,8 @@ export default function SellerHubPage() {
                         </span>
                       </div>
                       <p className='mt-2 text-sm text-gray-500'>
-                        {request.notes || 'Submitted for marketplace trust review.'}
+                        {request.notes ||
+                          'Submitted for marketplace trust review.'}
                       </p>
                     </div>
                   ))

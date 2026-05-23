@@ -112,14 +112,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name='books'
         options={{
-          title: 'Books',
-          tabBarIcon: ({ focused, color }) => (
-            <TabBarIcon
-              focused={focused}
-              color={color}
-              name={focused ? 'book' : 'book-outline'}
-            />
-          ),
+          href: null, // Keep route, remove from bottom tabs (5-tab layout)
         }}
       />
       <Tabs.Screen

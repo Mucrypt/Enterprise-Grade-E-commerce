@@ -79,9 +79,6 @@ export default function SettingsPage() {
   const [businessError, setBusinessError] = useState('')
   const [businessSuccess, setBusinessSuccess] = useState('')
 
-  const creatorHubUrl =
-    import.meta.env.VITE_CREATOR_HUB_URL || 'https://techtoolstore.com/admin'
-
   useEffect(() => {
     if (hasHydrated && !isAuthenticated && !authLoading) {
       navigate('/login', { state: { from: { pathname: '/settings' } } })
@@ -355,7 +352,26 @@ export default function SettingsPage() {
                     <div>
                       <p className='font-semibold text-gray-900'>Seller hub</p>
                       <p className='text-sm text-gray-500'>
-                        Manage business mode, seller verification, and trust tiers.
+                        Manage business mode, seller verification, and trust
+                        tiers.
+                      </p>
+                    </div>
+                  </div>
+                </Link>
+
+                <Link
+                  to='/creator-dashboard'
+                  className='rounded-2xl border border-gray-200 p-4 transition hover:border-orange-200 hover:bg-orange-50/40'
+                >
+                  <div className='flex items-center gap-3'>
+                    <Briefcase className='h-5 w-5 text-orange-500' />
+                    <div>
+                      <p className='font-semibold text-gray-900'>
+                        Creator dashboard
+                      </p>
+                      <p className='text-sm text-gray-500'>
+                        Create books, submit for review, and track creator
+                        sales.
                       </p>
                     </div>
                   </div>
@@ -482,15 +498,20 @@ export default function SettingsPage() {
                         : 'Request Basic Verification'}
                     </button>
                   </div>
-                  <a
-                    href={creatorHubUrl}
-                    target='_blank'
-                    rel='noreferrer'
+                  <Link
+                    to='/creator-dashboard'
                     className='mt-3 inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100'
                   >
                     <Store className='h-4 w-4' />
-                    Open Creator Hub
-                  </a>
+                    Open Creator Dashboard
+                  </Link>
+                  <Link
+                    to='/seller-hub'
+                    className='mt-3 ml-2 inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100'
+                  >
+                    <Store className='h-4 w-4' />
+                    Open Seller Hub
+                  </Link>
                 </div>
               ) : (
                 <div className='mt-5'>

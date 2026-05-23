@@ -25,6 +25,7 @@ const LoginPage = lazy(() => import('./pages/LoginPage'))
 const RegisterPage = lazy(() => import('./pages/RegisterPage'))
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const SellerHubPage = lazy(() => import('./pages/SellerHubPage'))
+const CreatorDashboardPage = lazy(() => import('./pages/CreatorDashboardPage'))
 const OrdersPage = lazy(() => import('./pages/OrdersPage'))
 const WishlistPage = lazy(() => import('./pages/WishlistPage'))
 const PaymentMethodsPage = lazy(() => import('./pages/PaymentMethodsPage'))
@@ -110,6 +111,10 @@ function App() {
                 {/* User Profile */}
                 <Route path='profile' element={<ProfilePage />} />
                 <Route path='seller-hub' element={<SellerHubPage />} />
+                <Route
+                  path='creator-dashboard'
+                  element={<CreatorDashboardPage />}
+                />
                 <Route path='orders' element={<OrdersPage />} />
                 <Route path='wishlist' element={<WishlistPage />} />
                 <Route

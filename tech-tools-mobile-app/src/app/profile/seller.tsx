@@ -93,7 +93,9 @@ export default function SellerHubScreen() {
     return tierOrder.indexOf(tier as SellerTier)
   }, [sellerProfile?.tier])
 
-  const pendingRequest = requests.find((request) => request.status === 'pending')
+  const pendingRequest = requests.find(
+    (request) => request.status === 'pending',
+  )
 
   const nextTiers = useMemo(
     () =>
@@ -149,9 +151,7 @@ export default function SellerHubScreen() {
     }
   }
 
-  const requestTier = async (
-    requestedTier: 'basic' | 'trusted' | 'pro',
-  ) => {
+  const requestTier = async (requestedTier: 'basic' | 'trusted' | 'pro') => {
     setBusyAction(requestedTier)
     setMessage('')
 
@@ -171,7 +171,9 @@ export default function SellerHubScreen() {
           : current,
       )
       setMessage(
-        `${formatTier(requestedTier)} verification submitted. You can continue selling while it is reviewed.`,
+        `${formatTier(
+          requestedTier,
+        )} verification submitted. You can continue selling while it is reviewed.`,
       )
     } catch (error: any) {
       setMessage(
@@ -185,9 +187,9 @@ export default function SellerHubScreen() {
 
   const openCreatorHub = async () => {
     try {
-      await Linking.openURL('https://techtoolstore.com/admin')
+      await Linking.openURL('https://techtoolstore.com/creator-dashboard')
     } catch {
-      Alert.alert('Unavailable', 'Could not open creator tools right now.')
+      Alert.alert('Unavailable', 'Could not open creator dashboard right now.')
     }
   }
 
@@ -207,7 +209,10 @@ export default function SellerHubScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.hero}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backButton}
+          >
             <Ionicons name='arrow-back' size={18} color={AppColors.white} />
             <Text style={styles.backButtonText}>Back</Text>
           </TouchableOpacity>
@@ -216,7 +221,8 @@ export default function SellerHubScreen() {
             Start selling fast with built-in trust and buyer protection.
           </Text>
           <Text style={styles.heroSubtitle}>
-            Activate business mode, create your seller profile, and move through verification tiers without blocking early growth.
+            Activate business mode, create your seller profile, and move through
+            verification tiers without blocking early growth.
           </Text>
         </View>
 
@@ -240,7 +246,8 @@ export default function SellerHubScreen() {
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Activation flow</Text>
           <Text style={styles.sectionSubtitle}>
-            This sequence is designed to stay low-friction for honest sellers while preserving platform safety.
+            This sequence is designed to stay low-friction for honest sellers
+            while preserving platform safety.
           </Text>
 
           {!user.is_business_account ? (
@@ -280,7 +287,8 @@ export default function SellerHubScreen() {
           <Text style={styles.sectionTitle}>Trust tiers</Text>
           {tiers.map((tier) => {
             const isCurrent = sellerProfile?.tier === tier.tier
-            const disabled = !sellerProfile || Boolean(pendingRequest) || isCurrent
+            const disabled =
+              !sellerProfile || Boolean(pendingRequest) || isCurrent
             const isUpgrade = tierOrder.indexOf(tier.tier) > currentTierIndex
 
             return (
@@ -294,7 +302,8 @@ export default function SellerHubScreen() {
                   ) : null}
                 </View>
                 <Text style={styles.tierDescription}>
-                  {tier.description || 'Protected marketplace access with progressive trust.'}
+                  {tier.description ||
+                    'Protected marketplace access with progressive trust.'}
                 </Text>
                 <Text style={styles.tierMeta}>
                   Listings: {tier.max_active_listings} | Max price:{' '}
@@ -324,7 +333,8 @@ export default function SellerHubScreen() {
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Seller snapshot</Text>
           <Text style={styles.snapshotRow}>
-            Verification: {formatTier(sellerProfile?.verification_status || 'none')}
+            Verification:{' '}
+            {formatTier(sellerProfile?.verification_status || 'none')}
           </Text>
           <Text style={styles.snapshotRow}>
             Active listing limit: {sellerProfile?.max_active_listings ?? 0}
@@ -332,7 +342,10 @@ export default function SellerHubScreen() {
           <Text style={styles.snapshotRow}>
             Price cap: {formatMoney(sellerProfile?.max_product_price)}
           </Text>
-          <TouchableOpacity style={styles.secondaryButton} onPress={openCreatorHub}>
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={openCreatorHub}
+          >
             <Text style={styles.secondaryButtonText}>Open creator tools</Text>
           </TouchableOpacity>
         </View>
@@ -349,7 +362,9 @@ export default function SellerHubScreen() {
                 <Text style={styles.timelineTitle}>
                   {formatTier(request.requested_tier)} tier request
                 </Text>
-                <Text style={styles.timelineMeta}>Status: {request.status}</Text>
+                <Text style={styles.timelineMeta}>
+                  Status: {request.status}
+                </Text>
                 <Text style={styles.timelineMeta}>
                   {request.notes || 'Submitted for review.'}
                 </Text>

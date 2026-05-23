@@ -22,6 +22,9 @@ import type {
   SellerProfile,
   SellerTierConfig,
   SellerVerificationRequest,
+  CreatorProfile,
+  CreatorDashboardMetrics,
+  CreatorBookDraftInput,
 } from '../types'
 
 // API Configuration
@@ -565,6 +568,83 @@ export const sellerApi = {
     }>('/seller/verification-requests')
 
     return response.data.data.requests
+  },
+}
+
+export const creatorApi = {
+  async getMyProfile() {
+    const response = await api.get<{
+      success: boolean
+      data: {
+        profile: CreatorProfile
+      }
+    }>('/creator/profile/me')
+
+    return response.data.data.profile
+  },
+
+  async upsertMyProfile(payload: {
+    handle: string
+    displayName: string
+    bio?: string
+    avatarUrl?: string
+    websiteUrl?: string
+    socialLinks?: Record<string, unknown>
+    payoutAddress?: string
+    isPublic?: boolean
+  }) {
+    const response = await api.put<{
+      success: boolean
+      data: {
+        profile: CreatorProfile
+      }
+    }>('/creator/profile/me', payload)
+
+    return response.data.data.profile
+  },
+
+  async getDashboardMetrics() {
+    const response = await api.get<{
+      success: boolean
+      data: CreatorDashboardMetrics
+    }>('/creator/dashboard/metrics')
+
+    return response.data.data
+  },
+
+  async createBook(payload: CreatorBookDraftInput) {
+    const response = await api.post<{
+      success: boolean
+      data: {
+        book: {
+          id: string
+          name: string
+          slug: string
+          product_kind?: string
+        }
+      }
+    }>('/creator/books', payload)
+
+    return response.data.data.book
+  },
+
+  async submitBookForReview(bookId: string, payload?: { notes?: string }) {
+    const response = await api.post<{
+      success: boolean
+      data: {
+        book: {
+          id: string
+          publication_status: string
+          submitted_for_review_at?: string | null
+        }
+      }
+    }>(`/creator/books/${bookId}/submit`, {
+      rightsDeclared: true,
+      creatorTermsAccepted: true,
+      ...(payload || {}),
+    })
+
+    return response.data.data.book
   },
 }
 
