@@ -56,8 +56,11 @@ export default function FlashDealsSection() {
 
       setFlashDealCollection(collection)
       setProducts((collection.products || []).slice(0, 8))
-    } catch (error) {
-      console.error('Failed to load flash deals:', error)
+    } catch (error: any) {
+      const status = error?.response?.status
+      if (status !== 404) {
+        console.error('Failed to load flash deals:', error)
+      }
       setFlashDealCollection(null)
       setProducts([])
     } finally {

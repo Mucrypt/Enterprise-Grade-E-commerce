@@ -16,19 +16,31 @@ interface Notification {
 export function NotificationToast() {
   const [toast, setToast] = useState<Notification | null>(null)
   const [recentNotifications, setRecentNotifications] = useState<string[]>([])
+  const authToken = localStorage.getItem('auth_token')
 
   // Fetch notifications
   const { data: notificationsData } = useQuery({
-    queryKey: ['user-notifications', localStorage.getItem('auth_token')],
+    queryKey: ['user-notifications', authToken],
     queryFn: async () => {
+      if (!authToken) {
+        return { data: { notifications: [] } }
+      }
+
       const response = await fetch('/api/v1/notifications?limit=5', {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
+          Authorization: `Bearer ${authToken}`,
         },
       })
+
+      // Quietly degrade for auth-expired or disabled notification APIs.
+      if (response.status === 401 || response.status === 403 || response.status === 404) {
+        return { data: { notifications: [] } }
+      }
+
       if (!response.ok) throw new Error('Failed to fetch')
       return response.json()
     },
+    enabled: Boolean(authToken),
     refetchInterval: 15000,
   })
 

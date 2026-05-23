@@ -23,18 +23,29 @@ export function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false)
   const queryClient = useQueryClient()
 
-  // Fetch notifications
+  const authToken = localStorage.getItem('auth_token')
+
+  // Fetch notifications — only when authenticated; silently degrade on 401/403/404
   const { data: notificationsData, isLoading } = useQuery({
-    queryKey: ['notifications', localStorage.getItem('auth_token')],
+    queryKey: ['notifications', authToken],
     queryFn: async () => {
       const token = localStorage.getItem('auth_token')
       if (!token) return { data: { notifications: [], unreadCount: 0 } }
 
-      const response = await api.get('/notifications?limit=10', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      return response.data
+      try {
+        const response = await api.get('/notifications?limit=10', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        return response.data
+      } catch (err: any) {
+        const status = err?.response?.status
+        if (status === 401 || status === 403 || status === 404) {
+          return { data: { notifications: [], unreadCount: 0 } }
+        }
+        throw err
+      }
     },
+    enabled: Boolean(authToken),
     refetchInterval: 30000,
   })
 
