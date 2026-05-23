@@ -314,6 +314,11 @@ export interface CreatorActivityItem {
 
 export interface CreatorDashboardActivity {
   items: CreatorActivityItem[]
+  pagination: {
+    hasMore: boolean
+    nextCursor: string | null
+    limit: number
+  }
   generatedAt: string
 }
 

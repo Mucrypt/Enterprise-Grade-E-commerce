@@ -30,6 +30,7 @@ import {
   SellerProfile,
   SellerTierConfig,
   SellerVerificationRequest,
+  CreatorDashboardActivity,
 } from '../types'
 
 // API Configuration
@@ -793,6 +794,34 @@ export const sellerApi = {
     const data = response.data?.data || response.data
 
     return (data?.requests || []) as SellerVerificationRequest[]
+  },
+}
+
+export const creatorApi = {
+  getDashboardActivity: async (
+    limit = 10,
+    cursor?: string | null,
+  ): Promise<CreatorDashboardActivity> => {
+    const params = new URLSearchParams({
+      limit: String(limit),
+    })
+
+    if (cursor) {
+      params.set('cursor', cursor)
+    }
+
+    const response = await apiClient.get(`/creator/dashboard/activity?${params.toString()}`)
+    const data = response.data?.data || response.data
+
+    return {
+      items: (data?.items || []) as CreatorDashboardActivity['items'],
+      pagination: {
+        hasMore: Boolean(data?.pagination?.hasMore),
+        nextCursor: data?.pagination?.nextCursor || null,
+        limit: Number(data?.pagination?.limit || limit),
+      },
+      generatedAt: data?.generatedAt || new Date().toISOString(),
+    }
   },
 }
 

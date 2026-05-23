@@ -888,6 +888,57 @@ export const getCreatorDashboardActivity = async (
 
     const limit = Math.min(Math.max(Number(req.query.limit) || 10, 1), 25)
 
+    const decodeCursor = (rawCursor: unknown) => {
+      if (typeof rawCursor !== 'string' || !rawCursor.trim()) {
+        return null
+      }
+
+      try {
+        const parsed = JSON.parse(
+          Buffer.from(rawCursor, 'base64').toString('utf8'),
+        ) as {
+          occurredAt?: string
+          sortWeight?: number
+          cursorKey?: string
+        }
+
+        if (
+          !parsed.occurredAt ||
+          typeof parsed.sortWeight !== 'number' ||
+          !parsed.cursorKey
+        ) {
+          return null
+        }
+
+        const occurredAt = new Date(parsed.occurredAt)
+        if (Number.isNaN(occurredAt.getTime())) {
+          return null
+        }
+
+        return {
+          occurredAt: occurredAt.toISOString(),
+          sortWeight: parsed.sortWeight,
+          cursorKey: parsed.cursorKey,
+        }
+      } catch {
+        return null
+      }
+    }
+
+    const encodeCursor = (cursor: {
+      occurredAt: string
+      sortWeight: number
+      cursorKey: string
+    }) => Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64')
+
+    const cursor = decodeCursor(req.query.cursor)
+    if (req.query.cursor && !cursor) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid cursor',
+      })
+    }
+
     const creatorResult = await query(
       `SELECT cp.id,
               cp.handle,
@@ -939,7 +990,8 @@ export const getCreatorDashboardActivity = async (
            NULL::text AS order_number,
            NULL::int AS quantity,
            NULL::numeric AS amount,
-           100 AS sort_weight
+           100 AS sort_weight,
+           concat('creator:', creator.id::text) AS cursor_key
          FROM creator
 
          UNION ALL
@@ -957,7 +1009,8 @@ export const getCreatorDashboardActivity = async (
            NULL::text,
            NULL::int,
            NULL::numeric,
-           95
+           95,
+           concat('business_mode:', creator.id::text)
          FROM creator
          WHERE creator.business_mode_activated_at IS NOT NULL
 
@@ -979,7 +1032,8 @@ export const getCreatorDashboardActivity = async (
            NULL::text,
            NULL::int,
            NULL::numeric,
-           80
+           80,
+           concat('draft_created:', p.id::text)
          FROM products p
          JOIN creator ON creator.id = p.creator_profile_id
          WHERE p.deleted_at IS NULL
@@ -1000,7 +1054,8 @@ export const getCreatorDashboardActivity = async (
            NULL::text,
            NULL::int,
            NULL::numeric,
-           70
+           70,
+           concat('draft_submitted:', p.id::text)
          FROM products p
          JOIN creator ON creator.id = p.creator_profile_id
          WHERE p.deleted_at IS NULL
@@ -1027,7 +1082,8 @@ export const getCreatorDashboardActivity = async (
            o.order_number,
            oi.quantity,
            (oi.unit_price * oi.quantity) - COALESCE(oi.discount_amount, 0),
-           60
+           60,
+           concat('sale:', o.id::text, ':', oi.id::text)
          FROM order_items oi
          JOIN orders o ON o.id = oi.order_id
          JOIN products p ON p.id = oi.product_id
@@ -1037,22 +1093,53 @@ export const getCreatorDashboardActivity = async (
            AND o.order_status NOT IN ('cancelled', 'refunded')
        ) activity
        WHERE activity.occurred_at IS NOT NULL
-       ORDER BY activity.occurred_at DESC, activity.sort_weight DESC
-       LIMIT $6`,
+         AND (
+           $6::timestamptz IS NULL
+           OR activity.occurred_at < $6
+           OR (
+             activity.occurred_at = $6
+             AND activity.sort_weight < $7
+           )
+           OR (
+             activity.occurred_at = $6
+             AND activity.sort_weight = $7
+             AND activity.cursor_key < $8
+           )
+         )
+       ORDER BY activity.occurred_at DESC, activity.sort_weight DESC, activity.cursor_key DESC
+       LIMIT $9`,
       [
         creator.id,
         creator.handle,
         creator.display_name,
         creator.creator_created_at,
         creator.business_mode_activated_at,
-        limit,
+        cursor?.occurredAt || null,
+        cursor?.sortWeight || null,
+        cursor?.cursorKey || null,
+        limit + 1,
       ],
     )
+
+    const hasMore = activityResult.rows.length > limit
+    const pageItems = hasMore
+      ? activityResult.rows.slice(0, limit)
+      : activityResult.rows
+    const lastItem = pageItems[pageItems.length - 1]
+
+    const nextCursor =
+      hasMore && lastItem
+        ? encodeCursor({
+            occurredAt: new Date(lastItem.occurred_at).toISOString(),
+            sortWeight: Number(lastItem.sort_weight),
+            cursorKey: String(lastItem.cursor_key),
+          })
+        : null
 
     res.json({
       success: true,
       data: {
-        items: activityResult.rows.map((row) => ({
+        items: pageItems.map((row) => ({
           id: `${row.event_type}-${
             row.entity_id || row.order_id || row.occurred_at
           }`,
@@ -1072,6 +1159,11 @@ export const getCreatorDashboardActivity = async (
               ? Number(row.amount)
               : null,
         })),
+        pagination: {
+          hasMore,
+          nextCursor,
+          limit,
+        },
         generatedAt: new Date().toISOString(),
       },
     })

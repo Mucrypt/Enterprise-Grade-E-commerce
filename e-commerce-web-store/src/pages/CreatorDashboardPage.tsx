@@ -57,6 +57,11 @@ export default function CreatorDashboardPage() {
   )
   const [metrics, setMetrics] = useState<CreatorDashboardMetrics | null>(null)
   const [activityFeed, setActivityFeed] = useState<CreatorActivityItem[]>([])
+  const [activityNextCursor, setActivityNextCursor] = useState<string | null>(
+    null,
+  )
+  const [activityHasMore, setActivityHasMore] = useState(false)
+  const [isLoadingMoreActivity, setIsLoadingMoreActivity] = useState(false)
   const [latestBookId, setLatestBookId] = useState<string | null>(null)
   const [latestBookSlug, setLatestBookSlug] = useState<string | null>(null)
 
@@ -99,17 +104,29 @@ export default function CreatorDashboardPage() {
       setError('')
 
       try {
-        const [sellerResult, metricsResult, activityResult] = await Promise.all([
-          sellerApi
-            .getMyProfile()
-            .catch(() => ({ sellerProfile: null, eligible: false })),
-          creatorApi.getDashboardMetrics().catch(() => null),
-          creatorApi.getDashboardActivity().catch(() => ({ items: [] })),
-        ])
+        const [sellerResult, metricsResult, activityResult] = await Promise.all(
+          [
+            sellerApi
+              .getMyProfile()
+              .catch(() => ({ sellerProfile: null, eligible: false })),
+            creatorApi.getDashboardMetrics().catch(() => null),
+            creatorApi.getDashboardActivity().catch(() => ({
+              items: [],
+              pagination: {
+                hasMore: false,
+                nextCursor: null,
+                limit: 10,
+              },
+              generatedAt: new Date().toISOString(),
+            })),
+          ],
+        )
 
         setSellerProfile(sellerResult.sellerProfile)
         setMetrics(metricsResult)
         setActivityFeed(activityResult.items)
+        setActivityHasMore(activityResult.pagination?.hasMore ?? false)
+        setActivityNextCursor(activityResult.pagination?.nextCursor ?? null)
 
         try {
           const creator = await creatorApi.getMyProfile()
@@ -329,6 +346,40 @@ export default function CreatorDashboardPage() {
       )
     } finally {
       setIsSubmittingBook(false)
+    }
+  }
+
+  const handleLoadMoreActivity = async () => {
+    if (!activityHasMore || !activityNextCursor || isLoadingMoreActivity) {
+      return
+    }
+
+    setIsLoadingMoreActivity(true)
+    setError('')
+
+    try {
+      const result = await creatorApi.getDashboardActivity(
+        10,
+        activityNextCursor,
+      )
+
+      setActivityFeed((current) => {
+        const existingIds = new Set(current.map((item) => item.id))
+        const newItems = result.items.filter(
+          (item) => !existingIds.has(item.id),
+        )
+        return [...current, ...newItems]
+      })
+
+      setActivityHasMore(result.pagination?.hasMore ?? false)
+      setActivityNextCursor(result.pagination?.nextCursor ?? null)
+    } catch (loadMoreError: any) {
+      setError(
+        loadMoreError?.response?.data?.error ||
+          'Could not load more activity right now.',
+      )
+    } finally {
+      setIsLoadingMoreActivity(false)
     }
   }
 
@@ -779,11 +830,31 @@ export default function CreatorDashboardPage() {
                     })
                   ) : (
                     <div className='rounded-2xl border border-dashed border-gray-200 bg-slate-50 px-4 py-6 text-sm text-gray-500'>
-                      Recent creator activity will appear here once you create drafts,
-                      submit books, or start making sales.
+                      Recent creator activity will appear here once you create
+                      drafts, submit books, or start making sales.
                     </div>
                   )}
                 </div>
+
+                {activityHasMore ? (
+                  <div className='mt-5'>
+                    <button
+                      type='button'
+                      onClick={handleLoadMoreActivity}
+                      disabled={isLoadingMoreActivity}
+                      className='inline-flex items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60'
+                    >
+                      {isLoadingMoreActivity ? (
+                        <>
+                          <Loader2 className='h-4 w-4 animate-spin' /> Loading
+                          more
+                        </>
+                      ) : (
+                        'Load more activity'
+                      )}
+                    </button>
+                  </div>
+                ) : null}
               </div>
 
               <div className='rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5'>

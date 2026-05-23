@@ -613,11 +613,19 @@ export const creatorApi = {
     return response.data.data
   },
 
-  async getDashboardActivity(limit = 10) {
+  async getDashboardActivity(limit = 10, cursor?: string | null) {
+    const params = new URLSearchParams({
+      limit: String(limit),
+    })
+
+    if (cursor) {
+      params.set('cursor', cursor)
+    }
+
     const response = await api.get<{
       success: boolean
       data: CreatorDashboardActivity
-    }>(`/creator/dashboard/activity?limit=${limit}`)
+    }>(`/creator/dashboard/activity?${params.toString()}`)
 
     return response.data.data
   },

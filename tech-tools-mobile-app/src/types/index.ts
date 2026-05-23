@@ -302,6 +302,32 @@ export interface Pagination {
   totalPages: number
 }
 
+export interface CreatorActivityItem {
+  id: string
+  eventType: string
+  subjectType: string
+  title: string
+  description: string
+  occurredAt: string
+  entityId?: string | null
+  entitySlug?: string | null
+  entityName?: string | null
+  orderId?: string | null
+  orderNumber?: string | null
+  quantity?: number | null
+  amount?: number | null
+}
+
+export interface CreatorDashboardActivity {
+  items: CreatorActivityItem[]
+  pagination: {
+    hasMore: boolean
+    nextCursor: string | null
+    limit: number
+  }
+  generatedAt: string
+}
+
 export interface ApiResponse<T> {
   success: boolean
   data: T

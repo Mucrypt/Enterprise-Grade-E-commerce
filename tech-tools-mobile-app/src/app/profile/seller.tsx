@@ -12,7 +12,7 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
-import { sellerApi, userApi } from '@/api'
+import { creatorApi, sellerApi, userApi } from '@/api'
 import {
   AppBorderRadius,
   AppColors,
@@ -20,6 +20,7 @@ import {
   AppSpacing,
 } from '@/constants/appTheme'
 import type {
+  CreatorActivityItem,
   SellerProfile,
   SellerTier,
   SellerTierConfig,
@@ -48,6 +49,12 @@ export default function SellerHubScreen() {
   const [sellerProfile, setSellerProfile] = useState<SellerProfile | null>(null)
   const [tiers, setTiers] = useState<SellerTierConfig[]>([])
   const [requests, setRequests] = useState<SellerVerificationRequest[]>([])
+  const [activityFeed, setActivityFeed] = useState<CreatorActivityItem[]>([])
+  const [activityNextCursor, setActivityNextCursor] = useState<string | null>(
+    null,
+  )
+  const [activityHasMore, setActivityHasMore] = useState(false)
+  const [activityLoadingMore, setActivityLoadingMore] = useState(false)
   const [message, setMessage] = useState('')
   const [busyAction, setBusyAction] = useState<
     'activate' | 'onboard' | SellerTier | null
@@ -67,17 +74,30 @@ export default function SellerHubScreen() {
 
       setScreenLoading(true)
       try {
-        const [tierData, profileData, requestData] = await Promise.all([
+        const [tierData, profileData, requestData, activityData] =
+          await Promise.all([
           sellerApi.getTierConfig().catch(() => []),
           sellerApi
             .getMyProfile()
             .catch(() => ({ sellerProfile: null, eligible: false })),
           sellerApi.getVerificationRequests().catch(() => []),
+          creatorApi.getDashboardActivity().catch(() => ({
+            items: [],
+            pagination: {
+              hasMore: false,
+              nextCursor: null,
+              limit: 10,
+            },
+            generatedAt: new Date().toISOString(),
+          })),
         ])
 
         setTiers(tierData)
         setSellerProfile(profileData.sellerProfile)
         setRequests(requestData)
+        setActivityFeed(activityData.items)
+        setActivityHasMore(activityData.pagination?.hasMore ?? false)
+        setActivityNextCursor(activityData.pagination?.nextCursor ?? null)
       } catch {
         setMessage('Could not load seller tools right now.')
       } finally {
@@ -125,40 +145,6 @@ export default function SellerHubScreen() {
       sellerProfile?.verification_status,
       isBusinessAccount,
     ],
-  )
-
-  const activityFeed = useMemo(
-    () => [
-      {
-        title: 'Business mode',
-        detail: isBusinessAccount
-          ? 'Your seller account is active and ready for creator workflows.'
-          : 'Activate business mode to unlock creator tools.',
-      },
-      {
-        title: 'Seller profile',
-        detail: sellerProfile
-          ? `Profile is ready with ${sellerProfile.max_active_listings} active listing limit.`
-          : 'Create your seller profile to start selling with protection.',
-      },
-      {
-        title: 'Verification',
-        detail: pendingRequest
-          ? `Your ${formatTier(
-              pendingRequest.requested_tier,
-            )} request is pending admin review.`
-          : creatorDashboardReady
-          ? 'Approved and ready for creator tools.'
-          : 'Request verification when you are ready to upgrade.',
-      },
-      {
-        title: 'Creator dashboard',
-        detail: creatorDashboardReady
-          ? 'Creator tools are unlocked.'
-          : 'Locked until admin approval is completed.',
-      },
-    ],
-    [creatorDashboardReady, isBusinessAccount, pendingRequest, sellerProfile],
   )
 
   const nextTiers = useMemo(
@@ -262,6 +248,35 @@ export default function SellerHubScreen() {
       await Linking.openURL('https://techtoolstore.com/creator-dashboard')
     } catch {
       Alert.alert('Unavailable', 'Could not open creator dashboard right now.')
+    }
+  }
+
+  const loadMoreActivity = async () => {
+    if (!activityHasMore || !activityNextCursor || activityLoadingMore) {
+      return
+    }
+
+    setActivityLoadingMore(true)
+    setMessage('')
+
+    try {
+      const result = await creatorApi.getDashboardActivity(10, activityNextCursor)
+
+      setActivityFeed((current) => {
+        const existingIds = new Set(current.map((item) => item.id))
+        const newItems = result.items.filter((item) => !existingIds.has(item.id))
+        return [...current, ...newItems]
+      })
+
+      setActivityHasMore(result.pagination?.hasMore ?? false)
+      setActivityNextCursor(result.pagination?.nextCursor ?? null)
+    } catch (error: any) {
+      setMessage(
+        error?.response?.data?.error ||
+          'Could not load more creator activity right now.',
+      )
+    } finally {
+      setActivityLoadingMore(false)
     }
   }
 
@@ -451,19 +466,41 @@ export default function SellerHubScreen() {
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Recent activity</Text>
           <Text style={styles.sectionSubtitle}>
-            A lightweight summary of your seller and creator lifecycle.
+            Real creator activity from the same backend feed as web.
           </Text>
           <View style={styles.activityList}>
-            {activityFeed.map((item) => (
-              <View key={item.title} style={styles.activityItem}>
-                <View style={styles.activityDot} />
-                <View style={styles.activityContent}>
-                  <Text style={styles.activityTitle}>{item.title}</Text>
-                  <Text style={styles.activityDetail}>{item.detail}</Text>
+            {activityFeed.length > 0 ? (
+              activityFeed.map((item) => (
+                <View key={item.id} style={styles.activityItem}>
+                  <View style={styles.activityDot} />
+                  <View style={styles.activityContent}>
+                    <Text style={styles.activityTitle}>{item.title}</Text>
+                    <Text style={styles.activityDetail}>{item.description}</Text>
+                    <Text style={styles.activityTime}>
+                      {item.occurredAt
+                        ? new Date(item.occurredAt).toLocaleString()
+                        : 'Just now'}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-            ))}
+              ))
+            ) : (
+              <Text style={styles.sectionSubtitle}>
+                Activity appears here after drafts, submissions, and sales.
+              </Text>
+            )}
           </View>
+          {activityHasMore ? (
+            <TouchableOpacity
+              style={styles.ghostButton}
+              onPress={loadMoreActivity}
+              disabled={activityLoadingMore}
+            >
+              <Text style={styles.ghostButtonText}>
+                {activityLoadingMore ? 'Loading...' : 'Load more activity'}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         <View style={styles.card}>
@@ -670,6 +707,12 @@ const styles = StyleSheet.create({
     marginTop: 4,
     color: AppColors.gray500,
     lineHeight: 20,
+  },
+  activityTime: {
+    marginTop: 6,
+    color: AppColors.gray500,
+    fontSize: 12,
+    fontWeight: '600',
   },
   successText: {
     marginTop: AppSpacing.md,
