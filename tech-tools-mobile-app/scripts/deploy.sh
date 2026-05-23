@@ -19,7 +19,7 @@ APP_DIR="$(dirname "$SCRIPT_DIR")"
 
 cd "$APP_DIR"
 
-EAS_CMD="npx eas-cli@latest"
+EAS_CMD="npx --yes eas-cli@latest"
 
 run_eas() {
     $EAS_CMD "$@"
@@ -66,6 +66,7 @@ echo -e "Current branch: ${GREEN}$CURRENT_BRANCH${NC}"
 
 echo ""
 echo -e "${BLUE}Checking EAS authentication...${NC}"
+echo -e "${YELLOW}If this is your first run on this machine, npx may download eas-cli for a few seconds.${NC}"
 if ! run_eas whoami >/dev/null 2>&1; then
     echo -e "${RED}Not logged in to EAS CLI.${NC}"
     echo "Run: npx eas-cli@latest login"
