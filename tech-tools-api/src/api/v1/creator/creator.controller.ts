@@ -71,7 +71,9 @@ const normalizeFormatKey = (formatKey: string | undefined) => {
 }
 
 const normalizeAssetType = (value: string | undefined) => {
-  const normalized = String(value || '').trim().toLowerCase()
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase()
   const supported = ['full', 'sample', 'cover', 'audio']
   return supported.includes(normalized) ? (normalized as any) : 'full'
 }
@@ -354,9 +356,10 @@ export const createMyBook = async (req: AuthRequest, res: Response) => {
       })
     }
 
-    const existingSlug = await query('SELECT id FROM products WHERE slug = $1', [
-      resolvedSlug,
-    ])
+    const existingSlug = await query(
+      'SELECT id FROM products WHERE slug = $1',
+      [resolvedSlug],
+    )
 
     if (existingSlug.rows.length > 0) {
       return res.status(409).json({
@@ -371,43 +374,44 @@ export const createMyBook = async (req: AuthRequest, res: Response) => {
       'creator_profile_id',
     )
 
-    const productInsert = supportsProductKind && supportsCreatorProfile
-      ? await query(
-          `INSERT INTO products (
+    const productInsert =
+      supportsProductKind && supportsCreatorProfile
+        ? await query(
+            `INSERT INTO products (
              sku, name, slug, description, short_description,
              base_price, sale_price, is_active, is_digital,
              product_kind, creator_profile_id
            )
            VALUES ($1, $2, $3, $4, $5, $6, $7, true, true, 'book', $8)
            RETURNING id, sku, name, slug, product_kind`,
-          [
-            generateSku(),
-            name,
-            resolvedSlug,
-            description || null,
-            shortDescription || null,
-            basePrice,
-            salePrice || null,
-            creatorProfileId,
-          ],
-        )
-      : await query(
-          `INSERT INTO products (
+            [
+              generateSku(),
+              name,
+              resolvedSlug,
+              description || null,
+              shortDescription || null,
+              basePrice,
+              salePrice || null,
+              creatorProfileId,
+            ],
+          )
+        : await query(
+            `INSERT INTO products (
              sku, name, slug, description, short_description,
              base_price, sale_price, is_active, is_digital
            )
            VALUES ($1, $2, $3, $4, $5, $6, $7, true, true)
            RETURNING id, sku, name, slug`,
-          [
-            generateSku(),
-            name,
-            resolvedSlug,
-            description || null,
-            shortDescription || null,
-            basePrice,
-            salePrice || null,
-          ],
-        )
+            [
+              generateSku(),
+              name,
+              resolvedSlug,
+              description || null,
+              shortDescription || null,
+              basePrice,
+              salePrice || null,
+            ],
+          )
 
     const product = productInsert.rows[0]
 
@@ -439,10 +443,16 @@ export const createMyBook = async (req: AuthRequest, res: Response) => {
 
     const digitalAssetsReady = await tableExists('digital_assets')
     if (digitalAssetsReady) {
-      const supportsFormatKey = await columnExists('digital_assets', 'format_key')
+      const supportsFormatKey = await columnExists(
+        'digital_assets',
+        'format_key',
+      )
       const resolvedAssets = Array.isArray(assets) ? [...assets] : []
 
-      if (fileUrl && !resolvedAssets.some((asset: any) => asset?.url === fileUrl)) {
+      if (
+        fileUrl &&
+        !resolvedAssets.some((asset: any) => asset?.url === fileUrl)
+      ) {
         resolvedAssets.push({
           url: fileUrl,
           mimeType: 'application/pdf',
@@ -566,7 +576,9 @@ export const uploadMyBookAssets = async (req: AuthRequest, res: Response) => {
       })
     }
 
-    const assetType = normalizeAssetType((req.body.assetType as string) || 'full')
+    const assetType = normalizeAssetType(
+      (req.body.assetType as string) || 'full',
+    )
     const label = (req.body.label as string) || null
     const published = [] as any[]
 
@@ -648,7 +660,11 @@ export const submitMyBookForReview = async (
     }
 
     const { bookId } = req.params
-    const { rightsDeclared = true, creatorTermsAccepted = true, notes } = req.body
+    const {
+      rightsDeclared = true,
+      creatorTermsAccepted = true,
+      notes,
+    } = req.body
 
     const bookCheck = await query(
       `SELECT p.id, cp.user_id
@@ -686,7 +702,8 @@ export const submitMyBookForReview = async (
     if (Number(fullAssetResult.rows[0]?.total || 0) === 0) {
       return res.status(400).json({
         success: false,
-        error: 'Upload at least one full book asset before submitting for review',
+        error:
+          'Upload at least one full book asset before submitting for review',
       })
     }
 
@@ -811,7 +828,8 @@ export const getCreatorDashboardMetrics = async (
         ? Math.max(
             0,
             Math.round(
-              (new Date(firstSaleAt).getTime() - new Date(firstBookCreatedAt).getTime()) /
+              (new Date(firstSaleAt).getTime() -
+                new Date(firstBookCreatedAt).getTime()) /
                 (1000 * 60 * 60),
             ),
           )
@@ -828,7 +846,8 @@ export const getCreatorDashboardMetrics = async (
           pendingReviewBooks: stats.pending_review_books,
           rejectedBooks: stats.rejected_books,
           firstBookCreatedAt,
-          firstSubmittedForReviewAt: stats.first_submitted_for_review_at || null,
+          firstSubmittedForReviewAt:
+            stats.first_submitted_for_review_at || null,
         },
         sales: {
           unitsSold: sales.units_sold,
@@ -846,6 +865,221 @@ export const getCreatorDashboardMetrics = async (
     res.status(500).json({
       success: false,
       error: 'Failed to fetch creator dashboard metrics',
+    })
+  }
+}
+
+export const getCreatorDashboardActivity = async (
+  req: AuthRequest,
+  res: Response,
+) => {
+  try {
+    if (!requireFeatureEnabled(res)) {
+      return
+    }
+
+    const userId = req.user?.userId
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required',
+      })
+    }
+
+    const limit = Math.min(Math.max(Number(req.query.limit) || 10, 1), 25)
+
+    const creatorResult = await query(
+      `SELECT cp.id,
+              cp.handle,
+              cp.display_name,
+              cp.created_at AS creator_created_at,
+              u.business_mode_activated_at
+       FROM creator_profiles cp
+       JOIN users u ON u.id = cp.user_id
+       WHERE cp.user_id = $1
+       LIMIT 1`,
+      [userId],
+    )
+
+    if (creatorResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Creator profile not found',
+      })
+    }
+
+    const creator = creatorResult.rows[0]
+
+    const activityResult = await query(
+      `WITH creator AS (
+         SELECT id, handle, display_name, creator_created_at, business_mode_activated_at
+         FROM (
+           SELECT id,
+                  handle,
+                  display_name,
+                  creator_created_at,
+                  business_mode_activated_at
+           FROM (
+             VALUES ($1::uuid, $2::text, $3::text, $4::timestamptz, $5::timestamptz)
+           ) AS creator_data(id, handle, display_name, creator_created_at, business_mode_activated_at)
+         ) AS creator_values
+       )
+       SELECT *
+       FROM (
+         SELECT
+           creator.creator_created_at AS occurred_at,
+           'creator_profile_created'::text AS event_type,
+           creator.id AS entity_id,
+           creator.handle AS entity_slug,
+           creator.display_name AS entity_name,
+           'Creator profile created'::text AS title,
+           'Your creator profile is now live.'::text AS description,
+           'creator'::text AS subject_type,
+           NULL::uuid AS order_id,
+           NULL::text AS order_number,
+           NULL::int AS quantity,
+           NULL::numeric AS amount,
+           100 AS sort_weight
+         FROM creator
+
+         UNION ALL
+
+         SELECT
+           creator.business_mode_activated_at AS occurred_at,
+           'business_mode_activated'::text,
+           NULL::uuid,
+           NULL::text,
+           NULL::text,
+           'Business mode activated'::text,
+           'Business mode was enabled for this account.'::text,
+           'account'::text,
+           NULL::uuid,
+           NULL::text,
+           NULL::int,
+           NULL::numeric,
+           95
+         FROM creator
+         WHERE creator.business_mode_activated_at IS NOT NULL
+
+         UNION ALL
+
+         SELECT
+           p.created_at AS occurred_at,
+           'draft_created'::text,
+           p.id,
+           p.slug,
+           p.name,
+           'Draft created'::text,
+           CASE
+             WHEN p.publication_status = 'published' THEN 'A new title was drafted and published.'
+             ELSE 'A new draft was created in the publishing studio.'
+           END AS description,
+           'book'::text,
+           NULL::uuid,
+           NULL::text,
+           NULL::int,
+           NULL::numeric,
+           80
+         FROM products p
+         JOIN creator ON creator.id = p.creator_profile_id
+         WHERE p.deleted_at IS NULL
+           AND (p.product_kind = 'book' OR p.is_digital = true)
+
+         UNION ALL
+
+         SELECT
+           p.submitted_for_review_at AS occurred_at,
+           'draft_submitted'::text,
+           p.id,
+           p.slug,
+           p.name,
+           'Submitted for review'::text,
+           'The draft was sent to the moderation queue.'::text,
+           'book'::text,
+           NULL::uuid,
+           NULL::text,
+           NULL::int,
+           NULL::numeric,
+           70
+         FROM products p
+         JOIN creator ON creator.id = p.creator_profile_id
+         WHERE p.deleted_at IS NULL
+           AND p.submitted_for_review_at IS NOT NULL
+           AND (p.product_kind = 'book' OR p.is_digital = true)
+
+         UNION ALL
+
+         SELECT
+           o.created_at AS occurred_at,
+           'sale_completed'::text,
+           p.id,
+           p.slug,
+           p.name,
+           'Sale completed'::text,
+           format(
+             '%s unit%s sold in order %s',
+             oi.quantity,
+             CASE WHEN oi.quantity = 1 THEN '' ELSE 's' END,
+             o.order_number
+           )::text,
+           'sale'::text,
+           o.id,
+           o.order_number,
+           oi.quantity,
+           (oi.unit_price * oi.quantity) - COALESCE(oi.discount_amount, 0),
+           60
+         FROM order_items oi
+         JOIN orders o ON o.id = oi.order_id
+         JOIN products p ON p.id = oi.product_id
+         JOIN creator ON creator.id = p.creator_profile_id
+         WHERE p.deleted_at IS NULL
+           AND o.payment_status = 'paid'
+           AND o.order_status NOT IN ('cancelled', 'refunded')
+       ) activity
+       WHERE activity.occurred_at IS NOT NULL
+       ORDER BY activity.occurred_at DESC, activity.sort_weight DESC
+       LIMIT $6`,
+      [
+        creator.id,
+        creator.handle,
+        creator.display_name,
+        creator.creator_created_at,
+        creator.business_mode_activated_at,
+        limit,
+      ],
+    )
+
+    res.json({
+      success: true,
+      data: {
+        items: activityResult.rows.map((row) => ({
+          id: `${row.event_type}-${
+            row.entity_id || row.order_id || row.occurred_at
+          }`,
+          eventType: row.event_type,
+          subjectType: row.subject_type,
+          title: row.title,
+          description: row.description,
+          occurredAt: row.occurred_at,
+          entityId: row.entity_id,
+          entitySlug: row.entity_slug,
+          entityName: row.entity_name,
+          orderId: row.order_id,
+          orderNumber: row.order_number,
+          quantity: row.quantity,
+          amount:
+            row.amount !== null && row.amount !== undefined
+              ? Number(row.amount)
+              : null,
+        })),
+        generatedAt: new Date().toISOString(),
+      },
+    })
+  } catch (error) {
+    logger.error('Get creator dashboard activity error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch creator dashboard activity',
     })
   }
 }

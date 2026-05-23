@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { authenticate } from '../../../middleware/auth'
 import {
   createMyBook,
+  getCreatorDashboardActivity,
   getCreatorDashboardMetrics,
   getCreatorProfileByHandle,
   getMyCreatorProfile,
@@ -27,5 +28,6 @@ router.post(
 )
 router.post('/books/:bookId/submit', authenticate, submitMyBookForReview)
 router.get('/dashboard/metrics', authenticate, getCreatorDashboardMetrics)
+router.get('/dashboard/activity', authenticate, getCreatorDashboardActivity)
 
 export default router

@@ -97,6 +97,70 @@ export default function SellerHubScreen() {
     (request) => request.status === 'pending',
   )
 
+  const creatorDashboardReady =
+    sellerProfile?.verification_status === 'approved'
+  const isBusinessAccount = user?.is_business_account ?? false
+
+  const summaryCards = useMemo(
+    () => [
+      {
+        label: 'Business mode',
+        value: isBusinessAccount ? 'Active' : 'Inactive',
+        tone: isBusinessAccount ? 'emerald' : 'amber',
+      },
+      {
+        label: 'Seller tier',
+        value: formatTier(sellerProfile?.tier || 'unverified'),
+        tone: 'blue',
+      },
+      {
+        label: 'Approval status',
+        value: formatTier(sellerProfile?.verification_status || 'none'),
+        tone: creatorDashboardReady ? 'emerald' : 'slate',
+      },
+    ],
+    [
+      creatorDashboardReady,
+      sellerProfile?.tier,
+      sellerProfile?.verification_status,
+      isBusinessAccount,
+    ],
+  )
+
+  const activityFeed = useMemo(
+    () => [
+      {
+        title: 'Business mode',
+        detail: isBusinessAccount
+          ? 'Your seller account is active and ready for creator workflows.'
+          : 'Activate business mode to unlock creator tools.',
+      },
+      {
+        title: 'Seller profile',
+        detail: sellerProfile
+          ? `Profile is ready with ${sellerProfile.max_active_listings} active listing limit.`
+          : 'Create your seller profile to start selling with protection.',
+      },
+      {
+        title: 'Verification',
+        detail: pendingRequest
+          ? `Your ${formatTier(
+              pendingRequest.requested_tier,
+            )} request is pending admin review.`
+          : creatorDashboardReady
+          ? 'Approved and ready for creator tools.'
+          : 'Request verification when you are ready to upgrade.',
+      },
+      {
+        title: 'Creator dashboard',
+        detail: creatorDashboardReady
+          ? 'Creator tools are unlocked.'
+          : 'Locked until admin approval is completed.',
+      },
+    ],
+    [creatorDashboardReady, isBusinessAccount, pendingRequest, sellerProfile],
+  )
+
   const nextTiers = useMemo(
     () =>
       tiers.filter((tier) => tierOrder.indexOf(tier.tier) > currentTierIndex),
@@ -186,6 +250,14 @@ export default function SellerHubScreen() {
   }
 
   const openCreatorHub = async () => {
+    if (!creatorDashboardReady) {
+      Alert.alert(
+        'Verification pending',
+        'An admin must approve your seller verification before creator tools unlock.',
+      )
+      return
+    }
+
     try {
       await Linking.openURL('https://techtoolstore.com/creator-dashboard')
     } catch {
@@ -227,6 +299,24 @@ export default function SellerHubScreen() {
         </View>
 
         {message ? <Text style={styles.message}>{message}</Text> : null}
+
+        <View style={styles.summaryGrid}>
+          {summaryCards.map((card) => (
+            <View key={card.label} style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>{card.label}</Text>
+              <Text
+                style={[
+                  styles.summaryValue,
+                  card.tone === 'emerald' && styles.summaryValueEmerald,
+                  card.tone === 'amber' && styles.summaryValueAmber,
+                  card.tone === 'blue' && styles.summaryValueBlue,
+                ]}
+              >
+                {card.value}
+              </Text>
+            </View>
+          ))}
+        </View>
 
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
@@ -343,11 +433,37 @@ export default function SellerHubScreen() {
             Price cap: {formatMoney(sellerProfile?.max_product_price)}
           </Text>
           <TouchableOpacity
-            style={styles.secondaryButton}
+            style={[
+              styles.secondaryButton,
+              !creatorDashboardReady && styles.secondaryButtonDisabled,
+            ]}
             onPress={openCreatorHub}
+            disabled={!creatorDashboardReady}
           >
-            <Text style={styles.secondaryButtonText}>Open creator tools</Text>
+            <Text style={styles.secondaryButtonText}>
+              {creatorDashboardReady
+                ? 'Open creator tools'
+                : 'Creator tools locked'}
+            </Text>
           </TouchableOpacity>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Recent activity</Text>
+          <Text style={styles.sectionSubtitle}>
+            A lightweight summary of your seller and creator lifecycle.
+          </Text>
+          <View style={styles.activityList}>
+            {activityFeed.map((item) => (
+              <View key={item.title} style={styles.activityItem}>
+                <View style={styles.activityDot} />
+                <View style={styles.activityContent}>
+                  <Text style={styles.activityTitle}>{item.title}</Text>
+                  <Text style={styles.activityDetail}>{item.detail}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
         </View>
 
         <View style={styles.card}>
@@ -444,6 +560,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: AppSpacing.md,
   },
+  summaryGrid: {
+    flexDirection: 'row',
+    gap: AppSpacing.md,
+    marginBottom: AppSpacing.sm,
+  },
+  summaryCard: {
+    flex: 1,
+    borderRadius: 24,
+    backgroundColor: AppColors.white,
+    padding: AppSpacing.md,
+    ...AppShadows.sm,
+  },
+  summaryLabel: {
+    color: AppColors.gray500,
+    fontSize: 12,
+  },
+  summaryValue: {
+    marginTop: 8,
+    color: AppColors.gray900,
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  summaryValueEmerald: { color: '#047857' },
+  summaryValueAmber: { color: '#B45309' },
+  summaryValueBlue: { color: '#2563EB' },
   statCard: {
     flex: 1,
     borderRadius: 24,
@@ -495,9 +636,40 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
   },
+  secondaryButtonDisabled: {
+    backgroundColor: '#9CA3AF',
+  },
   secondaryButtonText: {
     color: AppColors.white,
     fontWeight: '700',
+  },
+  activityList: {
+    marginTop: AppSpacing.md,
+    gap: AppSpacing.md,
+  },
+  activityItem: {
+    flexDirection: 'row',
+    gap: AppSpacing.md,
+    alignItems: 'flex-start',
+  },
+  activityDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginTop: 6,
+    backgroundColor: AppColors.primary,
+  },
+  activityContent: {
+    flex: 1,
+  },
+  activityTitle: {
+    fontWeight: '700',
+    color: AppColors.gray900,
+  },
+  activityDetail: {
+    marginTop: 4,
+    color: AppColors.gray500,
+    lineHeight: 20,
   },
   successText: {
     marginTop: AppSpacing.md,

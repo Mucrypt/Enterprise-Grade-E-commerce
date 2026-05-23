@@ -187,6 +187,8 @@ router.get('/docs', (_req, res) => {
           'Submit book to moderation review queue (authenticated)',
         'GET /api/v1/creator/dashboard/metrics':
           'Get creator activation and first-sale KPI metrics (authenticated)',
+        'GET /api/v1/creator/dashboard/activity':
+          'Get creator recent activity feed (authenticated)',
       },
       seller: {
         'GET /api/v1/seller/tiers': 'Get seller tier configuration',

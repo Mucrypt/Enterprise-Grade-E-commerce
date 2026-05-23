@@ -24,6 +24,7 @@ import type {
   SellerVerificationRequest,
   CreatorProfile,
   CreatorDashboardMetrics,
+  CreatorDashboardActivity,
   CreatorBookDraftInput,
 } from '../types'
 
@@ -608,6 +609,15 @@ export const creatorApi = {
       success: boolean
       data: CreatorDashboardMetrics
     }>('/creator/dashboard/metrics')
+
+    return response.data.data
+  },
+
+  async getDashboardActivity(limit = 10) {
+    const response = await api.get<{
+      success: boolean
+      data: CreatorDashboardActivity
+    }>(`/creator/dashboard/activity?limit=${limit}`)
 
     return response.data.data
   },

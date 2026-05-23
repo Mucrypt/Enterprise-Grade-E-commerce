@@ -100,6 +100,9 @@ export default function SellerHubPage() {
     (request) => request.status === 'pending',
   )
 
+  const creatorDashboardReady =
+    sellerProfile?.verification_status === 'approved'
+
   const handleActivateBusinessMode = async () => {
     setBusyAction('activate')
     setError('')
@@ -227,12 +230,18 @@ export default function SellerHubPage() {
               >
                 <ArrowLeft className='h-4 w-4' /> Back to profile
               </Link>
-              <Link
-                to='/creator-dashboard'
-                className='inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-orange-50'
-              >
-                <Briefcase className='h-4 w-4' /> Creator dashboard
-              </Link>
+              {creatorDashboardReady ? (
+                <Link
+                  to='/creator-dashboard'
+                  className='inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-orange-50'
+                >
+                  <Briefcase className='h-4 w-4' /> Creator dashboard
+                </Link>
+              ) : (
+                <div className='inline-flex items-center gap-2 rounded-2xl bg-white/10 px-4 py-2.5 text-sm font-semibold text-white/80 ring-1 ring-white/15'>
+                  <Briefcase className='h-4 w-4' /> Creator dashboard locked
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -449,6 +458,10 @@ export default function SellerHubPage() {
                   buyers and the platform.
                 </li>
               </ul>
+              <p className='mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600 ring-1 ring-slate-100'>
+                Creator dashboard access is unlocked only after an admin
+                approves verification in the seller queue.
+              </p>
             </div>
 
             <div className='rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5'>
