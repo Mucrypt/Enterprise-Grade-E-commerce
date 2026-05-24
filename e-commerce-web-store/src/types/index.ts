@@ -322,6 +322,37 @@ export interface CreatorDashboardActivity {
   generatedAt: string
 }
 
+export interface CreatorProduct {
+  id: string
+  name: string
+  slug: string
+  publicationStatus: string
+  basePrice: number
+  salePrice: number | null
+  shortDescription: string | null
+  coverImageUrl: string | null
+  totalUnitsSold: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreatorProductList {
+  items: CreatorProduct[]
+  pagination: { page: number; limit: number; hasMore: boolean }
+}
+
+export interface CreatorAuditLogEntry {
+  id: string
+  action: string
+  entity_type: string
+  entity_id: string | null
+  old_value: Record<string, unknown> | null
+  new_value: Record<string, unknown> | null
+  meta: Record<string, unknown> | null
+  ip_address: string | null
+  created_at: string
+}
+
 export interface CreatorBookDraftInput {
   name: string
   slug?: string

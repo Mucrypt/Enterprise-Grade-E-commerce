@@ -6,6 +6,7 @@ import {
   approveSellerVerificationRequest,
   getSellerVerificationQueue,
   rejectSellerVerificationRequest,
+  setSellerCreatorAccess,
   suspendSellerProfile,
 } from './sellers.controller'
 
@@ -42,6 +43,12 @@ router.post(
   adminSellerWriteLimiter,
   validate(adminSellerSchemas.suspendSeller),
   suspendSellerProfile,
+)
+router.post(
+  '/:sellerProfileId/creator-access',
+  adminSellerWriteLimiter,
+  validate(adminSellerSchemas.setCreatorAccess),
+  setSellerCreatorAccess,
 )
 
 export default router

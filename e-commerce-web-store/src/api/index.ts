@@ -26,6 +26,8 @@ import type {
   CreatorDashboardMetrics,
   CreatorDashboardActivity,
   CreatorBookDraftInput,
+  CreatorProductList,
+  CreatorProduct,
 } from '../types'
 
 // API Configuration
@@ -573,6 +575,39 @@ export const sellerApi = {
 }
 
 export const creatorApi = {
+  normalizeProduct(raw: any): CreatorProduct {
+    return {
+      id: String(raw?.id || ''),
+      name: String(raw?.name || ''),
+      slug: String(raw?.slug || ''),
+      publicationStatus: String(
+        raw?.publicationStatus ?? raw?.publication_status ?? 'draft',
+      ),
+      basePrice: Number(raw?.basePrice ?? raw?.base_price ?? 0),
+      salePrice:
+        raw?.salePrice !== undefined
+          ? raw.salePrice === null
+            ? null
+            : Number(raw.salePrice)
+          : raw?.sale_price === null || raw?.sale_price === undefined
+          ? null
+          : Number(raw.sale_price),
+      shortDescription: (raw?.shortDescription ??
+        raw?.short_description ??
+        null) as string | null,
+      coverImageUrl: (raw?.coverImageUrl ?? raw?.cover_image_url ?? null) as
+        | string
+        | null,
+      totalUnitsSold: Number(raw?.totalUnitsSold ?? raw?.total_units_sold ?? 0),
+      createdAt: String(
+        raw?.createdAt ?? raw?.created_at ?? new Date().toISOString(),
+      ),
+      updatedAt: String(
+        raw?.updatedAt ?? raw?.updated_at ?? new Date().toISOString(),
+      ),
+    }
+  },
+
   async getMyProfile() {
     const response = await api.get<{
       success: boolean
@@ -663,6 +698,50 @@ export const creatorApi = {
     })
 
     return response.data.data.book
+  },
+
+  async getMyProducts(params?: {
+    page?: number
+    limit?: number
+    status?: string
+    search?: string
+  }): Promise<CreatorProductList> {
+    const qs = new URLSearchParams()
+    if (params?.page) qs.set('page', String(params.page))
+    if (params?.limit) qs.set('limit', String(params.limit))
+    if (params?.status) qs.set('status', params.status)
+    if (params?.search) qs.set('search', params.search)
+    const response = await api.get<{
+      success: boolean
+      data: CreatorProductList
+    }>(`/creator/products?${qs.toString()}`)
+    const data = response.data.data as any
+    return {
+      items: Array.isArray(data?.items)
+        ? data.items.map((item: any) => creatorApi.normalizeProduct(item))
+        : [],
+      pagination: {
+        page: Number(data?.pagination?.page || params?.page || 1),
+        limit: Number(data?.pagination?.limit || params?.limit || 8),
+        hasMore: Boolean(data?.pagination?.hasMore),
+      },
+    }
+  },
+
+  async updateMyProduct(
+    productId: string,
+    payload: {
+      basePrice?: number
+      salePrice?: number | null
+      description?: string
+      shortDescription?: string
+    },
+  ): Promise<CreatorProduct> {
+    const response = await api.patch<{
+      success: boolean
+      data: { product: CreatorProduct }
+    }>(`/creator/products/${productId}`, payload)
+    return creatorApi.normalizeProduct(response.data.data.product)
   },
 }
 

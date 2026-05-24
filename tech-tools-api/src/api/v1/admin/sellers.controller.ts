@@ -458,3 +458,143 @@ export const suspendSellerProfile = async (req: AuthRequest, res: Response) => {
     })
   }
 }
+
+export const setSellerCreatorAccess = async (
+  req: AuthRequest,
+  res: Response,
+) => {
+  const client = await getClient()
+
+  try {
+    if (!(await ensureSellerInfrastructure(res))) {
+      return
+    }
+
+    const adminId = req.user?.userId
+    if (!adminId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required',
+      })
+    }
+
+    const { sellerProfileId } = req.params
+    const { accessEnabled, reason } = req.body as {
+      accessEnabled: boolean
+      reason?: string
+    }
+
+    await client.query('BEGIN')
+
+    const currentResult = await client.query(
+      `SELECT sp.*, u.is_business_account, u.business_mode_activated_at
+       FROM seller_profiles sp
+       INNER JOIN users u ON u.id = sp.user_id
+       WHERE sp.id = $1
+       LIMIT 1`,
+      [sellerProfileId],
+    )
+
+    if (currentResult.rows.length === 0) {
+      await client.query('ROLLBACK')
+      return res.status(404).json({
+        success: false,
+        error: 'Seller profile not found',
+      })
+    }
+
+    const current = currentResult.rows[0]
+
+    if (Boolean(accessEnabled) && current.is_suspended) {
+      await client.query('ROLLBACK')
+      return res.status(409).json({
+        success: false,
+        error: 'Cannot grant creator access while seller profile is suspended',
+      })
+    }
+
+    if (Boolean(accessEnabled) && !current.is_business_account) {
+      await client.query(
+        `UPDATE users
+         SET is_business_account = true,
+             business_mode_activated_at = COALESCE(business_mode_activated_at, CURRENT_TIMESTAMP),
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1`,
+        [current.user_id],
+      )
+    }
+
+    const updatedProfileResult = await client.query(
+      `UPDATE seller_profiles
+       SET verification_status = $1,
+           is_active = CASE WHEN $2 = true THEN true ELSE is_active END,
+           is_suspended = CASE WHEN $2 = true THEN false ELSE is_suspended END,
+           suspension_reason = CASE WHEN $2 = true THEN NULL ELSE suspension_reason END,
+           suspended_at = CASE WHEN $2 = true THEN NULL ELSE suspended_at END,
+           suspended_by_admin_id = CASE WHEN $2 = true THEN NULL ELSE suspended_by_admin_id END,
+           verified_at = CASE
+             WHEN $2 = true THEN COALESCE(verified_at, CURRENT_TIMESTAMP)
+             ELSE verified_at
+           END,
+           verified_by_admin_id = CASE
+             WHEN $2 = true THEN COALESCE(verified_by_admin_id, $3)
+             ELSE verified_by_admin_id
+           END,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $4
+       RETURNING *`,
+      [
+        accessEnabled ? 'approved' : 'none',
+        Boolean(accessEnabled),
+        adminId,
+        sellerProfileId,
+      ],
+    )
+
+    await client.query('COMMIT')
+
+    const updatedProfile = updatedProfileResult.rows[0]
+
+    await appendAuditLog({
+      profileId: sellerProfileId,
+      userId: updatedProfile.user_id,
+      actorId: adminId,
+      action: accessEnabled
+        ? 'creator_dashboard_access_granted'
+        : 'creator_dashboard_access_revoked',
+      previousState: {
+        verification_status: current.verification_status,
+        is_suspended: current.is_suspended,
+        is_business_account: current.is_business_account,
+      },
+      newState: {
+        verification_status: updatedProfile.verification_status,
+        is_suspended: updatedProfile.is_suspended,
+      },
+      details: {
+        reason: reason || null,
+      },
+      req,
+    })
+
+    return res.json({
+      success: true,
+      data: {
+        sellerProfile: updatedProfile,
+        creatorAccess: {
+          enabled: accessEnabled,
+          updatedBy: adminId,
+        },
+      },
+    })
+  } catch (error) {
+    await client.query('ROLLBACK')
+    logger.error('Set seller creator access error:', error)
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to update creator dashboard access',
+    })
+  } finally {
+    client.release()
+  }
+}

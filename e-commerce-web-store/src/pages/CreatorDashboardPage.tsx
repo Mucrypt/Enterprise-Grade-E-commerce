@@ -14,12 +14,16 @@ import {
   Store,
   UserCircle2,
   TrendingUp,
+  Package,
+  FolderKanban,
+  Settings2,
 } from 'lucide-react'
 import { creatorApi, sellerApi, userApi } from '../api'
 import type {
   CreatorBookDraftInput,
   CreatorActivityItem,
   CreatorDashboardMetrics,
+  CreatorProduct,
   CreatorProfile,
   SellerProfile,
 } from '../types'
@@ -62,6 +66,19 @@ export default function CreatorDashboardPage() {
   )
   const [activityHasMore, setActivityHasMore] = useState(false)
   const [isLoadingMoreActivity, setIsLoadingMoreActivity] = useState(false)
+  const [creatorProducts, setCreatorProducts] = useState<CreatorProduct[]>([])
+  const [productsPage, setProductsPage] = useState(1)
+  const [productsHasMore, setProductsHasMore] = useState(false)
+  const [isLoadingMoreProducts, setIsLoadingMoreProducts] = useState(false)
+  const [isSavingProductId, setIsSavingProductId] = useState<string | null>(
+    null,
+  )
+  const [productDrafts, setProductDrafts] = useState<
+    Record<
+      string,
+      { basePrice: string; salePrice: string; shortDescription: string }
+    >
+  >({})
   const [latestBookId, setLatestBookId] = useState<string | null>(null)
   const [latestBookSlug, setLatestBookSlug] = useState<string | null>(null)
 
@@ -104,8 +121,8 @@ export default function CreatorDashboardPage() {
       setError('')
 
       try {
-        const [sellerResult, metricsResult, activityResult] = await Promise.all(
-          [
+        const [sellerResult, metricsResult, activityResult, productsResult] =
+          await Promise.all([
             sellerApi
               .getMyProfile()
               .catch(() => ({ sellerProfile: null, eligible: false })),
@@ -119,14 +136,41 @@ export default function CreatorDashboardPage() {
               },
               generatedAt: new Date().toISOString(),
             })),
-          ],
-        )
+            creatorApi.getMyProducts({ page: 1, limit: 8 }).catch(() => ({
+              items: [],
+              pagination: {
+                page: 1,
+                limit: 8,
+                hasMore: false,
+              },
+            })),
+          ])
 
         setSellerProfile(sellerResult.sellerProfile)
         setMetrics(metricsResult)
         setActivityFeed(activityResult.items)
         setActivityHasMore(activityResult.pagination?.hasMore ?? false)
         setActivityNextCursor(activityResult.pagination?.nextCursor ?? null)
+        setCreatorProducts(productsResult.items)
+        setProductsPage(productsResult.pagination?.page ?? 1)
+        setProductsHasMore(productsResult.pagination?.hasMore ?? false)
+        setProductDrafts(() => {
+          const next: Record<
+            string,
+            { basePrice: string; salePrice: string; shortDescription: string }
+          > = {}
+          for (const product of productsResult.items) {
+            next[product.id] = {
+              basePrice: String(product.basePrice ?? ''),
+              salePrice:
+                product.salePrice === null || product.salePrice === undefined
+                  ? ''
+                  : String(product.salePrice),
+              shortDescription: product.shortDescription || '',
+            }
+          }
+          return next
+        })
 
         try {
           const creator = await creatorApi.getMyProfile()
@@ -225,6 +269,14 @@ export default function CreatorDashboardPage() {
     ...analyticsBars.map((bar) => bar.value),
     1,
   )
+
+  const sidebarNav = [
+    { id: 'creator-overview', label: 'Overview', icon: BarChart3 },
+    { id: 'product-studio', label: 'Product studio', icon: Package },
+    { id: 'creator-activity', label: 'Activity feed', icon: ListTodo },
+    { id: 'catalog-ops', label: 'Catalog ops', icon: FolderKanban },
+    { id: 'creator-settings', label: 'Creator settings', icon: Settings2 },
+  ]
 
   const canAccessCreatorDashboard = creatorDashboardReady
 
@@ -380,6 +432,88 @@ export default function CreatorDashboardPage() {
       )
     } finally {
       setIsLoadingMoreActivity(false)
+    }
+  }
+
+  const handleLoadMoreProducts = async () => {
+    if (!productsHasMore || isLoadingMoreProducts) {
+      return
+    }
+
+    setIsLoadingMoreProducts(true)
+    setError('')
+
+    try {
+      const nextPage = productsPage + 1
+      const result = await creatorApi.getMyProducts({
+        page: nextPage,
+        limit: 8,
+      })
+
+      setCreatorProducts((current) => {
+        const existingIds = new Set(current.map((item) => item.id))
+        const newItems = result.items.filter(
+          (item) => !existingIds.has(item.id),
+        )
+        return [...current, ...newItems]
+      })
+
+      setProductDrafts((current) => {
+        const next = { ...current }
+        for (const product of result.items) {
+          if (!next[product.id]) {
+            next[product.id] = {
+              basePrice: String(product.basePrice ?? ''),
+              salePrice:
+                product.salePrice === null || product.salePrice === undefined
+                  ? ''
+                  : String(product.salePrice),
+              shortDescription: product.shortDescription || '',
+            }
+          }
+        }
+        return next
+      })
+
+      setProductsPage(result.pagination?.page ?? nextPage)
+      setProductsHasMore(result.pagination?.hasMore ?? false)
+    } catch (loadError: any) {
+      setError(
+        loadError?.response?.data?.error ||
+          'Could not load more creator products right now.',
+      )
+    } finally {
+      setIsLoadingMoreProducts(false)
+    }
+  }
+
+  const handleSaveProduct = async (productId: string) => {
+    const draft = productDrafts[productId]
+    if (!draft) return
+
+    setError('')
+    setSuccess('')
+    setIsSavingProductId(productId)
+
+    try {
+      const updated = await creatorApi.updateMyProduct(productId, {
+        basePrice: Number(draft.basePrice || 0),
+        salePrice:
+          draft.salePrice.trim() === '' ? null : Number(draft.salePrice || 0),
+        shortDescription: draft.shortDescription.trim(),
+      })
+
+      setCreatorProducts((current) =>
+        current.map((item) => (item.id === productId ? updated : item)),
+      )
+      setSuccess('Product updated successfully.')
+    } catch (saveError: any) {
+      setError(
+        saveError?.response?.data?.error ||
+          'Could not update this product right now.',
+      )
+    } finally {
+      setIsSavingProductId(null)
     }
   }
 
@@ -546,9 +680,58 @@ export default function CreatorDashboardPage() {
             </div>
           </div>
         ) : (
-          <div className='mt-6 grid gap-6 lg:grid-cols-[1.2fr,0.8fr]'>
+          <div className='mt-6 grid gap-6 xl:grid-cols-[260px,1.2fr,0.8fr]'>
+            <aside className='rounded-3xl bg-slate-950 p-5 text-white shadow-sm ring-1 ring-black/5 xl:sticky xl:top-6 xl:self-start'>
+              <p className='text-xs font-semibold uppercase tracking-[0.24em] text-slate-300'>
+                Creator command menu
+              </p>
+              <p className='mt-2 text-lg font-bold'>
+                Manage products like a pro back office.
+              </p>
+
+              <div className='mt-5 space-y-2'>
+                {sidebarNav.map((item) => {
+                  const Icon = item.icon
+
+                  return (
+                    <a
+                      key={item.id}
+                      href={`#${item.id}`}
+                      className='flex items-center gap-2 rounded-2xl bg-white/10 px-3 py-2 text-sm font-medium transition hover:bg-white/20'
+                    >
+                      <Icon className='h-4 w-4 text-orange-300' />
+                      <span>{item.label}</span>
+                    </a>
+                  )
+                })}
+              </div>
+
+              <div className='mt-6 rounded-2xl bg-white/10 p-4'>
+                <p className='text-xs font-semibold uppercase tracking-[0.2em] text-slate-300'>
+                  Quick actions
+                </p>
+                <div className='mt-3 flex flex-col gap-2'>
+                  <a
+                    href='#product-studio'
+                    className='rounded-xl bg-orange-500 px-3 py-2 text-center text-sm font-semibold text-white transition hover:bg-orange-400'
+                  >
+                    Create new product
+                  </a>
+                  <Link
+                    to='/products'
+                    className='rounded-xl border border-white/25 px-3 py-2 text-center text-sm font-semibold text-white transition hover:bg-white/10'
+                  >
+                    Manage live products
+                  </Link>
+                </div>
+              </div>
+            </aside>
+
             <div className='space-y-6'>
-              <div className='rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5'>
+              <div
+                id='creator-overview'
+                className='rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5'
+              >
                 <div className='flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between'>
                   <div>
                     <p className='inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-blue-700'>
@@ -619,7 +802,10 @@ export default function CreatorDashboardPage() {
                 </div>
               </div>
 
-              <div className='rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5'>
+              <div
+                id='creator-settings'
+                className='rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5'
+              >
                 <h2 className='flex items-center gap-2 text-xl font-bold text-slate-900'>
                   <UserCircle2 className='h-5 w-5 text-blue-600' /> Creator
                   identity
@@ -777,7 +963,10 @@ export default function CreatorDashboardPage() {
                 </div>
               </div>
 
-              <div className='rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5'>
+              <div
+                id='creator-activity'
+                className='rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5'
+              >
                 <div className='flex items-center justify-between gap-4'>
                   <div>
                     <h2 className='flex items-center gap-2 text-xl font-bold text-slate-900'>
@@ -785,8 +974,7 @@ export default function CreatorDashboardPage() {
                       Recent activity
                     </h2>
                     <p className='mt-1 text-sm text-gray-500'>
-                      Derived from creator profile, seller status, and sales
-                      signals.
+                      Live backend events for drafts, submissions, and sales.
                     </p>
                   </div>
                   <div className='rounded-2xl bg-blue-50 px-4 py-3 ring-1 ring-blue-100'>
@@ -857,7 +1045,10 @@ export default function CreatorDashboardPage() {
                 ) : null}
               </div>
 
-              <div className='rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5'>
+              <div
+                id='product-studio'
+                className='rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5'
+              >
                 <h2 className='flex items-center gap-2 text-xl font-bold text-slate-900'>
                   <BookOpen className='h-5 w-5 text-orange-600' /> Create and
                   launch book
@@ -1024,7 +1215,157 @@ export default function CreatorDashboardPage() {
               </div>
             </div>
 
-            <div className='space-y-6'>
+            <div id='catalog-ops' className='space-y-6'>
+              <div className='rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5'>
+                <div className='flex items-start justify-between gap-4'>
+                  <div>
+                    <h2 className='flex items-center gap-2 text-xl font-bold text-slate-900'>
+                      <Package className='h-5 w-5 text-blue-600' /> Catalog
+                      manager
+                    </h2>
+                    <p className='mt-1 text-sm text-gray-500'>
+                      Manage your creator products with the same operational
+                      discipline as admin workflows.
+                    </p>
+                  </div>
+                  <span className='rounded-xl bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-gray-500 ring-1 ring-slate-100'>
+                    {creatorProducts.length} loaded
+                  </span>
+                </div>
+
+                <div className='mt-5 space-y-4'>
+                  {creatorProducts.length > 0 ? (
+                    creatorProducts.map((product) => (
+                      <div
+                        key={product.id}
+                        className='rounded-2xl border border-gray-100 bg-slate-50 p-4'
+                      >
+                        <div className='flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between'>
+                          <div>
+                            <p className='font-semibold text-slate-900'>
+                              {product.name}
+                            </p>
+                            <p className='text-xs text-gray-500'>
+                              /{product.slug} · {product.publicationStatus}
+                            </p>
+                          </div>
+                          <p className='text-xs font-medium text-gray-500'>
+                            Sold: {product.totalUnitsSold}
+                          </p>
+                        </div>
+
+                        <div className='mt-3 grid gap-3 md:grid-cols-3'>
+                          <input
+                            value={productDrafts[product.id]?.basePrice ?? ''}
+                            onChange={(e) =>
+                              setProductDrafts((current) => ({
+                                ...current,
+                                [product.id]: {
+                                  ...(current[product.id] || {
+                                    basePrice: '',
+                                    salePrice: '',
+                                    shortDescription: '',
+                                  }),
+                                  basePrice: e.target.value,
+                                },
+                              }))
+                            }
+                            type='number'
+                            min='0'
+                            step='0.01'
+                            placeholder='Base price'
+                            className='w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100'
+                          />
+                          <input
+                            value={productDrafts[product.id]?.salePrice ?? ''}
+                            onChange={(e) =>
+                              setProductDrafts((current) => ({
+                                ...current,
+                                [product.id]: {
+                                  ...(current[product.id] || {
+                                    basePrice: '',
+                                    salePrice: '',
+                                    shortDescription: '',
+                                  }),
+                                  salePrice: e.target.value,
+                                },
+                              }))
+                            }
+                            type='number'
+                            min='0'
+                            step='0.01'
+                            placeholder='Sale price (optional)'
+                            className='w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100'
+                          />
+                          <button
+                            type='button'
+                            onClick={() => handleSaveProduct(product.id)}
+                            disabled={isSavingProductId === product.id}
+                            className='inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60'
+                          >
+                            {isSavingProductId === product.id ? (
+                              <>
+                                <Loader2 className='h-4 w-4 animate-spin' />
+                                Saving...
+                              </>
+                            ) : (
+                              'Save'
+                            )}
+                          </button>
+                        </div>
+
+                        <textarea
+                          value={
+                            productDrafts[product.id]?.shortDescription ?? ''
+                          }
+                          onChange={(e) =>
+                            setProductDrafts((current) => ({
+                              ...current,
+                              [product.id]: {
+                                ...(current[product.id] || {
+                                  basePrice: '',
+                                  salePrice: '',
+                                  shortDescription: '',
+                                }),
+                                shortDescription: e.target.value,
+                              },
+                            }))
+                          }
+                          rows={2}
+                          placeholder='Short description'
+                          className='mt-3 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100'
+                        />
+                      </div>
+                    ))
+                  ) : (
+                    <div className='rounded-2xl border border-dashed border-gray-200 bg-slate-50 px-4 py-6 text-sm text-gray-500'>
+                      No creator products yet. Use Product Studio to create your
+                      first draft.
+                    </div>
+                  )}
+                </div>
+
+                {productsHasMore ? (
+                  <div className='mt-5'>
+                    <button
+                      type='button'
+                      onClick={handleLoadMoreProducts}
+                      disabled={isLoadingMoreProducts}
+                      className='inline-flex items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60'
+                    >
+                      {isLoadingMoreProducts ? (
+                        <>
+                          <Loader2 className='h-4 w-4 animate-spin' /> Loading
+                          more
+                        </>
+                      ) : (
+                        'Load more products'
+                      )}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+
               <div className='rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5'>
                 <h2 className='flex items-center gap-2 text-xl font-bold text-slate-900'>
                   <DollarSign className='h-5 w-5 text-emerald-600' /> Revenue

@@ -78,6 +78,116 @@ const normalizeAssetType = (value: string | undefined) => {
   return supported.includes(normalized) ? (normalized as any) : 'full'
 }
 
+type CreatorAccessContext = {
+  creatorProfileId: string
+  sellerProfileId: string | null
+  verificationStatus: string | null
+  isSellerSuspended: boolean
+  isSellerActive: boolean
+  maxActiveListings: number | null
+  isBusinessAccount: boolean
+}
+
+const getCreatorAccessContext = async (
+  userId: string,
+  options?: { requireApproved?: boolean },
+): Promise<CreatorAccessContext | null> => {
+  const result = await query(
+    `SELECT cp.id AS creator_profile_id,
+            sp.id AS seller_profile_id,
+            sp.verification_status,
+            COALESCE(sp.is_suspended, false) AS is_seller_suspended,
+            COALESCE(sp.is_active, true) AS is_seller_active,
+            sp.max_active_listings,
+            COALESCE(u.is_business_account, false) AS is_business_account
+     FROM creator_profiles cp
+     INNER JOIN users u ON u.id = cp.user_id
+     LEFT JOIN seller_profiles sp ON sp.user_id = cp.user_id
+     WHERE cp.user_id = $1
+     LIMIT 1`,
+    [userId],
+  )
+
+  if (result.rows.length === 0) {
+    return null
+  }
+
+  const row = result.rows[0]
+  const context: CreatorAccessContext = {
+    creatorProfileId: row.creator_profile_id,
+    sellerProfileId: row.seller_profile_id || null,
+    verificationStatus: row.verification_status || null,
+    isSellerSuspended: Boolean(row.is_seller_suspended),
+    isSellerActive: Boolean(row.is_seller_active),
+    maxActiveListings:
+      row.max_active_listings !== null && row.max_active_listings !== undefined
+        ? Number(row.max_active_listings)
+        : null,
+    isBusinessAccount: Boolean(row.is_business_account),
+  }
+
+  if (options?.requireApproved) {
+    if (!context.isBusinessAccount) {
+      return null
+    }
+
+    if (!context.sellerProfileId) {
+      return null
+    }
+
+    if (context.isSellerSuspended || !context.isSellerActive) {
+      return null
+    }
+
+    if (context.verificationStatus !== 'approved') {
+      return null
+    }
+  }
+
+  return context
+}
+
+const appendCreatorAuditLog = async (options: {
+  sellerProfileId: string | null
+  userId: string
+  actorId: string
+  action: string
+  previousState?: Record<string, unknown> | null
+  newState?: Record<string, unknown> | null
+  details?: Record<string, unknown> | null
+  req: AuthRequest
+}) => {
+  if (!options.sellerProfileId) {
+    return
+  }
+
+  const auditReady = await tableExists('seller_audit_log')
+  if (!auditReady) {
+    return
+  }
+
+  try {
+    await query(
+      `INSERT INTO seller_audit_log
+        (seller_profile_id, user_id, actor_id, action, previous_state, new_state, details, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8, $9)`,
+      [
+        options.sellerProfileId,
+        options.userId,
+        options.actorId,
+        options.action,
+        options.previousState ? JSON.stringify(options.previousState) : null,
+        options.newState ? JSON.stringify(options.newState) : null,
+        options.details ? JSON.stringify(options.details) : null,
+        options.req.ip || null,
+        options.req.headers['user-agent'] || null,
+      ],
+    )
+  } catch (error) {
+    logger.warn('Failed to append creator audit log', error)
+  }
+}
+
 export const getMyCreatorProfile = async (req: AuthRequest, res: Response) => {
   try {
     if (!requireFeatureEnabled(res)) {
@@ -306,19 +416,38 @@ export const createMyBook = async (req: AuthRequest, res: Response) => {
       })
     }
 
-    const creatorResult = await query(
-      'SELECT id FROM creator_profiles WHERE user_id = $1',
-      [userId],
-    )
+    const access = await getCreatorAccessContext(userId, {
+      requireApproved: true,
+    })
 
-    if (creatorResult.rows.length === 0) {
-      return res.status(400).json({
+    if (!access) {
+      return res.status(403).json({
         success: false,
-        error: 'Create creator profile first',
+        error:
+          'Creator publishing access requires approved seller verification',
       })
     }
 
-    const creatorProfileId = creatorResult.rows[0].id
+    const creatorProfileId = access.creatorProfileId
+
+    if (access.maxActiveListings !== null && access.maxActiveListings > 0) {
+      const activeCountResult = await query(
+        `SELECT COUNT(*)::int AS total
+         FROM products
+         WHERE creator_profile_id = $1
+           AND deleted_at IS NULL
+           AND COALESCE(is_active, true) = true`,
+        [creatorProfileId],
+      )
+
+      if ((activeCountResult.rows[0]?.total || 0) >= access.maxActiveListings) {
+        return res.status(409).json({
+          success: false,
+          error:
+            'Active listing limit reached for your seller tier. Upgrade or deactivate existing products first.',
+        })
+      }
+    }
 
     const {
       name,
@@ -414,6 +543,23 @@ export const createMyBook = async (req: AuthRequest, res: Response) => {
           )
 
     const product = productInsert.rows[0]
+
+    await appendCreatorAuditLog({
+      sellerProfileId: access.sellerProfileId,
+      userId,
+      actorId: userId,
+      action: 'creator_product_created',
+      newState: {
+        productId: product.id,
+        slug: product.slug,
+        basePrice,
+        salePrice: salePrice || null,
+      },
+      details: {
+        source: 'creator_dashboard',
+      },
+      req,
+    })
 
     const bookMetadataReady = await tableExists('book_metadata')
     if (bookMetadataReady) {
@@ -544,6 +690,16 @@ export const uploadMyBookAssets = async (req: AuthRequest, res: Response) => {
       })
     }
 
+    const access = await getCreatorAccessContext(userId, {
+      requireApproved: true,
+    })
+    if (!access) {
+      return res.status(403).json({
+        success: false,
+        error: 'Creator access is not approved for this account',
+      })
+    }
+
     const { bookId } = req.params
     const bookCheck = await query(
       `SELECT p.id, p.creator_profile_id, cp.user_id
@@ -633,6 +789,18 @@ export const uploadMyBookAssets = async (req: AuthRequest, res: Response) => {
         assets: published,
       },
     })
+
+    await appendCreatorAuditLog({
+      sellerProfileId: access.sellerProfileId,
+      userId,
+      actorId: userId,
+      action: 'creator_asset_uploaded',
+      details: {
+        productId: bookId,
+        files: published.length,
+      },
+      req,
+    })
   } catch (error: any) {
     logger.error('Upload creator book assets error:', error)
     res.status(500).json({
@@ -656,6 +824,16 @@ export const submitMyBookForReview = async (
       return res.status(401).json({
         success: false,
         error: 'Authentication required',
+      })
+    }
+
+    const access = await getCreatorAccessContext(userId, {
+      requireApproved: true,
+    })
+    if (!access) {
+      return res.status(403).json({
+        success: false,
+        error: 'Creator access is not approved for this account',
       })
     }
 
@@ -733,6 +911,17 @@ export const submitMyBookForReview = async (
       data: {
         book: result.rows[0],
       },
+    })
+
+    await appendCreatorAuditLog({
+      sellerProfileId: access.sellerProfileId,
+      userId,
+      actorId: userId,
+      action: 'creator_product_submitted_for_review',
+      details: {
+        productId: bookId,
+      },
+      req,
     })
   } catch (error) {
     logger.error('Submit creator book for review error:', error)
@@ -1173,5 +1362,437 @@ export const getCreatorDashboardActivity = async (
       success: false,
       error: 'Failed to fetch creator dashboard activity',
     })
+  }
+}
+
+// ============================================================
+// Creator Audit Log Helper
+// ============================================================
+
+const appendCreatorEntityAuditLog = async (options: {
+  creatorProfileId: string
+  userId: string
+  action: string
+  entityType?: string
+  entityId?: string | null
+  oldValue?: Record<string, unknown> | null
+  newValue?: Record<string, unknown> | null
+  meta?: Record<string, unknown> | null
+  req: AuthRequest
+}) => {
+  try {
+    const auditTableExists = await tableExists('creator_audit_logs')
+    if (!auditTableExists) return
+
+    await query(
+      `INSERT INTO creator_audit_logs
+        (creator_profile_id, user_id, action, entity_type, entity_id,
+         old_value, new_value, meta, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9, $10)`,
+      [
+        options.creatorProfileId,
+        options.userId,
+        options.action,
+        options.entityType || 'book',
+        options.entityId || null,
+        options.oldValue ? JSON.stringify(options.oldValue) : null,
+        options.newValue ? JSON.stringify(options.newValue) : null,
+        options.meta ? JSON.stringify(options.meta) : null,
+        options.req.ip || null,
+        options.req.headers['user-agent'] || null,
+      ],
+    )
+  } catch (err) {
+    logger.warn('Failed to append creator audit log', err)
+  }
+}
+
+// ============================================================
+// GET /creator/products
+// List the authenticated creator's own book products
+// ============================================================
+
+export const getCreatorProducts = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!requireFeatureEnabled(res)) return
+
+    const userId = req.user?.userId
+    if (!userId) {
+      return res
+        .status(401)
+        .json({ success: false, error: 'Authentication required' })
+    }
+
+    const access = await getCreatorAccessContext(userId, {
+      requireApproved: true,
+    })
+
+    if (!access) {
+      return res.status(403).json({
+        success: false,
+        error: 'Creator access is not approved for this account',
+      })
+    }
+
+    const page = Math.max(Number(req.query.page) || 1, 1)
+    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100)
+    const offset = (page - 1) * limit
+    const statusFilter =
+      typeof req.query.status === 'string' ? req.query.status : null
+    const search =
+      typeof req.query.search === 'string' ? req.query.search.trim() : null
+
+    let whereExtra = ''
+    const params: unknown[] = [access.creatorProfileId, limit + 1, offset]
+    let idx = 4
+
+    if (statusFilter) {
+      whereExtra += ` AND p.publication_status = $${idx}`
+      params.push(statusFilter)
+      idx++
+    }
+    if (search) {
+      whereExtra += ` AND (p.name ILIKE $${idx} OR p.description ILIKE $${idx})`
+      params.push(`%${search}%`)
+      idx++
+    }
+
+    const booksResult = await query(
+      `SELECT p.id, p.name, p.slug, p.publication_status, p.base_price,
+              p.sale_price, p.short_description, bm.cover_image_url,
+              p.created_at, p.updated_at,
+              COALESCE(
+                (SELECT SUM(oi.quantity)
+                 FROM order_items oi
+                 INNER JOIN orders o ON o.id = oi.order_id
+                 WHERE oi.product_id = p.id AND o.payment_status = 'paid'),
+                0
+              ) AS total_units_sold
+       FROM products p
+       LEFT JOIN book_metadata bm ON bm.product_id = p.id
+       WHERE p.creator_profile_id = $1
+         AND p.deleted_at IS NULL
+         AND (p.product_kind = 'book' OR p.is_digital = true)
+         ${whereExtra}
+       ORDER BY p.created_at DESC
+       LIMIT $2 OFFSET $3`,
+      params,
+    )
+
+    const hasMore = booksResult.rows.length > limit
+    const items = hasMore ? booksResult.rows.slice(0, limit) : booksResult.rows
+
+    return res.json({
+      success: true,
+      data: {
+        items: items.map((row) => ({
+          id: row.id,
+          name: row.name,
+          slug: row.slug,
+          publicationStatus: row.publication_status,
+          basePrice: Number(row.base_price),
+          salePrice: row.sale_price !== null ? Number(row.sale_price) : null,
+          shortDescription: row.short_description || null,
+          coverImageUrl: row.cover_image_url || null,
+          totalUnitsSold: Number(row.total_units_sold),
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        })),
+        pagination: { page, limit, hasMore },
+      },
+    })
+  } catch (error) {
+    logger.error('Get creator products error:', error)
+    return res
+      .status(500)
+      .json({ success: false, error: 'Failed to fetch creator products' })
+  }
+}
+
+// ============================================================
+// PATCH /creator/products/:productId
+// Creator can update price, description, and status of their own book
+// ============================================================
+
+const ALLOWED_CREATOR_STATUS_TRANSITIONS: Record<string, string[]> = {
+  draft: ['draft'],
+  rejected: ['draft'],
+  // published/pending_review transitions are handled by the review workflow
+}
+
+export const updateCreatorProduct = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!requireFeatureEnabled(res)) return
+
+    const userId = req.user?.userId
+    if (!userId) {
+      return res
+        .status(401)
+        .json({ success: false, error: 'Authentication required' })
+    }
+
+    const { productId } = req.params
+
+    // Verify creator access
+    const profileResult = await query(
+      `SELECT cp.id AS creator_profile_id, sp.verification_status, sp.is_suspended
+       FROM creator_profiles cp
+       INNER JOIN seller_profiles sp ON sp.user_id = cp.user_id
+       WHERE cp.user_id = $1
+       LIMIT 1`,
+      [userId],
+    )
+
+    if (profileResult.rows.length === 0) {
+      return res
+        .status(403)
+        .json({ success: false, error: 'Creator profile not found.' })
+    }
+
+    const profile = profileResult.rows[0]
+    if (profile.verification_status !== 'approved') {
+      return res
+        .status(403)
+        .json({
+          success: false,
+          error: 'Creator access requires admin approval.',
+        })
+    }
+    if (profile.is_suspended) {
+      return res
+        .status(403)
+        .json({ success: false, error: 'Creator access is suspended.' })
+    }
+
+    // Fetch the existing book owned by this creator
+    const bookResult = await query(
+      `SELECT id, name, base_price, sale_price, description, short_description,
+              publication_status, creator_profile_id
+       FROM products
+       WHERE id = $1 AND creator_profile_id = $2 AND deleted_at IS NULL
+       LIMIT 1`,
+      [productId, profile.creator_profile_id],
+    )
+
+    if (bookResult.rows.length === 0) {
+      return res
+        .status(404)
+        .json({
+          success: false,
+          error: 'Product not found or not owned by you.',
+        })
+    }
+
+    const existing = bookResult.rows[0]
+
+    const {
+      basePrice,
+      salePrice,
+      description,
+      shortDescription,
+      publicationStatus,
+    } = req.body as {
+      basePrice?: number
+      salePrice?: number | null
+      description?: string
+      shortDescription?: string
+      publicationStatus?: string
+    }
+
+    // Validate price
+    if (basePrice !== undefined) {
+      const price = Number(basePrice)
+      if (!Number.isFinite(price) || price < 0) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+            error: 'basePrice must be a non-negative number.',
+          })
+      }
+      // Rate of change guard: block >500% price increase in one shot
+      const existingPrice = Number(existing.base_price)
+      if (existingPrice > 0 && price > existingPrice * 6) {
+        return res.status(400).json({
+          success: false,
+          error:
+            'Price increase exceeds the allowed limit. Please use smaller increments.',
+        })
+      }
+    }
+
+    if (salePrice !== undefined && salePrice !== null) {
+      const sp = Number(salePrice)
+      if (!Number.isFinite(sp) || sp < 0) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+            error: 'salePrice must be a non-negative number.',
+          })
+      }
+      const effectiveBase =
+        basePrice !== undefined
+          ? Number(basePrice)
+          : Number(existing.base_price)
+      if (sp >= effectiveBase) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+            error: 'salePrice must be less than basePrice.',
+          })
+      }
+    }
+
+    // Validate status transitions
+    if (publicationStatus !== undefined) {
+      const allowedNext =
+        ALLOWED_CREATOR_STATUS_TRANSITIONS[existing.publication_status] || []
+      if (!allowedNext.includes(publicationStatus)) {
+        return res.status(400).json({
+          success: false,
+          error: `Cannot transition from '${existing.publication_status}' to '${publicationStatus}'. Use the submit-for-review workflow.`,
+        })
+      }
+    }
+
+    // Build update
+    const setClauses: string[] = ['updated_at = CURRENT_TIMESTAMP']
+    const updateParams: unknown[] = []
+    let pIdx = 1
+
+    if (basePrice !== undefined) {
+      setClauses.push(`base_price = $${pIdx}`)
+      updateParams.push(Number(basePrice))
+      pIdx++
+    }
+    if (salePrice !== undefined) {
+      setClauses.push(`sale_price = $${pIdx}`)
+      updateParams.push(salePrice === null ? null : Number(salePrice))
+      pIdx++
+    }
+    if (description !== undefined) {
+      setClauses.push(`description = $${pIdx}`)
+      updateParams.push(String(description).trim())
+      pIdx++
+    }
+    if (shortDescription !== undefined) {
+      setClauses.push(`short_description = $${pIdx}`)
+      updateParams.push(String(shortDescription).trim())
+      pIdx++
+    }
+    if (publicationStatus !== undefined) {
+      setClauses.push(`publication_status = $${pIdx}`)
+      updateParams.push(publicationStatus)
+      pIdx++
+    }
+
+    if (updateParams.length === 0) {
+      return res
+        .status(400)
+        .json({ success: false, error: 'No updatable fields provided.' })
+    }
+
+    updateParams.push(productId)
+    const updatedResult = await query(
+      `UPDATE products SET ${setClauses.join(', ')}
+       WHERE id = $${pIdx}
+       RETURNING id, name, slug, base_price, sale_price, description,
+                 short_description, publication_status, updated_at`,
+      updateParams,
+    )
+
+    await appendCreatorEntityAuditLog({
+      creatorProfileId: profile.creator_profile_id,
+      userId,
+      action: 'product_updated',
+      entityType: 'book',
+      entityId: productId,
+      oldValue: {
+        base_price: existing.base_price,
+        sale_price: existing.sale_price,
+        description: existing.description,
+        short_description: existing.short_description,
+        publication_status: existing.publication_status,
+      },
+      newValue: updatedResult.rows[0] as Record<string, unknown>,
+      req,
+    })
+
+    return res.json({
+      success: true,
+      data: { product: updatedResult.rows[0] },
+    })
+  } catch (error) {
+    logger.error('Update creator product error:', error)
+    return res
+      .status(500)
+      .json({ success: false, error: 'Failed to update product' })
+  }
+}
+
+// ============================================================
+// GET /creator/audit-logs
+// Paginated audit log for the authenticated creator
+// ============================================================
+
+export const getCreatorAuditLogs = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!requireFeatureEnabled(res)) return
+
+    const userId = req.user?.userId
+    if (!userId) {
+      return res
+        .status(401)
+        .json({ success: false, error: 'Authentication required' })
+    }
+
+    const auditTableExists = await tableExists('creator_audit_logs')
+    if (!auditTableExists) {
+      return res.json({
+        success: true,
+        data: { items: [], pagination: { page: 1, limit: 20, hasMore: false } },
+      })
+    }
+
+    const profileResult = await query(
+      `SELECT id AS creator_profile_id FROM creator_profiles WHERE user_id = $1 LIMIT 1`,
+      [userId],
+    )
+
+    if (profileResult.rows.length === 0) {
+      return res
+        .status(403)
+        .json({ success: false, error: 'Creator profile not found.' })
+    }
+
+    const creatorProfileId = profileResult.rows[0].creator_profile_id
+    const page = Math.max(Number(req.query.page) || 1, 1)
+    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100)
+    const offset = (page - 1) * limit
+
+    const logsResult = await query(
+      `SELECT id, action, entity_type, entity_id, old_value, new_value,
+              meta, ip_address, created_at
+       FROM creator_audit_logs
+       WHERE creator_profile_id = $1
+       ORDER BY created_at DESC
+       LIMIT $2 OFFSET $3`,
+      [creatorProfileId, limit + 1, offset],
+    )
+
+    const hasMore = logsResult.rows.length > limit
+    const items = hasMore ? logsResult.rows.slice(0, limit) : logsResult.rows
+
+    return res.json({
+      success: true,
+      data: { items, pagination: { page, limit, hasMore } },
+    })
+  } catch (error) {
+    logger.error('Get creator audit logs error:', error)
+    return res
+      .status(500)
+      .json({ success: false, error: 'Failed to fetch audit logs' })
   }
 }

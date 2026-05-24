@@ -178,6 +178,16 @@ export const sellerSchemas = {
   }),
 }
 
+export const creatorSchemas = {
+  updateProduct: Joi.object({
+    basePrice: Joi.number().min(0),
+    salePrice: Joi.number().min(0).allow(null),
+    description: Joi.string().allow(''),
+    shortDescription: Joi.string().max(500).allow(''),
+    publicationStatus: Joi.string().valid('draft'),
+  }).min(1),
+}
+
 export const adminSellerSchemas = {
   approveVerification: Joi.object({
     adminNotes: Joi.string().max(4000),
@@ -194,5 +204,10 @@ export const adminSellerSchemas = {
 
   suspendSeller: Joi.object({
     suspensionReason: Joi.string().max(4000).required(),
+  }),
+
+  setCreatorAccess: Joi.object({
+    accessEnabled: Joi.boolean().required(),
+    reason: Joi.string().max(2000),
   }),
 }

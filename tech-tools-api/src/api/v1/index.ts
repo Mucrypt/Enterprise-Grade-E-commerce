@@ -189,6 +189,12 @@ router.get('/docs', (_req, res) => {
           'Get creator activation and first-sale KPI metrics (authenticated)',
         'GET /api/v1/creator/dashboard/activity':
           'Get creator recent activity feed (authenticated)',
+        'GET /api/v1/creator/products':
+          'List creator-owned products for catalog management (authenticated)',
+        'PATCH /api/v1/creator/products/:productId':
+          'Update creator-owned product pricing/content with validation and limits (authenticated)',
+        'GET /api/v1/creator/audit-logs':
+          'Get creator audit trail entries (authenticated)',
       },
       seller: {
         'GET /api/v1/seller/tiers': 'Get seller tier configuration',
@@ -210,6 +216,8 @@ router.get('/docs', (_req, res) => {
           'Reject seller verification request (admin)',
         'POST /api/v1/admin/sellers/:sellerProfileId/suspend':
           'Suspend seller profile (admin)',
+        'POST /api/v1/admin/sellers/:sellerProfileId/creator-access':
+          'Grant or revoke creator dashboard access (admin)',
       },
       adminBooks: {
         'GET /api/v1/admin/books/review-queue':

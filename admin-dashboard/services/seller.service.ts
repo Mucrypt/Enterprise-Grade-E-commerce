@@ -90,4 +90,17 @@ export const sellerService = {
       payload,
     )
   },
+
+  async setCreatorAccess(
+    sellerProfileId: string,
+    payload: {
+      accessEnabled: boolean
+      reason?: string
+    },
+  ) {
+    return await apiClient.post(
+      `/admin/sellers/${sellerProfileId}/creator-access`,
+      payload,
+    )
+  },
 }

@@ -33,7 +33,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { CheckCircle2, ShieldAlert, UserCheck, XCircle } from 'lucide-react'
+import {
+  CheckCircle2,
+  ShieldAlert,
+  ShieldCheck,
+  ShieldX,
+  UserCheck,
+  XCircle,
+} from 'lucide-react'
 
 const parseQueue = (response: unknown): SellerVerificationQueueItem[] => {
   const data = (response as { data?: { data?: unknown } })?.data?.data
@@ -48,6 +55,7 @@ export default function SellersPage() {
   const [statusFilter, setStatusFilter] = useState<'pending' | 'approved' | 'rejected' | 'suspended' | 'none'>('pending')
   const [moderationNotes, setModerationNotes] = useState('')
   const [suspendReason, setSuspendReason] = useState('')
+  const [accessReason, setAccessReason] = useState('')
 
   const userType =
     (user as any)?.user_type || (user as any)?.userType || 'admin'
@@ -109,6 +117,35 @@ export default function SellersPage() {
     },
   })
 
+  const setAccessMutation = useMutation({
+    mutationFn: ({
+      sellerProfileId,
+      accessEnabled,
+    }: {
+      sellerProfileId: string
+      accessEnabled: boolean
+    }) =>
+      sellerService.setCreatorAccess(sellerProfileId, {
+        accessEnabled,
+        reason: accessReason || moderationNotes || undefined,
+      }),
+    onSuccess: (_data, variables) => {
+      toast.success(
+        variables.accessEnabled
+          ? 'Creator access granted'
+          : 'Creator access revoked',
+      )
+      queryClient.invalidateQueries({ queryKey: ['admin-seller-verification-queue'] })
+      setAccessReason('')
+    },
+    onError: (error: any) => {
+      toast.error(
+        error?.response?.data?.error ||
+          'Failed to update creator dashboard access',
+      )
+    },
+  })
+
   const pendingCount = queue.filter((item) => item.status === 'pending').length
 
   return (
@@ -147,7 +184,7 @@ export default function SellersPage() {
             </Select>
           </div>
 
-          <div className='grid gap-4 md:grid-cols-2'>
+          <div className='grid gap-4 md:grid-cols-3'>
             <div className='space-y-2'>
               <Label htmlFor='seller-moderation-notes'>Moderation notes</Label>
               <Textarea
@@ -165,6 +202,15 @@ export default function SellersPage() {
                 value={suspendReason}
                 onChange={(event) => setSuspendReason(event.target.value)}
                 placeholder='Use only when immediate risk is detected.'
+              />
+            </div>
+            <div className='space-y-2'>
+              <Label htmlFor='seller-access-reason'>Access override reason</Label>
+              <Input
+                id='seller-access-reason'
+                value={accessReason}
+                onChange={(event) => setAccessReason(event.target.value)}
+                placeholder='Reason for granting/revoking creator access.'
               />
             </div>
           </div>
@@ -259,6 +305,44 @@ export default function SellersPage() {
                           }
                         >
                           <ShieldAlert className='mr-1 h-4 w-4' /> Suspend
+                        </Button>
+                        <Button
+                          size='sm'
+                          variant='secondary'
+                          onClick={() =>
+                            item.seller_profile_id
+                              ? setAccessMutation.mutate({
+                                  sellerProfileId: item.seller_profile_id,
+                                  accessEnabled: true,
+                                })
+                              : null
+                          }
+                          disabled={
+                            !item.seller_profile_id ||
+                            item.verification_status === 'approved' ||
+                            setAccessMutation.isPending
+                          }
+                        >
+                          <ShieldCheck className='mr-1 h-4 w-4' /> Grant access
+                        </Button>
+                        <Button
+                          size='sm'
+                          variant='outline'
+                          onClick={() =>
+                            item.seller_profile_id
+                              ? setAccessMutation.mutate({
+                                  sellerProfileId: item.seller_profile_id,
+                                  accessEnabled: false,
+                                })
+                              : null
+                          }
+                          disabled={
+                            !item.seller_profile_id ||
+                            item.verification_status !== 'approved' ||
+                            setAccessMutation.isPending
+                          }
+                        >
+                          <ShieldX className='mr-1 h-4 w-4' /> Revoke access
                         </Button>
                       </div>
                     </TableCell>
