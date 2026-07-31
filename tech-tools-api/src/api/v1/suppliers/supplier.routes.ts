@@ -13,6 +13,11 @@ import {
   evaluateProductAutoPause,
   getAutoPausedProducts,
 } from './supplier.controller'
+import {
+  csvUpload,
+  previewSupplierImport,
+  commitSupplierImport,
+} from './supplier-import.controller'
 import { authenticate, authorize } from '../../../middleware/auth'
 
 const router = Router()
@@ -27,6 +32,8 @@ router.get('/ops/auto-paused', getAutoPausedProducts)
 
 router.get('/', getSuppliers)
 router.post('/:id/products/offers', upsertSupplierProductOffer)
+router.post('/:id/import/preview', csvUpload.single('file'), previewSupplierImport)
+router.post('/:id/import/:batchId/commit', commitSupplierImport)
 router.get('/:id', getSupplierById)
 router.post('/', createSupplier)
 router.put('/:id', updateSupplier)
