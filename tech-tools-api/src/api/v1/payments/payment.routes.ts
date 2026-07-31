@@ -3,7 +3,7 @@
 // Stripe Payment Integration
 // ============================================
 
-import { Router, raw } from 'express'
+import { Router } from 'express'
 import {
   getStripeConfig,
   createPaymentIntent,
@@ -31,9 +31,10 @@ const router = Router()
 // Get Stripe publishable key (public)
 router.get('/config', getStripeConfig)
 
-// Stripe webhook (must use raw body parser)
-// Note: This route should be registered before json body parser in app.ts
-router.post('/webhook', raw({ type: 'application/json' }), handleWebhook)
+// Stripe webhook. Signature verification uses req.rawBody, captured by a
+// verify callback on the global express.json() parser in app.ts -- see the
+// comment there for why a route-local raw() parser doesn't work here.
+router.post('/webhook', handleWebhook)
 
 // ============================================
 // Authenticated Customer Routes

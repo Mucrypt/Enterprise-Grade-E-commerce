@@ -711,7 +711,10 @@ export const createRefund = async (req: AuthRequest, res: Response) => {
 /**
  * Handle Stripe webhook events
  */
-export const handleWebhook = async (req: Request, res: Response) => {
+export const handleWebhook = async (
+  req: Request & { rawBody?: Buffer },
+  res: Response,
+) => {
   const sig = req.headers['stripe-signature'] as string
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
 
@@ -720,9 +723,16 @@ export const handleWebhook = async (req: Request, res: Response) => {
     return res.status(500).json({ error: 'Webhook not configured' })
   }
 
+  if (!req.rawBody) {
+    logger.error(
+      'Stripe webhook received without a captured raw body -- signature verification cannot proceed',
+    )
+    return res.status(400).json({ error: 'Missing raw request body' })
+  }
+
   try {
     const event = stripeService.constructWebhookEvent(
-      req.body,
+      req.rawBody,
       sig,
       webhookSecret,
     )

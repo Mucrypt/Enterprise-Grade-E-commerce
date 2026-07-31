@@ -61,7 +61,19 @@ app.use('/api/', limiter)
 app.use(compression())
 
 // Body parsers
-app.use(express.json({ limit: '10mb' }))
+// Stripe webhook signature verification needs the exact raw request bytes,
+// but the global JSON parser below runs before Express even routes to that
+// handler, so the raw stream is gone by the time it would matter. Capture it
+// here as a side channel (req.rawBody) so the webhook route doesn't need its
+// own body parser ahead of this one -- see payment.controller.ts handleWebhook.
+app.use(
+  express.json({
+    limit: '10mb',
+    verify: (req, _res, buf) => {
+      ;(req as Request & { rawBody?: Buffer }).rawBody = Buffer.from(buf)
+    },
+  }),
+)
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
 // Static file serving for media uploads
