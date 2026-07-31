@@ -5,6 +5,7 @@
  */
 
 import { Pool, QueryResult } from 'pg';
+import geoip from 'geoip-lite';
 import { AnyEvent, EventContext, EventType, EventSource } from '../types/events';
 import logger from '../utils/logger';
 
@@ -113,9 +114,10 @@ export class EventService {
         INSERT INTO user_sessions (
           session_id, user_id, source, device_type, os_name, browser_name,
           ip_address, referrer, utm_source, utm_medium, utm_campaign,
-          utm_content, utm_term, start_time, last_activity_time
+          utm_content, utm_term, country_code, country_name, city,
+          start_time, last_activity_time
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ON CONFLICT (session_id) DO UPDATE
         SET last_activity_time = CURRENT_TIMESTAMP
         WHERE user_sessions.session_id = $1;
@@ -123,6 +125,7 @@ export class EventService {
 
       const deviceType = this.parseDeviceType(context?.userAgent);
       const { browser, os } = this.parseUserAgent(context?.userAgent);
+      const { countryCode, countryName, city } = this.resolveGeo(context?.ipAddress);
 
       await this.db.query(query, [
         sessionId,
@@ -138,10 +141,38 @@ export class EventService {
         context?.utmCampaign || null,
         context?.utmContent || null,
         context?.utmTerm || null,
+        countryCode,
+        countryName,
+        city,
       ]);
     } catch (error) {
       logger.error('Failed to create/update session', { sessionId, error });
     }
+  }
+
+  /**
+   * Helper: resolve country/city from an IP address via geoip-lite's local dataset.
+   * Handles comma-separated x-forwarded-for lists and private/unresolvable IPs gracefully.
+   */
+  private resolveGeo(ipAddress?: string): {
+    countryCode: string | null;
+    countryName: string | null;
+    city: string | null;
+  } {
+    if (!ipAddress) return { countryCode: null, countryName: null, city: null };
+
+    const ip = ipAddress.split(',')[0].trim();
+    const geo = geoip.lookup(ip);
+    if (!geo?.country) return { countryCode: null, countryName: null, city: null };
+
+    let countryName: string | null = null;
+    try {
+      countryName = new Intl.DisplayNames(['en'], { type: 'region' }).of(geo.country) ?? null;
+    } catch {
+      countryName = null;
+    }
+
+    return { countryCode: geo.country, countryName, city: geo.city || null };
   }
 
   /**

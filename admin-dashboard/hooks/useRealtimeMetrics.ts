@@ -18,6 +18,11 @@ interface DashboardMetrics {
     medium: number
     low: number
   }
+  topCountries: {
+    countryCode: string
+    countryName: string
+    count: number
+  }[]
 }
 
 interface UseRealtimeMetricsReturn {
@@ -26,7 +31,11 @@ interface UseRealtimeMetricsReturn {
   error: string | null
 }
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:9000'
+// NEXT_PUBLIC_API_URL includes the /api/v1 path suffix (e.g. https://techtoolstore.com/api/v1);
+// Socket.IO needs the bare origin, otherwise it treats /api/v1 as a namespace and never connects.
+const API_URL = (
+  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9000/api/v1'
+).replace(/\/api\/v1\/?$/, '')
 
 export function useRealtimeMetrics(): UseRealtimeMetricsReturn {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)

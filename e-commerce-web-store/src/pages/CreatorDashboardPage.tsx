@@ -28,6 +28,7 @@ import type {
   SellerProfile,
 } from '../types'
 import { useAuthStore } from '../stores'
+import { formatPrice } from '../utils'
 
 const toSlug = (value: string) =>
   value
@@ -37,7 +38,7 @@ const toSlug = (value: string) =>
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
 
-const formatMoney = (value: number) => `$${Number(value || 0).toFixed(2)}`
+const formatMoney = (value: number) => formatPrice(value)
 
 export default function CreatorDashboardPage() {
   const navigate = useNavigate()

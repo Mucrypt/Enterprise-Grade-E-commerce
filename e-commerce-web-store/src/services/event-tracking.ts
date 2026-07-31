@@ -333,7 +333,43 @@ export class EventTrackingService {
     return {
       userAgent: navigator.userAgent,
       referrer: document.referrer,
+      ...this.getUtmParams(),
     }
+  }
+
+  /**
+   * UTM params are typically only present on the landing URL, so capture them
+   * once and persist for the lifetime of this browser session (sessionStorage),
+   * falling back to whatever was captured earlier if the current URL has none.
+   */
+  private getUtmParams(): Partial<EventContext> {
+    const STORAGE_KEY = 'analytics_utm'
+    const params = new URLSearchParams(window.location.search)
+    const fromUrl = {
+      utmSource: params.get('utm_source') || undefined,
+      utmMedium: params.get('utm_medium') || undefined,
+      utmCampaign: params.get('utm_campaign') || undefined,
+      utmContent: params.get('utm_content') || undefined,
+      utmTerm: params.get('utm_term') || undefined,
+    }
+
+    if (fromUrl.utmSource) {
+      try {
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(fromUrl))
+      } catch {
+        // sessionStorage unavailable (e.g. private mode) -- fine, just won't persist
+      }
+      return fromUrl
+    }
+
+    try {
+      const stored = sessionStorage.getItem(STORAGE_KEY)
+      if (stored) return JSON.parse(stored)
+    } catch {
+      // ignore malformed/unavailable storage
+    }
+
+    return {}
   }
 
   private setFlushTimer(): void {

@@ -17,6 +17,7 @@ import type {
   SellerVerificationRequest,
 } from '../types'
 import { useAuthStore } from '../stores'
+import { formatPrice } from '../utils'
 
 const tierOrder: SellerTier[] = ['unverified', 'basic', 'trusted', 'pro']
 
@@ -28,7 +29,7 @@ const formatMoney = (value?: number | string | null) => {
     return 'Custom'
   }
 
-  return `$${Number(value).toFixed(2)}`
+  return formatPrice(Number(value))
 }
 
 export default function SellerHubPage() {

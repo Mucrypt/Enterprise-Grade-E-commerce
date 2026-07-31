@@ -153,7 +153,7 @@ export default function TermsOfServicePage() {
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-3">Pricing & Availability</h3>
                 <ul className="list-disc list-inside text-gray-600 space-y-2 ml-4">
-                  <li>All prices are displayed in USD unless otherwise specified</li>
+                  <li>All prices are displayed in EUR unless otherwise specified</li>
                   <li>Prices are subject to change without notice</li>
                   <li>We reserve the right to limit quantities of any products</li>
                   <li>Product availability is subject to change and not guaranteed</li>
