@@ -1,20 +1,19 @@
 // ============================================
-// Home Page - TechTools E-Commerce Store
+// Home Page - TechTools Professional Tools & Workshop Equipment
 // ============================================
 
 import { useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import { BookOpen, Store } from 'lucide-react'
 
 import {
-  HeroSection,
-  FlashDealsSection,
-  CategoryGridSection,
-  FeaturedProductsSection,
-  BooksShowcaseSection,
-  BrandShowcase,
-  PromoBanners,
-  NewsletterSection,
+  ToolsHero,
+  TrustStrip,
+  ShopByTrade,
+  FeaturedProfessionalTools,
+  WorkshopMachinerySection,
+  BusinessBuyerSection,
+  ProfessionalBrands,
+  ToolKnowledgeSection,
+  HomepageNewsletter,
 } from '../components/home'
 
 export default function HomePage() {
@@ -42,80 +41,32 @@ export default function HomePage() {
 
   return (
     <>
-      {/* Hero Slider with Features Bar */}
-      <HeroSection />
+      {/* Professional Hero */}
+      <ToolsHero />
 
-      {/* Quick Access - Books and Seller tools */}
-      <section className='bg-white'>
-        <div className='container mx-auto px-4 py-6'>
-          <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
-            <Link
-              to='/books'
-              className='group rounded-3xl bg-linear-to-br from-slate-950 via-slate-900 to-orange-700 p-5 text-white shadow-sm transition hover:shadow-lg'
-            >
-              <div className='flex items-center justify-between gap-4'>
-                <div className='flex items-start gap-3'>
-                  <span className='inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white/15'>
-                    <BookOpen className='h-5 w-5' />
-                  </span>
-                  <div>
-                    <p className='text-lg font-bold'>Books Library</p>
-                    <p className='mt-1 text-sm text-orange-100/90'>
-                      Discover curated digital books and creator releases.
-                    </p>
-                  </div>
-                </div>
-                <span className='text-sm font-semibold text-orange-100 transition group-hover:text-white'>
-                  Open
-                </span>
-              </div>
-            </Link>
+      {/* Trust / service strip */}
+      <TrustStrip />
 
-            <Link
-              to='/seller-hub'
-              className='group rounded-3xl border border-orange-100 bg-orange-50 p-5 text-slate-900 shadow-sm transition hover:shadow-lg'
-            >
-              <div className='flex items-center justify-between gap-4'>
-                <div className='flex items-start gap-3'>
-                  <span className='inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-orange-100'>
-                    <Store className='h-5 w-5 text-orange-600' />
-                  </span>
-                  <div>
-                    <p className='text-lg font-bold'>Seller Hub</p>
-                    <p className='mt-1 text-sm text-slate-600'>
-                      Switch to business mode and manage trust tiers.
-                    </p>
-                  </div>
-                </div>
-                <span className='text-sm font-semibold text-orange-600 transition group-hover:text-orange-700'>
-                  Open
-                </span>
-              </div>
-            </Link>
-          </div>
-        </div>
-      </section>
+      {/* Shop by Trade */}
+      <ShopByTrade />
 
-      {/* Flash Deals - Time-limited Offers */}
-      <FlashDealsSection />
+      {/* Featured Professional Tools */}
+      <FeaturedProfessionalTools />
 
-      {/* Shop by Category */}
-      <CategoryGridSection />
+      {/* Workshop Machinery feature */}
+      <WorkshopMachinerySection />
 
-      {/* Promotional Banners */}
-      <PromoBanners />
+      {/* Business & Bulk Orders (B2B) */}
+      <BusinessBuyerSection />
 
-      {/* Featured/Popular Products */}
-      <FeaturedProductsSection />
+      {/* Professional Brands */}
+      <ProfessionalBrands />
 
-      {/* Books Marketplace Spotlight */}
-      <BooksShowcaseSection />
-
-      {/* Top Brands */}
-      <BrandShowcase />
+      {/* Tool Guides & Workshop Knowledge */}
+      <ToolKnowledgeSection />
 
       {/* Newsletter Signup */}
-      <NewsletterSection />
+      <HomepageNewsletter />
     </>
   )
 }
