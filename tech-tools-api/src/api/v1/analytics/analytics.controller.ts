@@ -142,12 +142,13 @@ export const getConversionFunnel = async (
       summary: {
         topOfFunnelUsers: funnelData[0]?.uniqueUsers || 0,
         paymentSuccessUsers: funnelData[3]?.uniqueUsers || 0,
-        overallConversionRate: funnelData[3]
-          ? (
-              (funnelData[3].eventCount / funnelData[0].eventCount) *
-              100
-            ).toFixed(2)
-          : 0,
+        overallConversionRate:
+          funnelData[3] && funnelData[0].eventCount > 0
+            ? (
+                (funnelData[3].eventCount / funnelData[0].eventCount) *
+                100
+              ).toFixed(2)
+            : 0,
       },
     })
   } catch (error) {
@@ -242,8 +243,8 @@ export const getSearchMetrics = async (
         COUNT(*) as total_searches,
         COUNT(CASE WHEN payload->>'resultsCount' = '0' THEN 1 END) as zero_result_searches,
         ROUND(
-          COUNT(CASE WHEN payload->>'resultsCount' = '0' THEN 1 END)::NUMERIC 
-          / COUNT(*)::NUMERIC * 100,
+          COUNT(CASE WHEN payload->>'resultsCount' = '0' THEN 1 END)::NUMERIC
+          / NULLIF(COUNT(*), 0)::NUMERIC * 100,
           2
         ) as zero_result_rate,
         COUNT(DISTINCT user_id) as unique_users
