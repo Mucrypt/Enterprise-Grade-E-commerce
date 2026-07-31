@@ -1,9 +1,18 @@
 'use client'
 
-import { Dispatch, SetStateAction, useMemo, useState } from 'react'
+import { Dispatch, SetStateAction, useCallback, useMemo, useState } from 'react'
+import { useDropzone } from 'react-dropzone'
+import { Upload } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import supplierService, { SupplierProfile } from '@/services/supplier.service'
+import supplierService, {
+  SupplierProfile,
+  SupplierSourcePlatform,
+  ImportBatch,
+  ImportPreviewRow,
+  ImportRowError,
+} from '@/services/supplier.service'
 import { productService } from '@/services/product.service'
+import { cn } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -39,7 +48,7 @@ type SupplierFormState = {
   contactName: string
   email: string
   phone: string
-  sourcePlatform: 'amazon' | 'alibaba' | 'other'
+  sourcePlatform: SupplierSourcePlatform
   countryCode: string
   status: 'active' | 'watchlist' | 'blocked'
   paymentTerms: string
@@ -79,6 +88,16 @@ export default function SuppliersPage() {
   const [editForm, setEditForm] =
     useState<SupplierFormState>(EMPTY_SUPPLIER_FORM)
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>('')
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
+  const [importSupplierId, setImportSupplierId] = useState<string>('')
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importPreview, setImportPreview] = useState<{
+    batch: ImportBatch
+    rowsToCreate: ImportPreviewRow[]
+    rowsToUpdate: ImportPreviewRow[]
+    errors: ImportRowError[]
+  } | null>(null)
+  const [economicsProductId, setEconomicsProductId] = useState<string>('')
   const [offerForm, setOfferForm] = useState({
     productId: '',
     supplierSku: '',
@@ -88,7 +107,7 @@ export default function SuppliersPage() {
     minOrderQuantity: '1',
     leadTimeDays: '',
     estimatedDeliveryDays: '',
-    currencyCode: 'USD',
+    currencyCode: 'EUR',
     supplierUrl: '',
     isPrimary: false,
     isAvailable: true,
@@ -260,6 +279,114 @@ export default function SuppliersPage() {
     },
   })
 
+  const previewImportMutation = useMutation({
+    mutationFn: () => {
+      if (!importSupplierId || !importFile) {
+        throw new Error('Choose a supplier and a CSV file first')
+      }
+      return supplierService.previewImport(importSupplierId, importFile)
+    },
+    onSuccess: (response) => {
+      setImportPreview(response.data || null)
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to preview import')
+      setImportPreview(null)
+    },
+  })
+
+  const commitImportMutation = useMutation({
+    mutationFn: () => {
+      if (!importSupplierId || !importPreview) {
+        throw new Error('Preview an import first')
+      }
+      return supplierService.commitImport(importSupplierId, importPreview.batch.id)
+    },
+    onSuccess: (response) => {
+      toast.success(
+        `Import committed: ${response.data?.createdCount ?? 0} created, ${response.data?.updatedCount ?? 0} updated`,
+      )
+      queryClient.invalidateQueries({ queryKey: ['supplier-offers', importSupplierId] })
+      queryClient.invalidateQueries({ queryKey: ['supplier-offer-products'] })
+      setIsImportDialogOpen(false)
+      setImportFile(null)
+      setImportPreview(null)
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to commit import')
+    },
+  })
+
+  const onImportDrop = useCallback((acceptedFiles: File[]) => {
+    setImportPreview(null)
+    setImportFile(acceptedFiles[0] || null)
+  }, [])
+
+  const {
+    getRootProps: getImportRootProps,
+    getInputProps: getImportInputProps,
+    isDragActive: isImportDragActive,
+  } = useDropzone({
+    onDrop: onImportDrop,
+    accept: { 'text/csv': ['.csv'] },
+    multiple: false,
+    disabled: previewImportMutation.isPending || commitImportMutation.isPending,
+  })
+
+  const openImportDialog = (supplierId: string) => {
+    setImportSupplierId(supplierId)
+    setImportFile(null)
+    setImportPreview(null)
+    setIsImportDialogOpen(true)
+  }
+
+  const {
+    data: economicsResponse,
+    isFetching: isLoadingEconomics,
+    refetch: refetchEconomics,
+  } = useQuery({
+    queryKey: ['product-economics', economicsProductId],
+    queryFn: () => supplierService.getProductEconomics(economicsProductId),
+    enabled: false,
+  })
+
+  const recomputeEconomicsMutation = useMutation({
+    mutationFn: () => supplierService.recomputeProductEconomics(economicsProductId),
+    onSuccess: () => {
+      toast.success('Economics recomputed')
+      refetchEconomics()
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to recompute economics')
+    },
+  })
+
+  const evaluateAutoPauseMutation = useMutation({
+    mutationFn: () => supplierService.evaluateProductAutoPause(economicsProductId),
+    onSuccess: (response) => {
+      const shouldPause = response.data?.shouldPause ?? false
+      toast[shouldPause ? 'error' : 'success'](
+        shouldPause
+          ? 'Product would be auto-paused: margin below floor'
+          : 'Margin is healthy, no pause needed',
+      )
+      queryClient.invalidateQueries({ queryKey: ['auto-paused-products'] })
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to evaluate auto-pause')
+    },
+  })
+
+  const { data: autoPausedResponse, isLoading: isLoadingAutoPaused } = useQuery({
+    queryKey: ['auto-paused-products'],
+    queryFn: () => supplierService.getAutoPausedProducts(20),
+    staleTime: 30_000,
+  })
+
+  const autoPausedProducts = autoPausedResponse?.data?.items || []
+  const economics = economicsResponse?.data?.economics
+  const economicsFlags = economicsResponse?.data?.flags
+
   const openEditDialog = (supplier: SupplierProfile) => {
     setEditingSupplierId(supplier.id)
     setEditForm({
@@ -341,7 +468,7 @@ export default function SuppliersPage() {
         <Label>Source Platform</Label>
         <Select
           value={form.sourcePlatform}
-          onValueChange={(value: 'amazon' | 'alibaba' | 'other') =>
+          onValueChange={(value: SupplierSourcePlatform) =>
             setForm((prev) => ({ ...prev, sourcePlatform: value }))
           }
         >
@@ -349,6 +476,10 @@ export default function SuppliersPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value='wholesale_distributor'>
+              Wholesale Distributor
+            </SelectItem>
+            <SelectItem value='brand_manufacturer'>Brand / Manufacturer</SelectItem>
             <SelectItem value='amazon'>Amazon</SelectItem>
             <SelectItem value='alibaba'>Alibaba</SelectItem>
             <SelectItem value='other'>Other</SelectItem>
@@ -493,6 +624,10 @@ export default function SuppliersPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value='all'>All</SelectItem>
+                <SelectItem value='wholesale_distributor'>
+                  Wholesale Distributor
+                </SelectItem>
+                <SelectItem value='brand_manufacturer'>Brand / Manufacturer</SelectItem>
                 <SelectItem value='amazon'>Amazon</SelectItem>
                 <SelectItem value='alibaba'>Alibaba</SelectItem>
                 <SelectItem value='other'>Other</SelectItem>
@@ -593,6 +728,13 @@ export default function SuppliersPage() {
                           onClick={() => setSelectedSupplierId(supplier.id)}
                         >
                           Offers
+                        </Button>
+                        <Button
+                          variant='outline'
+                          size='sm'
+                          onClick={() => openImportDialog(supplier.id)}
+                        >
+                          Import Products
                         </Button>
                         <Button
                           variant='outline'
@@ -852,6 +994,116 @@ export default function SuppliersPage() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle className='text-base'>Product Economics &amp; Auto-Pause</CardTitle>
+        </CardHeader>
+        <CardContent className='space-y-4'>
+          <div className='grid gap-3 md:grid-cols-3'>
+            <div className='space-y-1 md:col-span-2'>
+              <Label>Product</Label>
+              <Select
+                value={economicsProductId}
+                onValueChange={(value: string) => setEconomicsProductId(value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder='Select product' />
+                </SelectTrigger>
+                <SelectContent>
+                  {productOptions.map((product) => (
+                    <SelectItem key={product.id} value={product.id}>
+                      {product.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className='flex items-end gap-2'>
+              <Button
+                variant='outline'
+                disabled={!economicsProductId || recomputeEconomicsMutation.isPending}
+                onClick={() => recomputeEconomicsMutation.mutate()}
+              >
+                {recomputeEconomicsMutation.isPending ? 'Computing...' : 'Recompute'}
+              </Button>
+              <Button
+                variant='outline'
+                disabled={!economicsProductId || evaluateAutoPauseMutation.isPending}
+                onClick={() => evaluateAutoPauseMutation.mutate()}
+              >
+                Evaluate Pause
+              </Button>
+            </div>
+          </div>
+
+          {isLoadingEconomics ? (
+            <Skeleton className='h-16 w-full' />
+          ) : economics ? (
+            <div className='grid gap-2 rounded-md border p-3 text-sm md:grid-cols-4'>
+              <div>
+                Sell price{' '}
+                <span className='font-semibold'>
+                  €{Number(economics.sell_price || 0).toFixed(2)}
+                </span>
+              </div>
+              <div>
+                Landed cost{' '}
+                <span className='font-semibold'>
+                  €{Number(economics.landed_cost || 0).toFixed(2)}
+                </span>
+              </div>
+              <div>
+                Margin{' '}
+                <span className='font-semibold'>
+                  {Number(economics.margin_percent || 0).toFixed(1)}%
+                </span>
+              </div>
+              <div>
+                {economicsFlags?.auto_pause ? (
+                  <Badge variant='destructive'>Auto-paused</Badge>
+                ) : (
+                  <Badge variant='default'>Active</Badge>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className='text-sm text-muted-foreground'>
+              Select a product, then Recompute to view its margin.
+            </p>
+          )}
+
+          <div className='rounded-lg border p-3'>
+            <p className='mb-2 text-sm font-semibold'>Currently Auto-Paused Products</p>
+            {isLoadingAutoPaused ? (
+              <Skeleton className='h-8 w-full' />
+            ) : autoPausedProducts.length === 0 ? (
+              <p className='text-sm text-muted-foreground'>
+                No products are currently auto-paused for low margin.
+              </p>
+            ) : (
+              <div className='space-y-2'>
+                {autoPausedProducts.map((item) => (
+                  <div
+                    key={item.product_id}
+                    className='flex flex-wrap items-center justify-between gap-2 rounded border p-2 text-sm'
+                  >
+                    <div>
+                      <p className='font-medium'>{item.product_name}</p>
+                      <p className='text-xs text-muted-foreground'>
+                        {item.pause_reason || 'Margin below floor'}
+                      </p>
+                    </div>
+                    <Badge variant='destructive'>
+                      {Number(item.margin_percent || 0).toFixed(1)}%
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
         <DialogContent className='max-w-3xl'>
           <DialogHeader>
@@ -898,6 +1150,135 @@ export default function SuppliersPage() {
             >
               {editSupplierMutation.isPending ? 'Saving...' : 'Save Changes'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+        <DialogContent className='max-w-3xl'>
+          <DialogHeader>
+            <DialogTitle>Import Supplier Catalogue (CSV)</DialogTitle>
+          </DialogHeader>
+
+          <div className='space-y-4'>
+            <p className='text-sm text-muted-foreground'>
+              Required columns: <code>sku, product_name, cost_price,
+              stock_quantity, lead_time_days</code>. Optional: <code>currency_code</code>{' '}
+              (defaults to EUR). New SKUs are created as inactive drafts for review
+              before they go live.
+            </p>
+
+            <div
+              {...getImportRootProps()}
+              className={cn(
+                'cursor-pointer rounded-lg border-2 border-dashed p-6 text-center transition-colors',
+                isImportDragActive
+                  ? 'border-primary bg-primary/5'
+                  : 'border-muted-foreground/25 hover:border-primary/50',
+              )}
+            >
+              <input {...getImportInputProps()} />
+              <Upload className='mx-auto mb-3 h-8 w-8 text-muted-foreground' />
+              <p className='mb-1 text-sm text-muted-foreground'>
+                {importFile
+                  ? importFile.name
+                  : isImportDragActive
+                    ? 'Drop the CSV file here...'
+                    : 'Drag & drop a .csv file here, or click to select'}
+              </p>
+            </div>
+
+            {!importPreview ? (
+              <Button
+                onClick={() => previewImportMutation.mutate()}
+                disabled={!importFile || previewImportMutation.isPending}
+              >
+                {previewImportMutation.isPending ? 'Parsing...' : 'Preview Import'}
+              </Button>
+            ) : (
+              <div className='space-y-3'>
+                <div className='grid grid-cols-3 gap-2 text-sm'>
+                  <div className='rounded border p-2 text-center'>
+                    <p className='font-semibold'>{importPreview.rowsToCreate.length}</p>
+                    <p className='text-muted-foreground'>To create</p>
+                  </div>
+                  <div className='rounded border p-2 text-center'>
+                    <p className='font-semibold'>{importPreview.rowsToUpdate.length}</p>
+                    <p className='text-muted-foreground'>To update</p>
+                  </div>
+                  <div className='rounded border p-2 text-center'>
+                    <p className='font-semibold'>{importPreview.errors.length}</p>
+                    <p className='text-muted-foreground'>Errors</p>
+                  </div>
+                </div>
+
+                {importPreview.errors.length > 0 && (
+                  <div className='max-h-40 overflow-y-auto rounded border p-2 text-xs'>
+                    {importPreview.errors.map((rowError) => (
+                      <p key={rowError.rowNumber} className='text-destructive'>
+                        Row {rowError.rowNumber}: {rowError.reason}
+                      </p>
+                    ))}
+                  </div>
+                )}
+
+                <div className='max-h-52 overflow-y-auto rounded border'>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>SKU</TableHead>
+                        <TableHead>Product</TableHead>
+                        <TableHead>Cost</TableHead>
+                        <TableHead>Stock</TableHead>
+                        <TableHead>Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {[...importPreview.rowsToCreate, ...importPreview.rowsToUpdate].map(
+                        (row) => (
+                          <TableRow key={row.rowNumber}>
+                            <TableCell>{row.sku}</TableCell>
+                            <TableCell>{row.productName}</TableCell>
+                            <TableCell>
+                              {row.currencyCode} {row.costPrice.toFixed(2)}
+                            </TableCell>
+                            <TableCell>{row.stockQuantity}</TableCell>
+                            <TableCell className='capitalize'>{row.action}</TableCell>
+                          </TableRow>
+                        ),
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={() => {
+                setIsImportDialogOpen(false)
+                setImportFile(null)
+                setImportPreview(null)
+              }}
+            >
+              Cancel
+            </Button>
+            {importPreview && (
+              <Button
+                type='button'
+                onClick={() => commitImportMutation.mutate()}
+                disabled={
+                  commitImportMutation.isPending ||
+                  (importPreview.rowsToCreate.length === 0 &&
+                    importPreview.rowsToUpdate.length === 0)
+                }
+              >
+                {commitImportMutation.isPending ? 'Committing...' : 'Confirm Import'}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1355,6 +1355,9 @@ export default function OrdersPage() {
                                   SKU: {item.sku}
                                 </p>
                               )}
+                              <p className='text-xs text-muted-foreground mt-1'>
+                                Supplier: {item.supplier_name || 'Direct / not dropshipped'}
+                              </p>
                               <div className='flex justify-between items-start mt-3'>
                                 <div className='text-sm space-y-1'>
                                   <div className='flex gap-3 text-muted-foreground'>

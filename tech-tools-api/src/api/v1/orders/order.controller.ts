@@ -8,6 +8,7 @@ import {
   sendOrderConfirmationWhatsApp,
   OrderDetails as WhatsAppOrderDetails,
 } from '../../../services/whatsapp.service'
+import { resolveSupplierForOrderItem } from '../../../services/fulfillment.service'
 
 const buildOrderAdminAlertHtml = (data: {
   orderNumber: string
@@ -230,15 +231,17 @@ export const getAdminOrderById = async (req: AuthRequest, res: Response) => {
     logger.debug('Executing order items query...')
     // Get order items with product info and image from product_media table
     const itemsResult = await query(
-      `SELECT 
+      `SELECT
         oi.*,
         p.name as product_title,
-        (SELECT url FROM product_media 
+        s.company_name as supplier_name,
+        (SELECT url FROM product_media
          WHERE product_id = oi.product_id AND type = 'image'
-         ORDER BY position ASC, created_at ASC 
+         ORDER BY position ASC, created_at ASC
          LIMIT 1) as product_image
       FROM order_items oi
       LEFT JOIN products p ON oi.product_id = p.id
+      LEFT JOIN suppliers s ON oi.supplier_id = s.id
       WHERE oi.order_id = $1
       ORDER BY oi.created_at`,
       [id],
@@ -877,11 +880,12 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
     // Create order items
     for (const item of orderItems) {
       // Note: total_price is a generated column (unit_price * quantity - discount_amount)
+      const supplierId = await resolveSupplierForOrderItem(item.productId)
       await query(
         `INSERT INTO order_items (
           order_id, product_id, sku, product_name,
-          quantity, unit_price
-        ) VALUES ($1, $2, $3, $4, $5, $6)`,
+          quantity, unit_price, supplier_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
           order.id,
           item.productId,
@@ -889,6 +893,7 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
           item.productName,
           item.quantity,
           item.unitPrice,
+          supplierId,
         ],
       )
 
@@ -1356,11 +1361,12 @@ export const createGuestOrder = async (req: any, res: Response) => {
 
     // Create order items
     for (const item of orderItems) {
+      const supplierId = await resolveSupplierForOrderItem(item.productId)
       await query(
         `INSERT INTO order_items (
           order_id, product_id, sku, product_name,
-          quantity, unit_price
-        ) VALUES ($1, $2, $3, $4, $5, $6)`,
+          quantity, unit_price, supplier_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
           order.id,
           item.productId,
@@ -1368,6 +1374,7 @@ export const createGuestOrder = async (req: any, res: Response) => {
           item.productName,
           item.quantity,
           item.unitPrice,
+          supplierId,
         ],
       )
 

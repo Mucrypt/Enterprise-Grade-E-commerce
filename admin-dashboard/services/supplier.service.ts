@@ -1,13 +1,20 @@
 import apiClient from '@/lib/api-client'
 import type { ApiResponse } from '@/types'
 
+export type SupplierSourcePlatform =
+  | 'amazon'
+  | 'alibaba'
+  | 'wholesale_distributor'
+  | 'brand_manufacturer'
+  | 'other'
+
 export interface SupplierProfile {
   id: string
   company_name: string
   contact_name?: string | null
   email: string
   phone?: string | null
-  source_platform?: 'amazon' | 'alibaba' | 'other'
+  source_platform?: SupplierSourcePlatform
   country_code?: string | null
   status?: 'active' | 'watchlist' | 'blocked'
   rating?: number | null
@@ -66,12 +73,40 @@ export interface AutoPausedProduct {
   landed_cost?: number | null
 }
 
+export interface ImportBatch {
+  id: string
+  supplier_id: string
+  filename: string
+  status: 'preview' | 'committed' | 'failed'
+  total_rows: number
+  created_count: number
+  updated_count: number
+  failed_count: number
+  created_at: string
+}
+
+export interface ImportPreviewRow {
+  rowNumber: number
+  sku: string
+  productName: string
+  costPrice: number
+  stockQuantity: number
+  leadTimeDays: number | null
+  currencyCode: string
+  action: 'create' | 'update'
+}
+
+export interface ImportRowError {
+  rowNumber: number
+  reason: string
+}
+
 class SupplierService {
   async getSuppliers(params?: {
     page?: number
     limit?: number
     status?: 'active' | 'watchlist' | 'blocked'
-    sourcePlatform?: 'amazon' | 'alibaba' | 'other'
+    sourcePlatform?: SupplierSourcePlatform
     search?: string
   }): Promise<
     ApiResponse<{
@@ -102,7 +137,7 @@ class SupplierService {
     email: string
     phone?: string
     address?: Record<string, unknown>
-    sourcePlatform?: 'amazon' | 'alibaba' | 'other'
+    sourcePlatform?: SupplierSourcePlatform
     countryCode?: string
     status?: 'active' | 'watchlist' | 'blocked'
     paymentTerms?: string
@@ -119,7 +154,7 @@ class SupplierService {
       email: string
       phone: string
       address: Record<string, unknown>
-      sourcePlatform: 'amazon' | 'alibaba' | 'other'
+      sourcePlatform: SupplierSourcePlatform
       countryCode: string
       status: 'active' | 'watchlist' | 'blocked'
       paymentTerms: string
@@ -218,6 +253,31 @@ class SupplierService {
     limit: number = 20,
   ): Promise<ApiResponse<{ items: AutoPausedProduct[] }>> {
     return apiClient.get(`/suppliers/ops/auto-paused?limit=${limit}`)
+  }
+
+  async previewImport(
+    supplierId: string,
+    file: File,
+  ): Promise<
+    ApiResponse<{
+      batch: ImportBatch
+      rowsToCreate: ImportPreviewRow[]
+      rowsToUpdate: ImportPreviewRow[]
+      errors: ImportRowError[]
+    }>
+  > {
+    const formData = new FormData()
+    formData.append('file', file)
+    return apiClient.postFormData(`/suppliers/${supplierId}/import/preview`, formData)
+  }
+
+  async commitImport(
+    supplierId: string,
+    batchId: string,
+  ): Promise<
+    ApiResponse<{ batchId: string; createdCount: number; updatedCount: number }>
+  > {
+    return apiClient.post(`/suppliers/${supplierId}/import/${batchId}/commit`)
   }
 }
 

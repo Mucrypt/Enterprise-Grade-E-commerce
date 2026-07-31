@@ -72,6 +72,7 @@ export interface OrderItem {
   product_id: string
   variation_id?: string
   supplier_id?: string
+  supplier_name?: string | null
   sku: string
   product_name: string
   quantity: number
