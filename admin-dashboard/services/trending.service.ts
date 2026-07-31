@@ -464,6 +464,74 @@ export const trendingService = {
       }
     }
   },
+
+  /**
+   * Get live/active visitors (last N minutes)
+   */
+  async getLiveVisitors(minutes: number = 5) {
+    try {
+      const response = (await apiClient.get('/analytics/visitors/live', {
+        params: { minutes },
+      })) as any
+
+      return {
+        windowMinutes: response?.windowMinutes || minutes,
+        activeCount: response?.activeCount || 0,
+        visitors: response?.visitors || [],
+      }
+    } catch (error) {
+      console.error('Error fetching live visitors:', error)
+      return { windowMinutes: minutes, activeCount: 0, visitors: [] }
+    }
+  },
+
+  /**
+   * Get visitor breakdown by country
+   */
+  async getVisitorsByCountry(days: number = 7) {
+    try {
+      const response = (await apiClient.get('/analytics/visitors/by-country', {
+        params: { days },
+      })) as any
+
+      return {
+        period: response?.period || `${days}_days`,
+        data: response?.data || [],
+        summary: response?.summary || { totalSessions: 0, countryCount: 0 },
+      }
+    } catch (error) {
+      console.error('Error fetching visitors by country:', error)
+      return {
+        period: `${days}_days`,
+        data: [],
+        summary: { totalSessions: 0, countryCount: 0 },
+      }
+    }
+  },
+
+  /**
+   * Get revenue/session breakdown by UTM channel
+   */
+  async getChannelBreakdown(days: number = 7) {
+    try {
+      const response = (await apiClient.get('/analytics/channels', {
+        params: { days },
+      })) as any
+
+      return {
+        period: response?.period || `${days}_days`,
+        data: response?.data || [],
+        summary: response?.summary || { totalRevenue: 0, totalOrders: 0 },
+      }
+    } catch (error) {
+      console.error('Error fetching channel breakdown:', error)
+      return {
+        period: `${days}_days`,
+        data: [],
+        summary: { totalRevenue: 0, totalOrders: 0 },
+      }
+    }
+  },
 }
 
 export default trendingService

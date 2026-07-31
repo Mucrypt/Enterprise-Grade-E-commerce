@@ -6,8 +6,14 @@
 
 import { Request, Response } from 'express'
 import { query } from '../../../database/connection'
+import pool from '../../../config/database'
 import logger from '../../../utils/logger'
 import { AuthRequest } from '../../../middleware/auth'
+import { getClientIp } from '../../../utils/helpers'
+import { createEventService } from '../../../services/event.service'
+import { EventSource } from '../../../types/events'
+
+const eventService = createEventService(pool)
 
 async function tableExists(tableName: string): Promise<boolean> {
   const result = await query('SELECT to_regclass($1) IS NOT NULL AS exists', [
@@ -445,6 +451,9 @@ export const batchInsertEvents = async (
       return
     }
 
+    const ipAddress = getClientIp(req)
+    await upsertSessionsForBatch(events, ipAddress)
+
     const insertedCount = await insertEventsBatch(events)
 
     res.json({
@@ -455,6 +464,41 @@ export const batchInsertEvents = async (
   } catch (error) {
     logger.error('Error batch inserting events:', error)
     res.status(500).json({ error: 'Failed to insert events' })
+  }
+}
+
+/**
+ * Ensure every session referenced in this batch exists in user_sessions before the
+ * events themselves are inserted (events_core.session_id has a FK to user_sessions).
+ * Uses the first event carrying a given session as that session's context source.
+ */
+async function upsertSessionsForBatch(
+  events: any[],
+  ipAddress: string,
+): Promise<void> {
+  const seenSessions = new Set<string>()
+
+  for (const event of events) {
+    const sessionId = event.sessionId
+    if (!sessionId || seenSessions.has(sessionId)) continue
+    seenSessions.add(sessionId)
+
+    const context = event.context || {}
+    await eventService.createOrUpdateSession(
+      sessionId,
+      event.userId || undefined,
+      (event.source || 'web_store') as EventSource,
+      {
+        ipAddress,
+        userAgent: context.userAgent,
+        referrer: context.referrer,
+        utmSource: context.utmSource,
+        utmMedium: context.utmMedium,
+        utmCampaign: context.utmCampaign,
+        utmContent: context.utmContent,
+        utmTerm: context.utmTerm,
+      },
+    )
   }
 }
 
@@ -501,4 +545,166 @@ async function insertEventsBatch(events: any[]): Promise<number> {
   }
 
   return insertedCount
+}
+
+export const getLiveVisitors = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { minutes = 5 } = req.query
+    const numMinutes = parseInt(minutes as string) || 5
+
+    const visitorsResult = await query(`
+      SELECT
+        s.session_id,
+        s.user_id,
+        s.country_code,
+        s.country_name,
+        s.city,
+        s.device_type,
+        s.browser_name,
+        s.os_name,
+        s.source,
+        s.utm_source,
+        s.utm_medium,
+        s.utm_campaign,
+        s.referrer,
+        s.start_time,
+        s.last_activity_time,
+        (SELECT COUNT(*) FROM events_core e WHERE e.session_id = s.session_id) as page_views
+      FROM user_sessions s
+      WHERE s.end_time IS NULL OR s.last_activity_time > NOW() - INTERVAL '${numMinutes} minutes'
+      ORDER BY s.last_activity_time DESC
+      LIMIT 100;
+    `)
+
+    const countResult = await query(`
+      SELECT COUNT(DISTINCT session_id) as active_count
+      FROM user_sessions
+      WHERE end_time IS NULL OR last_activity_time > NOW() - INTERVAL '${numMinutes} minutes';
+    `)
+
+    res.json({
+      windowMinutes: numMinutes,
+      activeCount: parseInt(countResult.rows[0]?.active_count) || 0,
+      visitors: visitorsResult.rows.map((row) => ({
+        sessionId: row.session_id,
+        userId: row.user_id,
+        countryCode: row.country_code,
+        countryName: row.country_name,
+        city: row.city,
+        deviceType: row.device_type,
+        browserName: row.browser_name,
+        osName: row.os_name,
+        source: row.source,
+        utmSource: row.utm_source,
+        utmMedium: row.utm_medium,
+        utmCampaign: row.utm_campaign,
+        referrer: row.referrer,
+        startTime: row.start_time,
+        lastActivityTime: row.last_activity_time,
+        pageViews: parseInt(row.page_views) || 0,
+      })),
+    })
+  } catch (error) {
+    logger.error('Error fetching live visitors:', error)
+    res.status(500).json({ error: 'Failed to fetch live visitors' })
+  }
+}
+
+export const getVisitorsByCountry = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { days = 7 } = req.query
+    const numDays = parseInt(days as string) || 7
+
+    const result = await query(`
+      SELECT
+        COALESCE(country_code, 'XX') as country_code,
+        COALESCE(country_name, 'Unknown') as country_name,
+        COUNT(DISTINCT session_id) as session_count,
+        COUNT(DISTINCT COALESCE(user_id::text, session_id)) as unique_visitors,
+        AVG(session_duration_seconds) as avg_duration_seconds
+      FROM user_sessions
+      WHERE start_time >= NOW() - INTERVAL '${numDays} days'
+      GROUP BY COALESCE(country_code, 'XX'), COALESCE(country_name, 'Unknown')
+      ORDER BY session_count DESC;
+    `)
+
+    const data = result.rows.map((row) => ({
+      countryCode: row.country_code,
+      countryName: row.country_name,
+      sessionCount: parseInt(row.session_count) || 0,
+      uniqueVisitors: parseInt(row.unique_visitors) || 0,
+      avgDurationSeconds: Math.round(parseFloat(row.avg_duration_seconds)) || 0,
+    }))
+
+    res.json({
+      period: `${numDays}_days`,
+      data,
+      summary: {
+        totalSessions: data.reduce((sum, d) => sum + d.sessionCount, 0),
+        countryCount: data.filter((d) => d.countryCode !== 'XX').length,
+      },
+    })
+  } catch (error) {
+    logger.error('Error fetching visitors by country:', error)
+    res.status(500).json({ error: 'Failed to fetch visitors by country' })
+  }
+}
+
+export const getChannelBreakdown = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { days = 7 } = req.query
+    const numDays = parseInt(days as string) || 7
+
+    const result = await query(`
+      SELECT
+        COALESCE(s.utm_source, 'direct') as utm_source,
+        COALESCE(s.utm_medium, 'none') as utm_medium,
+        s.utm_campaign,
+        COUNT(DISTINCT s.session_id) as session_count,
+        COUNT(DISTINCT o.id) as order_count,
+        COALESCE(SUM(o.grand_total), 0) as revenue
+      FROM user_sessions s
+      LEFT JOIN events_core e
+        ON e.session_id = s.session_id AND e.event_type = 'payment_success'
+      LEFT JOIN orders o ON o.id = e.order_id
+      WHERE s.start_time >= NOW() - INTERVAL '${numDays} days'
+      GROUP BY COALESCE(s.utm_source, 'direct'), COALESCE(s.utm_medium, 'none'), s.utm_campaign
+      ORDER BY revenue DESC;
+    `)
+
+    const data = result.rows.map((row) => {
+      const sessionCount = parseInt(row.session_count) || 0
+      const orderCount = parseInt(row.order_count) || 0
+      return {
+        utmSource: row.utm_source,
+        utmMedium: row.utm_medium,
+        utmCampaign: row.utm_campaign,
+        sessionCount,
+        orderCount,
+        revenue: parseFloat(row.revenue) || 0,
+        conversionRate: sessionCount > 0 ? (orderCount / sessionCount) * 100 : 0,
+      }
+    })
+
+    res.json({
+      period: `${numDays}_days`,
+      data,
+      summary: {
+        totalRevenue: data.reduce((sum, d) => sum + d.revenue, 0),
+        totalOrders: data.reduce((sum, d) => sum + d.orderCount, 0),
+      },
+    })
+  } catch (error) {
+    logger.error('Error fetching channel breakdown:', error)
+    res.status(500).json({ error: 'Failed to fetch channel breakdown' })
+  }
 }

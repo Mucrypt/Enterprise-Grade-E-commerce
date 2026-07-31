@@ -14,19 +14,48 @@ import logger from '../utils/logger'
 let metricsInterval: NodeJS.Timeout | null = null
 
 /**
- * Calculate current active users (sessions in last 5 minutes)
+ * Calculate current active visitors (sessions active in last 5 minutes).
+ * Counts DISTINCT session_id, not user_id -- user_id is null for guest
+ * visitors, who are the overwhelming majority of storefront traffic.
  */
 async function getActiveUsers(): Promise<number> {
   try {
     const result = await query(
-      `SELECT COUNT(DISTINCT user_id) as active_users 
-       FROM user_sessions 
-       WHERE end_time IS NULL OR end_time > NOW() - INTERVAL '5 minutes'`,
+      `SELECT COUNT(DISTINCT session_id) as active_users
+       FROM user_sessions
+       WHERE end_time IS NULL OR last_activity_time > NOW() - INTERVAL '5 minutes'`,
     )
-    return result.rows[0]?.active_users || 0
+    return Number(result.rows[0]?.active_users) || 0
   } catch (error) {
     logger.error('Error calculating active users:', error)
     return 0
+  }
+}
+
+/**
+ * Top 3 countries by active session count in the last 5 minutes.
+ */
+async function getTopCountries(): Promise<
+  { countryCode: string; countryName: string; count: number }[]
+> {
+  try {
+    const result = await query(
+      `SELECT country_code, country_name, COUNT(DISTINCT session_id) as count
+       FROM user_sessions
+       WHERE (end_time IS NULL OR last_activity_time > NOW() - INTERVAL '5 minutes')
+         AND country_code IS NOT NULL
+       GROUP BY country_code, country_name
+       ORDER BY count DESC
+       LIMIT 3`,
+    )
+    return result.rows.map((row) => ({
+      countryCode: row.country_code,
+      countryName: row.country_name || row.country_code,
+      count: Number(row.count) || 0,
+    }))
+  } catch (error) {
+    logger.error('Error calculating top countries:', error)
+    return []
   }
 }
 
@@ -154,6 +183,7 @@ async function fetchAndBroadcastMetrics(): Promise<void> {
       lastHourOrders,
       conversionRate,
       activeAlerts,
+      topCountries,
     ] = await Promise.all([
       getActiveUsers(),
       getEventsPerSecond(),
@@ -161,6 +191,7 @@ async function fetchAndBroadcastMetrics(): Promise<void> {
       getLastHourOrders(),
       getConversionRate(),
       getActiveAlertStats(),
+      getTopCountries(),
     ])
 
     const metrics: DashboardMetrics = {
@@ -170,6 +201,7 @@ async function fetchAndBroadcastMetrics(): Promise<void> {
       lastHourOrders,
       conversionRate,
       activeAlerts,
+      topCountries,
     }
 
     webSocketService.broadcastMetrics(metrics)

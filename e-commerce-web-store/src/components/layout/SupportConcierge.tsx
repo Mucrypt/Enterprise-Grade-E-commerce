@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react'
 import type { SupportProfile, User } from '../../types'
+import { formatPrice } from '../../utils'
 
 interface SupportConciergeProps {
   user: User | null
@@ -298,7 +299,7 @@ export function SupportConcierge({
                           {item.reason}
                         </p>
                         <p className='mt-1 text-xs font-semibold text-orange-700'>
-                          ${item.price.toFixed(2)}
+                          {formatPrice(item.price)}
                         </p>
                       </div>
                     </Link>

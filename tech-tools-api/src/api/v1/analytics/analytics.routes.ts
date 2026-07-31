@@ -13,6 +13,9 @@ import {
   getReturnRate,
   getCheckoutAbandonment,
   batchInsertEvents,
+  getLiveVisitors,
+  getVisitorsByCountry,
+  getChannelBreakdown,
 } from './analytics.controller';
 import { authenticate, authorize } from '../../../middleware/auth';
 
@@ -73,6 +76,27 @@ router.get(
   authenticate,
   authorize('admin', 'super_admin'),
   getCheckoutAbandonment
+);
+
+router.get(
+  '/visitors/live',
+  authenticate,
+  authorize('admin', 'super_admin'),
+  getLiveVisitors
+);
+
+router.get(
+  '/visitors/by-country',
+  authenticate,
+  authorize('admin', 'super_admin'),
+  getVisitorsByCountry
+);
+
+router.get(
+  '/channels',
+  authenticate,
+  authorize('admin', 'super_admin'),
+  getChannelBreakdown
 );
 
 export default router;

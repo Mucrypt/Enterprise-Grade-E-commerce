@@ -19,6 +19,11 @@ export interface DashboardMetrics {
     medium: number
     low: number
   }
+  topCountries: {
+    countryCode: string
+    countryName: string
+    count: number
+  }[]
 }
 
 interface ConnectedClient {
