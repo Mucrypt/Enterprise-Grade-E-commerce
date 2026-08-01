@@ -58,8 +58,14 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       logout: async () => {
-        await authApi.logout();
+        // Clear local state immediately so the UI reflects "signed out"
+        // right away, instead of waiting on the backend round-trip (which
+        // callers like ProfilePage's handleLogout don't await before
+        // navigating away -- the store update needs to already be done by
+        // then, not still pending on a network call that could take up to
+        // the request timeout to settle).
         set({ user: null, isAuthenticated: false });
+        await authApi.logout();
       },
 
       fetchUser: async () => {

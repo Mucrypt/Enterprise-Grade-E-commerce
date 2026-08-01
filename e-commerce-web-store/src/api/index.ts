@@ -386,14 +386,18 @@ export const authApi = {
     } as User
   },
 
-  // Logout
+  // Logout. Call the backend BEFORE clearing the token -- /auth/logout reads
+  // the Bearer token to know which refresh token to delete from Redis, so
+  // clearing it first (as this used to) meant the request always went out
+  // unauthenticated and the server-side session was never actually revoked.
   async logout() {
-    localStorage.removeItem('auth_token')
     try {
       await api.post('/auth/logout')
     } catch {
-      // Ignore logout errors
+      // Ignore logout errors -- always clear client-side regardless
     }
+    localStorage.removeItem('auth_token')
+    localStorage.removeItem('refresh_token')
   },
 
   // Forgot password
