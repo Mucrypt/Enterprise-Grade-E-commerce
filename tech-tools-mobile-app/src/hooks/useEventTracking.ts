@@ -150,7 +150,7 @@ export function useEventTracking() {
   const trackScreenView = useCallback(
     (screenName: string, screenParams?: Record<string, any>) => {
       tracker.trackEvent({
-        eventType: 'supplier_interaction',
+        eventType: 'page_view',
         source: 'mobile_app',
         timestamp: new Date(),
         payload: {
@@ -158,7 +158,7 @@ export function useEventTracking() {
           screenParams,
           timestamp: Date.now(),
         },
-      } as any)
+      })
     },
     [tracker],
   )
@@ -170,7 +170,7 @@ export function useEventTracking() {
       context?: Record<string, any>,
     ) => {
       tracker.trackEvent({
-        eventType: 'supplier_interaction',
+        eventType: 'error',
         source: 'mobile_app',
         timestamp: new Date(),
         payload: {
@@ -179,7 +179,7 @@ export function useEventTracking() {
           context,
           timestamp: Date.now(),
         },
-      } as any)
+      })
     },
     [tracker],
   )

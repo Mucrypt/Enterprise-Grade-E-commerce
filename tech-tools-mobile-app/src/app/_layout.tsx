@@ -15,6 +15,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon'
+import ScreenViewTracker from '@/components/ScreenViewTracker'
 import MobileNotificationService from '@/services/notification.service'
 import { useAuthStore } from '@/stores'
 import { initializeEventTracking } from '@/services/event-tracking'
@@ -62,6 +63,7 @@ export default function RootLayout() {
             translucent
           />
           <AnimatedSplashOverlay />
+          <ScreenViewTracker />
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name='(tabs)' options={{ headerShown: false }} />
             <Stack.Screen name='(auth)' options={{ headerShown: false }} />

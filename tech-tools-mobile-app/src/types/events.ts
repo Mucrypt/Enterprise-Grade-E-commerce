@@ -22,7 +22,9 @@ export type EventType =
   | 'checkout_abandoned'
   | 'promo_code_applied'
   | 'review_submitted'
-  | 'supplier_interaction';
+  | 'supplier_interaction'
+  | 'page_view'
+  | 'error';
 
 export type EventSource = 'web_store' | 'mobile_app' | 'api' | 'admin_dashboard' | 'internal';
 export type DeviceType = 'desktop' | 'tablet' | 'mobile' | 'unknown';

@@ -23,8 +23,16 @@ export class MobileEventTrackingService {
   private batchTimer: NodeJS.Timeout | null = null;
   private deviceInfo: any = null;
 
-  constructor(apiUrl: string = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001') {
-    this.apiUrl = apiUrl;
+  constructor(
+    // EXPO_PUBLIC_API_URL is never actually set anywhere in this app (grep
+    // confirms zero references outside this file) -- every build silently
+    // fell back to localhost:3001, which doesn't exist on a device. Match
+    // the same production URL the real, working API client in
+    // src/api/index.ts uses (API_BASE_URL), already including /api/v1.
+    apiUrl: string = process.env.EXPO_PUBLIC_API_URL ||
+      'https://techtoolstore.com/api/v1',
+  ) {
+    this.apiUrl = apiUrl.replace(/\/api\/v1\/?$/, '');
     this.sessionId = this.generateSessionId();
     this.initializeDeviceInfo();
   }
@@ -95,7 +103,7 @@ export class MobileEventTrackingService {
     this.eventQueue = [];
 
     try {
-      const response = await fetch(`${this.apiUrl}/api/v1/events/batch`, {
+      const response = await fetch(`${this.apiUrl}/api/v1/analytics/events/batch`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
