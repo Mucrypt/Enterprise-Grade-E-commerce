@@ -674,17 +674,35 @@ export const createRefund = async (req: AuthRequest, res: Response) => {
     )
 
     // Update payment record
-    await query(
-      `UPDATE payments SET 
+    const paymentUpdateResult = await query(
+      `UPDATE payments SET
         refund_amount = COALESCE(refund_amount, 0) + $1,
         refund_reason = $2,
-        status = CASE 
+        status = CASE
           WHEN COALESCE(refund_amount, 0) + $1 >= amount THEN 'refunded'
           ELSE 'partially_refunded'
         END,
         updated_at = NOW()
-      WHERE order_id = $3`,
+      WHERE order_id = $3
+      RETURNING status`,
       [refund.amount / 100, reason, orderId],
+    )
+
+    // Mirror the refund onto the order itself -- previously this endpoint
+    // only updated the `payments` row, leaving orders.payment_status stuck
+    // at 'paid' even after a full refund.
+    const isFullyRefunded = paymentUpdateResult.rows[0]?.status === 'refunded'
+    await query(
+      `UPDATE orders SET
+        payment_status = $1,
+        order_status = CASE WHEN $2 THEN 'refunded' ELSE order_status END,
+        updated_at = NOW()
+       WHERE id = $3`,
+      [
+        isFullyRefunded ? 'refunded' : 'partially_refunded',
+        isFullyRefunded,
+        orderId,
+      ],
     )
 
     res.json({

@@ -1495,12 +1495,13 @@ export const cancelOrder = async (req: AuthRequest, res: Response) => {
     const { id } = req.params
     const { reason } = req.body
 
-    // Verify order belongs to user
+    // Verify order belongs to user. (Previously this joined `payments` and
+    // aliased payments.status as `payment_status`, shadowing the real
+    // orders.payment_status column of the same name on the returned row --
+    // fragile and confusing. orders.transaction_id already holds the Stripe
+    // PaymentIntent id directly, no join needed.)
     const orderResult = await query(
-      `SELECT o.*, p.transaction_id, p.amount as payment_amount, p.status as payment_status
-       FROM orders o
-       LEFT JOIN payments p ON o.id = p.order_id AND p.status = 'completed'
-       WHERE o.id = $1 AND o.user_id = $2`,
+      `SELECT * FROM orders WHERE id = $1 AND user_id = $2`,
       [id, userId],
     )
 
@@ -1528,7 +1529,8 @@ export const cancelOrder = async (req: AuthRequest, res: Response) => {
     }
 
     // If payment was made, initiate refund
-    if (order.transaction_id && order.payment_status === 'completed') {
+    let refundIssued = false
+    if (order.transaction_id && order.payment_status === 'paid') {
       try {
         const stripeService = (await import('../../../services/stripe.service'))
           .default
@@ -1537,6 +1539,7 @@ export const cancelOrder = async (req: AuthRequest, res: Response) => {
           undefined, // Full refund
           'requested_by_customer',
         )
+        refundIssued = true
       } catch (error) {
         logger.error('Failed to create refund:', error)
         // Continue with cancellation even if refund fails
@@ -1544,7 +1547,13 @@ export const cancelOrder = async (req: AuthRequest, res: Response) => {
       }
     }
 
-    // Restore stock
+    // Release the stock reservation made at checkout. Checkout only ever
+    // increments inventory.reserved_stock (never products.stock_quantity),
+    // so restoring stock must release that same reservation -- crediting
+    // products.stock_quantity instead (as this used to) silently left
+    // cancelled orders' units stuck reserved forever, permanently shrinking
+    // available_stock (current_stock - reserved_stock) with every
+    // cancellation.
     const itemsResult = await query(
       'SELECT product_id, quantity FROM order_items WHERE order_id = $1',
       [id],
@@ -1552,21 +1561,30 @@ export const cancelOrder = async (req: AuthRequest, res: Response) => {
 
     for (const item of itemsResult.rows) {
       await query(
-        `UPDATE products SET stock_quantity = stock_quantity + $1, updated_at = NOW()
-         WHERE id = $2`,
+        `UPDATE inventory SET
+          reserved_stock = GREATEST(0, reserved_stock - $1),
+          updated_at = NOW()
+         WHERE product_id = $2`,
         [item.quantity, item.product_id],
       )
     }
 
-    // Update order status
+    // Update order status. Also reflect the refund/cancellation on
+    // payment_status -- previously this was left untouched (e.g. a
+    // successfully-refunded order would still show payment_status='paid').
     const updateResult = await query(
-      `UPDATE orders SET 
+      `UPDATE orders SET
         order_status = 'cancelled',
+        payment_status = CASE
+          WHEN $3 THEN 'refunded'
+          WHEN payment_status = 'pending' THEN 'cancelled'
+          ELSE payment_status
+        END,
         cancelled_at = NOW(),
         cancelled_reason = $1,
         updated_at = NOW()
        WHERE id = $2 RETURNING *`,
-      [reason || 'Cancelled by customer', id],
+      [reason || 'Cancelled by customer', id, refundIssued],
     )
 
     res.json({
