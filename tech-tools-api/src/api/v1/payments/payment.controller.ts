@@ -739,6 +739,23 @@ export const handleWebhook = async (
 
     logger.info(`Received Stripe webhook: ${event.type}`)
 
+    // Idempotency gate: Stripe retries webhook deliveries (e.g. if our
+    // response is slow or briefly unavailable), so guard against
+    // reprocessing the same event twice -- duplicate confirmation emails,
+    // double-counted refund amounts, etc. stripe_webhook_events.event_id
+    // is UNIQUE (013_stripe_integration.sql), so this insert is the gate.
+    const eventRecord = await query(
+      `INSERT INTO stripe_webhook_events (event_id, event_type, payload)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (event_id) DO NOTHING
+       RETURNING id`,
+      [event.id, event.type, JSON.stringify(event)],
+    )
+    if (eventRecord.rowCount === 0) {
+      logger.info(`Duplicate Stripe webhook ignored: ${event.id}`)
+      return res.json({ received: true, duplicate: true })
+    }
+
     // Handle the event
     switch (event.type) {
       case 'payment_intent.succeeded':

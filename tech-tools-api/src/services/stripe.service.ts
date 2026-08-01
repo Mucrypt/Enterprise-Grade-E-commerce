@@ -7,6 +7,13 @@ import Stripe from 'stripe'
 import { query } from '../database/connection'
 import logger from '../utils/logger'
 import digitalEntitlementsService from './digital-entitlements.service'
+import emailService from './email.service'
+import { sendOrderConfirmationEmail, OrderDetails } from '../utils/email'
+import {
+  sendOrderConfirmationWhatsApp,
+  OrderDetails as WhatsAppOrderDetails,
+} from './whatsapp.service'
+import { buildOrderAdminAlertHtml } from '../utils/order-notifications'
 
 // Initialize Stripe with latest API version
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
@@ -482,11 +489,133 @@ class StripeService {
       // Grant digital entitlements for paid orders (idempotent).
       await digitalEntitlementsService.grantEntitlementsForPaidOrder(orderId)
 
+      // Send the order confirmation email/WhatsApp now that payment is
+      // actually confirmed -- not a fatal error for the webhook if this
+      // fails, same "don't fail the order over a notification" rule the
+      // legacy order-creation flow already follows.
+      try {
+        await this.sendOrderConfirmationIfNeeded(orderId)
+      } catch (notifyError) {
+        logger.error(
+          'Failed to send order confirmation after payment succeeded:',
+          notifyError,
+        )
+      }
+
       logger.info(`Payment succeeded for order ${orderId}`)
     } catch (error) {
       logger.error('Error handling payment succeeded:', error)
       throw error
     }
+  }
+
+  /**
+   * Send the order-confirmation email/admin notification/WhatsApp exactly
+   * once per order. Orders created by the legacy createOrder/createGuestOrder
+   * path (order.controller.ts, still used by mobile) already send this
+   * inline at order-creation time -- which for that flow only ever runs
+   * after payment already succeeded -- and mark `confirmation_sent_at`
+   * there too, so this is a no-op for those orders when the webhook fires.
+   */
+  private async sendOrderConfirmationIfNeeded(orderId: string): Promise<void> {
+    const orderResult = await query(
+      `SELECT o.*, u.email as user_email
+       FROM orders o
+       LEFT JOIN users u ON o.user_id = u.id
+       WHERE o.id = $1 AND o.confirmation_sent_at IS NULL`,
+      [orderId],
+    )
+    const order = orderResult.rows[0]
+    if (!order) return // already sent, or order not found
+
+    const itemsResult = await query(
+      `SELECT product_name, quantity, unit_price, total_price
+       FROM order_items WHERE order_id = $1`,
+      [orderId],
+    )
+    const items = itemsResult.rows.map((item: any) => ({
+      productName: item.product_name,
+      quantity: item.quantity,
+      unitPrice: Number(item.unit_price),
+      totalPrice: Number(item.total_price),
+    }))
+
+    const shippingAddress = order.shipping_address || {}
+    const recipientEmail: string | undefined =
+      order.guest_email || order.user_email || shippingAddress.email
+    if (!recipientEmail) {
+      logger.warn(
+        `Cannot send order confirmation for ${order.order_number}: no recipient email on file`,
+      )
+      return
+    }
+
+    const customerName =
+      `${order.guest_first_name || shippingAddress.firstName || ''} ${
+        order.guest_last_name || shippingAddress.lastName || ''
+      }`.trim() || 'Valued Customer'
+
+    const orderDetails: OrderDetails = {
+      orderNumber: order.order_number,
+      customerName,
+      customerEmail: recipientEmail,
+      items,
+      subtotal: Number(order.total_amount),
+      taxAmount: Number(order.tax_amount),
+      shippingAmount: Number(order.shipping_amount),
+      grandTotal: Number(order.grand_total),
+      shippingAddress: {
+        firstName: shippingAddress.firstName,
+        lastName: shippingAddress.lastName,
+        address: shippingAddress.address,
+        city: shippingAddress.city,
+        state: shippingAddress.state,
+        postalCode: shippingAddress.postalCode,
+        country: shippingAddress.country,
+      },
+      estimatedDelivery: order.estimated_delivery_date
+        ? new Date(order.estimated_delivery_date).toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          })
+        : undefined,
+    }
+
+    await sendOrderConfirmationEmail(recipientEmail, orderDetails)
+
+    await emailService.sendAdminNotification({
+      subject: `New order received: ${order.order_number}`,
+      html: buildOrderAdminAlertHtml({
+        orderNumber: order.order_number,
+        customerName,
+        customerEmail: recipientEmail,
+        grandTotal: Number(order.grand_total),
+        itemCount: items.length,
+      }),
+      emailType: 'custom',
+    })
+
+    const phone: string | undefined = order.guest_phone || shippingAddress.phone
+    if (phone) {
+      const whatsappDetails: WhatsAppOrderDetails = {
+        orderNumber: order.order_number,
+        customerName,
+        customerPhone: phone,
+        items,
+        subtotal: orderDetails.subtotal,
+        taxAmount: orderDetails.taxAmount,
+        shippingAmount: orderDetails.shippingAmount,
+        grandTotal: orderDetails.grandTotal,
+        estimatedDelivery: orderDetails.estimatedDelivery,
+      }
+      await sendOrderConfirmationWhatsApp(whatsappDetails)
+    }
+
+    await query(`UPDATE orders SET confirmation_sent_at = NOW() WHERE id = $1`, [
+      orderId,
+    ])
   }
 
   /**
@@ -512,12 +641,21 @@ class StripeService {
         [orderId],
       )
 
-      // Create failed payment record
+      // Create failed payment record (idempotent on Stripe transaction_id --
+      // without ON CONFLICT here, a Stripe retry of this same event would
+      // throw a unique-violation on payments.transaction_id, which the
+      // webhook handler surfaces as a 400, causing Stripe to retry again
+      // indefinitely).
       await query(
         `INSERT INTO payments (
           order_id, payment_method, payment_gateway, transaction_id,
           amount, currency, status, gateway_response
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (transaction_id)
+        DO UPDATE SET
+          status = EXCLUDED.status,
+          gateway_response = EXCLUDED.gateway_response,
+          updated_at = NOW()`,
         [
           orderId,
           paymentIntent.payment_method_types?.[0] || 'card',

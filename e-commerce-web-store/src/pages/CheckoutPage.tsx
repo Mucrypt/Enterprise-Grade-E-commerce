@@ -19,7 +19,7 @@ import {
 } from 'lucide-react'
 import { useCartStore, useAuthStore } from '../stores'
 import { formatPrice, getProductImage, cn } from '../utils'
-import { paymentsApi, ordersApiNew } from '../api'
+import { ordersApiNew } from '../api'
 import { StripeElementsWrapper } from '../contexts/StripeContext'
 import StripePaymentForm from '../components/checkout/StripePaymentForm'
 import { countriesSortedByName } from '../data/countries'
@@ -82,10 +82,29 @@ export default function CheckoutPage() {
   const [_paymentIntentId, setPaymentIntentId] = useState<string | null>(null)
   const [paymentComplete, setPaymentComplete] = useState(false)
 
+  // Set once the order draft + PaymentIntent are created together on the
+  // server (before payment is confirmed) -- the order already exists by the
+  // time the shopper reaches the payment step, so handlePaymentSuccess just
+  // finalizes the UI instead of creating the order after the fact.
+  const [orderDraft, setOrderDraft] = useState<{
+    orderId: string
+    orderNumber: string
+    checkoutToken?: string
+    taxAmount: number
+    shippingAmount: number
+    grandTotal: number
+  } | null>(null)
+
   const subtotal = getSubtotal()
+  // Client-side estimate shown before the order draft exists; once it does,
+  // the server-computed totals below are authoritative and take over.
   const shippingCost = subtotal >= 50 ? 0 : 5.99
   const tax = subtotal * 0.08 // 8% tax
   const total = subtotal + shippingCost + tax
+
+  const displayShippingCost = orderDraft?.shippingAmount ?? shippingCost
+  const displayTax = orderDraft?.taxAmount ?? tax
+  const displayTotal = orderDraft?.grandTotal ?? total
 
   // Redirect if cart is empty
   useEffect(() => {
@@ -107,38 +126,73 @@ export default function CheckoutPage() {
     }
   }, [isAuthenticated, user])
 
-  // Create payment intent when moving to payment step
-  const createPaymentIntent = useCallback(async () => {
+  // Create the order (pending payment) + PaymentIntent together when moving
+  // to the payment step -- server prices everything from the database, so
+  // the order and the amount Stripe will charge can never disagree, and the
+  // order exists before any money can be captured.
+  const createCheckoutSession = useCallback(async () => {
     try {
       setError(null)
 
-      const paymentItems = items.map((item) => ({
+      const orderItems = items.map((item) => ({
         productId: item.product.id,
-        price: Number(item.product.sale_price || item.product.base_price),
         quantity: item.quantity,
       }))
+      const shippingAddressPayload = {
+        firstName: shipping.firstName,
+        lastName: shipping.lastName,
+        email: shipping.email,
+        phone: shipping.phone,
+        address: shipping.address,
+        apartment: shipping.apartment,
+        city: shipping.city,
+        state: shipping.state,
+        postalCode: shipping.postalCode,
+        country: shipping.country,
+      }
 
-      const result = await paymentsApi.createPaymentIntent({
-        items: paymentItems,
-        shippingAddress: {
-          name: `${shipping.firstName} ${shipping.lastName}`,
-          address: shipping.address,
-          apartment: shipping.apartment,
-          city: shipping.city,
-          state: shipping.state,
-          postalCode: shipping.postalCode,
-          country: shipping.country,
-        },
-        currency: 'usd',
-      })
+      let checkoutToken: string | undefined
+      let result: {
+        clientSecret: string
+        paymentIntentId: string
+        orderId: string
+        orderNumber: string
+        taxAmount: number
+        shippingAmount: number
+        grandTotal: number
+      }
+
+      if (isGuestCheckout) {
+        const guestResult = await ordersApiNew.guestCheckoutSession({
+          items: orderItems,
+          shippingAddress: shippingAddressPayload,
+          guestEmail: guestEmail || shipping.email,
+          guestPhone: shipping.phone,
+        })
+        result = guestResult
+        checkoutToken = guestResult.checkoutToken
+      } else {
+        result = await ordersApiNew.checkoutSession({
+          items: orderItems,
+          shippingAddress: shippingAddressPayload,
+        })
+      }
 
       setClientSecret(result.clientSecret)
       setPaymentIntentId(result.paymentIntentId)
+      setOrderDraft({
+        orderId: result.orderId,
+        orderNumber: result.orderNumber,
+        checkoutToken,
+        taxAmount: result.taxAmount,
+        shippingAmount: result.shippingAmount,
+        grandTotal: result.grandTotal,
+      })
     } catch (err) {
-      console.error('Failed to create payment intent:', err)
+      console.error('Failed to start checkout:', err)
       setError('Failed to initialize payment. Please try again.')
     }
-  }, [items, shipping])
+  }, [items, shipping, isGuestCheckout, guestEmail])
 
   const currentStepIndex = steps.findIndex((s) => s.id === currentStep)
 
@@ -178,8 +232,8 @@ export default function CheckoutPage() {
     if (currentStep === 'shipping') {
       if (!validateShipping()) return
 
-      // Create payment intent before moving to payment step
-      await createPaymentIntent()
+      // Create the order draft + PaymentIntent before moving to payment step
+      await createCheckoutSession()
       setCurrentStep('payment')
     } else if (currentStep === 'payment') {
       // Payment step is handled by Stripe form
@@ -192,64 +246,22 @@ export default function CheckoutPage() {
     else if (currentStep === 'review') setCurrentStep('payment')
   }
 
-  // Handle successful payment
-  const handlePaymentSuccess = async (completedPaymentIntentId: string) => {
+  // Handle successful payment. The order already exists (created in
+  // createCheckoutSession before payment was attempted) -- final
+  // confirmation (payment_status -> paid) happens server-side via the
+  // Stripe webhook, so this just finalizes the UI.
+  const handlePaymentSuccess = async (_completedPaymentIntentId: string) => {
     setIsProcessing(true)
     setError(null)
 
     try {
-      let order
-
-      if (isGuestCheckout) {
-        // Guest checkout - call guest order endpoint
-        order = await ordersApiNew.createGuestOrder({
-          items: items.map((item) => ({
-            productId: item.product.id,
-            quantity: item.quantity,
-          })),
-          shippingAddress: {
-            firstName: shipping.firstName,
-            lastName: shipping.lastName,
-            address: shipping.address,
-            apartment: shipping.apartment,
-            city: shipping.city,
-            state: shipping.state,
-            postalCode: shipping.postalCode,
-            country: shipping.country,
-          },
-          guestEmail: guestEmail || shipping.email,
-          guestPhone: shipping.phone,
-          paymentIntentId: completedPaymentIntentId,
-          paymentMethod: 'card',
-        })
-      } else {
-        // Authenticated checkout
-        order = await ordersApiNew.create({
-          items: items.map((item) => ({
-            productId: item.product.id,
-            quantity: item.quantity,
-          })),
-          shippingAddress: {
-            firstName: shipping.firstName,
-            lastName: shipping.lastName,
-            email: shipping.email,
-            phone: shipping.phone,
-            address: shipping.address,
-            apartment: shipping.apartment,
-            city: shipping.city,
-            state: shipping.state,
-            postalCode: shipping.postalCode,
-            country: shipping.country,
-          },
-          paymentIntentId: completedPaymentIntentId,
-          paymentMethod: 'card',
-        })
+      if (!orderDraft) {
+        throw new Error('Missing order details for this payment')
       }
 
-      // Track payment success event
       trackPaymentSuccess(
-        order.id,
-        Number(order.grand_total),
+        orderDraft.orderId,
+        orderDraft.grandTotal,
         items.length,
         'EUR',
       )
@@ -260,34 +272,19 @@ export default function CheckoutPage() {
       clearCart()
       navigate('/order-confirmation', {
         state: {
-          orderNumber: order.order_number,
-          orderId: order.id,
-          total: order.grand_total,
+          orderNumber: orderDraft.orderNumber,
+          orderId: orderDraft.orderId,
+          total: orderDraft.grandTotal,
           email: guestEmail || shipping.email,
-          checkoutToken:
-            isGuestCheckout && 'checkoutToken' in order
-              ? order.checkoutToken
-              : undefined,
+          checkoutToken: orderDraft.checkoutToken,
           isGuest: isGuestCheckout,
         },
       })
     } catch (err: unknown) {
-      console.error('Failed to create order:', err)
-      // Extract the actual error message from the API response
-      let errorMessage =
-        'Payment successful but failed to create order. Please contact support.'
-      if (err && typeof err === 'object' && 'response' in err) {
-        const axiosError = err as {
-          response?: { data?: { error?: string; message?: string } }
-        }
-        const apiError =
-          axiosError.response?.data?.error || axiosError.response?.data?.message
-        if (apiError) {
-          errorMessage = `Payment successful but order creation failed: ${apiError}`
-          console.error('API Error Details:', axiosError.response?.data)
-        }
-      }
-      setError(errorMessage)
+      console.error('Failed to finalize order confirmation:', err)
+      setError(
+        'Payment was successful, but we could not finalize your confirmation. Please check your email or contact support.',
+      )
     } finally {
       setIsProcessing(false)
     }
@@ -772,15 +769,17 @@ export default function CheckoutPage() {
                   <span
                     className={cn(
                       'font-medium',
-                      shippingCost === 0 && 'text-green-600',
+                      displayShippingCost === 0 && 'text-green-600',
                     )}
                   >
-                    {shippingCost === 0 ? 'FREE' : formatPrice(shippingCost)}
+                    {displayShippingCost === 0
+                      ? 'FREE'
+                      : formatPrice(displayShippingCost)}
                   </span>
                 </div>
                 <div className='flex justify-between'>
                   <span className='text-gray-600'>Tax (8%)</span>
-                  <span className='font-medium'>{formatPrice(tax)}</span>
+                  <span className='font-medium'>{formatPrice(displayTax)}</span>
                 </div>
                 <div className='border-t pt-3 mt-3'>
                   <div className='flex justify-between'>
@@ -788,7 +787,7 @@ export default function CheckoutPage() {
                       Total
                     </span>
                     <span className='text-lg font-bold text-blue-600'>
-                      {formatPrice(total)}
+                      {formatPrice(displayTotal)}
                     </span>
                   </div>
                 </div>

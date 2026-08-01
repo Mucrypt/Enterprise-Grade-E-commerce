@@ -1180,6 +1180,83 @@ export const paymentsApi = {
 // Orders API (Updated with Stripe integration)
 // ============================================
 export const ordersApiNew = {
+  // Create an order draft + Stripe PaymentIntent together, BEFORE payment is
+  // confirmed -- the order always exists before any money can be captured.
+  async checkoutSession(data: {
+    items: { productId: string; quantity: number }[]
+    shippingAddress: {
+      firstName: string
+      lastName: string
+      email: string
+      phone?: string
+      address: string
+      apartment?: string
+      city: string
+      state: string
+      postalCode: string
+      country: string
+    }
+    billingAddress?: {
+      firstName: string
+      lastName: string
+      address: string
+      apartment?: string
+      city: string
+      state: string
+      postalCode: string
+      country: string
+    }
+    customerNotes?: string
+  }) {
+    const response = await api.post<{
+      success: boolean
+      data: {
+        clientSecret: string
+        paymentIntentId: string
+        orderId: string
+        orderNumber: string
+        currency: string
+        taxAmount: number
+        shippingAmount: number
+        grandTotal: number
+      }
+    }>('/orders/checkout-session', data)
+    return response.data.data
+  },
+
+  // Guest equivalent of checkoutSession (no authentication required)
+  async guestCheckoutSession(data: {
+    items: { productId: string; quantity: number }[]
+    shippingAddress: any
+    guestEmail: string
+    guestPhone?: string
+    customerNotes?: string
+  }) {
+    const guestApi = axios.create({
+      baseURL: API_URL,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      timeout: 15000,
+    })
+
+    const response = await guestApi.post<{
+      success: boolean
+      data: {
+        clientSecret: string
+        paymentIntentId: string
+        orderId: string
+        orderNumber: string
+        checkoutToken: string
+        currency: string
+        taxAmount: number
+        shippingAmount: number
+        grandTotal: number
+      }
+    }>('/orders/guest/checkout-session', data)
+    return response.data.data
+  },
+
   // Create order with Stripe payment
   async create(data: {
     items: { productId: string; quantity: number }[]

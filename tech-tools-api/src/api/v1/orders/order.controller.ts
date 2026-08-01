@@ -1,6 +1,6 @@
 import { Response } from 'express'
 import { AuthRequest } from '../../../middleware/auth'
-import { query } from '../../../database/connection'
+import { query, getClient } from '../../../database/connection'
 import logger from '../../../utils/logger'
 import emailService from '../../../services/email.service'
 import { sendOrderConfirmationEmail, OrderDetails } from '../../../utils/email'
@@ -9,54 +9,7 @@ import {
   OrderDetails as WhatsAppOrderDetails,
 } from '../../../services/whatsapp.service'
 import { resolveSupplierForOrderItem } from '../../../services/fulfillment.service'
-
-const buildOrderAdminAlertHtml = (data: {
-  orderNumber: string
-  customerName: string
-  customerEmail: string
-  grandTotal: number
-  itemCount: number
-}) => `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>New Order Received</title>
-</head>
-<body style="margin:0;padding:0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f8fafc;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;margin:0 auto;background:#ffffff;">
-    <tr>
-      <td style="background:linear-gradient(135deg,#111827 0%,#f97316 100%);padding:32px 40px;color:#ffffff;">
-        <h1 style="margin:0;font-size:24px;font-weight:700;">New Order Received</h1>
-        <p style="margin:8px 0 0;font-size:14px;color:rgba(255,255,255,0.86);">Order ${
-          data.orderNumber
-        }</p>
-      </td>
-    </tr>
-    <tr>
-      <td style="padding:32px 40px;">
-        <p style="margin:0 0 10px;color:#0f172a;font-size:14px;"><strong>Customer:</strong> ${
-          data.customerName
-        }</p>
-        <p style="margin:0 0 10px;color:#0f172a;font-size:14px;"><strong>Email:</strong> ${
-          data.customerEmail
-        }</p>
-        <p style="margin:0 0 10px;color:#0f172a;font-size:14px;"><strong>Items:</strong> ${
-          data.itemCount
-        }</p>
-        <p style="margin:0 0 18px;color:#0f172a;font-size:14px;"><strong>Total:</strong> $${data.grandTotal.toFixed(
-          2,
-        )}</p>
-        <a href="${
-          process.env.ADMIN_DASHBOARD_URL ||
-          'https://techtoolstore.com/admin/dashboard'
-        }/orders" style="display:inline-block;background:#f97316;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:600;">Open orders dashboard</a>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`
+import { buildOrderAdminAlertHtml } from '../../../utils/order-notifications'
 
 // =====================================================
 // Admin Order Management
@@ -975,6 +928,10 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
         orderNumber: order.order_number,
         email: shippingAddress.email,
       })
+      await query(
+        'UPDATE orders SET confirmation_sent_at = NOW() WHERE id = $1',
+        [order.id],
+      )
 
       await emailService.sendAdminNotification({
         subject: `New order received: ${order.order_number}`,
@@ -1059,6 +1016,454 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
           ? error.stack
           : undefined,
     })
+  }
+}
+
+// ============================================
+// Checkout session (order draft + PaymentIntent created together)
+//
+// Unlike createOrder/createGuestOrder above (which still exist, unchanged,
+// for backward compatibility with the mobile app), these two endpoints
+// create the order BEFORE payment is attempted, so a successful Stripe
+// charge can never exist without a corresponding order row, and the
+// PaymentIntent always has the correct orderId in its metadata from the
+// moment it's created. See docs/PRODUCTION-READINESS-AUDIT.md.
+// ============================================
+
+type PricedItem = {
+  productId: string
+  sku: string
+  productName: string
+  quantity: number
+  unitPrice: number
+  totalPrice: number
+}
+
+/** Thrown by validateAndPriceOrderItems for a client-facing validation failure. */
+class OrderValidationError extends Error {
+  status: number
+  constructor(status: number, message: string) {
+    super(message)
+    this.status = status
+  }
+}
+
+/**
+ * Server-side price/stock validation, run inside the caller's open
+ * transaction (via `client`) so it can never see a different product/stock
+ * state than the INSERTs that follow it in the same request.
+ */
+async function validateAndPriceOrderItems(
+  client: { query: (text: string, params?: any[]) => Promise<any> },
+  items: Array<{ productId: string; quantity: number }>,
+): Promise<{ orderItems: PricedItem[]; totalAmount: number }> {
+  let totalAmount = 0
+  const orderItems: PricedItem[] = []
+
+  for (const item of items) {
+    const productResult = await client.query(
+      `SELECT p.id, p.name, p.sku, p.base_price, p.sale_price,
+              COALESCE((SELECT SUM(i.available_stock) FROM inventory i WHERE i.product_id = p.id), 0) as total_stock
+       FROM products p
+       WHERE p.id = $1 AND p.is_active = true`,
+      [item.productId],
+    )
+
+    if (!productResult.rows[0]) {
+      throw new OrderValidationError(400, `Product not found: ${item.productId}`)
+    }
+
+    const product = productResult.rows[0]
+    const availableStock = parseInt(product.total_stock, 10)
+    if (availableStock < item.quantity) {
+      throw new OrderValidationError(
+        400,
+        `Insufficient stock for ${product.name}. Available: ${availableStock}`,
+      )
+    }
+
+    const effectivePrice = parseFloat(product.sale_price || product.base_price)
+    const itemTotal = effectivePrice * item.quantity
+    totalAmount += itemTotal
+
+    orderItems.push({
+      productId: product.id,
+      sku: product.sku,
+      productName: product.name,
+      quantity: item.quantity,
+      unitPrice: effectivePrice,
+      totalPrice: itemTotal,
+    })
+  }
+
+  return { orderItems, totalAmount }
+}
+
+/** Same tax/shipping formula as createOrder/createGuestOrder, in one place. */
+function calculateOrderTotals(totalAmount: number): {
+  taxAmount: number
+  shippingAmount: number
+  grandTotal: number
+} {
+  const taxRate = 0.08 // 8% tax - can be configurable
+  const taxAmount = totalAmount * taxRate
+  const shippingAmount = totalAmount >= 50 ? 0 : 5.99
+  const grandTotal = totalAmount + taxAmount + shippingAmount
+  return { taxAmount, shippingAmount, grandTotal }
+}
+
+function generateOrderNumber(): string {
+  return `TT-${Date.now().toString().slice(-8)}-${Math.random()
+    .toString(36)
+    .substr(2, 4)
+    .toUpperCase()}`
+}
+
+async function insertOrderItemsAndReserveStock(
+  client: { query: (text: string, params?: any[]) => Promise<any> },
+  orderId: string,
+  orderItems: PricedItem[],
+) {
+  for (const item of orderItems) {
+    const supplierId = await resolveSupplierForOrderItem(item.productId)
+    await client.query(
+      `INSERT INTO order_items (
+        order_id, product_id, sku, product_name,
+        quantity, unit_price, supplier_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        orderId,
+        item.productId,
+        item.sku,
+        item.productName,
+        item.quantity,
+        item.unitPrice,
+        supplierId,
+      ],
+    )
+    await client.query(
+      `UPDATE inventory SET
+        reserved_stock = reserved_stock + $1,
+        updated_at = NOW()
+       WHERE product_id = $2`,
+      [item.quantity, item.productId],
+    )
+  }
+}
+
+/**
+ * Authenticated checkout session: creates the order (pending payment) and a
+ * Stripe PaymentIntent for it in one call, returning clientSecret + orderId.
+ */
+export const createOrderCheckoutSession = async (
+  req: AuthRequest,
+  res: Response,
+) => {
+  const userId = req.user?.userId
+  const { items, shippingAddress, billingAddress, customerNotes } = req.body
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return res
+      .status(400)
+      .json({ success: false, error: 'Order items are required' })
+  }
+  if (!shippingAddress) {
+    return res
+      .status(400)
+      .json({ success: false, error: 'Shipping address is required' })
+  }
+
+  let userEmail: string | undefined
+  if (userId) {
+    const userResult = await query('SELECT email FROM users WHERE id = $1', [
+      userId,
+    ])
+    userEmail = userResult.rows[0]?.email
+  }
+
+  const client = await getClient()
+  let committed = false
+  try {
+    await client.query('BEGIN')
+
+    const { orderItems, totalAmount } = await validateAndPriceOrderItems(
+      client,
+      items,
+    )
+    const { taxAmount, shippingAmount, grandTotal } = calculateOrderTotals(totalAmount)
+    const orderNumber = generateOrderNumber()
+
+    const orderResult = await client.query(
+      `INSERT INTO orders (
+        order_number, user_id, order_status, payment_status,
+        total_amount, tax_amount, shipping_amount, grand_total, currency,
+        shipping_address, billing_address, customer_notes,
+        payment_method, payment_gateway,
+        estimated_delivery_date
+      ) VALUES (
+        $1, $2, 'pending', 'pending',
+        $3, $4, $5, $6, 'EUR',
+        $7, $8, $9,
+        'card', 'stripe',
+        CURRENT_DATE + INTERVAL '5 days'
+      ) RETURNING *`,
+      [
+        orderNumber,
+        userId || null,
+        totalAmount,
+        taxAmount,
+        shippingAmount,
+        grandTotal,
+        JSON.stringify(shippingAddress),
+        billingAddress
+          ? JSON.stringify(billingAddress)
+          : JSON.stringify(shippingAddress),
+        customerNotes || null,
+      ],
+    )
+    const order = orderResult.rows[0]
+
+    await insertOrderItemsAndReserveStock(client, order.id, orderItems)
+
+    await client.query('COMMIT')
+    committed = true
+
+    // Stripe call happens after commit -- never hold DB locks/connections
+    // open across a network call to a third party.
+    const stripeService = (await import('../../../services/stripe.service'))
+      .default
+    const paymentIntent = await stripeService.createPaymentIntent({
+      amount: Math.round(grandTotal * 100),
+      currency: 'eur',
+      orderId: order.id,
+      customerEmail: userEmail,
+      receiptEmail: userEmail,
+      description: `TechTools Order ${order.order_number}`,
+      shippingAddress: {
+        name: `${shippingAddress.firstName || ''} ${shippingAddress.lastName || ''}`.trim(),
+        address: {
+          line1: shippingAddress.address,
+          line2: shippingAddress.apartment || undefined,
+          city: shippingAddress.city,
+          state: shippingAddress.state,
+          postal_code: shippingAddress.postalCode,
+          country: shippingAddress.country,
+        },
+      },
+      metadata: {
+        orderNumber: order.order_number,
+        userId: userId || 'guest',
+      },
+    })
+
+    await query(
+      `UPDATE orders SET transaction_id = $1, updated_at = NOW() WHERE id = $2`,
+      [paymentIntent.id, order.id],
+    )
+
+    res.status(201).json({
+      success: true,
+      data: {
+        clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id,
+        orderId: order.id,
+        orderNumber: order.order_number,
+        currency: 'EUR',
+        taxAmount,
+        shippingAmount,
+        grandTotal,
+      },
+    })
+  } catch (error) {
+    if (!committed) {
+      try {
+        await client.query('ROLLBACK')
+      } catch {
+        // ignore -- original error is what matters
+      }
+    }
+    if (error instanceof OrderValidationError) {
+      return res.status(error.status).json({ success: false, error: error.message })
+    }
+    logger.error('Create checkout session error:', error)
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to start checkout',
+    })
+  } finally {
+    client.release()
+  }
+}
+
+/**
+ * Guest checkout session: same as createOrderCheckoutSession but for
+ * unauthenticated shoppers -- no `authenticate` middleware on this route.
+ */
+export const createGuestOrderCheckoutSession = async (req: any, res: Response) => {
+  const {
+    items,
+    shippingAddress,
+    billingAddress,
+    customerNotes,
+    guestEmail,
+    guestPhone,
+  } = req.body
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return res
+      .status(400)
+      .json({ success: false, error: 'Order items are required' })
+  }
+  if (!shippingAddress) {
+    return res
+      .status(400)
+      .json({ success: false, error: 'Shipping address is required' })
+  }
+  if (!guestEmail) {
+    return res
+      .status(400)
+      .json({ success: false, error: 'Email address is required' })
+  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(guestEmail)) {
+    return res.status(400).json({ success: false, error: 'Invalid email address' })
+  }
+
+  const userCheck = await query('SELECT id FROM users WHERE email = $1', [
+    guestEmail,
+  ])
+  if (userCheck.rows.length > 0) {
+    return res.status(400).json({
+      success: false,
+      error: 'Email already registered. Please login instead.',
+    })
+  }
+
+  const client = await getClient()
+  let committed = false
+  try {
+    await client.query('BEGIN')
+
+    const { orderItems, totalAmount } = await validateAndPriceOrderItems(
+      client,
+      items,
+    )
+    const { taxAmount, shippingAmount, grandTotal } = calculateOrderTotals(totalAmount)
+    const orderNumber = generateOrderNumber()
+
+    const orderResult = await client.query(
+      `INSERT INTO orders (
+        order_number, user_id, guest_email, guest_first_name, guest_last_name, guest_phone,
+        order_status, payment_status,
+        total_amount, tax_amount, shipping_amount, grand_total, currency,
+        shipping_address, billing_address, customer_notes,
+        payment_method, payment_gateway,
+        estimated_delivery_date
+      ) VALUES (
+        $1, NULL, $2, $3, $4, $5,
+        'pending', 'pending',
+        $6, $7, $8, $9, 'EUR',
+        $10, $11, $12,
+        'card', 'stripe',
+        CURRENT_DATE + INTERVAL '5 days'
+      ) RETURNING *`,
+      [
+        orderNumber,
+        guestEmail,
+        shippingAddress.firstName || '',
+        shippingAddress.lastName || '',
+        guestPhone || null,
+        totalAmount,
+        taxAmount,
+        shippingAmount,
+        grandTotal,
+        JSON.stringify(shippingAddress),
+        billingAddress
+          ? JSON.stringify(billingAddress)
+          : JSON.stringify(shippingAddress),
+        customerNotes || null,
+      ],
+    )
+    const order = orderResult.rows[0]
+
+    await insertOrderItemsAndReserveStock(client, order.id, orderItems)
+
+    const { generateCheckoutToken } = await import(
+      '../../../services/guest-checkout.service'
+    )
+    const checkoutToken = generateCheckoutToken()
+    await client.query(
+      `INSERT INTO guest_checkouts (email, order_id, checkout_token, created_by_ip)
+       VALUES ($1, $2, $3, $4)`,
+      [guestEmail, order.id, checkoutToken, req.ip || null],
+    )
+
+    await client.query('COMMIT')
+    committed = true
+
+    const stripeService = (await import('../../../services/stripe.service'))
+      .default
+    const paymentIntent = await stripeService.createPaymentIntent({
+      amount: Math.round(grandTotal * 100),
+      currency: 'eur',
+      orderId: order.id,
+      customerEmail: guestEmail,
+      receiptEmail: guestEmail,
+      description: `TechTools Order ${order.order_number}`,
+      shippingAddress: {
+        name: `${shippingAddress.firstName || ''} ${shippingAddress.lastName || ''}`.trim(),
+        address: {
+          line1: shippingAddress.address,
+          line2: shippingAddress.apartment || undefined,
+          city: shippingAddress.city,
+          state: shippingAddress.state,
+          postal_code: shippingAddress.postalCode,
+          country: shippingAddress.country,
+        },
+      },
+      metadata: {
+        orderNumber: order.order_number,
+        userId: 'guest',
+      },
+    })
+
+    await query(
+      `UPDATE orders SET transaction_id = $1, updated_at = NOW() WHERE id = $2`,
+      [paymentIntent.id, order.id],
+    )
+
+    res.status(201).json({
+      success: true,
+      data: {
+        clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id,
+        orderId: order.id,
+        orderNumber: order.order_number,
+        checkoutToken,
+        currency: 'EUR',
+        taxAmount,
+        shippingAmount,
+        grandTotal,
+      },
+    })
+  } catch (error) {
+    if (!committed) {
+      try {
+        await client.query('ROLLBACK')
+      } catch {
+        // ignore -- original error is what matters
+      }
+    }
+    if (error instanceof OrderValidationError) {
+      return res.status(error.status).json({ success: false, error: error.message })
+    }
+    logger.error('Create guest checkout session error:', error)
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to start checkout',
+    })
+  } finally {
+    client.release()
   }
 }
 
@@ -1429,6 +1834,10 @@ export const createGuestOrder = async (req: any, res: Response) => {
           phone: guestPhone,
         },
       })
+      await query(
+        'UPDATE orders SET confirmation_sent_at = NOW() WHERE id = $1',
+        [order.id],
+      )
 
       await emailService.sendAdminNotification({
         subject: `New guest order received: ${order.order_number}`,

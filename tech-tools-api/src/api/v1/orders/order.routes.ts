@@ -15,12 +15,15 @@ import {
   exportOrders,
   createGuestOrder,
   getGuestOrder,
+  createOrderCheckoutSession,
+  createGuestOrderCheckoutSession,
 } from './order.controller'
 import { authenticate, authorize } from '../../../middleware/auth'
 
 const router = Router()
 
 // Guest checkout routes (NO authentication required)
+router.post('/guest/checkout-session', createGuestOrderCheckoutSession)
 router.post('/guest/create', createGuestOrder)
 router.get('/guest/retrieve', getGuestOrder)
 
@@ -51,6 +54,7 @@ router.put(
 // Customer routes
 router.get('/', getOrders)
 router.get('/:id', getOrderById)
+router.post('/checkout-session', createOrderCheckoutSession)
 router.post('/', createOrder)
 router.put('/:id/cancel', cancelOrder)
 
