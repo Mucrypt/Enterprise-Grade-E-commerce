@@ -1,9 +1,9 @@
 // ============================================
-// Track Order Page - Production Ready
+// Track Order Page - real backend lookup by order number + email
 // ============================================
 
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   Search,
   Package,
@@ -12,120 +12,97 @@ import {
   MapPin,
   Clock,
   AlertTriangle,
+  XCircle,
   HelpCircle,
-  ChevronRight,
 } from 'lucide-react'
+import { ordersApiNew } from '../api'
 
-interface TrackingEvent {
-  status: string
-  location: string
-  date: string
-  time: string
-  description: string
+interface TrackedItem {
+  productName: string
+  quantity: number
+  itemStatus: string
+  trackingNumber: string | null
+  carrier: string | null
+  shippedAt: string | null
+  deliveredAt: string | null
 }
 
-interface OrderStatus {
+interface TrackedOrder {
   orderNumber: string
-  status:
-    | 'processing'
-    | 'shipped'
-    | 'in-transit'
-    | 'out-for-delivery'
-    | 'delivered'
-  estimatedDelivery: string
-  carrier: string
-  trackingNumber: string
-  events: TrackingEvent[]
-}
-
-// Mock tracking data for demonstration
-const mockTrackingData: OrderStatus = {
-  orderNumber: 'TT-123456',
-  status: 'in-transit',
-  estimatedDelivery: 'March 7, 2026',
-  carrier: 'FedEx',
-  trackingNumber: '7489374893748937',
-  events: [
-    {
-      status: 'In Transit',
-      location: 'Chicago, IL',
-      date: 'Mar 5, 2026',
-      time: '2:45 PM',
-      description: 'Package in transit to next facility',
-    },
-    {
-      status: 'Departed Facility',
-      location: 'Memphis, TN',
-      date: 'Mar 4, 2026',
-      time: '11:30 PM',
-      description: 'Package has left the FedEx facility',
-    },
-    {
-      status: 'Arrived at Facility',
-      location: 'Memphis, TN',
-      date: 'Mar 4, 2026',
-      time: '6:15 PM',
-      description: 'Package arrived at FedEx hub',
-    },
-    {
-      status: 'Shipped',
-      location: 'San Francisco, CA',
-      date: 'Mar 3, 2026',
-      time: '3:22 PM',
-      description: 'Package picked up by carrier',
-    },
-    {
-      status: 'Order Processed',
-      location: 'San Francisco, CA',
-      date: 'Mar 2, 2026',
-      time: '10:00 AM',
-      description: 'Order has been processed and is ready for shipment',
-    },
-  ],
+  orderStatus: string
+  paymentStatus: string
+  createdAt: string
+  estimatedDelivery: string | null
+  items: TrackedItem[]
 }
 
 const statusSteps = [
-  { key: 'processing', label: 'Processing', icon: Package },
-  { key: 'shipped', label: 'Shipped', icon: Package },
-  { key: 'in-transit', label: 'In Transit', icon: Truck },
-  { key: 'out-for-delivery', label: 'Out for Delivery', icon: Truck },
-  { key: 'delivered', label: 'Delivered', icon: CheckCircle },
+  { keys: ['pending', 'confirmed'], label: 'Processing', icon: Package },
+  { keys: ['processing', 'ready_to_ship'], label: 'Preparing', icon: Package },
+  { keys: ['shipped'], label: 'Shipped', icon: Truck },
+  { keys: ['delivered'], label: 'Delivered', icon: CheckCircle },
 ]
 
 function getStatusIndex(status: string): number {
-  return statusSteps.findIndex((s) => s.key === status)
+  return statusSteps.findIndex((s) => s.keys.includes(status))
+}
+
+function formatDate(value: string | null): string | null {
+  if (!value) return null
+  return new Date(value).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  })
 }
 
 export default function TrackOrderPage() {
-  const [orderNumber, setOrderNumber] = useState('')
+  const [searchParams] = useSearchParams()
+  const [orderNumber, setOrderNumber] = useState(
+    searchParams.get('orderNumber') || '',
+  )
   const [email, setEmail] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [trackingResult, setTrackingResult] = useState<OrderStatus | null>(null)
+  const [trackingResult, setTrackingResult] = useState<TrackedOrder | null>(
+    null,
+  )
   const [error, setError] = useState('')
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const runLookup = async (orderNum: string, emailValue: string) => {
     setIsLoading(true)
     setError('')
     setTrackingResult(null)
-
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-
-    // Mock validation - in production, this would call an actual API
-    if (orderNumber.toLowerCase() === 'tt-123456' || orderNumber === '123456') {
-      setTrackingResult(mockTrackingData)
-    } else {
+    try {
+      const result = await ordersApiNew.track(orderNum, emailValue)
+      setTrackingResult(result)
+    } catch (err) {
+      console.error('Order tracking lookup failed:', err)
       setError(
         'Order not found. Please check your order number and email address.',
       )
+    } finally {
+      setIsLoading(false)
     }
-
-    setIsLoading(false)
   }
 
+  // If arriving from "Track Package" on the Orders page with ?orderNumber=,
+  // the shopper is already logged in there but this page is public/guest-
+  // facing, so we still need their email before we can look anything up.
+  useEffect(() => {
+    const fromQuery = searchParams.get('orderNumber')
+    if (fromQuery) setOrderNumber(fromQuery)
+  }, [searchParams])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await runLookup(orderNumber, email)
+  }
+
+  const isCancelledOrRefunded =
+    trackingResult?.orderStatus === 'cancelled' ||
+    trackingResult?.orderStatus === 'refunded'
   const currentStatusIndex = trackingResult
-    ? getStatusIndex(trackingResult.status)
+    ? getStatusIndex(trackingResult.orderStatus)
     : -1
 
   return (
@@ -141,8 +118,8 @@ export default function TrackOrderPage() {
               Track Your Order
             </h1>
             <p className='text-white/90 text-lg max-w-2xl mx-auto'>
-              Enter your order number to get real-time updates on your delivery
-              status.
+              Enter your order number and the email used at checkout to get
+              the latest status.
             </p>
           </div>
         </div>
@@ -167,7 +144,7 @@ export default function TrackOrderPage() {
                   onChange={(e) => setOrderNumber(e.target.value)}
                   required
                   className='w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors'
-                  placeholder='e.g., TT-123456'
+                  placeholder='e.g., TT-12345678-ABCD'
                 />
               </div>
 
@@ -229,12 +206,7 @@ export default function TrackOrderPage() {
             {error && (
               <div className='mt-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3'>
                 <AlertTriangle className='w-5 h-5 text-red-500 shrink-0 mt-0.5' />
-                <div>
-                  <p className='text-sm text-red-800'>{error}</p>
-                  <p className='text-sm text-red-600 mt-1'>
-                    Try: TT-123456 or 123456 for a demo
-                  </p>
-                </div>
+                <p className='text-sm text-red-800'>{error}</p>
               </div>
             )}
           </div>
@@ -253,158 +225,126 @@ export default function TrackOrderPage() {
                     Order {trackingResult.orderNumber}
                   </h2>
                   <p className='text-gray-600'>
-                    Carrier: {trackingResult.carrier}
+                    Placed {formatDate(trackingResult.createdAt)}
                   </p>
                 </div>
-                <div className='text-right'>
-                  <p className='text-sm text-gray-500'>Estimated Delivery</p>
-                  <p className='text-lg font-semibold text-gray-900'>
-                    {trackingResult.estimatedDelivery}
-                  </p>
-                </div>
-              </div>
-
-              {/* Status Progress */}
-              <div className='relative'>
-                <div className='flex justify-between'>
-                  {statusSteps.map((step, index) => {
-                    const isCompleted = index <= currentStatusIndex
-                    const isCurrent = index === currentStatusIndex
-
-                    return (
-                      <div
-                        key={step.key}
-                        className='flex flex-col items-center relative z-10'
-                      >
-                        <div
-                          className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                            isCompleted
-                              ? 'bg-green-500 text-white'
-                              : 'bg-gray-200 text-gray-400'
-                          } ${isCurrent ? 'ring-4 ring-green-100' : ''}`}
-                        >
-                          <step.icon className='w-5 h-5' />
-                        </div>
-                        <span
-                          className={`text-xs mt-2 text-center ${
-                            isCompleted
-                              ? 'text-green-600 font-medium'
-                              : 'text-gray-400'
-                          }`}
-                        >
-                          {step.label}
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
-
-                {/* Progress Line */}
-                <div className='absolute top-5 left-0 right-0 h-0.5 bg-gray-200 z-0'>
-                  <div
-                    className='h-full bg-green-500 transition-all duration-500'
-                    style={{
-                      width: `${
-                        (currentStatusIndex / (statusSteps.length - 1)) * 100
-                      }%`,
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Tracking Details */}
-            <div className='grid md:grid-cols-3 gap-8'>
-              {/* Tracking Number */}
-              <div className='md:col-span-1'>
-                <div className='bg-white rounded-2xl p-6 shadow-sm'>
-                  <h3 className='font-semibold text-gray-900 mb-4'>
-                    Shipment Details
-                  </h3>
-
-                  <div className='space-y-4'>
-                    <div>
-                      <p className='text-sm text-gray-500'>Tracking Number</p>
-                      <p className='font-mono text-sm text-gray-900'>
-                        {trackingResult.trackingNumber}
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className='text-sm text-gray-500'>Carrier</p>
-                      <p className='font-medium text-gray-900'>
-                        {trackingResult.carrier}
-                      </p>
-                    </div>
-
-                    <a
-                      href={`https://www.fedex.com/fedextrack/?trknbr=${trackingResult.trackingNumber}`}
-                      target='_blank'
-                      rel='noopener noreferrer'
-                      className='inline-flex items-center gap-2 text-purple-600 font-medium hover:underline text-sm'
-                    >
-                      Track on {trackingResult.carrier}
-                      <ChevronRight className='w-4 h-4' />
-                    </a>
+                {trackingResult.estimatedDelivery && !isCancelledOrRefunded && (
+                  <div className='text-right'>
+                    <p className='text-sm text-gray-500'>Estimated Delivery</p>
+                    <p className='text-lg font-semibold text-gray-900'>
+                      {formatDate(trackingResult.estimatedDelivery)}
+                    </p>
                   </div>
-                </div>
+                )}
               </div>
 
-              {/* Tracking Events */}
-              <div className='md:col-span-2'>
-                <div className='bg-white rounded-2xl p-6 shadow-sm'>
-                  <h3 className='font-semibold text-gray-900 mb-6'>
-                    Tracking History
-                  </h3>
+              {isCancelledOrRefunded ? (
+                <div className='flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-xl'>
+                  <XCircle className='w-6 h-6 text-red-500 shrink-0' />
+                  <p className='font-medium text-red-800'>
+                    This order was{' '}
+                    {trackingResult.orderStatus === 'cancelled'
+                      ? 'cancelled'
+                      : 'refunded'}
+                    .
+                  </p>
+                </div>
+              ) : (
+                <div className='relative'>
+                  <div className='flex justify-between'>
+                    {statusSteps.map((step, index) => {
+                      const isCompleted = index <= currentStatusIndex
+                      const isCurrent = index === currentStatusIndex
 
-                  <div className='relative'>
-                    <div className='absolute left-4 top-2 bottom-2 w-0.5 bg-gray-200' />
-
-                    <div className='space-y-6'>
-                      {trackingResult.events.map((event, index) => (
-                        <div key={index} className='flex gap-4 relative'>
+                      return (
+                        <div
+                          key={step.label}
+                          className='flex flex-col items-center relative z-10'
+                        >
                           <div
-                            className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 ${
-                              index === 0 ? 'bg-green-500' : 'bg-gray-200'
+                            className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                              isCompleted
+                                ? 'bg-green-500 text-white'
+                                : 'bg-gray-200 text-gray-400'
+                            } ${isCurrent ? 'ring-4 ring-green-100' : ''}`}
+                          >
+                            <step.icon className='w-5 h-5' />
+                          </div>
+                          <span
+                            className={`text-xs mt-2 text-center ${
+                              isCompleted
+                                ? 'text-green-600 font-medium'
+                                : 'text-gray-400'
                             }`}
                           >
-                            {index === 0 ? (
-                              <Truck className='w-4 h-4 text-white' />
-                            ) : (
-                              <Package className='w-4 h-4 text-gray-500' />
-                            )}
-                          </div>
-
-                          <div className='flex-1 pb-2'>
-                            <div className='flex items-start justify-between gap-2'>
-                              <div>
-                                <p
-                                  className={`font-medium ${
-                                    index === 0
-                                      ? 'text-green-600'
-                                      : 'text-gray-900'
-                                  }`}
-                                >
-                                  {event.status}
-                                </p>
-                                <p className='text-sm text-gray-500'>
-                                  {event.location}
-                                </p>
-                              </div>
-                              <div className='text-right text-sm text-gray-500'>
-                                <p>{event.date}</p>
-                                <p>{event.time}</p>
-                              </div>
-                            </div>
-                            <p className='text-sm text-gray-600 mt-1'>
-                              {event.description}
-                            </p>
-                          </div>
+                            {step.label}
+                          </span>
                         </div>
-                      ))}
-                    </div>
+                      )
+                    })}
+                  </div>
+
+                  <div className='absolute top-5 left-0 right-0 h-0.5 bg-gray-200 z-0'>
+                    <div
+                      className='h-full bg-green-500 transition-all duration-500'
+                      style={{
+                        width: `${Math.max(
+                          0,
+                          (currentStatusIndex / (statusSteps.length - 1)) *
+                            100,
+                        )}%`,
+                      }}
+                    />
                   </div>
                 </div>
+              )}
+            </div>
+
+            {/* Items + per-item shipment info (only what we actually know) */}
+            <div className='bg-white rounded-2xl p-6 shadow-sm'>
+              <h3 className='font-semibold text-gray-900 mb-6'>Items</h3>
+              <div className='space-y-4'>
+                {trackingResult.items.map((item, index) => (
+                  <div
+                    key={index}
+                    className='flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-4 bg-gray-50 rounded-xl'
+                  >
+                    <div>
+                      <p className='font-medium text-gray-900'>
+                        {item.productName}
+                      </p>
+                      <p className='text-sm text-gray-500'>
+                        Qty: {item.quantity}
+                      </p>
+                    </div>
+                    <div className='text-sm text-gray-600 sm:text-right'>
+                      {item.trackingNumber ? (
+                        <>
+                          <p>
+                            {item.carrier || 'Carrier'} ·{' '}
+                            <span className='font-mono'>
+                              {item.trackingNumber}
+                            </span>
+                          </p>
+                          {item.shippedAt && (
+                            <p className='text-gray-500'>
+                              Shipped {formatDate(item.shippedAt)}
+                            </p>
+                          )}
+                          {item.deliveredAt && (
+                            <p className='text-gray-500'>
+                              Delivered {formatDate(item.deliveredAt)}
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        <p className='text-gray-400'>
+                          Tracking not yet available
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>

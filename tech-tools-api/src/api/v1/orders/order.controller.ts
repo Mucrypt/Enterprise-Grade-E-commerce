@@ -1937,3 +1937,75 @@ export const getGuestOrder = async (req: any, res: Response) => {
     })
   }
 }
+
+/**
+ * Public order tracking by order number + email -- no authentication and no
+ * guest checkout token required (that token isn't something a customer would
+ * have on hand when typing an order number into a "track my order" form; the
+ * order number + the email it was placed under is the standard low-friction
+ * pattern for this). Matches either a guest order (orders.guest_email) or an
+ * authenticated order (via the owning user's email).
+ */
+export const trackOrderByNumber = async (req: any, res: Response) => {
+  try {
+    const { orderNumber, email } = req.query
+
+    if (!orderNumber || !email) {
+      return res.status(400).json({
+        success: false,
+        error: 'Order number and email are required',
+      })
+    }
+
+    const orderResult = await query(
+      `SELECT o.id, o.order_number, o.order_status, o.payment_status,
+              o.created_at, o.estimated_delivery_date
+       FROM orders o
+       LEFT JOIN users u ON o.user_id = u.id
+       WHERE o.order_number = $1 AND (o.guest_email = $2 OR u.email = $2)`,
+      [orderNumber, email],
+    )
+
+    if (!orderResult.rows[0]) {
+      return res.status(404).json({
+        success: false,
+        error: 'No order found for that order number and email',
+      })
+    }
+
+    const order = orderResult.rows[0]
+
+    const itemsResult = await query(
+      `SELECT product_name, quantity, item_status, tracking_number, carrier,
+              shipped_at, delivered_at
+       FROM order_items WHERE order_id = $1`,
+      [order.id],
+    )
+
+    res.json({
+      success: true,
+      data: {
+        orderNumber: order.order_number,
+        orderStatus: order.order_status,
+        paymentStatus: order.payment_status,
+        createdAt: order.created_at,
+        estimatedDelivery: order.estimated_delivery_date,
+        items: itemsResult.rows.map((item: any) => ({
+          productName: item.product_name,
+          quantity: item.quantity,
+          itemStatus: item.item_status,
+          trackingNumber: item.tracking_number,
+          carrier: item.carrier,
+          shippedAt: item.shipped_at,
+          deliveredAt: item.delivered_at,
+        })),
+      },
+    })
+  } catch (error) {
+    logger.error('Track order error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to look up order',
+    })
+  }
+}

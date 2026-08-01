@@ -17,6 +17,7 @@ import {
   getGuestOrder,
   createOrderCheckoutSession,
   createGuestOrderCheckoutSession,
+  trackOrderByNumber,
 } from './order.controller'
 import { authenticate, authorize } from '../../../middleware/auth'
 
@@ -26,6 +27,9 @@ const router = Router()
 router.post('/guest/checkout-session', createGuestOrderCheckoutSession)
 router.post('/guest/create', createGuestOrder)
 router.get('/guest/retrieve', getGuestOrder)
+
+// Public order tracking by order number + email (NO authentication required)
+router.get('/track', trackOrderByNumber)
 
 // All other order routes require authentication
 router.use(authenticate)

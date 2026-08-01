@@ -419,25 +419,45 @@ export const authApi = {
 // User API
 // ============================================
 export const userApi = {
-  // Update profile
-  async updateProfile(data: Partial<User>) {
-    const response = await api.put<ApiResponse<User>>('/user/profile', data)
-    return response.data.data
+  // Update profile. Backend expects camelCase and returns { user: {...} },
+  // not the user object directly -- see user.controller.ts updateProfile.
+  async updateProfile(data: {
+    first_name?: string
+    last_name?: string
+    phone?: string
+  }) {
+    const response = await api.put<{
+      success: boolean
+      data: {
+        user: {
+          id: string
+          email: string
+          firstName: string
+          lastName: string
+          phone?: string
+        }
+      }
+    }>('/users/profile', {
+      firstName: data.first_name,
+      lastName: data.last_name,
+      phone: data.phone,
+    })
+    return response.data.data.user
   },
 
   // Get addresses
   async getAddresses() {
     const response = await api.get<{
       success: boolean
-      data: Address[]
-    }>('/user/addresses')
-    return response.data.data
+      data: { addresses: Address[] }
+    }>('/users/addresses')
+    return response.data.data.addresses
   },
 
   // Add address
   async addAddress(data: Omit<Address, 'id' | 'user_id'>) {
     const response = await api.post<ApiResponse<Address>>(
-      '/user/addresses',
+      '/users/addresses',
       data,
     )
     return response.data.data
@@ -446,7 +466,7 @@ export const userApi = {
   // Update address
   async updateAddress(id: string, data: Partial<Address>) {
     const response = await api.put<ApiResponse<Address>>(
-      `/user/addresses/${id}`,
+      `/users/addresses/${id}`,
       data,
     )
     return response.data.data
@@ -454,7 +474,7 @@ export const userApi = {
 
   // Delete address
   async deleteAddress(id: string) {
-    await api.delete(`/user/addresses/${id}`)
+    await api.delete(`/users/addresses/${id}`)
   },
 
   // Change password
@@ -1367,6 +1387,35 @@ export const ordersApiNew = {
       data: { order: object }
     }>(`/orders/${id}/cancel`, { reason })
     return response.data.data.order
+  },
+
+  // Public order tracking by order number + email (no authentication required)
+  async track(orderNumber: string, email: string) {
+    const trackApi = axios.create({
+      baseURL: API_URL,
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 15000,
+    })
+    const response = await trackApi.get<{
+      success: boolean
+      data: {
+        orderNumber: string
+        orderStatus: string
+        paymentStatus: string
+        createdAt: string
+        estimatedDelivery: string | null
+        items: Array<{
+          productName: string
+          quantity: number
+          itemStatus: string
+          trackingNumber: string | null
+          carrier: string | null
+          shippedAt: string | null
+          deliveredAt: string | null
+        }>
+      }
+    }>('/orders/track', { params: { orderNumber, email } })
+    return response.data.data
   },
 
   // Create guest order (no authentication required)

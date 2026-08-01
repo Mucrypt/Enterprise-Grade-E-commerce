@@ -29,9 +29,9 @@ import {
   Store,
   BookOpen,
 } from 'lucide-react'
-import { supportApi } from '../api'
+import { supportApi, userApi, ordersApiNew } from '../api'
 import { SupportConcierge } from '../components/layout/SupportConcierge'
-import { useAuthStore } from '../stores'
+import { useAuthStore, useWishlistStore } from '../stores'
 import { cn } from '../utils'
 
 type TabType = 'profile' | 'addresses' | 'security' | 'notifications'
@@ -58,6 +58,14 @@ export default function ProfilePage() {
     enabled: hasHydrated && isAuthenticated,
     retry: false,
   })
+
+  const { data: ordersData } = useQuery({
+    queryKey: ['profile-orders-count'],
+    queryFn: () => ordersApiNew.getAll(1, 1),
+    enabled: hasHydrated && isAuthenticated,
+    retry: false,
+  })
+  const wishlistCount = useWishlistStore((state) => state.items.length)
 
   const [formData, setFormData] = useState({
     first_name: '',
@@ -89,16 +97,21 @@ export default function ProfilePage() {
     setSuccess('')
 
     try {
-      // Update local state (API call would go here in production)
-      updateUser({
+      const updated = await userApi.updateProfile({
         first_name: formData.first_name,
         last_name: formData.last_name,
         phone: formData.phone,
+      })
+      updateUser({
+        first_name: updated.firstName,
+        last_name: updated.lastName,
+        phone: updated.phone,
       })
       setSuccess('Profile updated successfully!')
       setIsEditing(false)
       setTimeout(() => setSuccess(''), 3000)
     } catch (err) {
+      console.error('Failed to update profile:', err)
       setError('Failed to update profile. Please try again.')
     } finally {
       setIsSaving(false)
@@ -128,9 +141,19 @@ export default function ProfilePage() {
   ]
 
   const quickLinks = [
-    { label: 'My Orders', icon: Package, href: '/orders', count: 5 },
+    {
+      label: 'My Orders',
+      icon: Package,
+      href: '/orders',
+      count: ordersData?.pagination?.total,
+    },
     { label: 'Books Library', icon: BookOpen, href: '/books' },
-    { label: 'Wishlist', icon: Heart, href: '/wishlist', count: 12 },
+    {
+      label: 'Wishlist',
+      icon: Heart,
+      href: '/wishlist',
+      count: wishlistCount || undefined,
+    },
     { label: 'Track Order', icon: Package, href: '/track-order' },
     { label: 'Returns', icon: MessageCircle, href: '/returns' },
     { label: 'Payment Methods', icon: CreditCard, href: '/payment-methods' },
@@ -184,9 +207,15 @@ export default function ProfilePage() {
                 {user.first_name || ''} {user.last_name || ''}
               </h1>
               <p className='text-gray-500'>{user.email}</p>
-              <p className='text-sm text-orange-500 mt-1'>
-                Member since Jan 2024
-              </p>
+              {user.created_at && (
+                <p className='text-sm text-orange-500 mt-1'>
+                  Member since{' '}
+                  {new Date(user.created_at).toLocaleDateString('en-US', {
+                    month: 'long',
+                    year: 'numeric',
+                  })}
+                </p>
+              )}
             </div>
             <button
               onClick={handleLogout}
@@ -470,7 +499,11 @@ export default function ProfilePage() {
                   <h2 className='text-xl font-bold text-gray-900'>
                     Saved Addresses
                   </h2>
-                  <button className='px-4 py-2 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 transition-colors'>
+                  <button
+                    disabled
+                    title='Coming soon'
+                    className='px-4 py-2 bg-gray-200 text-gray-500 rounded-lg font-medium cursor-not-allowed'
+                  >
                     Add Address
                   </button>
                 </div>
@@ -478,14 +511,12 @@ export default function ProfilePage() {
                 <div className='text-center py-12'>
                   <MapPin className='w-16 h-16 text-gray-300 mx-auto mb-4' />
                   <h3 className='text-lg font-medium text-gray-900 mb-2'>
-                    No addresses saved
+                    Address book coming soon
                   </h3>
                   <p className='text-gray-500 mb-4'>
-                    Add a shipping address for faster checkout
+                    You can still enter a shipping address directly at
+                    checkout for every order.
                   </p>
-                  <button className='px-6 py-2 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 transition-colors'>
-                    Add Your First Address
-                  </button>
                 </div>
               </div>
             )}
@@ -501,10 +532,14 @@ export default function ProfilePage() {
                     <div>
                       <p className='font-medium text-gray-900'>Password</p>
                       <p className='text-sm text-gray-500'>
-                        Last changed 3 months ago
+                        Use "Forgot password" on the login page to reset it
                       </p>
                     </div>
-                    <button className='px-4 py-2 text-orange-500 hover:bg-orange-50 rounded-lg font-medium transition-colors'>
+                    <button
+                      disabled
+                      title='Coming soon'
+                      className='px-4 py-2 bg-gray-100 text-gray-400 rounded-lg font-medium cursor-not-allowed'
+                    >
                       Change Password
                     </button>
                   </div>
@@ -517,11 +552,13 @@ export default function ProfilePage() {
                   <div className='flex items-center justify-between p-4 bg-gray-50 rounded-xl'>
                     <div>
                       <p className='font-medium text-gray-900'>2FA Status</p>
-                      <p className='text-sm text-gray-500'>
-                        Add an extra layer of security
-                      </p>
+                      <p className='text-sm text-gray-500'>Coming soon</p>
                     </div>
-                    <button className='px-4 py-2 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 transition-colors'>
+                    <button
+                      disabled
+                      title='Coming soon'
+                      className='px-4 py-2 bg-gray-100 text-gray-400 rounded-lg font-medium cursor-not-allowed'
+                    >
                       Enable 2FA
                     </button>
                   </div>
@@ -531,21 +568,11 @@ export default function ProfilePage() {
                   <h2 className='text-xl font-bold text-gray-900 mb-6'>
                     Login Sessions
                   </h2>
-                  <div className='space-y-4'>
-                    <div className='flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-xl'>
-                      <div>
-                        <p className='font-medium text-gray-900'>
-                          Chrome on Windows
-                        </p>
-                        <p className='text-sm text-gray-500'>
-                          Current session • Vilnius, Lithuania
-                        </p>
-                      </div>
-                      <span className='px-2 py-1 bg-green-100 text-green-600 text-xs font-medium rounded-full'>
-                        Active
-                      </span>
-                    </div>
-                  </div>
+                  <p className='text-sm text-gray-500'>
+                    Session history isn't available yet. If you don't
+                    recognize activity on your account, contact support and
+                    change your password immediately.
+                  </p>
                 </div>
               </div>
             )}
@@ -553,9 +580,12 @@ export default function ProfilePage() {
             {/* Notifications Tab */}
             {activeTab === 'notifications' && (
               <div className='bg-white rounded-2xl shadow-sm p-6'>
-                <h2 className='text-xl font-bold text-gray-900 mb-6'>
+                <h2 className='text-xl font-bold text-gray-900 mb-2'>
                   Notification Preferences
                 </h2>
+                <p className='text-sm text-gray-500 mb-6'>
+                  Coming soon — these preferences aren't saved yet.
+                </p>
                 <div className='space-y-4'>
                   {[
                     {
@@ -592,8 +622,10 @@ export default function ProfilePage() {
                         </p>
                       </div>
                       <button
+                        disabled
+                        title='Coming soon'
                         className={cn(
-                          'w-12 h-6 rounded-full transition-colors relative',
+                          'w-12 h-6 rounded-full transition-colors relative cursor-not-allowed opacity-60',
                           item.enabled ? 'bg-orange-500' : 'bg-gray-300',
                         )}
                       >

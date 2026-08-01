@@ -2,8 +2,9 @@
 // Orders Page - Order History & Details
 // ============================================
 
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Package,
   ChevronRight,
@@ -11,123 +12,96 @@ import {
   CheckCircle,
   Clock,
   XCircle,
+  RotateCcw,
   Search,
   Filter,
   Calendar,
-  Eye,
-  RotateCcw,
-  MessageSquare,
+  Loader,
 } from 'lucide-react';
 import { cn, formatPrice } from '../utils';
+import { ordersApiNew } from '../api';
+import { useAuthStore } from '../stores';
 
-// Mock orders data
-const mockOrders = [
-  {
-    id: 'ORD-2024-001',
-    date: '2024-01-15',
-    status: 'delivered',
-    total: 149.99,
-    items: [
-      {
-        id: '1',
-        name: 'HandiBeam Pro LED Work Glasses',
-        image: 'https://images.unsplash.com/photo-1577174881658-0f30ed549adc?w=200',
-        quantity: 1,
-        price: 89.99,
-      },
-      {
-        id: '2',
-        name: 'USB-C Charging Cable',
-        image: 'https://images.unsplash.com/photo-1588872657578-7efd1f1555ed?w=200',
-        quantity: 2,
-        price: 29.99,
-      },
-    ],
-  },
-  {
-    id: 'ORD-2024-002',
-    date: '2024-01-20',
-    status: 'shipped',
-    total: 299.99,
-    trackingNumber: 'LT123456789',
-    items: [
-      {
-        id: '3',
-        name: 'Professional Tool Set',
-        image: 'https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?w=200',
-        quantity: 1,
-        price: 299.99,
-      },
-    ],
-  },
-  {
-    id: 'ORD-2024-003',
-    date: '2024-01-25',
-    status: 'processing',
-    total: 79.99,
-    items: [
-      {
-        id: '4',
-        name: 'Wireless Earbuds',
-        image: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=200',
-        quantity: 1,
-        price: 79.99,
-      },
-    ],
-  },
-  {
-    id: 'ORD-2024-004',
-    date: '2024-01-10',
-    status: 'cancelled',
-    total: 199.99,
-    items: [
-      {
-        id: '5',
-        name: 'Smart Watch',
-        image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=200',
-        quantity: 1,
-        price: 199.99,
-      },
-    ],
-  },
-];
-
-const statusConfig = {
-  processing: {
-    label: 'Processing',
-    color: 'bg-blue-100 text-blue-600',
-    icon: Clock,
-  },
-  shipped: {
-    label: 'Shipped',
-    color: 'bg-orange-100 text-orange-600',
-    icon: Truck,
-  },
-  delivered: {
-    label: 'Delivered',
-    color: 'bg-green-100 text-green-600',
-    icon: CheckCircle,
-  },
-  cancelled: {
-    label: 'Cancelled',
-    color: 'bg-red-100 text-red-600',
-    icon: XCircle,
-  },
+const statusConfig: Record<
+  string,
+  { label: string; color: string; icon: typeof Clock }
+> = {
+  pending: { label: 'Pending', color: 'bg-gray-100 text-gray-600', icon: Clock },
+  confirmed: { label: 'Confirmed', color: 'bg-blue-100 text-blue-600', icon: CheckCircle },
+  processing: { label: 'Processing', color: 'bg-blue-100 text-blue-600', icon: Clock },
+  ready_to_ship: { label: 'Ready to Ship', color: 'bg-orange-100 text-orange-600', icon: Package },
+  shipped: { label: 'Shipped', color: 'bg-orange-100 text-orange-600', icon: Truck },
+  delivered: { label: 'Delivered', color: 'bg-green-100 text-green-600', icon: CheckCircle },
+  cancelled: { label: 'Cancelled', color: 'bg-red-100 text-red-600', icon: XCircle },
+  refunded: { label: 'Refunded', color: 'bg-red-100 text-red-600', icon: RotateCcw },
 };
 
-type StatusFilter = 'all' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
+const CANCELLABLE_STATUSES = new Set(['pending', 'confirmed', 'processing']);
+
+type StatusFilter = 'all' | keyof typeof statusConfig;
+
+interface OrderSummary {
+  id: string;
+  order_number: string;
+  order_status: string;
+  payment_status: string;
+  grand_total: number;
+  created_at: string;
+}
 
 export default function OrdersPage() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { isAuthenticated, hasHydrated } = useAuthStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
-  const filteredOrders = mockOrders.filter((order) => {
-    const matchesSearch = order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.items.some(item => item.name.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
+  useEffect(() => {
+    if (hasHydrated && !isAuthenticated) {
+      navigate('/login', { state: { from: { pathname: '/orders' } } });
+    }
+  }, [hasHydrated, isAuthenticated, navigate]);
+
+  const { data: ordersData, isLoading } = useQuery({
+    queryKey: ['my-orders', page],
+    queryFn: () => ordersApiNew.getAll(page, 20),
+    enabled: hasHydrated && isAuthenticated,
+  });
+
+  const orders = (ordersData?.orders ?? []) as OrderSummary[];
+  const pagination = ordersData?.pagination;
+
+  const { data: expandedDetail, isLoading: detailLoading } = useQuery({
+    queryKey: ['order-detail', expandedOrder],
+    queryFn: () => ordersApiNew.getById(expandedOrder as string),
+    enabled: !!expandedOrder,
+  });
+
+  const filteredOrders = orders.filter((order) => {
+    const matchesSearch = order.order_number
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase());
+    const matchesStatus =
+      statusFilter === 'all' || order.order_status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  const handleCancel = async (orderId: string) => {
+    if (!window.confirm('Cancel this order? This cannot be undone.')) return;
+    setCancellingId(orderId);
+    try {
+      await ordersApiNew.cancel(orderId);
+      await queryClient.invalidateQueries({ queryKey: ['my-orders'] });
+    } catch (err) {
+      console.error('Failed to cancel order:', err);
+      window.alert('Failed to cancel this order. Please contact support.');
+    } finally {
+      setCancellingId(null);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -153,7 +127,7 @@ export default function OrdersPage() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by order ID or product name..."
+                placeholder="Search by order number..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-orange-500"
@@ -167,17 +141,22 @@ export default function OrdersPage() {
                 className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-orange-500"
               >
                 <option value="all">All Orders</option>
-                <option value="processing">Processing</option>
-                <option value="shipped">Shipped</option>
-                <option value="delivered">Delivered</option>
-                <option value="cancelled">Cancelled</option>
+                {Object.entries(statusConfig).map(([key, cfg]) => (
+                  <option key={key} value={key}>
+                    {cfg.label}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
         </div>
 
         {/* Orders List */}
-        {filteredOrders.length === 0 ? (
+        {isLoading ? (
+          <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+            <Loader className="w-8 h-8 text-orange-500 mx-auto animate-spin" />
+          </div>
+        ) : filteredOrders.length === 0 ? (
           <div className="bg-white rounded-xl shadow-sm p-12 text-center">
             <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No orders found</h3>
@@ -197,9 +176,11 @@ export default function OrdersPage() {
         ) : (
           <div className="space-y-4">
             {filteredOrders.map((order) => {
-              const status = statusConfig[order.status as keyof typeof statusConfig];
+              const status =
+                statusConfig[order.order_status] ?? statusConfig.pending;
               const StatusIcon = status.icon;
               const isExpanded = expandedOrder === order.id;
+              const isCancellable = CANCELLABLE_STATUSES.has(order.order_status);
 
               return (
                 <div
@@ -213,17 +194,13 @@ export default function OrdersPage() {
                   >
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                       <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-gray-100 rounded-lg overflow-hidden">
-                          <img
-                            src={order.items[0].image}
-                            alt=""
-                            className="w-full h-full object-cover"
-                          />
+                        <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center shrink-0">
+                          <Package className="w-6 h-6 text-gray-400" />
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="font-semibold text-gray-900">
-                              {order.id}
+                              {order.order_number}
                             </span>
                             <span className={cn('px-2 py-0.5 text-xs font-medium rounded-full', status.color)}>
                               <span className="flex items-center gap-1">
@@ -234,19 +211,17 @@ export default function OrdersPage() {
                           </div>
                           <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
                             <Calendar className="w-4 h-4" />
-                            {new Date(order.date).toLocaleDateString('en-US', {
+                            {new Date(order.created_at).toLocaleDateString('en-US', {
                               year: 'numeric',
                               month: 'long',
                               day: 'numeric',
                             })}
-                            <span>•</span>
-                            <span>{order.items.length} item{order.items.length > 1 ? 's' : ''}</span>
                           </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-4">
                         <span className="text-lg font-bold text-gray-900">
-                          {formatPrice(order.total)}
+                          {formatPrice(order.grand_total)}
                         </span>
                         <ChevronRight
                           className={cn(
@@ -261,73 +236,59 @@ export default function OrdersPage() {
                   {/* Expanded Order Details */}
                   {isExpanded && (
                     <div className="border-t">
-                      {/* Order Items */}
-                      <div className="p-4 space-y-4">
-                        {order.items.map((item) => (
-                          <div key={item.id} className="flex items-center gap-4">
-                            <div className="w-20 h-20 bg-gray-100 rounded-lg overflow-hidden">
-                              <img
-                                src={item.image}
-                                alt={item.name}
-                                className="w-full h-full object-cover"
-                              />
-                            </div>
-                            <div className="flex-1">
-                              <h4 className="font-medium text-gray-900">{item.name}</h4>
-                              <p className="text-sm text-gray-500">Qty: {item.quantity}</p>
-                            </div>
-                            <span className="font-semibold text-gray-900">
-                              {formatPrice(item.price * item.quantity)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Tracking Info */}
-                      {order.trackingNumber && (
-                        <div className="mx-4 mb-4 p-4 bg-orange-50 rounded-lg">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <Truck className="w-5 h-5 text-orange-500" />
-                              <div>
-                                <p className="font-medium text-gray-900">Shipment Tracking</p>
-                                <p className="text-sm text-gray-500">{order.trackingNumber}</p>
+                      {detailLoading ? (
+                        <div className="p-6 text-center">
+                          <Loader className="w-6 h-6 text-orange-500 mx-auto animate-spin" />
+                        </div>
+                      ) : (
+                        <div className="p-4 space-y-3">
+                          {expandedDetail?.items.map((item) => (
+                            <div key={item.id} className="flex items-center gap-4">
+                              <div className="w-14 h-14 bg-gray-100 rounded-lg flex items-center justify-center shrink-0">
+                                <Package className="w-6 h-6 text-gray-400" />
                               </div>
+                              <div className="flex-1">
+                                <h4 className="font-medium text-gray-900">
+                                  {item.product_name}
+                                </h4>
+                                <p className="text-sm text-gray-500">
+                                  Qty: {item.quantity}
+                                </p>
+                              </div>
+                              <span className="font-semibold text-gray-900">
+                                {formatPrice(item.total_price)}
+                              </span>
                             </div>
-                            <button className="px-3 py-1.5 text-sm font-medium text-orange-500 hover:bg-orange-100 rounded-lg transition-colors">
-                              Track Package
-                            </button>
-                          </div>
+                          ))}
                         </div>
                       )}
 
                       {/* Order Actions */}
                       <div className="p-4 bg-gray-50 flex flex-wrap gap-3">
-                        <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
-                          <Eye className="w-4 h-4" />
-                          View Details
-                        </button>
-                        {order.status === 'delivered' && (
-                          <>
-                            <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
-                              <RotateCcw className="w-4 h-4" />
-                              Return Items
-                            </button>
-                            <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
-                              <MessageSquare className="w-4 h-4" />
-                              Write Review
-                            </button>
-                          </>
-                        )}
-                        {order.status === 'processing' && (
-                          <button className="flex items-center gap-2 px-4 py-2 text-red-500 bg-white border border-red-200 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors">
-                            <XCircle className="w-4 h-4" />
+                        <Link
+                          to={`/track-order?orderNumber=${encodeURIComponent(order.order_number)}`}
+                          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+                        >
+                          <Truck className="w-4 h-4" />
+                          Track Package
+                        </Link>
+                        {isCancellable && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCancel(order.id);
+                            }}
+                            disabled={cancellingId === order.id}
+                            className="flex items-center gap-2 px-4 py-2 text-red-500 bg-white border border-red-200 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors disabled:opacity-50"
+                          >
+                            {cancellingId === order.id ? (
+                              <Loader className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <XCircle className="w-4 h-4" />
+                            )}
                             Cancel Order
                           </button>
                         )}
-                        <button className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 transition-colors ml-auto">
-                          Buy Again
-                        </button>
                       </div>
                     </div>
                   )}
@@ -338,18 +299,23 @@ export default function OrdersPage() {
         )}
 
         {/* Pagination */}
-        {filteredOrders.length > 0 && (
+        {pagination && pagination.totalPages > 1 && (
           <div className="mt-6 flex items-center justify-center gap-2">
-            <button className="px-4 py-2 border border-gray-300 rounded-lg text-gray-500 hover:bg-gray-50 transition-colors">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               Previous
             </button>
-            <button className="px-4 py-2 bg-orange-500 text-white rounded-lg font-medium">
-              1
-            </button>
-            <button className="px-4 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">
-              2
-            </button>
-            <button className="px-4 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">
+            <span className="px-4 py-2 text-gray-600">
+              Page {pagination.page} of {pagination.totalPages}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
+              disabled={page >= pagination.totalPages}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               Next
             </button>
           </div>
