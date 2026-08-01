@@ -68,6 +68,16 @@ export default function CheckoutScreen() {
   const [stripePublishableKey, setStripePublishableKey] = useState<string>('')
   const [clientSecret, setClientSecret] = useState<string | null>(null)
   const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null)
+  // Set once createPaymentIntent() creates the order draft + PaymentIntent
+  // together on the server (before payment is confirmed) -- the order
+  // already exists by the time the shopper reaches the payment step.
+  const [orderDraft, setOrderDraft] = useState<{
+    orderId: string
+    orderNumber: string
+    taxAmount: number
+    shippingAmount: number
+    grandTotal: number
+  } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [cardComplete, setCardComplete] = useState(false)
   const cardValidatedRef = useRef(false) // Track if card was validated before moving to review
@@ -167,16 +177,18 @@ export default function CheckoutScreen() {
         return false
       }
 
-      const paymentItems = items.map((item) => ({
+      const orderItems = items.map((item) => ({
         productId: item.product.id,
-        price: Number(item.product.sale_price || item.product.base_price),
         quantity: item.quantity,
       }))
 
-      const result = await paymentsApi.createPaymentIntent({
-        items: paymentItems,
+      const result = await ordersApiNew.checkoutSession({
+        items: orderItems,
         shippingAddress: {
-          name: `${shippingForm.firstName} ${shippingForm.lastName}`,
+          firstName: shippingForm.firstName,
+          lastName: shippingForm.lastName,
+          email: shippingForm.email,
+          phone: shippingForm.phone,
           address: shippingForm.address,
           apartment: shippingForm.apartment,
           city: shippingForm.city,
@@ -184,11 +196,17 @@ export default function CheckoutScreen() {
           postalCode: shippingForm.postalCode,
           country: shippingForm.country,
         },
-        currency: 'usd',
       })
 
       setClientSecret(result.clientSecret)
       setPaymentIntentId(result.paymentIntentId)
+      setOrderDraft({
+        orderId: result.orderId,
+        orderNumber: result.orderNumber,
+        taxAmount: result.taxAmount,
+        shippingAmount: result.shippingAmount,
+        grandTotal: result.grandTotal,
+      })
       return true
     } catch (err: any) {
       console.error('Failed to create payment intent:', err)
@@ -279,6 +297,7 @@ export default function CheckoutScreen() {
         setError={setError}
         clientSecret={clientSecret}
         paymentIntentId={paymentIntentId}
+        orderDraft={orderDraft}
         cardComplete={cardComplete}
         setCardComplete={setCardComplete}
         cardValidatedRef={cardValidatedRef}
@@ -309,6 +328,7 @@ function CheckoutContent({
   setError,
   clientSecret,
   paymentIntentId,
+  orderDraft,
   cardComplete,
   setCardComplete,
   cardValidatedRef,
@@ -319,6 +339,14 @@ function CheckoutContent({
   const { confirmPayment } = useStripe()
   const [countryPickerVisible, setCountryPickerVisible] = useState(false)
   const [countrySearch, setCountrySearch] = useState('')
+
+  // Once the order draft exists, the server-computed totals are
+  // authoritative -- the amount actually charged and the amount displayed
+  // should never be able to diverge. Before that, show the client-side
+  // estimate.
+  const displayShipping = orderDraft?.shippingAmount ?? shipping
+  const displayTax = orderDraft?.taxAmount ?? tax
+  const displayGrandTotal = orderDraft?.grandTotal ?? grandTotal
 
   // Filter countries based on search
   const filteredCountries = countrySearch
@@ -332,7 +360,7 @@ function CheckoutContent({
   const selectedCountry = getCountryByCode(shippingForm.country)
 
   const handlePlaceOrder = async () => {
-    if (!clientSecret || !paymentIntentId) {
+    if (!clientSecret || !paymentIntentId || !orderDraft) {
       Alert.alert('Error', 'Payment not initialized. Please try again.')
       return
     }
@@ -374,33 +402,15 @@ function CheckoutContent({
       }
 
       if (paymentIntent?.status === 'Succeeded') {
-        // Create the order in our backend
-        const order = await ordersApiNew.create({
-          items: items.map((item: any) => ({
-            productId: item.product.id,
-            quantity: item.quantity,
-          })),
-          shippingAddress: {
-            firstName: shippingForm.firstName,
-            lastName: shippingForm.lastName,
-            email: shippingForm.email,
-            phone: shippingForm.phone,
-            address: shippingForm.address,
-            apartment: shippingForm.apartment,
-            city: shippingForm.city,
-            state: shippingForm.state,
-            postalCode: shippingForm.postalCode,
-            country: shippingForm.country,
-          },
-          paymentIntentId: paymentIntent.id,
-          paymentMethod: 'card',
-        })
-
+        // The order already exists (created in createPaymentIntent() before
+        // payment was attempted) -- final confirmation (payment_status ->
+        // paid) happens server-side via the Stripe webhook, so this just
+        // finalizes the UI using the order we already know about.
         clearCart()
 
         Alert.alert(
           'Order Placed!',
-          `Order #${order.order_number} has been successfully placed. You will receive a confirmation email at ${shippingForm.email}.`,
+          `Order #${orderDraft.orderNumber} has been successfully placed. You will receive a confirmation email at ${shippingForm.email}.`,
           [
             {
               text: 'Continue Shopping',
@@ -413,7 +423,7 @@ function CheckoutContent({
         Alert.alert('Payment Issue', `Payment status: ${paymentIntent?.status}`)
       }
     } catch (err: any) {
-      console.error('Order error:', err)
+      console.error('Order confirmation error:', err)
       const errorMessage =
         err?.response?.data?.error || err?.message || 'Failed to complete order'
       setError(errorMessage)
@@ -762,18 +772,21 @@ function CheckoutContent({
         <View style={styles.priceRow}>
           <Text style={styles.priceLabel}>Shipping</Text>
           <Text
-            style={[styles.priceValue, shipping === 0 && styles.freeShipping]}
+            style={[
+              styles.priceValue,
+              displayShipping === 0 && styles.freeShipping,
+            ]}
           >
-            {shipping === 0 ? 'FREE' : formatPrice(shipping)}
+            {displayShipping === 0 ? 'FREE' : formatPrice(displayShipping)}
           </Text>
         </View>
         <View style={styles.priceRow}>
           <Text style={styles.priceLabel}>Tax (8%)</Text>
-          <Text style={styles.priceValue}>{formatPrice(tax)}</Text>
+          <Text style={styles.priceValue}>{formatPrice(displayTax)}</Text>
         </View>
         <View style={[styles.priceRow, styles.totalRowInner]}>
           <Text style={styles.totalLabelInner}>Total</Text>
-          <Text style={styles.totalValueInner}>{formatPrice(grandTotal)}</Text>
+          <Text style={styles.totalValueInner}>{formatPrice(displayGrandTotal)}</Text>
         </View>
       </View>
     </View>
@@ -815,7 +828,7 @@ function CheckoutContent({
       <View style={styles.footer}>
         <View style={styles.footerTotal}>
           <Text style={styles.footerTotalLabel}>Total</Text>
-          <Text style={styles.footerTotalValue}>{formatPrice(grandTotal)}</Text>
+          <Text style={styles.footerTotalValue}>{formatPrice(displayGrandTotal)}</Text>
         </View>
 
         {step === 'shipping' && (
@@ -901,7 +914,7 @@ function CheckoutContent({
                     color={AppColors.white}
                   />
                   <Text style={styles.continueButtonText}>
-                    Pay {formatPrice(grandTotal)}
+                    Pay {formatPrice(displayGrandTotal)}
                   </Text>
                 </>
               )}

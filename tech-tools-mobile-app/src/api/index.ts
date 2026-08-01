@@ -1895,6 +1895,62 @@ export const ordersApiNew = {
     const data = response.data.data || response.data
     return data.order || data
   },
+
+  // Create the order (pending payment) + Stripe PaymentIntent together,
+  // BEFORE payment is confirmed -- mirrors the web storefront's
+  // checkout-session flow (POST /orders/checkout-session). The order always
+  // exists before any money can be captured, unlike the old create() above
+  // (still used nowhere now, kept only for reference/backward compat).
+  checkoutSession: async (data: {
+    items: { productId: string; quantity: number }[]
+    shippingAddress: {
+      firstName: string
+      lastName: string
+      email: string
+      phone?: string
+      address: string
+      apartment?: string
+      city: string
+      state: string
+      postalCode: string
+      country: string
+    }
+    customerNotes?: string
+  }): Promise<{
+    clientSecret: string
+    paymentIntentId: string
+    orderId: string
+    orderNumber: string
+    currency: string
+    taxAmount: number
+    shippingAmount: number
+    grandTotal: number
+  }> => {
+    const response = await apiClient.post('/orders/checkout-session', data)
+    const requestId = getRequestIdFromResponse(response)
+    const result = response.data.data || response.data
+
+    if (!isRecord(result)) {
+      logNormalizationIssue(
+        '/orders/checkout-session',
+        'Unexpected checkout-session payload',
+        result,
+        requestId,
+      )
+      throw new Error('Failed to start checkout')
+    }
+
+    return {
+      clientSecret: toSafeString(result.clientSecret),
+      paymentIntentId: toSafeString(result.paymentIntentId),
+      orderId: toSafeString(result.orderId),
+      orderNumber: toSafeString(result.orderNumber),
+      currency: toSafeString(result.currency, 'EUR'),
+      taxAmount: toSafeNumber(result.taxAmount),
+      shippingAmount: toSafeNumber(result.shippingAmount),
+      grandTotal: toSafeNumber(result.grandTotal),
+    }
+  },
 }
 
 // Combined API object for convenience
