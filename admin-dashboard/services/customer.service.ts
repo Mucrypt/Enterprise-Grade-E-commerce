@@ -65,11 +65,18 @@ export interface CustomerStats {
   withOrders: number
 }
 
+// 'supplier' is deliberately not an option here -- dropshipping suppliers
+// are a separate `suppliers` table (see the Suppliers admin page), not a
+// users.user_type value; the DB's check_user_type_valid constraint only
+// allows customer/admin/super_admin.
+export type AccountType = 'customer' | 'admin' | 'super_admin' | 'all'
+
 export interface CustomerFilters {
   page?: number
   limit?: number
   search?: string
   status?: 'active' | 'inactive' | ''
+  userType?: AccountType
   sortBy?: 'created_at' | 'email' | 'first_name' | 'last_name' | 'last_login'
   sortOrder?: 'ASC' | 'DESC'
 }
@@ -89,14 +96,21 @@ export interface PaginatedCustomersResponse {
 
 export const customerService = {
   /**
-   * Get customer statistics for dashboard cards
+   * Get account statistics for dashboard cards. userType defaults to
+   * 'customer' server-side if omitted; pass 'all' or a specific type to
+   * match whatever the list view is currently filtered to.
    */
-  async getStats(): Promise<ApiResponse<CustomerStats>> {
-    return apiClient.get<ApiResponse<CustomerStats>>('/admin/customers/stats')
+  async getStats(userType?: AccountType): Promise<ApiResponse<CustomerStats>> {
+    const params = userType ? `?userType=${userType}` : ''
+    return apiClient.get<ApiResponse<CustomerStats>>(
+      `/admin/customers/stats${params}`,
+    )
   },
 
   /**
-   * Get all customers with pagination and filters
+   * Get all accounts with pagination and filters. userType lets this reach
+   * supplier/admin accounts too, not just customers (defaults to
+   * 'customer' server-side if omitted).
    */
   async getCustomers(
     filters?: CustomerFilters,
@@ -107,6 +121,7 @@ export const customerService = {
     if (filters?.limit) params.append('limit', filters.limit.toString())
     if (filters?.search) params.append('search', filters.search)
     if (filters?.status) params.append('status', filters.status)
+    if (filters?.userType) params.append('userType', filters.userType)
     if (filters?.sortBy) params.append('sortBy', filters.sortBy)
     if (filters?.sortOrder) params.append('sortOrder', filters.sortOrder)
 
@@ -128,23 +143,34 @@ export const customerService = {
   },
 
   /**
-   * Update customer status (activate/deactivate)
+   * Update account status (activate/deactivate). reason is recorded in the
+   * admin activity log for accountability -- not required, but strongly
+   * recommended for deactivations.
    */
   async updateCustomerStatus(
     customerId: string,
     isActive: boolean,
+    reason?: string,
   ): Promise<ApiResponse<{ customer: Customer }>> {
     return apiClient.patch<ApiResponse<{ customer: Customer }>>(
       `/admin/customers/${customerId}/status`,
-      { isActive },
+      { isActive, reason },
     )
   },
 
   /**
-   * Delete customer
+   * Delete (soft-delete) an account. Always deactivates + marks deleted_at
+   * server-side now, regardless of order history. reason is recorded in
+   * the admin activity log.
    */
-  async deleteCustomer(customerId: string): Promise<ApiResponse<void>> {
-    return apiClient.delete<ApiResponse<void>>(`/admin/customers/${customerId}`)
+  async deleteCustomer(
+    customerId: string,
+    reason?: string,
+  ): Promise<ApiResponse<void>> {
+    return apiClient.delete<ApiResponse<void>>(
+      `/admin/customers/${customerId}`,
+      { data: { reason } },
+    )
   },
 }
 

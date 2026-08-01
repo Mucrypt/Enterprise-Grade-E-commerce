@@ -4,8 +4,52 @@ import { query } from '../../../database/connection'
 import logger from '../../../utils/logger'
 
 // =====================================================
-// Customer Management for Admin Dashboard
+// User Management for Admin Dashboard
+//
+// Originally scoped to `user_type = 'customer'` only -- an admin had no way
+// to see or moderate a misbehaving supplier or fellow admin account from
+// this UI at all. userType is now an optional filter (defaults to
+// 'customer' to preserve existing behavior for any caller that doesn't
+// pass it) instead of a hardcoded restriction, so the same page/endpoints
+// can reach every account type.
 // =====================================================
+
+// 'supplier' is deliberately excluded -- users.user_type has a second,
+// stricter CHECK constraint added in 002_admin_management_schema.sql
+// (check_user_type_valid) that only allows 'customer'/'admin'/
+// 'super_admin'. Dropshipping suppliers are a wholly separate `suppliers`
+// table (see suppliers admin page), not a `users` account type, confirmed
+// against a real Postgres instance before shipping this.
+const VALID_USER_TYPES = ['customer', 'admin', 'super_admin']
+
+/**
+ * Every admin activity log write for this module goes through here so
+ * status changes/deletions always leave a trace of who did what, when, and
+ * why -- reuses the existing admin_activity_logs table (002_admin_management
+ * _schema.sql), already used by admin.controller.ts/books.controller.ts/
+ * supplier.controller.ts for the same purpose.
+ */
+const logUserModerationAction = async (options: {
+  adminId?: string
+  action: string
+  targetUserId: string
+  details: Record<string, unknown>
+}) => {
+  try {
+    await query(
+      `INSERT INTO admin_activity_logs (admin_id, action, resource_type, resource_id, details)
+       VALUES ($1, $2, 'users', $3, $4)`,
+      [
+        options.adminId || null,
+        options.action,
+        options.targetUserId,
+        JSON.stringify(options.details),
+      ],
+    )
+  } catch (error) {
+    logger.warn('Failed to write admin activity log', error)
+  }
+}
 
 /**
  * Get all customers with pagination, filtering, and search
@@ -17,6 +61,7 @@ export const getCustomers = async (req: AuthRequest, res: Response) => {
       limit = 20,
       search = '',
       status = '', // 'active', 'inactive', ''
+      userType = 'customer', // 'customer' | 'supplier' | 'admin' | 'super_admin' | 'all'
       sortBy = 'created_at',
       sortOrder = 'DESC',
     } = req.query
@@ -25,10 +70,19 @@ export const getCustomers = async (req: AuthRequest, res: Response) => {
     const limitNum = Math.min(100, Math.max(1, parseInt(limit as string, 10)))
     const offset = (pageNum - 1) * limitNum
 
-    // Build the WHERE clause
-    const conditions: string[] = ["user_type = 'customer'"]
+    // Build the WHERE clause. Soft-deleted accounts never show up here.
+    const conditions: string[] = ['deleted_at IS NULL']
     const params: any[] = []
     let paramIndex = 1
+
+    if (
+      userType !== 'all' &&
+      VALID_USER_TYPES.includes(userType as string)
+    ) {
+      conditions.push(`user_type = $${paramIndex}`)
+      params.push(userType)
+      paramIndex++
+    }
 
     // Search filter
     if (search) {
@@ -162,49 +216,57 @@ export const getCustomers = async (req: AuthRequest, res: Response) => {
  */
 export const getCustomerStats = async (req: AuthRequest, res: Response) => {
   try {
-    // Total customers
+    const { userType = 'customer' } = req.query
+    const typeFilter =
+      userType !== 'all' && VALID_USER_TYPES.includes(userType as string)
+        ? `user_type = '${userType}' AND`
+        : ''
+    // (typeFilter is built from a value checked against VALID_USER_TYPES
+    // above, never interpolated from unchecked input.)
+
+    // Total
     const totalResult = await query(
-      `SELECT COUNT(*) as total FROM users WHERE user_type = 'customer'`,
+      `SELECT COUNT(*) as total FROM users WHERE ${typeFilter} deleted_at IS NULL`,
     )
     const total = parseInt(totalResult.rows[0].total, 10)
 
-    // Active customers
+    // Active
     const activeResult = await query(
-      `SELECT COUNT(*) as active FROM users WHERE user_type = 'customer' AND is_active = TRUE`,
+      `SELECT COUNT(*) as active FROM users WHERE ${typeFilter} deleted_at IS NULL AND is_active = TRUE`,
     )
     const active = parseInt(activeResult.rows[0].active, 10)
 
-    // Inactive customers
+    // Inactive
     const inactive = total - active
 
-    // New customers today
+    // New today
     const newTodayResult = await query(
-      `SELECT COUNT(*) as new_today FROM users 
-       WHERE user_type = 'customer' 
+      `SELECT COUNT(*) as new_today FROM users
+       WHERE ${typeFilter} deleted_at IS NULL
        AND created_at >= CURRENT_DATE`,
     )
     const newToday = parseInt(newTodayResult.rows[0].new_today, 10)
 
-    // New customers this week
+    // New this week
     const newThisWeekResult = await query(
-      `SELECT COUNT(*) as new_week FROM users 
-       WHERE user_type = 'customer' 
+      `SELECT COUNT(*) as new_week FROM users
+       WHERE ${typeFilter} deleted_at IS NULL
        AND created_at >= CURRENT_DATE - INTERVAL '7 days'`,
     )
     const newThisWeek = parseInt(newThisWeekResult.rows[0].new_week, 10)
 
-    // New customers this month
+    // New this month
     const newThisMonthResult = await query(
-      `SELECT COUNT(*) as new_month FROM users 
-       WHERE user_type = 'customer' 
+      `SELECT COUNT(*) as new_month FROM users
+       WHERE ${typeFilter} deleted_at IS NULL
        AND created_at >= CURRENT_DATE - INTERVAL '30 days'`,
     )
     const newThisMonth = parseInt(newThisMonthResult.rows[0].new_month, 10)
 
-    // Verified email customers
+    // Verified email
     const verifiedResult = await query(
-      `SELECT COUNT(*) as verified FROM users 
-       WHERE user_type = 'customer' AND email_verified = TRUE`,
+      `SELECT COUNT(*) as verified FROM users
+       WHERE ${typeFilter} deleted_at IS NULL AND email_verified = TRUE`,
     )
     const emailVerified = parseInt(verifiedResult.rows[0].verified, 10)
 
@@ -243,15 +305,15 @@ export const getCustomerById = async (req: AuthRequest, res: Response) => {
   try {
     const { customerId } = req.params
 
-    // Get customer info
+    // Get customer info (any account type, not just 'customer')
     const customerResult = await query(
-      `SELECT 
+      `SELECT
         id, email, first_name, last_name, phone,
         user_type, company_name, tax_id, business_type,
         email_verified, phone_verified, is_active,
         last_login, created_at, updated_at
        FROM users
-       WHERE id = $1 AND user_type = 'customer'`,
+       WHERE id = $1 AND deleted_at IS NULL`,
       [customerId],
     )
 
@@ -340,7 +402,7 @@ export const getCustomerById = async (req: AuthRequest, res: Response) => {
 export const updateCustomerStatus = async (req: AuthRequest, res: Response) => {
   try {
     const { customerId } = req.params
-    const { isActive } = req.body
+    const { isActive, reason } = req.body
 
     if (typeof isActive !== 'boolean') {
       return res.status(400).json({
@@ -349,10 +411,22 @@ export const updateCustomerStatus = async (req: AuthRequest, res: Response) => {
       })
     }
 
+    const beforeResult = await query(
+      `SELECT is_active, user_type, email FROM users WHERE id = $1 AND deleted_at IS NULL`,
+      [customerId],
+    )
+    if (beforeResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Customer not found',
+      })
+    }
+    const before = beforeResult.rows[0]
+
     const result = await query(
-      `UPDATE users 
+      `UPDATE users
        SET is_active = $1, updated_at = NOW()
-       WHERE id = $2 AND user_type = 'customer'
+       WHERE id = $2 AND deleted_at IS NULL
        RETURNING id, email, first_name, last_name, is_active`,
       [isActive, customerId],
     )
@@ -370,6 +444,18 @@ export const updateCustomerStatus = async (req: AuthRequest, res: Response) => {
       customerId,
       isActive,
       adminId: req.user?.userId,
+    })
+    await logUserModerationAction({
+      adminId: req.user?.userId,
+      action: isActive ? 'activate_user' : 'deactivate_user',
+      targetUserId: customerId,
+      details: {
+        targetEmail: before.email,
+        targetUserType: before.user_type,
+        previousState: { isActive: before.is_active },
+        newState: { isActive },
+        reason: reason || null,
+      },
     })
 
     res.json({
@@ -399,59 +485,58 @@ export const updateCustomerStatus = async (req: AuthRequest, res: Response) => {
 /**
  * Delete customer (soft delete by deactivating)
  */
+/**
+ * Delete an account. Always soft-deletes (deleted_at + is_active=false) --
+ * this used to hard `DELETE FROM users` whenever the account had no order
+ * history, with no reason recorded anywhere beyond a log line. A real "this
+ * account did something bad" moderation action should never be
+ * unrecoverable/untraceable by accident, so this now behaves the same way
+ * regardless of order history: deactivate (blocks login, already a proven
+ * gate -- see auth.controller.ts) and mark deleted_at, with the reason and
+ * acting admin recorded in admin_activity_logs.
+ */
 export const deleteCustomer = async (req: AuthRequest, res: Response) => {
   try {
     const { customerId } = req.params
+    const { reason } = req.body
 
-    // Check if customer has orders - if so, just deactivate
-    const ordersResult = await query(
-      `SELECT COUNT(*) as order_count FROM orders WHERE user_id = $1`,
+    const beforeResult = await query(
+      `SELECT email, user_type FROM users WHERE id = $1 AND deleted_at IS NULL`,
       [customerId],
     )
-
-    const hasOrders = parseInt(ordersResult.rows[0].order_count, 10) > 0
-
-    if (hasOrders) {
-      // Soft delete - just deactivate
-      await query(
-        `UPDATE users 
-         SET is_active = FALSE, updated_at = NOW()
-         WHERE id = $1 AND user_type = 'customer'`,
-        [customerId],
-      )
-
-      logger.info('Customer deactivated (has orders):', {
-        customerId,
-        adminId: req.user?.userId,
-      })
-
-      return res.json({
-        success: true,
-        message: 'Customer deactivated (has order history)',
-      })
-    }
-
-    // Hard delete if no orders
-    const result = await query(
-      `DELETE FROM users WHERE id = $1 AND user_type = 'customer' RETURNING id`,
-      [customerId],
-    )
-
-    if (result.rows.length === 0) {
+    if (beforeResult.rows.length === 0) {
       return res.status(404).json({
         success: false,
         error: 'Customer not found',
       })
     }
+    const before = beforeResult.rows[0]
 
-    logger.info('Customer deleted:', {
+    await query(
+      `UPDATE users
+       SET is_active = FALSE, deleted_at = NOW(), updated_at = NOW()
+       WHERE id = $1`,
+      [customerId],
+    )
+
+    logger.info('User soft-deleted:', {
       customerId,
       adminId: req.user?.userId,
+    })
+    await logUserModerationAction({
+      adminId: req.user?.userId,
+      action: 'delete_user',
+      targetUserId: customerId,
+      details: {
+        targetEmail: before.email,
+        targetUserType: before.user_type,
+        reason: reason || null,
+      },
     })
 
     res.json({
       success: true,
-      message: 'Customer deleted successfully',
+      message: 'Account deactivated and marked deleted',
     })
   } catch (error) {
     logger.error('Delete customer error:', error)

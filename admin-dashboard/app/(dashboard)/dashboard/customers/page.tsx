@@ -30,6 +30,14 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Users,
   UserCheck,
@@ -50,8 +58,16 @@ import {
   customerService,
   type Customer,
   type CustomerStats,
+  type AccountType,
 } from '@/services/customer.service'
 import { useDebounce } from '@/hooks/useDebounce'
+
+const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
+  customer: 'Customers',
+  admin: 'Admins',
+  super_admin: 'Super Admins',
+  all: 'All Accounts',
+}
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -62,6 +78,7 @@ export default function CustomersPage() {
   const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | ''>(
     '',
   )
+  const [userTypeFilter, setUserTypeFilter] = useState<AccountType>('customer')
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 20,
@@ -72,6 +89,12 @@ export default function CustomersPage() {
     null,
   )
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  // Deactivation also asks for a reason (recorded in the admin activity
+  // log) -- previously this was an instant, untraced toggle.
+  const [deactivateTarget, setDeactivateTarget] = useState<Customer | null>(
+    null,
+  )
+  const [reasonText, setReasonText] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
 
   const debouncedSearch = useDebounce(searchQuery, 300)
@@ -79,7 +102,7 @@ export default function CustomersPage() {
   const fetchStats = useCallback(async () => {
     try {
       setStatsLoading(true)
-      const response = await customerService.getStats()
+      const response = await customerService.getStats(userTypeFilter)
       if (response.success && response.data) {
         setStats(response.data)
       }
@@ -88,7 +111,7 @@ export default function CustomersPage() {
     } finally {
       setStatsLoading(false)
     }
-  }, [])
+  }, [userTypeFilter])
 
   const fetchCustomers = useCallback(async () => {
     try {
@@ -98,6 +121,7 @@ export default function CustomersPage() {
         limit: pagination.limit,
         search: debouncedSearch,
         status: statusFilter,
+        userType: userTypeFilter,
         sortBy: 'created_at',
         sortOrder: 'DESC',
       })
@@ -115,7 +139,13 @@ export default function CustomersPage() {
     } finally {
       setLoading(false)
     }
-  }, [pagination.page, pagination.limit, debouncedSearch, statusFilter])
+  }, [
+    pagination.page,
+    pagination.limit,
+    debouncedSearch,
+    statusFilter,
+    userTypeFilter,
+  ])
 
   useEffect(() => {
     fetchStats()
@@ -125,17 +155,35 @@ export default function CustomersPage() {
     fetchCustomers()
   }, [fetchCustomers])
 
-  const handleToggleStatus = async (customer: Customer) => {
+  const handleActivate = async (customer: Customer) => {
     try {
       setActionLoading(true)
-      await customerService.updateCustomerStatus(
-        customer.id,
-        !customer.isActive,
-      )
+      await customerService.updateCustomerStatus(customer.id, true)
       fetchCustomers()
       fetchStats()
     } catch (error) {
-      console.error('Failed to update customer status:', error)
+      console.error('Failed to update account status:', error)
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleDeactivate = async () => {
+    if (!deactivateTarget) return
+
+    try {
+      setActionLoading(true)
+      await customerService.updateCustomerStatus(
+        deactivateTarget.id,
+        false,
+        reasonText || undefined,
+      )
+      setDeactivateTarget(null)
+      setReasonText('')
+      fetchCustomers()
+      fetchStats()
+    } catch (error) {
+      console.error('Failed to update account status:', error)
     } finally {
       setActionLoading(false)
     }
@@ -146,9 +194,13 @@ export default function CustomersPage() {
 
     try {
       setActionLoading(true)
-      await customerService.deleteCustomer(selectedCustomer.id)
+      await customerService.deleteCustomer(
+        selectedCustomer.id,
+        reasonText || undefined,
+      )
       setShowDeleteDialog(false)
       setSelectedCustomer(null)
+      setReasonText('')
       fetchCustomers()
       fetchStats()
     } catch (error) {
@@ -168,9 +220,9 @@ export default function CustomersPage() {
   }
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat(undefined, {
       style: 'currency',
-      currency: 'USD',
+      currency: 'EUR',
     }).format(amount)
   }
 
@@ -199,7 +251,7 @@ export default function CustomersPage() {
         <Card>
           <CardHeader className='flex flex-row items-center justify-between pb-2'>
             <CardTitle className='text-sm font-medium'>
-              Total Customers
+              Total {ACCOUNT_TYPE_LABELS[userTypeFilter]}
             </CardTitle>
             <Users className='h-4 w-4 text-muted-foreground' />
           </CardHeader>
@@ -271,6 +323,26 @@ export default function CustomersPage() {
             className='pl-9'
           />
         </div>
+        <Select
+          value={userTypeFilter}
+          onValueChange={(value: string) => {
+            setUserTypeFilter(value as AccountType)
+            setPagination((prev) => ({ ...prev, page: 1 }))
+          }}
+        >
+          <SelectTrigger className='w-45'>
+            <SelectValue placeholder='Account type' />
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.keys(ACCOUNT_TYPE_LABELS) as AccountType[]).map(
+              (type) => (
+                <SelectItem key={type} value={type}>
+                  {ACCOUNT_TYPE_LABELS[type]}
+                </SelectItem>
+              ),
+            )}
+          </SelectContent>
+        </Select>
         <div className='flex gap-2'>
           <Button
             variant={statusFilter === '' ? 'default' : 'outline'}
@@ -311,7 +383,7 @@ export default function CustomersPage() {
           ) : customers.length === 0 ? (
             <div className='text-center py-12'>
               <Users className='h-12 w-12 mx-auto text-muted-foreground mb-4' />
-              <h3 className='text-lg font-semibold mb-2'>No customers found</h3>
+              <h3 className='text-lg font-semibold mb-2'>No accounts found</h3>
               <p className='text-muted-foreground'>
                 {searchQuery || statusFilter
                   ? 'Try adjusting your search or filters'
@@ -325,6 +397,7 @@ export default function CustomersPage() {
                   <TableRow>
                     <TableHead>Customer</TableHead>
                     <TableHead>Contact</TableHead>
+                    <TableHead>Type</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Orders</TableHead>
                     <TableHead>Total Spent</TableHead>
@@ -355,6 +428,11 @@ export default function CustomersPage() {
                             No phone
                           </span>
                         )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant='outline' className='capitalize'>
+                          {customer.userType?.replace('_', ' ') || 'customer'}
+                        </Badge>
                       </TableCell>
                       <TableCell>
                         <Badge
@@ -395,7 +473,11 @@ export default function CustomersPage() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align='end'>
                             <DropdownMenuItem
-                              onClick={() => handleToggleStatus(customer)}
+                              onClick={() =>
+                                customer.isActive
+                                  ? setDeactivateTarget(customer)
+                                  : handleActivate(customer)
+                              }
                               disabled={actionLoading}
                             >
                               {customer.isActive ? (
@@ -473,16 +555,35 @@ export default function CustomersPage() {
       </Card>
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+      <AlertDialog
+        open={showDeleteDialog}
+        onOpenChange={(open: boolean) => {
+          setShowDeleteDialog(open)
+          if (!open) setReasonText('')
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Customer</AlertDialogTitle>
+            <AlertDialogTitle>Delete Account</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete {selectedCustomer?.fullName}? This
-              action cannot be undone. If the customer has orders, they will be
-              deactivated instead.
+              Are you sure you want to delete {selectedCustomer?.fullName}
+              &apos;s account ({selectedCustomer?.userType || 'customer'})?
+              This deactivates the account and marks it deleted -- it can be
+              recovered from the database if needed, but will no longer be
+              able to sign in or appear in this list.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className='px-6 pb-2'>
+            <label className='text-sm font-medium mb-1.5 block'>
+              Reason (recorded in the admin activity log)
+            </label>
+            <Textarea
+              value={reasonText}
+              onChange={(e) => setReasonText(e.target.value)}
+              placeholder='e.g. Fraudulent orders, repeated policy violations...'
+              rows={3}
+            />
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
@@ -491,6 +592,48 @@ export default function CustomersPage() {
               disabled={actionLoading}
             >
               Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Deactivate Confirmation Dialog */}
+      <AlertDialog
+        open={!!deactivateTarget}
+        onOpenChange={(open: boolean) => {
+          if (!open) {
+            setDeactivateTarget(null)
+            setReasonText('')
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Deactivate Account</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deactivateTarget?.fullName} ({deactivateTarget?.userType || 'customer'})
+              will no longer be able to sign in until reactivated.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className='px-6 pb-2'>
+            <label className='text-sm font-medium mb-1.5 block'>
+              Reason (recorded in the admin activity log)
+            </label>
+            <Textarea
+              value={reasonText}
+              onChange={(e) => setReasonText(e.target.value)}
+              placeholder='e.g. Suspicious activity under review...'
+              rows={3}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeactivate}
+              className='bg-amber-600 hover:bg-amber-700'
+              disabled={actionLoading}
+            >
+              Deactivate
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
