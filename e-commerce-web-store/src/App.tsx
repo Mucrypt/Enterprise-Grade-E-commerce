@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { StripeProvider } from './contexts/StripeContext'
 import Layout from './components/layout/Layout'
 import ScrollToTop from './components/common/ScrollToTop'
+import PageViewTracker from './components/common/PageViewTracker'
 import { initializeEventTracking } from './services/event-tracking'
 
 const HomePage = lazy(() => import('./pages/HomePage'))
@@ -74,6 +75,7 @@ function App() {
       <StripeProvider>
         <BrowserRouter>
           <ScrollToTop />
+          <PageViewTracker />
           <Suspense fallback={routeFallback}>
             <Routes>
               <Route path='/' element={<Layout />}>

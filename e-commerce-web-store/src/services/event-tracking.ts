@@ -40,9 +40,12 @@ export class EventTrackingService {
 
   constructor(
     apiUrl: string = (import.meta.env.VITE_API_URL as string | undefined) ||
-      'http://localhost:9000',
+      'http://localhost:9000/api/v1',
   ) {
-    this.apiUrl = apiUrl
+    // VITE_API_URL already includes the /api/v1 suffix (same convention as
+    // src/api/index.ts) -- strip it so we can build the analytics path below
+    // without doubling it.
+    this.apiUrl = apiUrl.replace(/\/api\/v1\/?$/, '')
     this.sessionId = this.generateSessionId()
     this.initializeOnlineListeners()
   }
@@ -120,7 +123,7 @@ export class EventTrackingService {
     this.eventQueue = []
 
     try {
-      const response = await fetch(`${this.apiUrl}/api/v1/events/batch`, {
+      const response = await fetch(`${this.apiUrl}/api/v1/analytics/events/batch`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
