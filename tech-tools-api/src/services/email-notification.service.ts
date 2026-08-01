@@ -41,11 +41,16 @@ class EmailNotificationService {
    * Initialize email service
    */
   initialize(): void {
+    // Matches the env var names actually documented/used everywhere else
+    // (email.service.ts, .env.example) -- this previously read
+    // SMTP_PASSWORD/SMTP_FROM_EMAIL, which no deployment ever sets (only
+    // SMTP_PASS/SMTP_FROM), so isConfigured was always false and alert
+    // emails were silently disabled in every environment.
     const smtpHost = process.env.SMTP_HOST
     const smtpPort = process.env.SMTP_PORT
     const smtpUser = process.env.SMTP_USER
-    const smtpPassword = process.env.SMTP_PASSWORD
-    const smtpFromEmail = process.env.SMTP_FROM_EMAIL || smtpUser
+    const smtpPassword = process.env.SMTP_PASS
+    const smtpFromEmail = process.env.SMTP_FROM || smtpUser
 
     if (!smtpHost || !smtpPort || !smtpUser || !smtpPassword) {
       logger.warn('Email service not configured - email notifications disabled')
@@ -81,7 +86,7 @@ class EmailNotificationService {
       const subject = `${SEVERITY_SUBJECT_PREFIX[notification.severity]} Alert: ${notification.title}`
 
       await this.transporter.sendMail({
-        from: process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER,
+        from: process.env.SMTP_FROM || process.env.SMTP_USER,
         to: notification.recipientEmail,
         subject,
         html: htmlContent,
