@@ -710,94 +710,50 @@ export const getOrderById = async (req: AuthRequest, res: Response) => {
 }
 
 export const createOrder = async (req: AuthRequest, res: Response) => {
+  const userId = req.user?.userId
+  const {
+    items,
+    shippingAddress,
+    billingAddress,
+    customerNotes,
+    paymentIntentId,
+    paymentMethod = 'card',
+  } = req.body
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: 'Order items are required',
+    })
+  }
+
+  if (!shippingAddress) {
+    return res.status(400).json({
+      success: false,
+      error: 'Shipping address is required',
+    })
+  }
+
+  // Order + items + inventory reservation run inside one transaction (using
+  // the same helpers the checkout-session flow uses) so a mid-request
+  // failure can never leave an order with missing items, or stock reserved
+  // against an order that doesn't fully exist -- previously each INSERT/
+  // UPDATE here was an independent, unguarded query.
+  const client = await getClient()
+  let committed = false
   try {
-    const userId = req.user?.userId
-    const {
+    await client.query('BEGIN')
+
+    const { orderItems, totalAmount } = await validateAndPriceOrderItems(
+      client,
       items,
-      shippingAddress,
-      billingAddress,
-      customerNotes,
-      paymentIntentId,
-      paymentMethod = 'card',
-    } = req.body
-
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'Order items are required',
-      })
-    }
-
-    if (!shippingAddress) {
-      return res.status(400).json({
-        success: false,
-        error: 'Shipping address is required',
-      })
-    }
-
-    // Calculate totals
-    let totalAmount = 0
-    const orderItems = []
-
-    for (const item of items) {
-      // Verify product exists and get current price + stock from inventory
-      const productResult = await query(
-        `SELECT p.id, p.name, p.sku, p.base_price, p.sale_price, 
-                COALESCE((SELECT SUM(i.available_stock) FROM inventory i WHERE i.product_id = p.id), 0) as total_stock
-         FROM products p 
-         WHERE p.id = $1 AND p.is_active = true`,
-        [item.productId],
-      )
-
-      if (!productResult.rows[0]) {
-        return res.status(400).json({
-          success: false,
-          error: `Product not found: ${item.productId}`,
-        })
-      }
-
-      const product = productResult.rows[0]
-
-      // Check stock from inventory table
-      const availableStock = parseInt(product.total_stock, 10)
-      if (availableStock < item.quantity) {
-        return res.status(400).json({
-          success: false,
-          error: `Insufficient stock for ${product.name}. Available: ${availableStock}`,
-        })
-      }
-
-      // Use sale_price if available, otherwise base_price
-      const effectivePrice = parseFloat(
-        product.sale_price || product.base_price,
-      )
-      const itemTotal = effectivePrice * item.quantity
-      totalAmount += itemTotal
-
-      orderItems.push({
-        productId: product.id,
-        sku: product.sku,
-        productName: product.name,
-        quantity: item.quantity,
-        unitPrice: effectivePrice,
-        totalPrice: itemTotal,
-      })
-    }
-
-    // Calculate tax and shipping
-    const taxRate = 0.08 // 8% tax - can be configurable
-    const taxAmount = totalAmount * taxRate
-    const shippingAmount = totalAmount >= 50 ? 0 : 5.99
-    const grandTotal = totalAmount + taxAmount + shippingAmount
-
-    // Generate order number
-    const orderNumber = `TT-${Date.now().toString().slice(-8)}-${Math.random()
-      .toString(36)
-      .substr(2, 4)
-      .toUpperCase()}`
+    )
+    const { taxAmount, shippingAmount, grandTotal } =
+      calculateOrderTotals(totalAmount)
+    const orderNumber = generateOrderNumber()
 
     // Create order
-    const orderResult = await query(
+    const orderResult = await client.query(
       `INSERT INTO orders (
         order_number, user_id, order_status, payment_status,
         total_amount, tax_amount, shipping_amount, grand_total,
@@ -830,35 +786,10 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
 
     const order = orderResult.rows[0]
 
-    // Create order items
-    for (const item of orderItems) {
-      // Note: total_price is a generated column (unit_price * quantity - discount_amount)
-      const supplierId = await resolveSupplierForOrderItem(item.productId)
-      await query(
-        `INSERT INTO order_items (
-          order_id, product_id, sku, product_name,
-          quantity, unit_price, supplier_id
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          order.id,
-          item.productId,
-          item.sku,
-          item.productName,
-          item.quantity,
-          item.unitPrice,
-          supplierId,
-        ],
-      )
+    await insertOrderItemsAndReserveStock(client, order.id, orderItems)
 
-      // Reserve stock in inventory (available_stock is auto-calculated as current_stock - reserved_stock)
-      await query(
-        `UPDATE inventory SET 
-          reserved_stock = reserved_stock + $1,
-          updated_at = NOW()
-         WHERE product_id = $2`,
-        [item.quantity, item.productId],
-      )
-    }
+    await client.query('COMMIT')
+    committed = true
 
     // If payment intent ID provided, update it with order ID
     if (paymentIntentId) {
@@ -1004,6 +935,16 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       },
     })
   } catch (error) {
+    if (!committed) {
+      try {
+        await client.query('ROLLBACK')
+      } catch {
+        // ignore -- original error is what matters
+      }
+    }
+    if (error instanceof OrderValidationError) {
+      return res.status(error.status).json({ success: false, error: error.message })
+    }
     logger.error('Create order error:', error)
     // In development/debugging, include more details
     const errorMessage =
@@ -1016,6 +957,8 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
           ? error.stack
           : undefined,
     })
+  } finally {
+    client.release()
   }
 }
 
@@ -1631,120 +1574,83 @@ export const getOrderItems = async (req: AuthRequest, res: Response) => {
  * Create guest order (no authentication required)
  */
 export const createGuestOrder = async (req: any, res: Response) => {
+  const {
+    items,
+    shippingAddress,
+    billingAddress,
+    customerNotes,
+    paymentIntentId,
+    paymentMethod = 'card',
+    guestEmail,
+    guestPhone,
+  } = req.body
+
+  // Validate required fields
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: 'Order items are required',
+    })
+  }
+
+  if (!shippingAddress) {
+    return res.status(400).json({
+      success: false,
+      error: 'Shipping address is required',
+    })
+  }
+
+  if (!guestEmail) {
+    return res.status(400).json({
+      success: false,
+      error: 'Email address is required',
+    })
+  }
+
+  // Validate email format
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(guestEmail)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid email address',
+    })
+  }
+
+  // Check if email is already registered
+  const userCheck = await query('SELECT id FROM users WHERE email = $1', [
+    guestEmail,
+  ])
+  if (userCheck.rows.length > 0) {
+    return res.status(400).json({
+      success: false,
+      error: 'Email already registered. Please login instead.',
+    })
+  }
+
+  // Order + items + inventory reservation + guest_checkouts session all run
+  // inside one transaction -- see the same rationale on createOrder above.
+  const client = await getClient()
+  let committed = false
+  let order: any
+  let checkoutToken = ''
+  let orderItems: PricedItem[] = []
+  let totalAmount = 0
+  let taxAmount = 0
+  let shippingAmount = 0
+  let grandTotal = 0
+
   try {
-    const {
-      items,
-      shippingAddress,
-      billingAddress,
-      customerNotes,
-      paymentIntentId,
-      paymentMethod = 'card',
-      guestEmail,
-      guestPhone,
-    } = req.body
+    await client.query('BEGIN')
 
-    // Validate required fields
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'Order items are required',
-      })
-    }
-
-    if (!shippingAddress) {
-      return res.status(400).json({
-        success: false,
-        error: 'Shipping address is required',
-      })
-    }
-
-    if (!guestEmail) {
-      return res.status(400).json({
-        success: false,
-        error: 'Email address is required',
-      })
-    }
-
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(guestEmail)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid email address',
-      })
-    }
-
-    // Check if email is already registered
-    const userCheck = await query('SELECT id FROM users WHERE email = $1', [
-      guestEmail,
-    ])
-    if (userCheck.rows.length > 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'Email already registered. Please login instead.',
-      })
-    }
-
-    // Calculate totals
-    let totalAmount = 0
-    const orderItems = []
-
-    for (const item of items) {
-      const productResult = await query(
-        `SELECT p.id, p.name, p.sku, p.base_price, p.sale_price, 
-                COALESCE((SELECT SUM(i.available_stock) FROM inventory i WHERE i.product_id = p.id), 0) as total_stock
-         FROM products p 
-         WHERE p.id = $1 AND p.is_active = true`,
-        [item.productId],
-      )
-
-      if (!productResult.rows[0]) {
-        return res.status(400).json({
-          success: false,
-          error: `Product not found: ${item.productId}`,
-        })
-      }
-
-      const product = productResult.rows[0]
-      const availableStock = parseInt(product.total_stock, 10)
-
-      if (availableStock < item.quantity) {
-        return res.status(400).json({
-          success: false,
-          error: `Insufficient stock for ${product.name}. Available: ${availableStock}`,
-        })
-      }
-
-      const effectivePrice = parseFloat(
-        product.sale_price || product.base_price,
-      )
-      const itemTotal = effectivePrice * item.quantity
-      totalAmount += itemTotal
-
-      orderItems.push({
-        productId: product.id,
-        sku: product.sku,
-        productName: product.name,
-        quantity: item.quantity,
-        unitPrice: effectivePrice,
-        totalPrice: itemTotal,
-      })
-    }
-
-    // Calculate tax and shipping
-    const taxRate = 0.08
-    const taxAmount = totalAmount * taxRate
-    const shippingAmount = totalAmount >= 50 ? 0 : 5.99
-    const grandTotal = totalAmount + taxAmount + shippingAmount
-
-    // Generate order number
-    const orderNumber = `TT-${Date.now().toString().slice(-8)}-${Math.random()
-      .toString(36)
-      .substr(2, 4)
-      .toUpperCase()}`
+    const priced = await validateAndPriceOrderItems(client, items)
+    orderItems = priced.orderItems
+    totalAmount = priced.totalAmount
+    ;({ taxAmount, shippingAmount, grandTotal } =
+      calculateOrderTotals(totalAmount))
+    const orderNumber = generateOrderNumber()
 
     // Create order with NULL user_id for guest
-    const orderResult = await query(
+    const orderResult = await client.query(
       `INSERT INTO orders (
         order_number, user_id, guest_email, guest_first_name, guest_last_name, guest_phone,
         order_status, payment_status,
@@ -1780,47 +1686,23 @@ export const createGuestOrder = async (req: any, res: Response) => {
       ],
     )
 
-    const order = orderResult.rows[0]
+    order = orderResult.rows[0]
 
-    // Create order items
-    for (const item of orderItems) {
-      const supplierId = await resolveSupplierForOrderItem(item.productId)
-      await query(
-        `INSERT INTO order_items (
-          order_id, product_id, sku, product_name,
-          quantity, unit_price, supplier_id
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          order.id,
-          item.productId,
-          item.sku,
-          item.productName,
-          item.quantity,
-          item.unitPrice,
-          supplierId,
-        ],
-      )
-
-      // Reserve stock
-      await query(
-        `UPDATE inventory SET 
-          reserved_stock = reserved_stock + $1,
-          updated_at = NOW()
-         WHERE product_id = $2`,
-        [item.quantity, item.productId],
-      )
-    }
+    await insertOrderItemsAndReserveStock(client, order.id, orderItems)
 
     // Create guest checkout session
     const guestCheckoutService = await import(
       '../../../services/guest-checkout.service'
-    ).then((m) => m)
-    const checkoutToken = guestCheckoutService.generateCheckoutToken()
-    await query(
+    )
+    checkoutToken = guestCheckoutService.generateCheckoutToken()
+    await client.query(
       `INSERT INTO guest_checkouts (email, order_id, checkout_token, created_by_ip)
        VALUES ($1, $2, $3, $4)`,
       [guestEmail, order.id, checkoutToken, req.ip || null],
     )
+
+    await client.query('COMMIT')
+    committed = true
 
     // Send confirmation email
     try {
@@ -1886,11 +1768,23 @@ export const createGuestOrder = async (req: any, res: Response) => {
       },
     })
   } catch (error) {
+    if (!committed) {
+      try {
+        await client.query('ROLLBACK')
+      } catch {
+        // ignore -- original error is what matters
+      }
+    }
+    if (error instanceof OrderValidationError) {
+      return res.status(error.status).json({ success: false, error: error.message })
+    }
     logger.error('Create guest order error:', error)
     res.status(500).json({
       success: false,
       error: 'Failed to create guest order',
     })
+  } finally {
+    client.release()
   }
 }
 
