@@ -8,12 +8,13 @@ import Header from './Header'
 import Footer from './Footer'
 import { DriftChat } from './DriftChat'
 import { useEffect } from 'react'
-import { useAuthStore } from '../../stores'
+import { useAuthStore, useConsentStore } from '../../stores'
 import { supportApi } from '../../api'
 import { NotificationToast } from '../notifications/NotificationToast'
 
 export default function Layout() {
   const { fetchUser, user, isAuthenticated, hasHydrated } = useAuthStore()
+  const functionalConsent = useConsentStore((state) => state.functional)
 
   const { data: supportProfile } = useQuery({
     queryKey: ['support-profile', user?.id],
@@ -36,7 +37,7 @@ export default function Layout() {
       <Footer />
       <NotificationToast />
       <DriftChat
-        enabled={hasHydrated && isAuthenticated}
+        enabled={hasHydrated && isAuthenticated && functionalConsent}
         supportProfile={supportProfile || null}
       />
     </div>

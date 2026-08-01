@@ -4,6 +4,7 @@
 
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useConsentStore } from '../../stores'
 import {
   Facebook,
   Twitter,
@@ -90,6 +91,9 @@ const features = [
 
 export default function Footer() {
   const currentYear = new Date().getFullYear()
+  const openCookiePreferences = useConsentStore(
+    (state) => state.openPreferences,
+  )
   const [email, setEmail] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isSubscribed, setIsSubscribed] = useState(false)
@@ -333,6 +337,12 @@ export default function Footer() {
               >
                 Cookie Policy
               </Link>
+              <button
+                onClick={openCookiePreferences}
+                className='hover:text-white transition-colors'
+              >
+                Cookie Settings
+              </button>
             </div>
           </div>
         </div>

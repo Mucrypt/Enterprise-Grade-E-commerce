@@ -4,6 +4,26 @@
  * Emits events to the backend analytics API
  */
 
+/**
+ * Hard consent gate, checked directly against localStorage rather than via
+ * React/Zustand -- this class has no dependency on the component tree, and
+ * every page already calls trackXxx() methods unconditionally regardless of
+ * whether the consent banner has ever been shown. This is the one place
+ * that actually decides whether an event is allowed to be queued/sent, so
+ * it can't be bypassed by any call site. See stores/consentStore.ts, which
+ * persists to this exact key.
+ */
+function hasAnalyticsConsent(): boolean {
+  try {
+    const raw = localStorage.getItem('techtools-cookie-consent')
+    if (!raw) return false
+    const parsed = JSON.parse(raw)
+    return parsed?.state?.analytics === true
+  } catch {
+    return false
+  }
+}
+
 type EventSource = 'web_store' | 'mobile_app' | 'admin_dashboard' | 'api'
 
 interface EventContext {
@@ -54,6 +74,12 @@ export class EventTrackingService {
    * Track a single event
    */
   trackEvent(event: AnyEvent, context?: EventContext): void {
+    // Consent gate: do not queue (let alone send) anything until the
+    // visitor has opted into analytics via the cookie consent banner.
+    if (!hasAnalyticsConsent()) {
+      return
+    }
+
     // Add session info to event if not present
     if (!event.sessionId) {
       event.sessionId = this.sessionId

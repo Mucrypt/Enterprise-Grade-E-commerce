@@ -53,8 +53,8 @@ const sections = [
 ]
 
 export default function PrivacyPolicyPage() {
-  const lastUpdated = 'March 1, 2026'
-  const effectiveDate = 'March 1, 2026'
+  const lastUpdated = 'August 1, 2026'
+  const effectiveDate = 'August 1, 2026'
 
   return (
     <div className='min-h-screen bg-gray-50'>
@@ -109,11 +109,16 @@ export default function PrivacyPolicyPage() {
             </h2>
             <div className='prose prose-gray max-w-none'>
               <p className='text-gray-600 leading-relaxed'>
-                Welcome to TechTools ("we," "our," or "us"). We are committed to
-                protecting your personal information and your right to privacy.
-                This Privacy Policy describes how we collect, use, store, and
-                share your information when you use our website, mobile
-                application, and services (collectively, the "Services").
+                Welcome to TechTools ("we," "our," or "us"), operated by{' '}
+                <strong>[[LEGAL_ENTITY_NAME]]</strong>, registered in Italy
+                (VAT [[VAT_NUMBER]]), the data controller for the personal
+                information described in this policy. We are committed to
+                protecting your personal information and your right to privacy
+                under the EU General Data Protection Regulation (GDPR) and
+                applicable Italian data protection law. This Privacy Policy
+                describes how we collect, use, store, and share your
+                information when you use our website, mobile application, and
+                services (collectively, the "Services").
               </p>
               <p className='text-gray-600 leading-relaxed mt-4'>
                 By using our Services, you agree to the collection and use of
@@ -514,8 +519,20 @@ export default function PrivacyPolicyPage() {
 
             <div className='space-y-6'>
               <p className='text-gray-600'>
-                Depending on your location, you may have the following rights
-                regarding your personal data:
+                We process your personal data on one or more of these legal
+                bases, depending on the purpose: performance of a contract
+                (processing your order), legal obligation (tax and accounting
+                records), legitimate interest (fraud prevention, improving our
+                Services), and consent (analytics and any future marketing
+                communications, which you can withdraw at any time via{' '}
+                <Link to='/cookies' className='text-orange-600 hover:underline'>
+                  Cookie Settings
+                </Link>{' '}
+                or by unsubscribing from emails).
+              </p>
+              <p className='text-gray-600'>
+                As an EU/EEA resident, you have the following rights regarding
+                your personal data under the GDPR:
               </p>
 
               <div className='space-y-3'>
@@ -605,16 +622,31 @@ export default function PrivacyPolicyPage() {
                 </div>
               </div>
 
-              <div className='bg-gray-100 rounded-xl p-4'>
+              <div className='bg-gray-100 rounded-xl p-4 space-y-2'>
                 <p className='text-sm text-gray-700'>
                   To exercise any of these rights, please contact us at{' '}
                   <a
-                    href='mailto:privacy@techtools.com'
+                    href='mailto:[[PRIVACY_CONTACT_EMAIL]]'
                     className='text-orange-600 hover:underline'
                   >
-                    privacy@techtools.com
+                    [[PRIVACY_CONTACT_EMAIL]]
                   </a>
-                  . We will respond to your request within 30 days.
+                  {' '}(Data Protection Officer / privacy contact: [[DPO_CONTACT]], if applicable). We will respond to your request within one month, as required by the GDPR.
+                </p>
+                <p className='text-sm text-gray-700'>
+                  If you believe we have not adequately addressed your
+                  concern, you have the right to lodge a complaint with the{' '}
+                  <a
+                    href='https://www.garanteprivacy.it'
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    className='text-orange-600 hover:underline'
+                  >
+                    Garante per la protezione dei dati personali
+                  </a>{' '}
+                  (the Italian data protection supervisory authority), or the
+                  supervisory authority in your own EU member state of
+                  residence.
                 </p>
               </div>
             </div>
@@ -655,41 +687,50 @@ export default function PrivacyPolicyPage() {
                   </thead>
                   <tbody className='divide-y divide-gray-100'>
                     <tr>
-                      <td className='p-3 font-medium'>Essential</td>
+                      <td className='p-3 font-medium'>Strictly Necessary</td>
                       <td className='p-3 text-gray-600'>
-                        Required for site functionality (cart, login)
+                        Required for site functionality (cart, login session,
+                        payment fraud prevention) -- cannot be switched off
+                      </td>
+                      <td className='p-3 text-gray-600'>Session</td>
+                    </tr>
+                    <tr>
+                      <td className='p-3 font-medium'>Functional</td>
+                      <td className='p-3 text-gray-600'>
+                        Optional features like live chat support
                       </td>
                       <td className='p-3 text-gray-600'>Session</td>
                     </tr>
                     <tr>
                       <td className='p-3 font-medium'>Analytics</td>
                       <td className='p-3 text-gray-600'>
-                        Understand how visitors use our site
+                        Understand how visitors use our site (only runs if you
+                        opt in)
                       </td>
-                      <td className='p-3 text-gray-600'>2 years</td>
-                    </tr>
-                    <tr>
-                      <td className='p-3 font-medium'>Functional</td>
-                      <td className='p-3 text-gray-600'>
-                        Remember preferences (language, region)
-                      </td>
-                      <td className='p-3 text-gray-600'>1 year</td>
+                      <td className='p-3 text-gray-600'>Until you withdraw consent</td>
                     </tr>
                     <tr>
                       <td className='p-3 font-medium'>Marketing</td>
                       <td className='p-3 text-gray-600'>
-                        Deliver relevant advertisements
+                        Reserved for future advertising features -- not
+                        currently used
                       </td>
-                      <td className='p-3 text-gray-600'>90 days</td>
+                      <td className='p-3 text-gray-600'>N/A</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
 
               <p className='text-gray-600'>
-                You can manage cookie preferences through your browser settings.
-                Note that disabling certain cookies may affect site
-                functionality.
+                Unlike a browser-only cookie policy, we ask for your consent
+                directly when you first visit the site, and you can change
+                your choice at any time from the cookie banner, the{' '}
+                <Link to='/cookies' className='text-orange-600 hover:underline'>
+                  Cookie Policy
+                </Link>{' '}
+                page, or the "Cookie Settings" link in the footer. Strictly
+                necessary cookies can't be disabled since the site can't
+                function without them.
               </p>
 
               <Link
@@ -743,10 +784,10 @@ export default function PrivacyPolicyPage() {
                     <p>
                       <strong>Email:</strong>{' '}
                       <a
-                        href='mailto:privacy@techtools.com'
+                        href='mailto:[[PRIVACY_CONTACT_EMAIL]]'
                         className='text-orange-600 hover:underline'
                       >
-                        privacy@techtools.com
+                        [[PRIVACY_CONTACT_EMAIL]]
                       </a>
                     </p>
                     <p>
@@ -763,14 +804,14 @@ export default function PrivacyPolicyPage() {
                     <p>
                       <strong>Email:</strong>{' '}
                       <a
-                        href='mailto:support@techtools.com'
+                        href='mailto:[[SUPPORT_CONTACT_EMAIL]]'
                         className='text-orange-600 hover:underline'
                       >
-                        support@techtools.com
+                        [[SUPPORT_CONTACT_EMAIL]]
                       </a>
                     </p>
                     <p>
-                      <strong>Phone:</strong> +1 (234) 567-890
+                      <strong>Phone:</strong> [[SUPPORT_PHONE_NUMBER]]
                     </p>
                   </div>
                 </div>
@@ -778,18 +819,18 @@ export default function PrivacyPolicyPage() {
 
               <div className='bg-gray-50 rounded-xl p-6'>
                 <h4 className='font-semibold text-gray-900 mb-3'>
-                  Mailing Address
+                  Registered Office
                 </h4>
                 <p className='text-gray-600'>
-                  TechTools Inc.
+                  [[LEGAL_ENTITY_NAME]]
                   <br />
                   Attn: Privacy Team
                   <br />
-                  123 Tech Street
+                  [[REGISTERED_ADDRESS_LINE_1]]
                   <br />
-                  San Francisco, CA 94102
+                  [[REGISTERED_ADDRESS_LINE_2]]
                   <br />
-                  United States
+                  Italy
                 </p>
               </div>
             </div>
@@ -864,23 +905,23 @@ export default function PrivacyPolicyPage() {
                 <div className='flex items-center gap-2 mb-4'>
                   <span className='text-2xl'>🇪🇺</span>
                   <h3 className='text-lg font-semibold text-gray-900'>
-                    European Union (GDPR)
+                    European Union / Italy (GDPR)
                   </h3>
                 </div>
                 <p className='text-sm text-gray-600 mb-3'>
-                  If you are located in the European Economic Area, you have
-                  additional rights under the General Data Protection Regulation
-                  (GDPR), including:
+                  As our primary market, we process EU/EEA residents' data
+                  under the General Data Protection Regulation (GDPR) and
+                  Italian data protection law as our baseline standard for
+                  everyone, not just EU visitors. See Section 5 above for the
+                  full list of your rights (access, rectification, erasure,
+                  restriction, portability, objection, withdrawing consent)
+                  and how to reach our privacy contact and the Italian
+                  supervisory authority.
                 </p>
                 <ul className='text-sm text-gray-600 space-y-1'>
-                  <li>
-                    • Right to lodge a complaint with a supervisory authority
-                  </li>
-                  <li>
-                    • Right to receive information about automated
-                    decision-making
-                  </li>
-                  <li>• Enhanced data portability rights</li>
+                  <li>• No automated decision-making with legal/similarly significant effects is used on this Service</li>
+                  <li>• Consent for analytics/marketing is opt-in, not opt-out</li>
+                  <li>• Data is processed in the EU where possible; see "International Data Transfers" above for any exceptions</li>
                 </ul>
               </div>
 

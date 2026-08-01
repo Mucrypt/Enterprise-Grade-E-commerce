@@ -17,8 +17,8 @@ const sections = [
 ];
 
 export default function TermsOfServicePage() {
-  const lastUpdated = 'March 1, 2026';
-  const effectiveDate = 'March 1, 2026';
+  const lastUpdated = 'August 1, 2026';
+  const effectiveDate = 'August 1, 2026';
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -68,7 +68,7 @@ export default function TermsOfServicePage() {
             <h2 className="text-2xl font-bold text-gray-900 mb-4">Introduction</h2>
             <div className="prose prose-gray max-w-none">
               <p className="text-gray-600 leading-relaxed">
-                Welcome to TechTools. These Terms of Service ("Terms") govern your access to and use of the TechTools website, mobile applications, and services (collectively, the "Services") operated by TechTools Inc. ("we," "us," or "our").
+                Welcome to TechTools. These Terms of Service ("Terms") govern your access to and use of the TechTools website, mobile applications, and services (collectively, the "Services") operated by <strong>[[LEGAL_ENTITY_NAME]]</strong>, trading as "TechTools" ("we," "us," or "our"), registered in Italy under VAT number <strong>[[VAT_NUMBER]]</strong>.
               </p>
               <p className="text-gray-600 leading-relaxed mt-4">
                 By accessing or using our Services, you acknowledge that you have read, understood, and agree to be bound by these Terms. If you do not agree to these Terms, please do not use our Services.
@@ -283,7 +283,17 @@ export default function TermsOfServicePage() {
             <div className="space-y-6">
               <div className="bg-teal-50 border border-teal-200 rounded-xl p-4">
                 <p className="text-teal-800 font-medium">
-                  We offer a 30-day return policy on most items. See below for complete details.
+                  We offer a 30-day return policy on most items -- more generous than the legal minimum described below. See below for complete details.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">Your EU Right of Withdrawal (14 Days)</h3>
+                <p className="text-gray-600 mb-3">
+                  If you are a consumer in the European Union, you have a statutory right under the EU Consumer Rights Directive (2011/83/EU) to withdraw from your purchase within <strong>14 days</strong> of receiving your order, without giving any reason. To exercise this right, you must inform us of your decision to withdraw before the 14-day period expires (a clear statement by email is sufficient -- see the Contact section below). You must then return the goods within 14 days of that notice, and we will reimburse all payments received from you, including standard delivery costs, within 14 days of receiving the returned goods or evidence that you've shipped them, using the same payment method you used for the original transaction unless you agree otherwise. You are only liable for any diminished value of the goods resulting from handling beyond what's necessary to establish their nature and characteristics.
+                </p>
+                <p className="text-gray-600">
+                  This statutory right exists independently of, and alongside, our own 30-day return policy below -- whichever gives you more time or a better outcome applies.
                 </p>
               </div>
 
@@ -454,14 +464,18 @@ export default function TermsOfServicePage() {
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-3">Governing Law</h3>
                 <p className="text-gray-600">
-                  These Terms shall be governed by and construed in accordance with the laws of the State of California, United States, without regard to its conflict of law provisions.
+                  These Terms shall be governed by and construed in accordance with the laws of Italy. If you are a consumer resident in another EU member state, you also benefit from any mandatory consumer-protection provisions of your own country of residence that cannot be waived by agreement, per EU Regulation 593/2008 (Rome I).
                 </p>
               </div>
-              
+
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-3">Dispute Resolution</h3>
-                <p className="text-gray-600">
-                  Any disputes arising from these Terms or your use of our Services shall first be attempted to be resolved through good-faith negotiation. If negotiation fails, disputes shall be resolved through binding arbitration in San Francisco, California, in accordance with the rules of the American Arbitration Association.
+                <p className="text-gray-600 mb-3">
+                  Any disputes arising from these Terms or your use of our Services shall first be attempted to be resolved through good-faith negotiation with our support team. As an EU consumer, you're also entitled to use the European Commission's Online Dispute Resolution (ODR) platform at{' '}
+                  <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer" className="text-orange-600 hover:underline">
+                    ec.europa.eu/consumers/odr
+                  </a>{' '}
+                  to resolve disputes without going to court. Absent an out-of-court resolution, disputes shall be subject to the exclusive jurisdiction of the courts of [[JURISDICTION_CITY]], Italy, without prejudice to any mandatory right you have as a consumer to bring proceedings in the courts of your own country of residence.
                 </p>
               </div>
               
@@ -506,28 +520,28 @@ export default function TermsOfServicePage() {
                 <div className="bg-gray-50 rounded-xl p-6">
                   <h4 className="font-semibold text-gray-900 mb-3">Legal Inquiries</h4>
                   <div className="space-y-2 text-sm text-gray-600">
-                    <p><strong>Email:</strong> <a href="mailto:legal@techtools.com" className="text-orange-600 hover:underline">legal@techtools.com</a></p>
+                    <p><strong>Email:</strong> <a href="mailto:[[LEGAL_CONTACT_EMAIL]]" className="text-orange-600 hover:underline">[[LEGAL_CONTACT_EMAIL]]</a></p>
                     <p><strong>Subject:</strong> Terms of Service Inquiry</p>
                   </div>
                 </div>
-                
+
                 <div className="bg-gray-50 rounded-xl p-6">
                   <h4 className="font-semibold text-gray-900 mb-3">General Support</h4>
                   <div className="space-y-2 text-sm text-gray-600">
-                    <p><strong>Email:</strong> <a href="mailto:support@techtools.com" className="text-orange-600 hover:underline">support@techtools.com</a></p>
-                    <p><strong>Phone:</strong> +1 (234) 567-890</p>
+                    <p><strong>Email:</strong> <a href="mailto:[[SUPPORT_CONTACT_EMAIL]]" className="text-orange-600 hover:underline">[[SUPPORT_CONTACT_EMAIL]]</a></p>
+                    <p><strong>Phone:</strong> [[SUPPORT_PHONE_NUMBER]]</p>
                   </div>
                 </div>
               </div>
-              
+
               <div className="bg-gray-50 rounded-xl p-6">
-                <h4 className="font-semibold text-gray-900 mb-3">Mailing Address</h4>
+                <h4 className="font-semibold text-gray-900 mb-3">Registered Office</h4>
                 <p className="text-gray-600">
-                  TechTools Inc.<br />
-                  Attn: Legal Department<br />
-                  123 Tech Street<br />
-                  San Francisco, CA 94102<br />
-                  United States
+                  [[LEGAL_ENTITY_NAME]]<br />
+                  [[REGISTERED_ADDRESS_LINE_1]]<br />
+                  [[REGISTERED_ADDRESS_LINE_2]]<br />
+                  Italy<br />
+                  VAT: [[VAT_NUMBER]]
                 </p>
               </div>
             </div>

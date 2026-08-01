@@ -9,6 +9,7 @@ import { StripeProvider } from './contexts/StripeContext'
 import Layout from './components/layout/Layout'
 import ScrollToTop from './components/common/ScrollToTop'
 import PageViewTracker from './components/common/PageViewTracker'
+import CookieConsentBanner from './components/common/CookieConsentBanner'
 import { initializeEventTracking } from './services/event-tracking'
 
 const HomePage = lazy(() => import('./pages/HomePage'))
@@ -76,6 +77,7 @@ function App() {
         <BrowserRouter>
           <ScrollToTop />
           <PageViewTracker />
+          <CookieConsentBanner />
           <Suspense fallback={routeFallback}>
             <Routes>
               <Route path='/' element={<Layout />}>

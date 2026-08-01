@@ -4,6 +4,7 @@
 
 import { Link } from 'react-router-dom';
 import { Cookie, Settings, BarChart3, Target, Shield, ToggleLeft, HelpCircle, Mail } from 'lucide-react';
+import { useConsentStore } from '../stores';
 
 const sections = [
   { id: 'what-are-cookies', title: 'What Are Cookies', icon: Cookie },
@@ -15,18 +16,22 @@ const sections = [
   { id: 'contact', title: 'Contact Us', icon: Mail },
 ];
 
+// This table describes what we ACTUALLY use -- not a generic template. Most
+// of our own storage is technically localStorage/sessionStorage rather than
+// browser cookies, but we cover both here since EU guidance (ePrivacy
+// Directive) treats them the same way for consent purposes.
 const cookieTypes = [
   {
     name: 'Strictly Necessary',
     icon: '🔒',
     color: 'green',
     required: true,
-    description: 'Essential for the website to function properly. These cookies enable core functionality such as security, network management, and account access.',
+    description: "Required for the site to work at all. Can't be switched off, and don't require consent under the ePrivacy Directive's necessity exemption.",
     examples: [
-      { name: 'session_id', purpose: 'Maintains your session while browsing', duration: 'Session' },
-      { name: 'csrf_token', purpose: 'Protects against cross-site request forgery', duration: 'Session' },
-      { name: 'cart_items', purpose: 'Stores items in your shopping cart', duration: '30 days' },
-      { name: 'auth_token', purpose: 'Keeps you logged into your account', duration: '7 days' },
+      { name: 'auth_token / refresh_token', purpose: 'Keeps you logged into your account (localStorage)', duration: 'Until you sign out' },
+      { name: 'techtools-cart', purpose: 'Stores items in your shopping cart (localStorage)', duration: 'Until cleared' },
+      { name: 'techtools-cookie-consent', purpose: 'Remembers your cookie preferences (localStorage)', duration: '1 year' },
+      { name: '__stripe_mid / __stripe_sid', purpose: 'Stripe fraud-prevention during payment (cookie, set by js.stripe.com)', duration: 'Up to 1 year' },
     ],
   },
   {
@@ -34,12 +39,9 @@ const cookieTypes = [
     icon: '⚙️',
     color: 'blue',
     required: false,
-    description: 'Enable enhanced functionality and personalization. These cookies remember your preferences and settings.',
+    description: 'Optional features that make the site nicer to use. Off until you accept them in the cookie banner.',
     examples: [
-      { name: 'language_pref', purpose: 'Remembers your language preference', duration: '1 year' },
-      { name: 'currency', purpose: 'Stores your preferred currency', duration: '1 year' },
-      { name: 'recently_viewed', purpose: 'Shows recently viewed products', duration: '30 days' },
-      { name: 'theme_mode', purpose: 'Remembers dark/light mode preference', duration: '1 year' },
+      { name: 'Tawk.to widget cookies', purpose: 'Powers live chat support (only loaded for logged-in customers who accept this category)', duration: 'Set by Tawk.to, varies' },
     ],
   },
   {
@@ -47,12 +49,10 @@ const cookieTypes = [
     icon: '📊',
     color: 'purple',
     required: false,
-    description: 'Help us understand how visitors interact with our website by collecting and reporting information anonymously.',
+    description: 'Our own first-party analytics -- helps us see which pages/products get used. Off until you accept this category; nothing is queued or sent before then.',
     examples: [
-      { name: '_ga', purpose: 'Google Analytics - distinguishes users', duration: '2 years' },
-      { name: '_gid', purpose: 'Google Analytics - distinguishes users', duration: '24 hours' },
-      { name: '_gat', purpose: 'Google Analytics - throttles request rate', duration: '1 minute' },
-      { name: 'hotjar_id', purpose: 'Hotjar - identifies user sessions', duration: '1 year' },
+      { name: 'analytics_utm', purpose: 'Remembers the campaign that brought you here, for the current session (sessionStorage)', duration: 'Browser session' },
+      { name: 'In-memory session id', purpose: 'Groups your page views/product views together for our own reporting -- not shared with any third party', duration: 'Until you close the tab' },
     ],
   },
   {
@@ -60,19 +60,15 @@ const cookieTypes = [
     icon: '📢',
     color: 'orange',
     required: false,
-    description: 'Used to track visitors across websites to display relevant and engaging advertisements.',
-    examples: [
-      { name: '_fbp', purpose: 'Facebook - tracks visits across websites', duration: '3 months' },
-      { name: 'ads_session', purpose: 'Google Ads - measures ad effectiveness', duration: '30 days' },
-      { name: 'pinterest_sess', purpose: 'Pinterest - enables social sharing', duration: '1 year' },
-      { name: 'tiktok_pixel', purpose: 'TikTok - measures ad conversions', duration: '13 months' },
-    ],
+    description: "We don't currently use any advertising/marketing cookies or pixels (no Google Ads, Meta Pixel, TikTok Pixel, etc. are integrated today). This category exists so that if we add one in the future, it launches already gated behind your consent instead of retroactively.",
+    examples: [],
   },
 ];
 
 export default function CookiePolicyPage() {
-  const lastUpdated = 'March 1, 2026';
-  const effectiveDate = 'March 1, 2026';
+  const lastUpdated = 'August 1, 2026';
+  const effectiveDate = 'August 1, 2026';
+  const openCookiePreferences = useConsentStore((state) => state.openPreferences);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -126,10 +122,10 @@ export default function CookiePolicyPage() {
               <div>
                 <h3 className="font-semibold text-gray-900 mb-2">Quick Summary</h3>
                 <ul className="text-sm text-gray-700 space-y-1">
-                  <li>• We use cookies to make our website work and improve your experience</li>
-                  <li>• Some cookies are essential and cannot be disabled</li>
-                  <li>• You can manage non-essential cookies through your browser or our settings</li>
-                  <li>• Third-party cookies may be used for analytics and advertising</li>
+                  <li>• We ask for your consent before anything non-essential loads -- nothing is assumed</li>
+                  <li>• Strictly necessary cookies/storage (cart, login, payment fraud prevention) can't be disabled</li>
+                  <li>• Functional (live chat) and Analytics (our own, first-party) are off until you opt in</li>
+                  <li>• We don't currently use any advertising/marketing trackers</li>
                 </ul>
               </div>
             </div>
@@ -179,11 +175,12 @@ export default function CookiePolicyPage() {
                   In addition to cookies, we may use similar technologies such as:
                 </p>
                 <ul className="list-disc list-inside mt-2 ml-4 space-y-1">
-                  <li><strong>Web Beacons:</strong> Small graphic images (also called "pixel tags") used to track user behavior</li>
-                  <li><strong>Local Storage:</strong> Data stored in your browser that persists after you close it</li>
-                  <li><strong>Session Storage:</strong> Data stored temporarily for a single browser session</li>
-                  <li><strong>Fingerprinting:</strong> Collecting device information to create a unique identifier</li>
+                  <li><strong>Local Storage:</strong> Data stored in your browser that persists after you close it -- this is what we actually use for your cart, login session, and cookie preferences (see the table below)</li>
+                  <li><strong>Session Storage:</strong> Data stored temporarily for a single browser session -- used for campaign attribution (UTM parameters) if you've accepted Analytics</li>
                 </ul>
+                <p className="text-sm text-gray-500 mt-2">
+                  We don't use web beacons/pixel tags or device fingerprinting.
+                </p>
               </div>
             </div>
           </section>
@@ -235,27 +232,33 @@ export default function CookiePolicyPage() {
                   </div>
                   
                   <div className="p-4 bg-white">
-                    <h4 className="text-sm font-semibold text-gray-700 mb-3">Examples:</h4>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="text-left text-gray-500 border-b">
-                            <th className="pb-2 font-medium">Cookie Name</th>
-                            <th className="pb-2 font-medium">Purpose</th>
-                            <th className="pb-2 font-medium">Duration</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                          {type.examples.map((cookie) => (
-                            <tr key={cookie.name}>
-                              <td className="py-2 font-mono text-xs bg-gray-100 px-2 rounded">{cookie.name}</td>
-                              <td className="py-2 px-2 text-gray-600">{cookie.purpose}</td>
-                              <td className="py-2 text-gray-500">{cookie.duration}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    {type.examples.length === 0 ? (
+                      <p className="text-sm text-gray-500">Nothing in this category is used today.</p>
+                    ) : (
+                      <>
+                        <h4 className="text-sm font-semibold text-gray-700 mb-3">What's actually set:</h4>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="text-left text-gray-500 border-b">
+                                <th className="pb-2 font-medium">Name</th>
+                                <th className="pb-2 font-medium">Purpose</th>
+                                <th className="pb-2 font-medium">Duration</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                              {type.examples.map((cookie) => (
+                                <tr key={cookie.name}>
+                                  <td className="py-2 font-mono text-xs bg-gray-100 px-2 rounded">{cookie.name}</td>
+                                  <td className="py-2 px-2 text-gray-600">{cookie.purpose}</td>
+                                  <td className="py-2 text-gray-500">{cookie.duration}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}
@@ -331,48 +334,55 @@ export default function CookiePolicyPage() {
             
             <div className="space-y-6">
               <p className="text-gray-600">
-                Some cookies on our website are set by third-party services. These cookies are used for analytics, advertising, and social media integration.
+                We keep this list honest and short -- it only names services we
+                actually use, not a generic list of what an online store
+                might use.
               </p>
-              
+
               <div className="space-y-4">
                 <div className="border border-gray-200 rounded-xl p-4">
                   <div className="flex items-center gap-3 mb-3">
-                    <img src="https://www.google.com/favicon.ico" alt="Google" className="w-6 h-6" />
-                    <h4 className="font-semibold text-gray-900">Google Analytics</h4>
+                    <div className="w-6 h-6 bg-indigo-600 rounded flex items-center justify-center text-white text-xs font-bold">S</div>
+                    <h4 className="font-semibold text-gray-900">Stripe</h4>
+                    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Strictly Necessary</span>
                   </div>
                   <p className="text-sm text-gray-600 mb-2">
-                    We use Google Analytics to understand how visitors interact with our website. This helps us improve our content and user experience.
+                    Our payment processor. Stripe's own script loads on every
+                    page (not just checkout) and sets cookies used for
+                    payment fraud prevention -- these are treated as
+                    strictly necessary under the ePrivacy Directive and
+                    aren't gated behind the consent banner.
                   </p>
-                  <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="text-sm text-orange-600 hover:underline">
-                    View Google's Privacy Policy →
+                  <a href="https://stripe.com/privacy" target="_blank" rel="noopener noreferrer" className="text-sm text-orange-600 hover:underline">
+                    View Stripe's Privacy Policy →
                   </a>
                 </div>
-                
+
                 <div className="border border-gray-200 rounded-xl p-4">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="w-6 h-6 bg-blue-600 rounded flex items-center justify-center text-white text-xs font-bold">f</div>
-                    <h4 className="font-semibold text-gray-900">Facebook Pixel</h4>
+                    <div className="w-6 h-6 bg-sky-500 rounded flex items-center justify-center text-white text-xs font-bold">T</div>
+                    <h4 className="font-semibold text-gray-900">Tawk.to</h4>
+                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Functional</span>
                   </div>
                   <p className="text-sm text-gray-600 mb-2">
-                    We use Facebook Pixel to measure the effectiveness of our advertising campaigns and to show you relevant ads on Facebook.
+                    Our live chat support widget. Only loads for signed-in
+                    customers who have accepted the Functional cookie
+                    category -- never for anonymous visitors.
                   </p>
-                  <a href="https://www.facebook.com/privacy/explanation" target="_blank" rel="noopener noreferrer" className="text-sm text-orange-600 hover:underline">
-                    View Facebook's Privacy Policy →
+                  <a href="https://www.tawk.to/privacy-policy/" target="_blank" rel="noopener noreferrer" className="text-sm text-orange-600 hover:underline">
+                    View Tawk.to's Privacy Policy →
                   </a>
                 </div>
-                
-                <div className="border border-gray-200 rounded-xl p-4">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-6 h-6 bg-red-500 rounded flex items-center justify-center text-white text-xs font-bold">H</div>
-                    <h4 className="font-semibold text-gray-900">Hotjar</h4>
-                  </div>
-                  <p className="text-sm text-gray-600 mb-2">
-                    We use Hotjar to understand user behavior through heatmaps, session recordings, and surveys. This helps us identify usability issues.
-                  </p>
-                  <a href="https://www.hotjar.com/privacy/" target="_blank" rel="noopener noreferrer" className="text-sm text-orange-600 hover:underline">
-                    View Hotjar's Privacy Policy →
-                  </a>
-                </div>
+              </div>
+
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                <p className="text-sm text-gray-600">
+                  We do not currently use Google Analytics, Meta/Facebook
+                  Pixel, TikTok Pixel, Hotjar, or any other analytics or
+                  advertising service. If that changes, we'll update this
+                  page first and it will be gated behind the Marketing
+                  consent category, which is off by default.
+                </p>
               </div>
             </div>
           </section>
@@ -394,9 +404,12 @@ export default function CookiePolicyPage() {
               <div className="bg-teal-50 border border-teal-200 rounded-xl p-6">
                 <h3 className="font-semibold text-gray-900 mb-3">Cookie Preferences Center</h3>
                 <p className="text-sm text-gray-600 mb-4">
-                  Use our Cookie Preferences Center to customize which types of cookies you allow. You can access this at any time by clicking the "Cookie Settings" link in our website footer.
+                  Use our Cookie Preferences Center to customize which types of cookies you allow. You can access this at any time by clicking the "Cookie Settings" link in our website footer, or the button below.
                 </p>
-                <button className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium">
+                <button
+                  onClick={openCookiePreferences}
+                  className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium"
+                >
                   Open Cookie Settings
                 </button>
               </div>
@@ -470,26 +483,33 @@ export default function CookiePolicyPage() {
                 
                 <div className="space-y-3">
                   <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-xl">
-                    <span className="text-xl">📊</span>
+                    <span className="text-xl">🍪</span>
                     <div>
-                      <h4 className="font-medium text-gray-900">Google Analytics Opt-Out</h4>
-                      <p className="text-sm text-gray-600">Install the <a href="https://tools.google.com/dlpage/gaoptout" target="_blank" rel="noopener noreferrer" className="text-orange-600 hover:underline">Google Analytics Opt-Out Browser Add-on</a></p>
+                      <h4 className="font-medium text-gray-900">Our Cookie Settings</h4>
+                      <p className="text-sm text-gray-600">
+                        The fastest way to control what we collect: use the{' '}
+                        <button
+                          onClick={openCookiePreferences}
+                          className="text-orange-600 hover:underline"
+                        >
+                          Cookie Settings
+                        </button>{' '}
+                        panel to turn Functional and Analytics on or off at
+                        any time -- takes effect immediately.
+                      </p>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-xl">
                     <span className="text-xl">📢</span>
                     <div>
-                      <h4 className="font-medium text-gray-900">Interest-Based Advertising</h4>
-                      <p className="text-sm text-gray-600">Visit <a href="https://optout.aboutads.info/" target="_blank" rel="noopener noreferrer" className="text-orange-600 hover:underline">Digital Advertising Alliance</a> or <a href="https://www.youronlinechoices.com/" target="_blank" rel="noopener noreferrer" className="text-orange-600 hover:underline">Your Online Choices (EU)</a></p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-xl">
-                    <span className="text-xl">🚫</span>
-                    <div>
-                      <h4 className="font-medium text-gray-900">Do Not Track</h4>
-                      <p className="text-sm text-gray-600">We honor Do Not Track (DNT) signals sent by your browser</p>
+                      <h4 className="font-medium text-gray-900">Third-Party Ad Opt-Outs</h4>
+                      <p className="text-sm text-gray-600">
+                        Not applicable today -- we don't run any advertising
+                        or ad-retargeting integrations, so there's nothing to
+                        opt out of on services like the Digital Advertising
+                        Alliance or Your Online Choices.
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -521,16 +541,16 @@ export default function CookiePolicyPage() {
                 <div className="bg-gray-50 rounded-xl p-6">
                   <h4 className="font-semibold text-gray-900 mb-3">Cookie Inquiries</h4>
                   <div className="space-y-2 text-sm text-gray-600">
-                    <p><strong>Email:</strong> <a href="mailto:privacy@techtools.com" className="text-orange-600 hover:underline">privacy@techtools.com</a></p>
+                    <p><strong>Email:</strong> <a href="mailto:[[PRIVACY_CONTACT_EMAIL]]" className="text-orange-600 hover:underline">[[PRIVACY_CONTACT_EMAIL]]</a></p>
                     <p><strong>Subject:</strong> Cookie Policy Inquiry</p>
                   </div>
                 </div>
-                
+
                 <div className="bg-gray-50 rounded-xl p-6">
                   <h4 className="font-semibold text-gray-900 mb-3">General Support</h4>
                   <div className="space-y-2 text-sm text-gray-600">
-                    <p><strong>Email:</strong> <a href="mailto:support@techtools.com" className="text-orange-600 hover:underline">support@techtools.com</a></p>
-                    <p><strong>Phone:</strong> +1 (234) 567-890</p>
+                    <p><strong>Email:</strong> <a href="mailto:[[SUPPORT_CONTACT_EMAIL]]" className="text-orange-600 hover:underline">[[SUPPORT_CONTACT_EMAIL]]</a></p>
+                    <p><strong>Phone:</strong> [[SUPPORT_PHONE_NUMBER]]</p>
                   </div>
                 </div>
               </div>
