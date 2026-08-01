@@ -1,10 +1,18 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { productService } from '@/services/product.service'
 import { categoryService } from '@/services/category.service'
+import { collectionService } from '@/services/collection.service'
+import { orderService } from '@/services/order.service'
+import { trendingService } from '@/services/trending.service'
 import supplierService from '@/services/supplier.service'
+import { useRealtimeMetrics } from '@/hooks/useRealtimeMetrics'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import { StatCard } from '@/components/dashboard/StatCard'
+import { SectionEyebrow } from '@/components/dashboard/SectionEyebrow'
 import {
   Package,
   FolderTree,
@@ -13,25 +21,81 @@ import {
   DollarSign,
   ShoppingCart,
   Users,
-  Activity,
+  Gauge,
+  ShieldAlert,
+  Wifi,
+  WifiOff,
 } from 'lucide-react'
-import { Skeleton } from '@/components/ui/skeleton'
+
+const currencyFormatter = new Intl.NumberFormat(undefined, {
+  style: 'currency',
+  currency: 'EUR',
+})
+const numberFormatter = new Intl.NumberFormat(undefined)
 
 export default function DashboardPage() {
-  const { data: products, isLoading: productsLoading } = useQuery({
-    queryKey: ['products'],
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const tick = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(tick)
+  }, [])
+
+  const { metrics: realtimeMetrics, isConnected: metricsConnected } =
+    useRealtimeMetrics()
+  const [lastMetricsAt, setLastMetricsAt] = useState<number | null>(null)
+  useEffect(() => {
+    if (realtimeMetrics) setLastMetricsAt(Date.now())
+  }, [realtimeMetrics])
+  const secondsSinceUpdate = lastMetricsAt
+    ? Math.max(0, Math.floor((now - lastMetricsAt) / 1000))
+    : null
+
+  const { data: productsData, isLoading: productsLoading } = useQuery({
+    queryKey: ['dashboard-products'],
     queryFn: async () => {
-      const response = await productService.getProducts()
-      return response?.data?.items || []
+      const response = await productService.getProducts({ limit: 5 })
+      const data = response?.data as any
+      const items = data?.items || data?.products || []
+      const total = data?.pagination?.total ?? items.length
+      return { items, total }
     },
   })
 
   const { data: categories, isLoading: categoriesLoading } = useQuery({
-    queryKey: ['categories'],
+    queryKey: ['dashboard-categories'],
     queryFn: async () => {
       const response = await categoryService.getCategories()
       return response?.data?.categories || []
     },
+  })
+
+  const { data: collectionsTotal, isLoading: collectionsLoading } = useQuery({
+    queryKey: ['dashboard-collections'],
+    queryFn: async () => {
+      const response: any = await collectionService.getProductCollections({
+        limit: 1,
+      })
+      return response?.pagination?.total ?? 0
+    },
+  })
+
+  const { data: orderStats, isLoading: orderStatsLoading } = useQuery({
+    queryKey: ['dashboard-order-stats'],
+    queryFn: async () => {
+      const response = await orderService.getStats()
+      return response?.data?.stats
+    },
+  })
+
+  const { data: conversionFunnel, isLoading: conversionLoading } = useQuery({
+    queryKey: ['dashboard-conversion-funnel'],
+    queryFn: () => trendingService.getConversionFunnel(1),
+  })
+
+  const { data: liveVisitors, isLoading: liveVisitorsLoading } = useQuery({
+    queryKey: ['dashboard-live-visitors'],
+    queryFn: () => trendingService.getLiveVisitors(5),
+    refetchInterval: 20_000,
   })
 
   const { data: autoPausedResponse, isLoading: autoPausedLoading } = useQuery({
@@ -42,229 +106,255 @@ export default function DashboardPage() {
 
   const autoPausedItems = autoPausedResponse?.data?.items || []
 
+  const liveVisitorCount =
+    realtimeMetrics?.activeUsers ?? liveVisitors?.activeCount ?? 0
+  const conversionRate =
+    realtimeMetrics?.conversionRate ??
+    conversionFunnel?.summary?.overallConversionRate ??
+    0
+
   const stats = [
     {
       title: 'Total Products',
-      value: products?.length || 0,
+      value: numberFormatter.format(productsData?.total ?? 0),
       icon: Package,
-      color: 'bg-blue-500',
-      trend: '+12%',
+      loading: productsLoading,
     },
     {
       title: 'Categories',
-      value: categories?.length || 0,
+      value: numberFormatter.format(categories?.length ?? 0),
       icon: FolderTree,
-      color: 'bg-green-500',
-      trend: '+3',
+      loading: categoriesLoading,
     },
     {
       title: 'Collections',
-      value: 0,
+      value: numberFormatter.format(collectionsTotal ?? 0),
       icon: Grid3x3,
-      color: 'bg-purple-500',
-      trend: '+5',
+      loading: collectionsLoading,
     },
     {
-      title: 'Active Users',
-      value: '1.2K',
+      title: 'Live Visitors',
+      value: numberFormatter.format(liveVisitorCount),
+      sublabel: 'Last 5 minutes',
       icon: Users,
-      color: 'bg-orange-500',
-      trend: '+8%',
+      loading: liveVisitorsLoading && !realtimeMetrics,
     },
     {
       title: 'Total Revenue',
-      value: '$45.2K',
+      value: currencyFormatter.format(orderStats?.totalRevenue ?? 0),
+      sublabel: `Today: ${currencyFormatter.format(orderStats?.todayRevenue ?? 0)}`,
       icon: DollarSign,
-      color: 'bg-emerald-500',
-      trend: '+15%',
+      loading: orderStatsLoading,
     },
     {
-      title: 'Orders',
-      value: '324',
+      title: 'Total Orders',
+      value: numberFormatter.format(orderStats?.totalOrders ?? 0),
+      sublabel: `Today: ${numberFormatter.format(orderStats?.todayOrders ?? 0)}`,
       icon: ShoppingCart,
-      color: 'bg-pink-500',
-      trend: '+22',
+      loading: orderStatsLoading,
     },
     {
       title: 'Conversion Rate',
-      value: '3.2%',
+      value: `${Number(conversionRate).toFixed(2)}%`,
+      sublabel: 'View to purchase',
       icon: TrendingUp,
-      color: 'bg-indigo-500',
-      trend: '+0.5%',
+      loading: conversionLoading && !realtimeMetrics,
     },
     {
-      title: 'Active Sessions',
-      value: '89',
-      icon: Activity,
-      color: 'bg-cyan-500',
-      trend: 'Live',
+      title: 'Avg Order Value',
+      value: currencyFormatter.format(orderStats?.averageOrderValue ?? 0),
+      sublabel: 'Per transaction',
+      icon: Gauge,
+      loading: orderStatsLoading,
     },
   ]
 
-  if (productsLoading || categoriesLoading) {
-    return (
-      <div className='space-y-6'>
-        <h1 className='text-3xl font-bold'>Dashboard</h1>
-        <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6'>
-          {[...Array(8)].map((_, i) => (
-            <Skeleton key={i} className='h-32' />
+  return (
+    <div className='space-y-6'>
+      <div className='flex flex-wrap items-start justify-between gap-4'>
+        <div>
+          <h1 className='text-3xl font-bold'>Dashboard Overview</h1>
+          <p className='text-muted-foreground'>
+            Welcome to your TechTools admin dashboard.
+          </p>
+        </div>
+        <div className='flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm'>
+          {metricsConnected ? (
+            <Wifi className='h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400' />
+          ) : (
+            <WifiOff className='h-3.5 w-3.5 text-red-600 dark:text-red-400' />
+          )}
+          <span className='font-medium'>
+            {metricsConnected ? 'Live' : 'Offline'}
+          </span>
+          {metricsConnected && secondsSinceUpdate !== null && (
+            <span className='text-xs text-muted-foreground'>
+              · updated {secondsSinceUpdate}s ago
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div>
+        <SectionEyebrow>Overview</SectionEyebrow>
+        <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4'>
+          {stats.map((stat) => (
+            <StatCard
+              key={stat.title}
+              icon={stat.icon}
+              label={stat.title}
+              value={stat.value}
+              sublabel={stat.sublabel}
+              loading={stat.loading}
+            />
           ))}
         </div>
       </div>
-    )
-  }
 
-  return (
-    <div className='space-y-6'>
       <div>
-        <h1 className='text-3xl font-bold text-gray-900 dark:text-gray-100'>
-          Dashboard Overview
-        </h1>
-        <p className='text-gray-600 dark:text-gray-400 mt-2'>
-          Welcome to your TechTools admin dashboard. Here's what's happening
-          today.
-        </p>
-      </div>
-
-      {/* Stats Grid */}
-      <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6'>
-        {stats.map((stat) => {
-          const Icon = stat.icon
-          return (
-            <Card
-              key={stat.title}
-              className='hover:shadow-lg transition-shadow'
-            >
-              <CardHeader className='flex flex-row items-center justify-between pb-2'>
-                <CardTitle className='text-sm font-medium text-gray-600 dark:text-gray-400'>
-                  {stat.title}
-                </CardTitle>
-                <div className={`p-2 rounded-lg ${stat.color} bg-opacity-10`}>
-                  <Icon
-                    className={`w-5 h-5 ${stat.color.replace('bg-', 'text-')}`}
-                  />
+        <SectionEyebrow>Recent activity</SectionEyebrow>
+        <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
+          <Card>
+            <CardHeader>
+              <CardTitle className='flex items-center gap-2'>
+                <ShieldAlert className='h-5 w-5 text-amber-500' />
+                Ops Auto-Pause Guard
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {autoPausedLoading ? (
+                <div className='space-y-2'>
+                  <Skeleton className='h-8 w-full' />
+                  <Skeleton className='h-8 w-full' />
                 </div>
-              </CardHeader>
-              <CardContent>
-                <div className='text-3xl font-bold text-gray-900 dark:text-gray-100'>
-                  {stat.value}
-                </div>
-                <p className='text-sm text-green-600 dark:text-green-400 mt-2'>
-                  {stat.trend} from last month
+              ) : autoPausedItems.length === 0 ? (
+                <p className='text-sm text-muted-foreground'>
+                  No products are currently auto-paused.
                 </p>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
-
-      {/* Recent Activity */}
-      <div className='grid grid-cols-1 lg:grid-cols-2 gap-6'>
-        <Card>
-          <CardHeader>
-            <CardTitle>Ops Auto-Pause Guard</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {autoPausedLoading ? (
-              <div className='space-y-2'>
-                <Skeleton className='h-8 w-full' />
-                <Skeleton className='h-8 w-full' />
-              </div>
-            ) : autoPausedItems.length === 0 ? (
-              <p className='text-sm text-muted-foreground'>
-                No products are currently auto-paused.
-              </p>
-            ) : (
-              <div className='space-y-2'>
-                {autoPausedItems.map((item: any) => (
-                  <div
-                    key={item.product_id}
-                    className='rounded border p-2 text-sm'
-                  >
-                    <p className='font-medium'>{item.product_name}</p>
-                    <p className='text-xs text-muted-foreground'>
-                      SKU {item.sku} · Margin {Number(item.margin_percent || 0).toFixed(2)}% · Contribution ${' '}
-                      {Number(item.contribution_margin || 0).toFixed(2)}
-                    </p>
-                    {item.pause_reason && (
-                      <p className='mt-1 text-xs text-muted-foreground'>
-                        {item.pause_reason}
+              ) : (
+                <div className='space-y-2'>
+                  {autoPausedItems.map((item: any) => (
+                    <div
+                      key={item.product_id}
+                      className='rounded border p-2 text-sm'
+                    >
+                      <p className='font-medium'>{item.product_name}</p>
+                      <p className='text-xs text-muted-foreground'>
+                        SKU {item.sku} · Margin{' '}
+                        {Number(item.margin_percent || 0).toFixed(2)}% ·
+                        Contribution{' '}
+                        {currencyFormatter.format(
+                          Number(item.contribution_margin || 0),
+                        )}
                       </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Products</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className='space-y-4'>
-              {products?.slice(0, 5).map((product: any) => (
-                <div
-                  key={product.id}
-                  className='flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors'
-                >
-                  <div>
-                    <p className='font-medium text-gray-900 dark:text-gray-100'>
-                      {product.name}
-                    </p>
-                    <p className='text-sm text-gray-500 dark:text-gray-400'>
-                      ${product.price}
-                    </p>
-                  </div>
-                  <span
-                    className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      product.status === 'active'
-                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
-                        : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
-                    }`}
-                  >
-                    {product.status}
-                  </span>
+                      {item.pause_reason && (
+                        <p className='mt-1 text-xs text-muted-foreground'>
+                          {item.pause_reason}
+                        </p>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+              )}
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Categories</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className='space-y-4'>
-              {categories?.slice(0, 5).map((category: any) => (
-                <div
-                  key={category.id}
-                  className='flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors'
-                >
-                  <div>
-                    <p className='font-medium text-gray-900 dark:text-gray-100'>
-                      {category.name}
-                    </p>
-                    <p className='text-sm text-gray-500 dark:text-gray-400'>
-                      {category.slug}
-                    </p>
-                  </div>
-                  <span
-                    className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      category.status === 'active'
-                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300'
-                        : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
-                    }`}
-                  >
-                    {category.status}
-                  </span>
+          <Card>
+            <CardHeader>
+              <CardTitle className='flex items-center gap-2'>
+                <Package className='h-5 w-5 text-blue-500' />
+                Recent Products
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {productsLoading ? (
+                <div className='space-y-2'>
+                  <Skeleton className='h-10 w-full' />
+                  <Skeleton className='h-10 w-full' />
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+              ) : (productsData?.items ?? []).length === 0 ? (
+                <p className='text-sm text-muted-foreground'>
+                  No products yet.
+                </p>
+              ) : (
+                <div className='space-y-4'>
+                  {productsData!.items.slice(0, 5).map((product: any) => (
+                    <div
+                      key={product.id}
+                      className='flex items-center justify-between p-3 rounded-lg hover:bg-muted transition-colors'
+                    >
+                      <div>
+                        <p className='font-medium'>{product.name}</p>
+                        <p className='text-sm text-muted-foreground'>
+                          {currencyFormatter.format(
+                            parseFloat(product.base_price) || 0,
+                          )}
+                        </p>
+                      </div>
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          product.is_active
+                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                            : 'bg-muted text-muted-foreground'
+                        }`}
+                      >
+                        {product.is_active ? 'active' : 'inactive'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className='flex items-center gap-2'>
+                <FolderTree className='h-5 w-5 text-green-500' />
+                Recent Categories
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {categoriesLoading ? (
+                <div className='space-y-2'>
+                  <Skeleton className='h-10 w-full' />
+                  <Skeleton className='h-10 w-full' />
+                </div>
+              ) : (categories ?? []).length === 0 ? (
+                <p className='text-sm text-muted-foreground'>
+                  No categories yet.
+                </p>
+              ) : (
+                <div className='space-y-4'>
+                  {categories!.slice(0, 5).map((category: any) => (
+                    <div
+                      key={category.id}
+                      className='flex items-center justify-between p-3 rounded-lg hover:bg-muted transition-colors'
+                    >
+                      <div>
+                        <p className='font-medium'>{category.name}</p>
+                        <p className='text-sm text-muted-foreground'>
+                          {category.slug}
+                        </p>
+                      </div>
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          category.is_active ?? category.isActive
+                            ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                            : 'bg-muted text-muted-foreground'
+                        }`}
+                      >
+                        {(category.is_active ?? category.isActive)
+                          ? 'active'
+                          : 'inactive'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   )

@@ -43,8 +43,8 @@ import {
 import { trendingService } from '@/services/trending.service'
 import { useRealtimeMetrics, useRealtimeAlerts } from '@/hooks/useRealtimeMetrics'
 import type { ConversionFunnelStep, TopProductMetric } from '@/types/events'
-import { StatCard } from './components/StatCard'
-import { SectionEyebrow } from './components/SectionEyebrow'
+import { StatCard } from '@/components/dashboard/StatCard'
+import { SectionEyebrow } from '@/components/dashboard/SectionEyebrow'
 
 type Period = 'today' | 'week' | 'month'
 
