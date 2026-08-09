@@ -116,7 +116,7 @@ async function getLastHourOrders(): Promise<number> {
 /**
  * Calculate conversion rate (last 24 hours)
  */
-async function getConversionRate(): Promise<number> {
+export async function getConversionRate(): Promise<number> {
   try {
     const result = await query(
       `SELECT 
@@ -125,7 +125,13 @@ async function getConversionRate(): Promise<number> {
        FROM events_core
        WHERE event_time > NOW() - INTERVAL '24 hours'`,
     )
-    const { viewers = 0, buyers = 0 } = result.rows[0] || {}
+    // COUNT(...) comes back from pg as a bigint string (e.g. "0"), not a
+    // number -- `viewers === 0` was always false for that string, so the
+    // zero-viewers guard below never fired. That let `buyers / viewers`
+    // evaluate to 0/0 = NaN, which JSON.stringify silently turns into
+    // `null` on the wire, crashing the dashboard's `.toFixed()` call.
+    const viewers = Number(result.rows[0]?.viewers ?? 0)
+    const buyers = Number(result.rows[0]?.buyers ?? 0)
     if (viewers === 0) return 0
     return Number(((buyers / viewers) * 100).toFixed(2))
   } catch (error) {

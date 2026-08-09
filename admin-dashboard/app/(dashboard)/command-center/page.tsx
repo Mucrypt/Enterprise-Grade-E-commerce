@@ -213,7 +213,15 @@ function GlobalOverviewSection() {
           />
           <MetricCard
             label='Conversion rate'
-            value={metrics ? `${metrics.conversionRate.toFixed(2)}%` : '—'}
+            // metrics.conversionRate can arrive as `null` over the socket
+            // (NaN silently becomes null in JSON) if the backend ever
+            // regresses this -- guard here too rather than trusting the
+            // wire payload matches its TypeScript type.
+            value={
+              metrics && typeof metrics.conversionRate === 'number'
+                ? `${metrics.conversionRate.toFixed(2)}%`
+                : '—'
+            }
             icon={Percent}
           />
           <MetricCard
