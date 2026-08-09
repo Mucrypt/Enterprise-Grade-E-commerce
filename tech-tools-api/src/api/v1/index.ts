@@ -31,6 +31,7 @@ import libraryRoutes from './library/library.routes'
 import adminBooksRoutes from './admin/books.routes'
 import sellerRoutes from './seller/seller.routes'
 import adminSellersRoutes from './admin/sellers.routes'
+import staffRoutes from './staff/staff.routes'
 
 const router = Router()
 
@@ -77,6 +78,7 @@ router.use('/ai', aiRoutes)
 router.use('/books', booksRoutes)
 router.use('/creator', creatorRoutes)
 router.use('/library', libraryRoutes)
+router.use('/staff', staffRoutes)
 
 // Documentation route
 router.get('/docs', (_req, res) => {

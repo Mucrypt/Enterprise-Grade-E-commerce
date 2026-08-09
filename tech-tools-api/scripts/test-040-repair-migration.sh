@@ -20,7 +20,21 @@ set -euo pipefail
 # object it creates is fully throwaway and isolated -- it never touches
 # any real database).
 #
-# Usage: ./scripts/test-040-repair-migration.sh
+# Usage (note the path -- this script lives under tech-tools-api/, not the
+# repo root, so `./scripts/test-040-repair-migration.sh` only works from
+# inside tech-tools-api/):
+#   cd tech-tools-api && ./scripts/test-040-repair-migration.sh
+# or, from the repo root:
+#   ./tech-tools-api/scripts/test-040-repair-migration.sh
+#
+# The path this script resolves internally (via $0's own location, not the
+# caller's working directory) is correct regardless of which of the above
+# you use -- the "No such file or directory" error seen when this was first
+# tried was bash failing to find the SCRIPT FILE ITSELF at an assumed repo-
+# root-relative path (`./scripts/...` instead of
+# `./tech-tools-api/scripts/...`), not a bug in the path logic below. The
+# explicit check a few lines down exists to make any future version of that
+# same mistake fail with a clear message instead of a confusing one.
 
 CONTAINER_NAME="techtools-040-migration-test"
 IMAGE="postgres:15-alpine"
@@ -28,6 +42,14 @@ DB_NAME="techtools_test"
 DB_USER="techtools_user"
 DB_PASSWORD="test_password_only"
 MIGRATION_FILE="$(cd "$(dirname "$0")/.." && pwd)/src/database/migrations/040_repair_unified_analytics_alerts.sql"
+
+if [ ! -f "$MIGRATION_FILE" ]; then
+  echo "FAIL: expected migration file not found at: $MIGRATION_FILE"
+  echo "Run this script as either:"
+  echo "  cd tech-tools-api && ./scripts/test-040-repair-migration.sh"
+  echo "  ./tech-tools-api/scripts/test-040-repair-migration.sh   (from the repo root)"
+  exit 1
+fi
 
 cleanup() {
   echo "Cleaning up test container..."

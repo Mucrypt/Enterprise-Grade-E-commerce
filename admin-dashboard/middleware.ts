@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { ADMIN_ROLE_COOKIE_NAME, ADMIN_ROLES } from '@/lib/admin-role-cookie'
+import {
+  ADMIN_ROLE_COOKIE_NAME,
+  DASHBOARD_ACCESS_MARKERS,
+} from '@/lib/admin-role-cookie'
 
 // Server-side gate on the dashboard shell itself. Runs before any page
 // component renders, so a session without an admin/super_admin role cookie
@@ -28,7 +31,7 @@ export function middleware(request: NextRequest) {
 
   const role = request.cookies.get(ADMIN_ROLE_COOKIE_NAME)?.value
 
-  if (!role || !ADMIN_ROLES.includes(role)) {
+  if (!role || !DASHBOARD_ACCESS_MARKERS.includes(role)) {
     const loginUrl = new URL('/login', request.url)
     return NextResponse.redirect(loginUrl)
   }

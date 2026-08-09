@@ -76,7 +76,7 @@ fi
 
 # Function to run SQL
 run_sql() {
-    docker exec -i $POSTGRES_CONTAINER psql -U $DB_USER -d $DB_NAME "$@"
+    docker exec -i "$POSTGRES_CONTAINER" psql -v ON_ERROR_STOP=1 -U "$DB_USER" -d "$DB_NAME" "$@"
 }
 
 # Ensure migrations tracking table exists
@@ -105,11 +105,21 @@ get_migration_files() {
 run_migration() {
     local filename=$1
     local filepath="$MIGRATIONS_DIR/$filename"
-    
+
     log_info "Running: $filename"
-    
-    # Execute migration
-    if cat "$filepath" | run_sql; then
+
+    # -1/--single-transaction wraps the whole file in one BEGIN/COMMIT (like
+    # the app's own migrate.ts runner), and ON_ERROR_STOP (set in run_sql)
+    # makes psql abort immediately instead of silently continuing past a
+    # failed statement. Previously this piped the file through `run_sql`
+    # with neither flag: psql would print an error for a failing statement
+    # (e.g. a CREATE TABLE referencing a nonexistent table) and keep going,
+    # then this `if` would still see success and record the migration as
+    # executed even though part of it never applied -- this is the
+    # confirmed mechanism behind the 026/alerts drift documented in
+    # docs/PRODUCTION-026-DRIFT-RECONCILIATION.md. `-f -` (read the script
+    # from stdin) is required for `-1` to be accepted by psql.
+    if run_sql -1 -f - < "$filepath"; then
         # Record migration
         run_sql -c "INSERT INTO schema_migrations (filename) VALUES ('$filename')" >/dev/null 2>&1
         log_success "Executed: $filename"
@@ -246,7 +256,7 @@ migrate_force() {
     ensure_migrations_table
     
     log_info "Executing: $filename"
-    if cat "$filepath" | run_sql; then
+    if run_sql -1 -f - < "$filepath"; then
         # Update or insert tracking record
         run_sql -c "DELETE FROM schema_migrations WHERE filename = '$filename'" >/dev/null 2>&1
         run_sql -c "INSERT INTO schema_migrations (filename) VALUES ('$filename')" >/dev/null 2>&1

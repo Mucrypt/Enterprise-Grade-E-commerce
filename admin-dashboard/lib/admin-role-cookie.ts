@@ -16,10 +16,16 @@
 
 const COOKIE_NAME = 'tt_admin_role'
 const ADMIN_ROLES = ['admin', 'super_admin']
+// 'staff' is a distinct marker (never a real users.user_type value) for a
+// session whose dashboard access comes from an ACTIVE staff_memberships
+// row rather than a legacy admin/super_admin user_type -- e.g. a
+// MARKET_MANAGER whose user_type is still 'customer'. See
+// AuthContext.tsx's login()/loadUser() for where this is set.
+const DASHBOARD_ACCESS_MARKERS = [...ADMIN_ROLES, 'staff']
 
 export function setAdminRoleCookie(role: string | undefined | null): void {
   if (typeof document === 'undefined') return
-  if (!role || !ADMIN_ROLES.includes(role)) return
+  if (!role || !DASHBOARD_ACCESS_MARKERS.includes(role)) return
 
   const secure = window.location.protocol === 'https:' ? '; Secure' : ''
   // Matches the refresh token's lifetime (7d), not the short-lived access
@@ -36,4 +42,8 @@ export function clearAdminRoleCookie(): void {
   document.cookie = `${COOKIE_NAME}=; Path=/; Max-Age=0; SameSite=Lax`
 }
 
-export { COOKIE_NAME as ADMIN_ROLE_COOKIE_NAME, ADMIN_ROLES }
+export {
+  COOKIE_NAME as ADMIN_ROLE_COOKIE_NAME,
+  ADMIN_ROLES,
+  DASHBOARD_ACCESS_MARKERS,
+}

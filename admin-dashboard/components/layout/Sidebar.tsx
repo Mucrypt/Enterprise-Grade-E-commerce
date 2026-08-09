@@ -34,8 +34,11 @@ import {
   Megaphone,
   Bot,
   UserCheck,
+  Building2,
+  Activity,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useStaffAccess } from '@/contexts/StaffAccessContext'
 
 interface NavItem {
   title: string
@@ -43,6 +46,17 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>
   badge?: string
   children?: NavItem[]
+  /**
+   * When set, this item (and its children) is hidden unless the current
+   * user has this permission -- legacy admin/super_admin always pass,
+   * matching their existing unrestricted access (see
+   * StaffAccessContext.hasPermission). Items with no `permission` remain
+   * visible to anyone who can reach the dashboard shell at all, same as
+   * before the staff system existed. This is a rendering convenience only
+   * -- every route behind a gated item must also enforce the same
+   * permission server-side; hiding a link is never itself authorization.
+   */
+  permission?: string
 }
 
 const navigation: NavItem[] = [
@@ -50,6 +64,15 @@ const navigation: NavItem[] = [
     title: 'Dashboard',
     href: '/dashboard',
     icon: LayoutDashboard,
+  },
+  {
+    // New in ADMIN-PLATFORM-2A -- a separate page from /dashboard so the
+    // current default landing experience is unchanged this phase. See
+    // docs/ADMIN-PLATFORM-2-ROADMAP.md Part K.
+    title: 'Command Center',
+    href: '/command-center',
+    icon: Activity,
+    badge: 'New',
   },
   {
     title: 'Products',
@@ -227,16 +250,66 @@ const navigation: NavItem[] = [
     icon: Shield,
   },
   {
+    // Additive -- the legacy "Admins" link above is untouched. This is the
+    // new staff_memberships-based Organization area (see
+    // docs/041-STAFF-MEMBERSHIPS-IMPLEMENTATION-REPORT.md).
+    title: 'Organization',
+    href: '/organization/staff',
+    icon: Building2,
+    permission: 'staff.view',
+    children: [
+      {
+        title: 'Staff',
+        href: '/organization/staff',
+        icon: Building2,
+        permission: 'staff.view',
+      },
+    ],
+  },
+  {
     title: 'Settings',
     href: '/dashboard/settings',
     icon: Settings,
+    // Concrete proof point for "a SUPPORT_AGENT must not see Stripe
+    // configuration simply because the sidebar contains that link" --
+    // Settings holds payment/carrier/security configuration. Every other
+    // existing nav item is intentionally left ungated in this phase (see
+    // the ADMIN-PLATFORM-2 roadmap's Part J note on incremental rollout);
+    // this is the one item worth gating immediately given what it exposes.
+    permission: 'settings.view',
   },
 ]
+
+function filterNavByPermission(
+  items: NavItem[],
+  hasPermission: (permission: string) => boolean,
+): NavItem[] {
+  return items
+    .filter((item) => !item.permission || hasPermission(item.permission))
+    .map((item) =>
+      item.children
+        ? { ...item, children: filterNavByPermission(item.children, hasPermission) }
+        : item,
+    )
+}
 
 export function Sidebar() {
   const pathname = usePathname()
   const { user, logout } = useAuth()
+  const { hasPermission, isLoading: staffLoading } = useStaffAccess()
   const [expandedItems, setExpandedItems] = React.useState<string[]>([])
+
+  // While /staff/me is still resolving, show only ungated items -- avoids
+  // a flash of a permission-gated link (e.g. Organization/Settings)
+  // followed by it disappearing a moment later for someone who turns out
+  // not to have that permission.
+  const visibleNavigation = React.useMemo(
+    () =>
+      staffLoading
+        ? navigation.filter((item) => !item.permission)
+        : filterNavByPermission(navigation, hasPermission),
+    [staffLoading, hasPermission],
+  )
 
   const toggleExpand = (title: string) => {
     setExpandedItems((prev) =>
@@ -288,7 +361,7 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className='flex-1 overflow-y-auto p-4 space-y-1'>
-        {navigation.map((item) => (
+        {visibleNavigation.map((item) => (
           <div key={item.title}>
             {item.children ? (
               <div>
