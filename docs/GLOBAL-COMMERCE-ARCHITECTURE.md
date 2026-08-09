@@ -1,21 +1,42 @@
 # Global Commerce Architecture — TechTools
 
-**Status: DESIGN ONLY.** No code, no migrations, nothing applied anywhere. This document proposes an additive schema and set of algorithms; it does not implement them. Table/column names below are proposals for review, grounded in what already exists in the repository (checked before writing this, not guessed).
+**Status: DESIGN ONLY.** No code, no migrations, nothing applied anywhere. This document proposes an additive schema and set of algorithms; it does not implement them. Table/column names below are proposals for review, grounded in what already exists in the repository (checked before writing, not guessed) — including, as of this revision, `order_items` already snapshotting `unit_price`/`product_name`/`sku`/`tax_rate` at purchase time, which the order-snapshot design in §9 builds on rather than duplicates.
+
+---
+
+## Pre-Implementation Architecture Review (Round 1)
+
+The overall direction from the first pass was approved; this round revised thirteen specific structural issues before any implementation begins. Each is explained here with the reasoning, and the rest of the document below reflects the corrected design throughout (this is one document, not two — nothing below contradicts this section).
+
+1. **EU ≠ one currency.** The original design let a `market` own a single `base_currency` and priced products at `(product_id, market_id)`. That breaks the moment a market contains countries with different currencies (the EU commercially shares VAT/regulatory infrastructure while several member states use non-euro currencies). **Fix:** pricing is no longer owned by `markets` at all. A new `price_lists`/`price_list_entries` layer, each price list carrying its own `currency` and scoped to either a market (the common/default case) or a specific country (the override case), replaces `product_markets.price_override`. A market stays a single commercial/policy grouping; currency becomes a property of the *price list*, not the market. See §7.
+2. **Currency terminology was ambiguous.** "Base currency" meant two different things in the original draft (the company's own accounting currency, and a market's default currency). **Fix:** three explicitly separate, separately-named concepts — `platform_settings.accounting_currency` (platform level), `markets.default_currency` (a fallback/hint, not authoritative once a price list exists), and `orders.currency` (the existing column, now explicitly documented as immutable post-creation, the order transaction currency). No field is called "base currency" anymore. See §8.
+3. **`ZERO` tax was wrongly treated as a safe default.** **Fix:** the *absence* of a configured tax strategy (`tax_strategy_id IS NULL`, on both `markets` and any `market_countries` override) is now the explicit "unconfigured" state, distinct from a deliberately-chosen `ZERO` strategy row. The activation checklist (§11) hard-fails a country's path to `ACTIVE` + public checkout if its resolved tax strategy is `NULL`. See §9.
+4. **No market/country override mechanism existed.** **Fix:** rather than a separate `market_country_settings` table, the override columns live directly on a restructured `market_countries` (which already has to change for reason 5 below) — `tax_strategy_id`, `duties_policy`, `pricing_strategy`, each nullable and inheriting the market's default when unset. See §6 and the ownership matrix in §14.
+5. **Market resolution wasn't deterministic.** `is_primary` on a many-to-many `market_countries` could let a country resolve to more than one "primary" market, or none, with no enforcement. **Fix:** `market_countries` becomes a time-ranged assignment (`effective_from`/`effective_to`) with a partial unique index guaranteeing at most one row per country where `effective_to IS NULL` — "current market for this country" becomes a single, enforced, unambiguous lookup. Rejected a priority-number scheme as unnecessary complexity for the same guarantee. See §6.
+6. **No order-time commerce snapshot existed.** International configuration will keep changing after an order is placed; nothing preserved the *terms that were actually true* at checkout. **Fix:** a new, additive, 1:1 `order_commerce_snapshots` table, written once at order creation and never updated. Old orders simply have no row here — not a row full of nulls. See §9.
+7. **Fulfilment and shipping were conflated.** `product_fulfillment_options.strategy` mixed "who supplies the goods" (`OWN_STOCK`) with "how they physically move" (`COURIER`) in one enum. **Fix:** split into supply strategy (`product_fulfillment_options.supply_strategy`: `OWN_STOCK | SUPPLIER_DIRECT | LOCAL_STOCK | CONSOLIDATION_HUB`) versus delivery method, which is resolved entirely through the *existing* `shipping_zones`/`shipping_methods`/`ShippingService` (extended with two new `method_type` values, not a parallel system). See §11.
+8. **`SUPPLIER_DIRECT` had no real origin.** A single global fake "SUPPLIER-DIRECT" location would have made shipping-cost calculation impossible (every supplier is a different real country). **Fix:** `product_fulfillment_options` gets a nullable `supplier_id → suppliers(id)` (and optional `supplier_product_id`), used instead of `fulfillment_location_id` when `supply_strategy = 'SUPPLIER_DIRECT'` — origin resolves via the supplier's own real `country_code` (already exists), never a placeholder. See §12.
+9. **Fake postal codes were proposed.** The original draft suggested synthesizing a placeholder to satisfy `postal_code NOT NULL`. **Fix:** that idea is removed entirely. `ALTER TABLE user_addresses ALTER COLUMN postal_code DROP NOT NULL` is a normal, always-safe constraint *relaxation* — it cannot invalidate any existing row, no staging is required at the database level. What actually needs to be staged is application validation logic becoming country-aware before/alongside that column change, so "not required" never silently becomes "required nowhere." See §13.
+10. **Money precision needed review, not a rewrite.** Considered converting all monetary columns to integer minor units (Stripe-style). Rejected as disproportionate — Postgres `DECIMAL`/`NUMERIC` is already exact (no floating-point risk exists today), and a currency like XAF (Cameroon, the first pilot market) with zero minor units is still stored and rounded correctly as `DECIMAL(x, 2)` with two always-zero decimal digits — a display/rounding concern, not a storage-precision bug. **Fix:** widen new pricing columns to `DECIMAL(14,4)` for headroom (larger machinery-scale values, extra FX-derived precision), add a small `currency_minor_units` reference for correct display/Stripe-API rounding, and require every new monetary column to carry its currency alongside it explicitly. Existing `DECIMAL(10,2)` columns are left untouched — any future widening of those is its own, separately-reviewed change, not bundled here. See §10.
+11. **No activation gate existed.** **Fix:** a server-side `validateCountryForActivation()` check, enforced (not just displayed) before any country can be flipped to `ACTIVE` + `checkout_enabled = true`. See §15.
+12. **Staff scope needed a market-level path, not just country arrays forever.** **Fix:** documented (not built — `041` is unchanged) a future `staff_market_scopes` table supporting *either* a `country_id` *or* a `market_id` per row, so "EU Operations Manager" is one row referencing the EU market rather than an enumerated, manually-maintained list of 20+ country codes. See §19.
+13. **Historical-configuration behavior wasn't explicit.** **Fix:** a dedicated section (§16) states the general rule plainly — configuration tables represent current/future state and can change freely; `order_items` (existing) and `order_commerce_snapshots` (new) represent what was true at purchase time and are never touched by later configuration changes, and every snapshot-side foreign key uses `ON DELETE SET NULL`, never `CASCADE`.
 
 ---
 
 ## 1. Executive architecture summary
 
-TechTools today is architecturally single-market: one flat tax rate, one hardcoded currency path (`orders.currency` defaults `'USD'` in the schema but every real write path hardcodes `'EUR'`), one flat shipping formula, one address shape that assumes a postal code always exists. Every one of those is a *value*, not a *structure* — which is actually good news: the fix isn't a rewrite, it's adding a configuration layer above data that's already mostly generic (products are already global, `shipping_zones`/`shipping_methods` already exist as an unused rate-rule engine, `suppliers.country_code` already exists).
+TechTools today is architecturally single-market: one flat tax rate, one hardcoded currency path, one flat shipping formula, one address shape that assumes a postal code always exists. Every one of those is a *value*, not a *structure* — the fix is a configuration layer above data that's already mostly generic (products are already global; `shipping_zones`/`shipping_methods` already exist as an unused rate-rule engine; `suppliers.country_code` already exists; `order_items` already snapshots purchase-time price).
 
-The architecture proposed here has four layers, additive on top of the current schema:
+The architecture, revised, has five layers, additive on top of the current schema:
 
-1. **`countries`** — every country the software *could* know about, each with an explicit lifecycle status. Existing, not automatically active.
-2. **`markets`** — commercial groupings of one or more countries (EU, UK, US, CAMEROON, ...) that carry currency/tax/fulfilment *policy*.
-3. **`product_markets`** — per-(product, market) overrides (price, availability, lead time) layered on top of the existing global `products` row, never duplicating it.
-4. **Checkout eligibility** — a single server-side function that decides, for a given product + destination + customer, whether a sale can happen at all, and why not if it can't.
+1. **`countries`** — every country the software *could* know about, each with an explicit lifecycle status.
+2. **`markets`** — commercial/policy groupings of one or more countries, with `market_countries` deterministically resolving exactly one current market per country and allowing per-country overrides.
+3. **`price_lists`** — currency-scoped pricing, attached to a market (default) or a specific country (override) — the piece that makes "EU market, but Poland prices in PLN" representable without splitting markets or duplicating products.
+4. **`product_markets` / `product_fulfillment_options`** — per-market availability and per-market-or-country supply routing, layered on the existing global `products` row, never duplicating it.
+5. **Checkout eligibility + order commerce snapshot** — a single server-side function decides whether a sale can happen and why not if it can't, and a single additive table preserves exactly what was true when it did.
 
-Nothing here requires touching `products`, `orders`, `suppliers`, `seller_profiles`, or `inventory` as they exist today. Everything is new tables plus a handful of new *nullable* foreign keys added in later phases.
+Nothing here requires touching `products`, `orders`, `order_items`, `suppliers`, `seller_profiles`, or `inventory` as they exist today, beyond `user_addresses.postal_code` losing its `NOT NULL` (a pure relaxation) and a handful of new *nullable* foreign keys added in later phases.
 
 ---
 
@@ -23,347 +44,330 @@ Nothing here requires touching `products`, `orders`, `suppliers`, `seller_profil
 
 | Term | Definition |
 |---|---|
-| **Country** | A physical/legal destination — ISO 3166-1. Exists in the system whether or not anyone can buy from it yet. |
-| **Market** | A commercial operating area — a named group of one or more countries that share currency/tax/fulfilment policy. Not always 1:1 with a country (EU is one market, many countries; the US is one market, one country). |
-| **Region** | Optional cosmetic grouping for the admin UI (Europe/Africa/Asia/North America/Oceania) — not used in business logic, purely navigational. |
-| **Shipping zone** | An *operational* shipping grouping — already exists (`shipping_zones`, `countries TEXT[]`). Distinct from a market: a market is a commercial/policy concept, a shipping zone is "which rate table applies." One market can span multiple shipping zones (e.g. US market: contiguous-US zone vs. Alaska/Hawaii zone). |
-| **Fulfilment location** | Where goods physically or logically originate — a warehouse, a consolidation hub, or a marker meaning "ships direct from supplier." |
-| **Warehouse** | A company-owned physical fulfilment location — a *kind* of fulfilment location, not a separate concept. |
-| **Supplier** | Existing, unchanged — upstream B2B sourcing (`suppliers`/`supplier_products`). Not touched by this architecture beyond reading `suppliers.country_code`, which already exists and already does part of the job market-scoping needs. |
-| **Seller** | Existing, unchanged — marketplace merchant (`seller_profiles`). Explicitly not merged with supplier, per your instruction and per the original audit's finding that they're already two unrelated, non-overlapping systems. |
+| **Country** | A physical/legal destination — ISO 3166-1. Exists whether or not anyone can buy from it yet. |
+| **Market** | A commercial/policy grouping — one or more countries sharing tax-strategy/fulfilment defaults. **Not a currency grouping** (Round 1 correction) — a market's countries may use different price lists/currencies. |
+| **Price list** | A currency-scoped set of product prices, attached to a market (default for its countries) or a specific country (override). New concept, Round 1. |
+| **Region** | Cosmetic-only grouping for admin navigation (Europe/Africa/Asia/North America/Oceania) — never used in business logic. |
+| **Shipping zone** | An *operational* shipping grouping — already exists (`shipping_zones`, `countries TEXT[]`). A market can span multiple shipping zones. |
+| **Fulfilment location** | A physical/logical origin for `OWN_STOCK`/`LOCAL_STOCK`/`CONSOLIDATION_HUB` supply — never used for `SUPPLIER_DIRECT`, which resolves origin via the real supplier instead (Round 1 correction, §12). |
+| **Supply strategy** | *Who* sources the goods (`OWN_STOCK`/`SUPPLIER_DIRECT`/`LOCAL_STOCK`/`CONSOLIDATION_HUB`) — distinct from delivery method (Round 1 correction, §11). |
+| **Delivery method** | *How* goods physically move — entirely the existing `shipping_methods`/`shipping_zones`/`ShippingService`, not a new concept. |
+| **Order commerce snapshot** | An immutable, order-time-only record of the commercial context (market, tax strategy, duties policy, FX rate if any) a purchase was made under. New, Round 1. |
+| **Supplier** | Existing, unchanged (`suppliers`/`supplier_products`). |
+| **Seller** | Existing, unchanged (`seller_profiles`). Not merged with supplier. |
 
 ---
 
 ## 3. International ER / domain model
 
 ```
-regions (optional, cosmetic)
+regions (cosmetic only)
    │ 1
-   │
    │ N
-countries ──────────────┐
-   │ N        N │        │
-   │            │        │ referenced by
-   │      market_countries      user_addresses.country (free text today,
-   │            │        │      becomes country_id FK later, additively)
-   │ 1          │ N      │
-markets ─────────┘        │
-   │ 1                    │
-   │ N                    │
-product_markets ── N:1 ── products (existing, untouched)
+countries
+   │ 1                                    │ referenced by (nullable, additive)
+   │ N (time-ranged, deterministic)        user_addresses.country_id
+market_countries ──────── N:1 ──── markets
+   │  (tax_strategy_id, duties_policy,        │ 1
+   │   pricing_strategy -- all nullable        │ N
+   │   overrides; effective_from/to;      market default: tax_strategy_id,
+   │   partial-unique on country_id           duties_policy, pricing_strategy,
+   │   WHERE effective_to IS NULL)             default_currency (hint only)
    │
-   │ (references, doesn't own)
-   ├── fulfillment_locations (N:1, optional per row)
-   └── tax_strategy (via markets.tax_strategy_id)
+   ▼
+price_lists ── scope: market_id OR country_id (currency-bearing, not markets/countries themselves)
+   │ 1
+   │ N
+price_list_entries ── N:1 ── products (existing, untouched)
 
-markets ── 1:N ── market_payment_methods
-markets ── N:1 ── tax_strategies
+product_markets ── N:1 ── products            -- availability/visibility, not pricing
+   │ 1
+   │ N
+product_fulfillment_options
+   ├── N:1 (nullable) ── fulfillment_locations   -- for OWN_STOCK/LOCAL_STOCK/CONSOLIDATION_HUB
+   └── N:1 (nullable) ── suppliers (existing)     -- for SUPPLIER_DIRECT (real origin, no fake location)
+
+orders (existing, untouched) ── 1:1 (nullable) ── order_commerce_snapshots (new)
+order_items (existing, unchanged) already carries unit_price/sku/product_name at purchase time
 
 shipping_zones (existing) ── N:1 (new, optional) ── markets
-shipping_methods (existing) ── N:1 ── shipping_zones (existing, unchanged)
+shipping_methods (existing, method_type CHECK extended with
+   'consolidated_freight' | 'local_delivery') ── N:1 ── shipping_zones (unchanged)
 
-fulfillment_locations ── 1:N ── inventory (existing table; new nullable FK column added later, replacing free-text warehouse_location — see §13)
-
-staff_memberships (from MARKET-OPS) ── market_scope ── countries/markets (see §21)
+staff_memberships (from MARKET-OPS, unchanged) ── market_scope TEXT[] today;
+   future staff_market_scopes ── country_id OR market_id per row (§19, not built)
 ```
 
-Nothing in this diagram removes or renames an existing edge. Every new box is a new table; every new arrow into an existing table (`products`, `orders`, `inventory`, `user_addresses`) is a nullable FK added in a later phase, never a required one — old rows stay valid with the new column simply `NULL`.
+Every new box is a new table; every new arrow into an existing table (`user_addresses`, `shipping_zones`, `shipping_methods`) is a nullable addition or a constraint relaxation — old rows stay valid unchanged.
 
 ---
 
-## 4. Proposed tables and columns
+## 4. Countries
 
-### `regions` (optional — cosmetic only)
-```
-id            SMALLSERIAL PK
-code          VARCHAR(20) UNIQUE   -- 'EUROPE','AFRICA','ASIA','NORTH_AMERICA','OCEANIA'
-name          VARCHAR(100)
-```
+Unchanged from the first draft — still the right shape:
 
-### `countries`
 ```
 id                        UUID PK
-iso_alpha2                CHAR(2)  UNIQUE NOT NULL
-iso_alpha3                CHAR(3)  UNIQUE NOT NULL
+iso_alpha2 / iso_alpha3   CHAR(2)/CHAR(3) UNIQUE NOT NULL
 name                      VARCHAR(100) NOT NULL
 region_id                 SMALLINT REFERENCES regions(id)
-status                    country_status_enum NOT NULL DEFAULT 'UNSUPPORTED'
-                             -- UNSUPPORTED | SUPPORTED | TESTING | ACTIVE | SUSPENDED
-checkout_enabled           BOOLEAN NOT NULL DEFAULT FALSE
-seller_onboarding_enabled  BOOLEAN NOT NULL DEFAULT FALSE
-default_currency           CHAR(3)          -- ISO 4217, e.g. 'EUR','USD','XAF'
-supported_locales          TEXT[] DEFAULT '{}'
-phone_country_code         VARCHAR(5)
-postal_code_required       BOOLEAN NOT NULL DEFAULT TRUE
-address_rules              JSONB DEFAULT '{}'   -- see §12
-shipping_supported         BOOLEAN NOT NULL DEFAULT FALSE
-payment_supported          BOOLEAN NOT NULL DEFAULT FALSE
+status                    country_status_enum DEFAULT 'UNSUPPORTED'  -- UNSUPPORTED|SUPPORTED|TESTING|ACTIVE|SUSPENDED
+checkout_enabled          BOOLEAN NOT NULL DEFAULT FALSE
+seller_onboarding_enabled BOOLEAN NOT NULL DEFAULT FALSE
+supported_locales         TEXT[] DEFAULT '{}'
+phone_country_code        VARCHAR(5)
+postal_code_required      BOOLEAN NOT NULL DEFAULT TRUE
+address_rules             JSONB DEFAULT '{}'
+shipping_supported        BOOLEAN NOT NULL DEFAULT FALSE
+payment_supported         BOOLEAN NOT NULL DEFAULT FALSE
 created_at / updated_at
 ```
-`status` and `checkout_enabled` are deliberately separate columns, not derived from each other — a country can be `TESTING` with `checkout_enabled=false` (staff can see/configure it, customers can't buy), which is exactly the Cameroon-pilot state described in §3 of your brief.
-
-### `markets`
-```
-id                 UUID PK
-key                VARCHAR(30) UNIQUE NOT NULL   -- 'EU','UK','US','CANADA','AUSTRALIA','CAMEROON'
-name               VARCHAR(100) NOT NULL
-status              market_status_enum NOT NULL DEFAULT 'UNSUPPORTED'  -- mirrors country_status_enum
-base_currency       CHAR(3) NOT NULL
-locale               VARCHAR(10)              -- default display locale, e.g. 'en-US','fr-CM'
-pricing_strategy    VARCHAR(30) NOT NULL DEFAULT 'MANUAL'  -- 'MANUAL' | 'BASE_CONVERTED' (see §10)
-tax_strategy_id     UUID REFERENCES tax_strategies(id)
-fulfilment_strategy VARCHAR(30)               -- default strategy; product_markets/product_fulfillment_options can override per product
-duties_policy       VARCHAR(30) DEFAULT 'DUTIES_NOT_INCLUDED'  -- see §17
-created_at / updated_at
-```
-
-### `market_countries`
-```
-market_id   UUID REFERENCES markets(id)
-country_id  UUID REFERENCES countries(id)
-is_primary  BOOLEAN DEFAULT TRUE   -- for the rare case a country is relevant to >1 market during a transition
-PRIMARY KEY (market_id, country_id)
-```
-
-### `product_markets` (replaces the need for `market_prices` as a separate table — see rationale below)
-```
-id                    UUID PK
-product_id            UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE
-market_id             UUID NOT NULL REFERENCES markets(id) ON DELETE CASCADE
-visible               BOOLEAN NOT NULL DEFAULT FALSE
-sellable               BOOLEAN NOT NULL DEFAULT FALSE
-price_override        DECIMAL(10,2)          -- NULL = fall back to products.base_price via pricing_strategy (§10)
-compare_at_price_override DECIMAL(10,2)
-min_order_quantity    INTEGER
-max_order_quantity    INTEGER
-lead_time_days        INTEGER
-fulfilment_strategy    VARCHAR(30)            -- overrides markets.fulfilment_strategy for this product
-availability_status    VARCHAR(30) DEFAULT 'AVAILABLE'  -- 'AVAILABLE'|'BACKORDER'|'CUSTOMS_RESTRICTED'|'UNAVAILABLE'
-customs_restricted     BOOLEAN NOT NULL DEFAULT FALSE
-metadata               JSONB DEFAULT '{}'
-UNIQUE (product_id, market_id)
-```
-**Why no separate `market_prices` table:** a price is already 1:1 with (product, market) — the same grain `product_markets` is at. A separate table would just be `product_markets` split in two for no relational reason (no market has more than one price per product without also having more than one *market*, which is what the `markets` table itself already models). If a real future need shows up — e.g. showing a secondary currency alongside the primary one on a product page — that's a *display* concern, solvable with an FX conversion at read time (§10), not a second source-of-truth price table.
-
-### `tax_strategies`
-```
-id       UUID PK
-code     VARCHAR(30) UNIQUE  -- 'EU_VAT'|'UK_VAT'|'US_SALES_TAX'|'GST'|'ZERO'|'CUSTOM'|'EXTERNAL_PROVIDER'
-name     VARCHAR(100)
-config   JSONB DEFAULT '{}'   -- rate tables etc. -- NOT populated with real tax logic in this phase
-```
-`markets.tax_strategy_id` points here. The *strategy* exists as an architectural slot; no strategy's actual math is implemented in this phase (per your explicit instruction).
-
-### `fulfillment_locations`
-```
-id            UUID PK
-code          VARCHAR(50) UNIQUE  -- 'ITALY-WAREHOUSE-01','GERMANY-CONSOLIDATION-01','CAMEROON-DOUALA-01','SUPPLIER-DIRECT'
-name          VARCHAR(150)
-location_type VARCHAR(30) NOT NULL  -- 'WAREHOUSE'|'CONSOLIDATION_HUB'|'SUPPLIER_DIRECT'|'LOCAL_STOCK'
-country_id    UUID REFERENCES countries(id)
-address       JSONB
-is_active     BOOLEAN DEFAULT TRUE
-created_at / updated_at
-```
-A single row with `location_type='SUPPLIER_DIRECT'` and no real address stands in for "ships straight from the supplier, no company-controlled location" — so `product_fulfillment_options` (below) always points at *a* location, even when that location is conceptually "not a location."
-
-### `product_fulfillment_options`
-```
-id                     UUID PK
-product_id             UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE
-market_id              UUID NOT NULL REFERENCES markets(id) ON DELETE CASCADE
-fulfillment_location_id UUID NOT NULL REFERENCES fulfillment_locations(id)
-strategy               VARCHAR(30) NOT NULL  -- 'OWN_STOCK'|'SUPPLIER_DIRECT'|'COURIER'|'CONSOLIDATED_FREIGHT'|'LOCAL_STOCK'
-lead_time_days         INTEGER
-is_active              BOOLEAN DEFAULT TRUE
-UNIQUE (product_id, market_id, fulfillment_location_id)
-```
-This is the table that answers "how does this specific product actually get to this specific market" — e.g. the drill example: `(drill, DE market, ITALY-WAREHOUSE-01, COURIER)` vs `(sewing machine, CAMEROON market, GERMANY-CONSOLIDATION-01, CONSOLIDATED_FREIGHT)`.
-
-### `market_payment_methods`
-```
-id             UUID PK
-market_id      UUID NOT NULL REFERENCES markets(id) ON DELETE CASCADE
-provider_code  VARCHAR(30) NOT NULL   -- 'stripe_card'|'stripe_wallet'|'paypal'|'mtn_momo'|'orange_money'|'bank_transfer'
-is_active      BOOLEAN DEFAULT FALSE
-config         JSONB DEFAULT '{}'    -- non-secret config only; real credentials stay wherever the existing shipping_carriers.credentials-style pattern (or env/secrets manager) already keeps them -- never in this table
-UNIQUE (market_id, provider_code)
-```
-No provider is globally assumed — checkout eligibility (§19) reads this table, not a hardcoded "Stripe everywhere" assumption.
-
-### `shipping_zones` / `shipping_methods` — **reused, not duplicated**
-Both already exist (`005_shipping.sql`) and are already close to what §6/§15 ask for: `shipping_zones.countries TEXT[]` already groups countries for rate purposes, and `shipping_methods` already supports `flat_rate | free | weight_based | price_based | carrier` typed rules per zone. The only gap is that **checkout never queries either table today** — it uses a hardcoded `totalAmount >= 50 ? 0 : 5.99` formula instead (found in the original audit). This architecture's shipping-engine work (§15) is about *wiring checkout to what already exists*, not building a new shipping-zone system. The one proposed additive change: a nullable `market_id UUID REFERENCES markets(id)` column on `shipping_zones`, so a market can be queried for "its" zones — optional, since `countries TEXT[]` can already answer the same question by set-overlap with `market_countries` without the FK, if you'd rather not add it yet.
-
-### Consolidated freight (design only — explicitly not built in this phase)
-```
-freight_shipments
-  id, origin_fulfillment_location_id, destination_fulfillment_location_id,
-  cutoff_date, departure_date, estimated_arrival_date,
-  freight_cost, total_weight_kg, total_volume_m3, status, created_at/updated_at
-
-freight_shipment_items
-  freight_shipment_id, shipping_label_id (existing table), added_at
-```
-This is a placeholder shape for §16, sized for review, not for building — it would be its own migration group (see §25) well after the core layers exist and have real data to move through them.
+`default_currency` (present in the first draft) is **removed from `countries`** — currency now flows entirely through `price_lists` (§7); a country never owns a currency value directly, only a resolved market/price-list does.
 
 ---
 
-## 5. Country lifecycle / status model
+## 5. Platform-level settings
+
+New, small, Round 1 addition, mirroring the existing `shipping_settings` singleton-row pattern already in this codebase:
 
 ```
-UNSUPPORTED → SUPPORTED → TESTING → ACTIVE
-                                  ↘  SUSPENDED (from ACTIVE or TESTING)
+platform_settings (
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    accounting_currency CHAR(3) NOT NULL,   -- e.g. 'EUR' -- the company's own reporting currency
+    created_at / updated_at
+)
 ```
-- **UNSUPPORTED**: exists as a row (for address/locale reference) but nothing else about it is configured. This is most of the world at any given time.
-- **SUPPORTED**: architecture/config exists (currency, address rules, at least one fulfilment path *could* be configured) but the founder hasn't turned on real operations yet. Admin can configure it fully without customers seeing it.
-- **TESTING**: a market manager (like the planned Cameroon manager) can operate against it, `checkout_enabled` may be true for internal/pilot testing, but it's not part of any public rollout wave.
-- **ACTIVE**: fully live, publicly reachable, part of a rollout wave.
-- **SUSPENDED**: was `ACTIVE`/`TESTING`, temporarily pulled (e.g. a carrier relationship broke, a payment method got disabled) — `checkout_enabled` forced false regardless of anything else, existing orders remain fully readable/manageable.
-
-`checkout_enabled` is independently settable and is always the final gate (§19) — `status` communicates *why*/*intent* to admins, `checkout_enabled` is what the code actually checks.
+This is the "PLATFORM ACCOUNTING CURRENCY" from Round 1 correction 2 — never shown to a customer, used only for internal reporting/margin math (`product_unit_economics`, already EUR-denominated today).
 
 ---
 
-## 6. Market model
-
-A market is a **policy container**, not a shipping mechanism (that's `shipping_zones`, reused) and not a legal destination (that's `countries`). It groups countries that should be treated identically for currency, tax strategy, and default fulfilment — the EU market groups ~20 countries under one currency/VAT-strategy policy; the US market groups exactly one country because the US doesn't share policy with anyone. `market_countries` is a many-to-many join specifically so a country can move between markets over time (e.g. if the UK's relationship to an "EU market" changes) without ever needing to renumber or migrate historical data — you just repoint the join row.
-
----
-
-## 7. Product-market model
-
-`products` stays exactly as it is — one global row per product, same `id`, same `slug`, forever. `product_markets` is the layer that answers "is this product real *here*, and on what terms" — a product with zero `product_markets` rows is simply not sellable anywhere yet (safe default), not globally sellable by default (which would be the dangerous default). Every field on `product_markets` is an *override*; when `price_override IS NULL`, the pricing strategy (§10) decides what to show instead of duplicating a price that's identical to the base everywhere.
-
----
-
-## 8. Pricing and currency model
-
-Three distinct concepts, deliberately not conflated:
-
-- **Base accounting currency**: the founder's own reporting currency (EUR, per the Italy-based-business rationale already in migration `038_checkout_payment_safety.sql`). Never shown to customers directly; used for internal margin/reporting math (`product_unit_economics`, already existing, already EUR-denominated).
-- **Display currency**: what a customer *sees* while browsing — driven by `markets.base_currency` for whatever market they're currently in (§20).
-- **Transaction currency**: what actually gets charged — must equal the display currency shown at the moment of checkout (never let a customer see one currency and get charged another). `orders.currency` (existing column, unchanged) continues to record this.
-
-**The backend remains the sole source of truth for price, unconditionally** — `product_markets.price_override` (or the base price, converted) is read server-side at checkout-session-creation time, the same way the existing checkout-safety work (`038_checkout_payment_safety.sql`, `order.controller.ts`'s `validateAndPriceOrderItems`) already refuses to trust client-submitted prices. This architecture extends that same principle to market-aware pricing; it does not weaken it.
-
-**`pricing_strategy` on `markets`:**
-- `MANUAL` — every product's market price is an explicit `product_markets.price_override`; no FX math happens. Safest, most predictable, recommended default for every market until proven otherwise.
-- `BASE_CONVERTED` — price = base currency price × FX rate × markup, computed at read time (not stored) when no explicit override exists. Requires an FX architecture:
+## 6. Markets and deterministic market resolution
 
 ```
-fx_rates
-  id, base_currency, quote_currency, rate, rate_source, rate_timestamp,
-  created_at
+markets (
+    id                  UUID PK
+    key                 VARCHAR(30) UNIQUE NOT NULL   -- 'EU','UK','US','CANADA','AUSTRALIA','CAMEROON'
+    name                VARCHAR(100) NOT NULL
+    status              market_status_enum DEFAULT 'UNSUPPORTED'
+    default_currency    CHAR(3) NOT NULL   -- fallback/hint only, see §7 -- NOT authoritative pricing
+    locale              VARCHAR(10)
+    tax_strategy_id     UUID REFERENCES tax_strategies(id)   -- market-level default; NULL = unconfigured
+    pricing_strategy    VARCHAR(30) NOT NULL DEFAULT 'MANUAL'
+    duties_policy       VARCHAR(30) DEFAULT 'DUTIES_NOT_INCLUDED'
+    created_at / updated_at
+)
 
-market fields (already on `markets`, reused):
-  base_currency  -- the quote_currency for that market's conversions
+market_countries (
+    id              UUID PK
+    market_id       UUID NOT NULL REFERENCES markets(id)
+    country_id      UUID NOT NULL REFERENCES countries(id)
+    effective_from  TIMESTAMPTZ NOT NULL DEFAULT now()
+    effective_to    TIMESTAMPTZ NULL         -- NULL = currently in effect
+    -- per-country overrides; NULL = inherit the market's default
+    tax_strategy_id UUID REFERENCES tax_strategies(id)
+    duties_policy   VARCHAR(30)
+    pricing_strategy VARCHAR(30)
+    created_at
+
+    -- enforced: at most one row per country_id where effective_to IS NULL
+    -- (partial unique index -- see below)
+)
+CREATE UNIQUE INDEX ux_market_countries_current
+  ON market_countries (country_id) WHERE effective_to IS NULL;
 ```
-Rounding/markup rules live in `markets` (e.g. `fx_markup_percent`, `rounding_rule`) — not designed in full here since **no automatic FX service is implemented in this phase**, per your instruction; this is the slot it would plug into later, with a documented fallback (if no rate is fresh enough, fall back to `MANUAL`/last-known override rather than charging an unreviewed computed price).
+
+**This is the Round 1 answer to deterministic resolution (issue 5).** "What is the current market for country X" is always exactly one row: `SELECT * FROM market_countries WHERE country_id = X AND effective_to IS NULL` — the partial unique index makes a second concurrent answer a constraint violation, not just an application bug waiting to happen. When a country moves markets: close the old row (`effective_to = now()`), insert a new one — a plain, auditable history, no priority numbers, no ambiguity.
+
+**This is also the Round 1 answer to market/country overrides (issue 4).** Rather than a separate `market_country_settings` table, the three override columns live directly on the row that already has to exist and already has to be time-ranged for resolution to work — one table serves both jobs. `checkout_enabled`, `postal_code_required`, `address_rules`, and locale/phone data stay on `countries` directly (§4) — they were never market-relative and don't need this override mechanism.
 
 ---
 
-## 9. Tax strategy abstraction
+## 7. Pricing model — the EU multi-currency fix
 
-Covered in §4 (`tax_strategies` table) — the abstraction is a named strategy per market with a JSONB config slot. `order.controller.ts`'s current `const taxRate = 0.08` becomes, conceptually, `resolveTax(market, orderTotal) → taxAmount`, where `resolveTax` dispatches on `tax_strategies.code`. **No strategy's real math is implemented in this phase** — `ZERO` (always 0) is the only strategy that could safely be the *default* for any newly-`SUPPORTED` country, since it never overcharges; every other strategy requires deliberate configuration before a country leaves `TESTING`.
+**This is Round 1 issue 1, the most structurally significant change.**
+
+`product_markets.price_override` (first draft) assumed one price per `(product, market)`, which only works if a market has one currency. Compared against the alternatives from your brief:
+
+- **(A) market_country overrides** — closer, but still ties price to market membership rather than to currency directly; doesn't cleanly generalize to "this country's price should just track its price list."
+- **(B) price lists** — chosen. Decouples price entirely from the market/country hierarchy; a price list is *just* "a set of prices in a currency," attachable to whatever scope needs it.
+- **(C) country-specific pricing policy beneath a market** — this is effectively what (B) becomes once a price list can be scoped to a country instead of a market; (B) subsumes (C).
+- **(D) narrower markets (EUROZONE vs. individual non-euro countries)** — rejected: it solves pricing by fragmenting the *commercial* grouping, which then also fragments tax-strategy/fulfilment defaults that legitimately are shared EU-wide. Splitting the wrong dimension to fix the right one.
+
+**Design:**
+```
+price_lists (
+    id           UUID PK
+    currency     CHAR(3) NOT NULL
+    scope_type   VARCHAR(10) NOT NULL CHECK (scope_type IN ('MARKET','COUNTRY'))
+    market_id    UUID REFERENCES markets(id)    -- set iff scope_type = 'MARKET'
+    country_id   UUID REFERENCES countries(id)  -- set iff scope_type = 'COUNTRY'
+    name         VARCHAR(100)
+    status       VARCHAR(20) DEFAULT 'ACTIVE'
+    created_at / updated_at
+    CHECK ((scope_type = 'MARKET' AND market_id IS NOT NULL AND country_id IS NULL)
+        OR (scope_type = 'COUNTRY' AND country_id IS NOT NULL AND market_id IS NULL))
+)
+CREATE UNIQUE INDEX ux_price_lists_market ON price_lists(market_id) WHERE scope_type = 'MARKET';
+CREATE UNIQUE INDEX ux_price_lists_country ON price_lists(country_id) WHERE scope_type = 'COUNTRY';
+
+price_list_entries (
+    id             UUID PK
+    price_list_id  UUID NOT NULL REFERENCES price_lists(id) ON DELETE CASCADE
+    product_id     UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE
+    price          DECIMAL(14,4) NOT NULL     -- widened precision, see §10
+    compare_at_price DECIMAL(14,4)
+    UNIQUE (price_list_id, product_id)
+)
+```
+
+**Resolution rule** (used everywhere a price is needed — checkout, product display): *look for a `price_lists` row scoped to the customer's specific `country_id` first; if none, fall back to the `price_lists` row scoped to that country's currently-resolved `market_id` (§6); if neither has a `price_list_entries` row for the product, the product is not priced in that market and is therefore not sellable there* — a safe, closed default, not an accidental fallback to some other currency's number.
+
+**Worked example, directly answering the EU case:** the `EU` market has one `price_lists` row (`scope_type='MARKET', market_id=EU, currency='EUR'`), covering Germany/France/Italy/Spain/etc. Poland, still a `market_countries` member of `EU` for tax/fulfilment purposes, gets its *own* `price_lists` row (`scope_type='COUNTRY', country_id=Poland, currency='PLN'`) — an explicit override, not a market split. Adding Sweden (`SEK`) later is one more country-scoped price list, not a new market.
+
+**Requirements check:** one global product stays one product (`price_list_entries.product_id` references it, never duplicates it) · no duplicated product rows · same product can have different price/currency per country (via the market-vs-country price list resolution) · backend remains sole pricing authority (resolution happens server-side at checkout-session creation, same choke point the existing `validateAndPriceOrderItems` already uses — no client-submitted price is ever trusted, extending, not weakening, that existing rule) · `MANUAL` (explicit `price_list_entries` rows, no FX math) remains the recommended first `pricing_strategy` — `product_markets.price_override`/`compare_at_price_override` are removed from `product_markets` entirely, superseded by this layer.
 
 ---
 
-## 10. International address architecture
+## 8. Currency terminology (Round 1 issue 2)
 
-`user_addresses` (existing) keeps its columns; this is additive, not a rewrite:
+| Concept | Where it lives | Notes |
+|---|---|---|
+| **Platform accounting currency** | `platform_settings.accounting_currency` | Internal reporting only, e.g. `EUR`. Never customer-facing. |
+| **Market default currency** | `markets.default_currency` | A *hint* — used for admin-UI defaults and as a documentation aid, not consulted at checkout once a real `price_lists` row exists for the resolved scope. |
+| **Price list currency** | `price_lists.currency` | The actual, authoritative currency for any concrete price a customer sees. |
+| **Order transaction currency** | `orders.currency` (existing, unchanged column) | Set once at order creation from the resolved price list's currency; **immutable after that** — no code path updates it post-creation, and this document doesn't introduce one. |
+
+No field anywhere is named "base currency" after this revision — every one of the four concepts above has its own distinct name.
+
+---
+
+## 9. Tax strategy — UNCONFIGURED is not ZERO (Round 1 issue 3)
 
 ```
-user_addresses gains (nullable, backward compatible):
-  country_id       UUID REFERENCES countries(id)   -- resolved from the existing free-text `country` column; both can coexist during transition
-  region           VARCHAR(100)   -- state/province equivalent, already have `state`; `region` is for countries where that's the more natural term
-  district         VARCHAR(100)
-  quarter          VARCHAR(100)   -- meaningful in Cameroon/West-Africa addressing, not in most of Europe
-  landmark         TEXT
-  delivery_instructions TEXT
-  latitude / longitude DECIMAL   -- optional, for locations where postal addressing alone isn't enough
+tax_strategies (
+    id      UUID PK
+    code    VARCHAR(30) UNIQUE   -- 'EU_VAT'|'UK_VAT'|'US_SALES_TAX'|'GST'|'ZERO'|'CUSTOM'|'EXTERNAL_PROVIDER'
+    name    VARCHAR(100)
+    config  JSONB DEFAULT '{}'   -- no real strategy math implemented this phase
+)
 ```
-
-`postal_code` stays `NOT NULL` at the column level for backward compatibility with every existing row, but the **application-level validation rule becomes country-driven**: `countries.postal_code_required` (§4) determines whether the checkout form actually requires it — for a country where it's `false`, the API accepts an empty string / synthesized placeholder rather than rejecting the order, closing the exact Cameroon-checkout gap the original audit flagged. `countries.address_rules JSONB` is the slot for anything more country-specific later (regex patterns, required-field lists) without needing a schema change per country.
+There is deliberately **no `'UNCONFIGURED'` row** in this table. "Unconfigured" is represented by `tax_strategy_id IS NULL` on both `markets` and any `market_countries` override — the *absence* of a link, not a link to a row that means "nothing." This makes the distinction airtight: `NULL` = TechTools has never decided; a real `'ZERO'` row = TechTools deliberately decided to charge nothing. The activation checklist (§15) treats a resolved-`NULL` tax strategy as a hard blocker for `ACTIVE` + public `checkout_enabled` — a country can sit in `TESTING` indefinitely without tax being configured (internal-only access), but can never go live without it.
 
 ---
 
-## 11. Shipping-zone model
+## 10. Money precision and minor units (Round 1 issue 10)
 
-Already exists (`shipping_zones`, `shipping_methods` — §4). The architecture work here is entirely about **connecting checkout to it**, not building it:
+- New pricing columns (`price_list_entries.price`/`compare_at_price`) use `DECIMAL(14,4)` — four more max-value digits than the existing `DECIMAL(10,2)` (headroom for machinery/high-value equipment), and two extra decimal places (headroom for FX-derived or unusually precise figures later). This is **exact, arbitrary-precision arithmetic already** (Postgres `NUMERIC`), so no floating-point risk exists or is introduced.
+- Existing monetary columns (`products.base_price`, `orders.total_amount`, `order_items.unit_price`, etc., all `DECIMAL(10,2)`) are **not touched** by this architecture. Widening them is possible later (a `NUMERIC` precision increase is itself a safe, non-lossy operation) but is a separate, independently-reviewed change — not bundled into any `GLOBAL-COMMERCE` migration group.
+- **Currency minor units** (how many decimal places a currency actually uses — 2 for EUR/USD, 0 for JPY/XAF/XOF, 3 for a handful of others) is captured as a small static reference (a constant map in application code is sufficient — ISO 4217 minor-unit assignments essentially never change, so a full database table would be more ceremony than value). Used for two things: (a) display/rounding — never showing "15000.0000 XAF"; (b) the Stripe API boundary, which requires amounts as integer minor units regardless of how they're stored — `stripe.service.ts` converts using this same reference, consistently, for every currency, not just the EUR-shaped assumption it makes today.
+- **Currency always travels with an amount.** `price_list_entries` sits under a `price_lists` row that owns `currency` — no monetary figure in the new schema is ever stored or passed around without an explicit, adjacent currency; nothing here reintroduces an "amount, currency assumed" pattern anywhere.
 
-```
-Today:  checkout → hardcoded flat formula (order.controller.ts)
-Target: checkout → resolve market from destination country
-                  → resolve shipping_zones matching that country
-                  → resolve shipping_methods for those zones
-                  → for 'carrier' method_type, delegate to the existing
-                    ShippingService (FedEx/UPS/DHL, already fixed to fail
-                    loudly instead of faking rates — LAUNCH-FOUNDATION-1)
-                  → for flat_rate/weight_based/price_based, compute from
-                    shipping_methods' own columns (already there, unused)
-```
-Carriers remain exactly what they are today: one *option* within a zone/method, not the whole shipping architecture. Nothing about the DHL/UPS/FedEx integration changes.
+No FX conversion service is designed or implemented here (unchanged from the first draft) — `pricing_strategy = 'MANUAL'` remains the only implemented path.
 
 ---
 
-## 12. Fulfilment model
+## 11. Fulfilment vs. delivery — corrected separation (Round 1 issue 7)
 
-Covered in §4 (`fulfillment_locations`, `product_fulfillment_options`). The five strategies you specified (`OWN_STOCK`, `SUPPLIER_DIRECT`, `COURIER`, `CONSOLIDATED_FREIGHT`, `LOCAL_STOCK`) map directly onto `product_fulfillment_options.strategy`. Checkout eligibility (§19) requires at least one active, matching `product_fulfillment_options` row for (product, market) to consider a purchase possible at all.
+**Supply strategy** (who sources the goods — `product_fulfillment_options.supply_strategy`): `OWN_STOCK | SUPPLIER_DIRECT | LOCAL_STOCK | CONSOLIDATION_HUB`. This is the *only* thing `product_fulfillment_options` decides.
 
----
-
-## 13. Warehouse / inventory integration
-
-**Does not break the LAUNCH-FOUNDATION-1 inventory fixes.** `inventory.warehouse_location` (existing `VARCHAR(100)`, free text) is left exactly as it is in this phase. The proposed evolution, for a *later* phase once `fulfillment_locations` exists and has real data:
+**Delivery method** (how goods physically move) is resolved entirely through the *existing* `shipping_zones`/`shipping_methods`/`ShippingService` — not stored on `product_fulfillment_options` at all, and not a parallel enum. The one schema change: extend `shipping_methods.method_type`'s existing `CHECK` constraint (currently `'flat_rate','free','weight_based','price_based','carrier'`) with two more values, `'consolidated_freight'` and `'local_delivery'`, covering the two delivery concepts from your brief that don't already map onto an existing type. `'carrier'` (existing) already covers FedEx/UPS/DHL-style parcel delivery — no new concept needed there; "COURIER" as you used it maps onto the existing `'carrier'` method_type, not a new one.
 
 ```
-inventory gains (nullable, additive):
-  fulfillment_location_id  UUID REFERENCES fulfillment_locations(id)
+Resolution at checkout:
+  supply  = product_fulfillment_options.supply_strategy (+ location/supplier, §12)
+  delivery = shipping_zones/shipping_methods, resolved independently from the
+             destination country and package attributes (weight/dims/value),
+             exactly as designed in the first draft's §11/§15 (unchanged) --
+             the only change here is that 'strategy' no longer tries to also
+             answer this question.
 ```
-Existing rows keep their free-text `warehouse_location` untouched; new rows can optionally set the FK. `available_stock = current_stock - reserved_stock` (the generated column that's already the authoritative checkout-trusted value, per LAUNCH-FOUNDATION-1) is completely unaffected — this only adds a *location* dimension on top of a stock model that already works correctly. The inventory reconciliation script from that phase continues to work unmodified.
+
+`markets.fulfilment_strategy` and `product_markets.fulfilment_strategy` (both present in the first draft) are **removed** — they were speculative and duplicated what `product_fulfillment_options.supply_strategy` now owns as the single source of truth, at the correct (product, market-or-country) grain.
 
 ---
 
-## 14. Supplier-direct / dropshipping model
+## 12. Supplier-direct origin (Round 1 issue 8)
 
-No new supplier concept — `suppliers`/`supplier_products` stay exactly as they are (per your explicit instruction not to merge suppliers and sellers, and not to redesign what's working). The only new connective tissue is `product_fulfillment_options.strategy = 'SUPPLIER_DIRECT'` pointing at a `fulfillment_locations` row of `location_type='SUPPLIER_DIRECT'` — this lets the fulfilment layer say "this product, in this market, ships from a supplier, not company stock" without touching the supplier schema at all. `suppliers.country_code` (existing, from the profitability-controls migration) is what a future `applyMarketScope` (from MARKET-OPS) would already filter on for a market-scoped supplier view.
+```
+product_fulfillment_options (
+    id                       UUID PK
+    product_id               UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE
+    market_id                UUID REFERENCES markets(id)     -- nullable: a country-level override, see below
+    country_id               UUID REFERENCES countries(id)   -- nullable: set when this row is country-specific
+    supply_strategy          VARCHAR(30) NOT NULL  -- OWN_STOCK|SUPPLIER_DIRECT|LOCAL_STOCK|CONSOLIDATION_HUB
+    fulfillment_location_id  UUID REFERENCES fulfillment_locations(id)  -- required iff supply_strategy != 'SUPPLIER_DIRECT'
+    supplier_id               UUID REFERENCES suppliers(id)              -- required iff supply_strategy = 'SUPPLIER_DIRECT'
+    supplier_product_id       UUID REFERENCES supplier_products(id)      -- optional, for cost/lead-time granularity
+    lead_time_days            INTEGER
+    is_active                 BOOLEAN DEFAULT TRUE
+    CHECK (
+      (supply_strategy = 'SUPPLIER_DIRECT' AND supplier_id IS NOT NULL AND fulfillment_location_id IS NULL)
+      OR
+      (supply_strategy != 'SUPPLIER_DIRECT' AND fulfillment_location_id IS NOT NULL AND supplier_id IS NULL)
+    )
+    CHECK (market_id IS NOT NULL OR country_id IS NOT NULL)  -- must target at least a market
+)
+```
+For `SUPPLIER_DIRECT`, shipping-origin resolution uses `suppliers.country_code` (already exists, per the original supplier audit) — never a fake location. `fulfillment_locations` is reserved for company-controlled/known physical points (`OWN_STOCK`, `LOCAL_STOCK`, `CONSOLIDATION_HUB`); it is never used to represent "wherever the supplier happens to be," which was the flaw in the first draft's single global `SUPPLIER-DIRECT` row. No duplication of `suppliers`/`supplier_products` data — this table only references them.
 
 ---
 
-## 15. Consolidated-freight model
+## 13. Address architecture — corrected postal-code plan (Round 1 issue 9)
 
-Covered in §4. Explicitly design-only, explicitly not built this phase, explicitly its own future migration group (§25/§27 — `GLOBAL-COMMERCE-3` or later, after core layers exist and there's a real African/heavy-goods pilot generating actual freight volume to model against).
+Unchanged additive columns on `user_addresses` (region/district/quarter/landmark/delivery_instructions/lat-lng — see the original §12 content, still valid). **What changed:** the plan to synthesize placeholder postal codes is removed entirely. Instead:
 
----
+```sql
+ALTER TABLE user_addresses ALTER COLUMN postal_code DROP NOT NULL;
+```
+This is a constraint *relaxation*, not a tightening — every existing row already has a non-null value, so this statement cannot invalidate any existing data; it simply stops requiring the column going forward. No staging is needed at the database level for this specific change.
 
-## 16. Customs / duties model
-
-`markets.duties_policy` (§4): `DUTIES_NOT_INCLUDED | DUTIES_ESTIMATED | DUTIES_INCLUDED`, with an optional per-product override on `product_markets` (via `metadata` or a dedicated column if this proves common enough — start with the market-level default, add product-level only if real data shows it's needed). Checkout eligibility (§19) surfaces this policy to the customer *before* payment, not as a surprise on delivery — exactly your framing: never pretend duties are exact when the system can't calculate them.
-
----
-
-## 17. Payment capability model
-
-Covered in §4 (`market_payment_methods`). Checkout eligibility (§19) queries this table for the customer's resolved market and only offers payment methods marked active there — Stripe stays the sole *implemented* provider in this phase (nothing here adds MTN MoMo/Orange Money code), but the schema means adding a provider later is a new `market_payment_methods` row plus one new provider adapter, not a rewrite of checkout.
+What genuinely does need to land in careful order: **application-level validation** (the Joi schema currently unconditionally requiring `postalCode`, per the original audit) must become country-aware (`countries.postal_code_required`) *no later than* the column relaxation ships — otherwise a relaxed column with unchanged validation code accomplishes nothing (the app still rejects the empty value before it ever reaches the database). For any country not yet present in `countries` (edge case during rollout), the default is to keep requiring a postal code — matching current behavior, never silently relaxing validation for a country nobody has explicitly reviewed.
 
 ---
 
-## 18. Checkout eligibility algorithm
+## 14. Ownership matrix (Round 1 issue 14 — new)
 
-A single server-side function, called once at checkout-session creation (the same choke point the LAUNCH-FOUNDATION-1 checkout-safety work already established for price validation — this extends it, doesn't compete with it):
+| Setting | Owner | Notes |
+|---|---|---|
+| Accounting currency | **Platform** (`platform_settings`) | Single row, internal only |
+| Default/display currency hint | **Market** (`markets.default_currency`) | Not authoritative once a price list exists |
+| Actual price + currency | **Price list** (`price_lists`/`price_list_entries`) | Scoped to market or country, never to product directly |
+| Tax strategy | **Market** default, **Country** override | `market_countries.tax_strategy_id` inherits `markets.tax_strategy_id` when `NULL` |
+| Duties policy | **Market** default, **Country** override | Same inheritance pattern |
+| `checkout_enabled` | **Country** only | Never market-relative — a market can be `ACTIVE` while one of its countries individually isn't |
+| Address rules / postal code requirement | **Country** only | `countries.address_rules`/`postal_code_required` |
+| Payment methods | **Market** (`market_payment_methods`) | No country-level override built yet — deferred until real need appears, not spec'd speculatively |
+| Availability / visible / sellable / qty limits | **Product-Market** (`product_markets`) | Market grain; a country-level override isn't designed yet (no evidence it's needed beyond price, which §7 already handles separately) |
+| Supply strategy / fulfilment routing | **Product-Fulfilment-Option** (`product_fulfillment_options`) | Market or country grain, per row |
+| Lead time | **Product-Fulfilment-Option** | Overrides any market-level hint |
+| Inventory | **Fulfilment Location** | Existing `inventory` table, untouched this phase (§17 of the original draft, unchanged) |
+| Manager scope | **Staff membership** | `market_scope TEXT[]` today; future `staff_market_scopes` (§19) |
+| What was actually true at purchase | **Order** (`order_items`, existing) + **Order commerce snapshot** (new, §16) | Never touched by later configuration changes |
+
+---
+
+## 15. Checkout eligibility algorithm (revised)
 
 ```
 function checkEligibility(destinationCountryId, productId, quantity, requestedPaymentMethod):
 
   country = countries.get(destinationCountryId)
-  if country.status != 'ACTIVE' and not (staffTestingOverride):
+  if country.status != 'ACTIVE' and not staffTestingOverride:
       return INELIGIBLE("Country not active")
   if not country.checkout_enabled:
       return INELIGIBLE("Checkout not enabled for this destination")
 
-  market = resolveMarket(country)   -- via market_countries
+  marketCountry = market_countries.current(destinationCountryId)   -- effective_to IS NULL, §6
+  if marketCountry is null:
+      return INELIGIBLE("No market resolved for this country")
+  market = markets.get(marketCountry.market_id)
   if market.status not in ('ACTIVE','TESTING'):
       return INELIGIBLE("Market not operational")
+
+  priceList = price_lists.forCountry(destinationCountryId) ?? price_lists.forMarket(market.id)
+  entry = priceList ? price_list_entries.find(priceList.id, productId) : null
+  if entry is null:
+      return INELIGIBLE("Product not priced in this market")
 
   pm = product_markets.get(productId, market.id)
   if pm is null or not pm.sellable:
@@ -371,178 +375,215 @@ function checkEligibility(destinationCountryId, productId, quantity, requestedPa
   if quantity < pm.min_order_quantity or (pm.max_order_quantity and quantity > pm.max_order_quantity):
       return INELIGIBLE("Quantity outside allowed range")
 
-  fulfilment = product_fulfillment_options.findActive(productId, market.id)
+  fulfilment = product_fulfillment_options.findActive(productId, market.id, destinationCountryId)
   if fulfilment is empty:
-      return INELIGIBLE("No fulfilment option available")
+      return INELIGIBLE("No fulfilment route available")
 
-  shippingOption = resolveShippingOption(country, fulfilment)  -- §11
-  if shippingOption is null:
-      return INELIGIBLE("No shipping option available")
+  deliveryOption = resolveShippingMethod(country, fulfilment)   -- existing shipping_zones/shipping_methods, §11
+  if deliveryOption is null:
+      return INELIGIBLE("No delivery option available")
 
   paymentOption = market_payment_methods.findActive(market.id, requestedPaymentMethod)
   if paymentOption is null:
       return INELIGIBLE("Payment method not available in this market")
 
-  addressRuleCheck = validateAddress(submittedAddress, country.address_rules, country.postal_code_required)
-  if not addressRuleCheck.valid:
-      return INELIGIBLE(addressRuleCheck.reason)
+  resolvedTax = marketCountry.tax_strategy_id ?? market.tax_strategy_id
+  if resolvedTax is null:
+      return INELIGIBLE("Tax not configured for this destination")   -- should be unreachable if activation checklist (§15) was enforced, but checked again here as a hard runtime guarantee, not just an admin-time one
 
-  return ELIGIBLE(market, pm.effectivePrice, shippingOption, paymentOption, market.duties_policy)
+  addressCheck = validateAddress(submittedAddress, country.address_rules, country.postal_code_required)
+  if not addressCheck.valid:
+      return INELIGIBLE(addressCheck.reason)
+
+  resolvedDuties = marketCountry.duties_policy ?? market.duties_policy
+
+  return ELIGIBLE(market, entry.price, entry.currency, deliveryOption, paymentOption, resolvedTax, resolvedDuties)
 ```
 
-Every `INELIGIBLE` carries a specific, real reason string — never a generic "checkout failed." This is one function, called from one place (the checkout-session endpoint), not scattered across frontend components — matching your explicit instruction.
+On `ELIGIBLE`, at the same point the existing checkout-session logic already commits an order (the LAUNCH-FOUNDATION-1 checkout-safety choke point), the resolved values above are written into `order_commerce_snapshots` (§16) — once, at creation, never again.
 
 ---
 
-## 19. Customer market-selection flow
+## 16. Order commerce snapshot (Round 1 issue 6 — new, mandatory)
 
-1. **Default signal**: browser locale / IP-geolocation hint (advisory only, never authoritative).
-2. **Explicit override**: a country/market selector, persisted to the customer's session (and to `users` for logged-in customers, e.g. a `preferred_country_id` — additive nullable column, not designed in full here since it's a small, obvious addition once `countries` exists).
-3. **Authoritative signal**: once an address is entered at checkout, **the shipping destination country wins**, full stop — overriding whatever locale/IP/preference signal was used for browsing. This is the same principle as the existing `to.country || 'US'` fallback pattern in `shipping.controller.ts`, generalized: browsing-time signals are conveniences, checkout-time address is the fact the system acts on.
+**Chosen design: hybrid, via a new 1:1 side table** — not explicit columns bolted onto the high-traffic `orders` table (would grow a core table with many rarely-queried fields), not a bare JSONB blob with no typed/indexable fields (hard to report on), not a fully normalized multi-table breakdown (overengineered for what's actually needed).
 
----
+```
+order_commerce_snapshots (
+    id                    UUID PK
+    order_id              UUID NOT NULL UNIQUE REFERENCES orders(id) ON DELETE CASCADE
+    destination_country_id UUID REFERENCES countries(id) ON DELETE SET NULL
+    market_id              UUID REFERENCES markets(id) ON DELETE SET NULL
+    price_list_id           UUID REFERENCES price_lists(id) ON DELETE SET NULL
+    tax_strategy_id         UUID REFERENCES tax_strategies(id) ON DELETE SET NULL
+    duties_policy           VARCHAR(30)
+    pricing_strategy        VARCHAR(30)
+    fx_rate_used             DECIMAL(14,8)         -- NULL under MANUAL pricing (the only implemented strategy today)
+    details                  JSONB DEFAULT '{}'    -- per-line resolved price_list_entry ids, resolved fulfilment routes, etc. -- anything not worth its own column
+    created_at                TIMESTAMPTZ NOT NULL DEFAULT now()
+    -- no updated_at -- this row is written once and never updated, by convention;
+    -- optionally hardened later with a DB rule/trigger rejecting UPDATE, not required for the design
+)
+```
 
-## 20. Admin International Control Center
+**Why every FK uses `ON DELETE SET NULL`, never `CASCADE` or a hard requirement:** if a `market`/`country`/`tax_strategy` row is ever deleted years later, the *order* must still be readable — losing the FK's live join target should degrade the snapshot's drill-down convenience, never the order's own validity. `order_id` is the only FK that cascades (deleting an order legitimately removes its snapshot).
 
-**MVP (buildable once the schema above exists):**
-- **Countries** — list + status/checkout-enabled toggles + address-rule editor. Read/write against `countries` only.
-- **Markets** — list + currency/tax-strategy/fulfilment-strategy assignment + `market_countries` membership editor.
-- **Product Availability** — a per-product view of its `product_markets` rows (visible/sellable/price toggles per market) — the highest-value screen, since it's what a Catalog Manager or Market Manager would actually use day to day.
+**Why 1:1 side table, not columns on `orders`:** old orders (everything before this architecture exists) simply have **no row** in this table — a `LEFT JOIN` returns nothing extra for them, which is the correct, honest representation of "this order predates market-aware commerce," distinct from "this order has a snapshot but some fields happen to be unknown." `orders` itself is never altered by this design.
 
-**Later screens (not MVP):**
-- Currencies/FX rate management (depends on `BASE_CONVERTED` pricing strategy actually being needed).
-- Shipping Zones / Fulfilment Locations / Warehouses admin UI (the tables exist and are usable via direct DB/API access by an engineer in the meantime; a dedicated UI is a convenience, not a blocker).
-- Payment Methods, Tax Profiles, Customs — configuration screens for tables that exist but whose *strategies* aren't implemented yet; building the UI before there's a real strategy to configure would be premature.
-- Market Managers — this is exactly the `staff_memberships` admin UI already scoped in `MARKET-OPS-STAFF-ACCESS-AUDIT.md` §14 Phase 2; this Control Center's nav group is where it would live, not a separate build.
-
----
-
-## 21. MARKET_MANAGER integration
-
-**No hardcoded country checks, anywhere — confirmed as a hard requirement, not just a preference.** `staff_memberships.market_scope` (proposed in the original audit as `TEXT[]` of country codes) integrates with this architecture by having `applyMarketScope()` resolve against `countries`/`markets` instead of comparing raw strings: `WHERE country.iso_alpha2 = ANY(staff_membership.market_scope)` becomes the one place a country-code array is ever compared, not scattered `if (x === 'CM')` checks.
-
-**`TEXT[]` vs. a normalized `staff_market_scope` join table — recommendation:** keep `market_scope TEXT[]` for the initial `staff_memberships` migration (`041`), **do not build the join table yet.** Reasoning:
-- Right now, zero rows in `countries` exist (the table itself doesn't exist yet), so a `staff_market_scope.country_id → countries(id)` FK has nothing to reference — building the join table before `countries` exists would mean either forward-referencing a not-yet-real table or inventing a second, temporary country representation, either of which is worse than a plain `TEXT[]` for now.
-- `TEXT[]` with ISO codes is trivially forward-compatible: once `countries` exists, a follow-up migration can (a) add `staff_market_scope(staff_membership_id, country_id)`, (b) backfill it from the existing `TEXT[]` by joining on `iso_alpha2`, and (c) leave the `TEXT[]` column in place, deprecated, until every read path has moved over — a clean, low-risk, fully reversible migration path, not a rewrite.
-- The `West Africa Manager: ['CM','GH','NG']` / `EU Operations Manager: <EU market's countries>` examples both work fine against a `TEXT[]` today; a normalized table's main advantage (referential integrity against real country rows, easier set-based queries joining to `markets`) only starts to matter once `countries`/`markets` are real and being queried *together* with staff scope regularly — which is exactly the point at which the migration above should happen, not before.
-
-**This document does not change the MARKET-OPS-1 schema** — `041_staff_memberships.sql`, when written, still uses `market_scope TEXT[]` exactly as already designed.
+**What this table does *not* duplicate:** line-item unit prices, product names, SKUs, and tax rates are already correctly snapshotted per-line on the existing `order_items` table (confirmed present: `unit_price`, `product_name`, `sku`, `tax_rate`, all captured at insert time) — this table captures the *surrounding* commercial context that currently has no home anywhere: which market/price-list/tax-strategy/duties-policy/FX-rate the order was placed under.
 
 ---
 
-## 22. Analytics integration
+## 17. Warehouse / inventory integration
 
-**No second analytics system — extends `events_core`/`user_sessions`, per your instruction.** Both tables already carry most of what's needed:
-- `user_sessions` already has `country_code`/`country_name`/`city` (added by `037_live_visitor_analytics.sql`) — a market can be derived from `country_code` via `market_countries` at query time, no new column required for that alone.
-- `events_core` already has `order_id`, `product_id`, `session_id`, `payload JSONB` — a market/country breakdown of any existing event type is a `JOIN` through `user_sessions.country_code → market_countries → markets`, not new instrumentation.
-- The one genuinely new field worth adding (additive, nullable): `events_core.currency` and/or reading it from `payload` for commerce events, so "revenue by market" doesn't require guessing a currency from country alone (a session's country and an order's transaction currency should usually agree, but shouldn't be *assumed* to).
-
-The dashboard mockup in your brief (Cameroon / Germany / USA / global-owner, same metrics) is a `market_id` (or `country_code`) filter added to the existing `MARKET-OPS-DASHBOARD-PLAN.md` proposal — not a new proposal.
+Unchanged from the first draft (§13 there) — `inventory.warehouse_location` stays free-text; a nullable `fulfillment_location_id` FK is proposed as a later, optional addition. Nothing in this revision touches the LAUNCH-FOUNDATION-1 inventory fixes.
 
 ---
 
-## 23. Advertising-attribution readiness
+## 18. Analytics, advertising-attribution readiness, backwards compatibility
 
-Not integrated this phase (explicitly out of scope), but made *answerable* by this architecture: "which market/country did this campaign target/generate" is answerable today already via `user_sessions.utm_*` + `country_code`; "what currency/revenue resulted" becomes answerable once `orders`/`events_core` can be joined to `markets` via the destination country, which this architecture provides the join path for without adding any ad-platform code. TechTools' own analytics remains the source of truth, per your instruction — this is purely about making sure the join keys exist when that integration work eventually happens.
+Unchanged from the first draft (original §22/§23/§24) except: `order_commerce_snapshots.market_id`/`destination_country_id` are now available as join keys for market-scoped analytics, in addition to `user_sessions.country_code`, giving order-stage reporting a second, order-anchored path to the same breakdowns.
 
 ---
 
-## 24. Backwards compatibility
+## 19. Staff scope future normalization (Round 1 issue 12)
 
-| Existing thing | What happens to it |
+`041_staff_memberships.sql` is **unchanged** — `market_scope TEXT[]` ships exactly as already designed, per your explicit instruction. The future path, once `countries`/`markets` exist, now explicitly supports both grains rather than country-codes-only:
+
+```
+staff_market_scopes (
+    id                   UUID PK
+    staff_membership_id  UUID NOT NULL REFERENCES staff_memberships(id) ON DELETE CASCADE
+    scope_type           VARCHAR(10) NOT NULL CHECK (scope_type IN ('COUNTRY','MARKET'))
+    country_id           UUID REFERENCES countries(id)
+    market_id            UUID REFERENCES markets(id)
+    CHECK ((scope_type = 'COUNTRY' AND country_id IS NOT NULL AND market_id IS NULL)
+        OR (scope_type = 'MARKET' AND market_id IS NOT NULL AND country_id IS NULL))
+)
+```
+A membership can hold multiple rows. `applyMarketScope()` resolves the *effective* country set by unioning: every `country_id` referenced directly, plus every country currently in any referenced `market_id` (via `market_countries`, §6). This makes every example from your brief a single row: `EU Operations Manager` → one `MARKET` row (`EU`); `Cameroon Manager` → one `COUNTRY` row (`CM`); a future `West Africa Manager` → three `COUNTRY` rows (or, once a "West Africa" market exists, one `MARKET` row); `Owner` → zero rows, treated as global by the existing role check, not by an empty-scope special case. **Not built this phase** — this is the documented migration path for whenever `countries`/`markets` land, backfilling from the existing `TEXT[]` by joining on `iso_alpha2`, with the `TEXT[]` column kept in place, deprecated, until every read path has moved over.
+
+---
+
+## 20. Historical configuration (Round 1 issue 13 — new)
+
+General rule, stated once, applying uniformly to every kind of change below: **configuration tables (`countries`, `markets`, `market_countries`, `price_lists`/`price_list_entries`, `tax_strategies`, `market_payment_methods`, `shipping_zones`/`shipping_methods`, `fulfillment_locations`, `product_fulfillment_options`) represent current/future state and may change freely at any time. `order_items` (existing) and `order_commerce_snapshots` (new, §16) represent what was true at the moment of purchase and are never updated by a later configuration change** — the snapshot's FKs (all `ON DELETE SET NULL`) are for traceability/drill-down convenience, never the sole record of what an order says.
+
+| Change | What happens |
 |---|---|
-| `products.id` / `slug` | Unchanged, forever. `product_markets` references `product_id`; nothing about a product's identity changes. |
-| Existing orders | Fully readable as-is. `orders.currency`/`shipping_address` keep their current meaning; no backfill required for old rows (a `market_id` column, if added later, is nullable — old orders simply have `NULL`, meaning "pre-market-architecture," not "broken"). |
-| Existing inventory reservations | Untouched — `inventory.available_stock` (generated column) and the reservation logic from LAUNCH-FOUNDATION-1 don't reference anything in this document. |
-| Legacy admin users (`user_type='admin'/'super_admin'`) | Fully operational, unchanged — this architecture and the MARKET-OPS staff system are both strictly additive to the existing `authorize()` model, per the original audit's design. |
-| `shipping_zones`/`shipping_methods` | Reused as-is (§11) — existing rows (if any are configured) keep working; checkout gains the ability to query them, nothing about their shape changes. |
-| `suppliers`/`seller_profiles` | Untouched (§14). |
+| Country changes market | `market_countries`: old row gets `effective_to = now()`, new row inserted. Past orders' snapshots already captured the old `market_id` — unaffected. |
+| Market/price-list currency changes | A new `price_lists` row (or a new `price_list_entries.price`) takes effect for *future* checkouts only. Past orders' `orders.currency`/snapshot `price_list_id` are untouched. |
+| Product price changes | New `price_list_entries.price` value. `order_items.unit_price` on every existing order already has its own historical value — unaffected, no migration needed. |
+| Shipping rules change | `shipping_methods`/`shipping_zones` updated for future resolution. `orders.shipping_amount` (existing column) on past orders is untouched. |
+| Payment method disabled | `market_payment_methods.is_active = false` — stops being offered going forward. `orders.payment_method` (existing) on past orders is untouched. |
+| Tax strategy changes | New `market_countries`/`markets.tax_strategy_id`. `orders.tax_amount` (existing) and the snapshot's `tax_strategy_id` on past orders are untouched. |
+| Duties policy changes | Same pattern — snapshot captured it at order time. |
+| Fulfilment location closes | `fulfillment_locations.is_active = false` — excluded from future `product_fulfillment_options` resolution. Past orders' snapshot still references the (now-inactive) location for audit purposes, via `ON DELETE SET NULL`, never a hard failure. |
 
 ---
 
-## 25. Proposed migration sequence
+## 21. Activation validation (Round 1 issue 11 — new)
 
-Numbers are **placeholders** — re-confirm the actual next-free number against `schema_migrations` immediately before writing each group, per your own instruction; do not assume these survive until then.
+A server-side check, not an admin checklist someone has to remember, enforced at the exact API call that would set `countries.status = 'ACTIVE'` **and** `checkout_enabled = true` together:
 
-Assuming `040` (analytics-alerts repair) and `041` (staff_memberships) land first:
+```
+function validateCountryForActivation(countryId):
+  checks = {}
+  marketCountry = market_countries.current(countryId)
+  checks.market_resolved = marketCountry != null
+  if not checks.market_resolved: return { ready: false, checks }
 
-- **GLOBAL-COMMERCE-1A** (`042`?) — `regions`, `countries`, `markets`, `market_countries`. Foundational, nothing depends on anything outside itself. Seed `countries` from a static ISO 3166 list; seed zero `markets` initially (founder configures the first ones deliberately, doesn't inherit any implicit ones).
-- **GLOBAL-COMMERCE-1B** (`043`?) — `tax_strategies`, `product_markets`. Depends on `markets`.
-- **GLOBAL-COMMERCE-2** (`044`?) — `user_addresses` gains `country_id`/`region`/`district`/`quarter`/`landmark`/`delivery_instructions`/lat-lng (all nullable). Checkout-eligibility function (§18) implemented in application code, not SQL — no migration content beyond this.
-- **GLOBAL-COMMERCE-3** (`045`?) — `fulfillment_locations`, `product_fulfillment_options`, `shipping_zones.market_id` (nullable addition). `inventory.fulfillment_location_id` (nullable addition) — only once real fulfilment-location data exists to point at.
-- **GLOBAL-COMMERCE-4** (`046`?) — `market_payment_methods`, `fx_rates` (only if/when `BASE_CONVERTED` pricing is actually needed — may never be required if `MANUAL` proves sufficient).
-- **Later, not numbered yet** — `freight_shipments`/`freight_shipment_items` (§4/§15), only once a real consolidated-freight pilot exists to model.
+  market = markets.get(marketCountry.market_id)
+  resolvedTax = marketCountry.tax_strategy_id ?? market.tax_strategy_id
+  checks.tax_configured = resolvedTax != null                                    -- Round 1 issue 3, enforced here
+  checks.currency_configured = (price_lists.forCountry(countryId) ?? price_lists.forMarket(market.id)) != null
+  checks.payment_method_configured = market_payment_methods.existsActive(market.id)
+  checks.shipping_method_configured = shippingZonesCover(countryId)
+  checks.fulfilment_route_exists = existsAnyActive(product_fulfillment_options, market.id, countryId)
+  checks.address_validation_configured = countryHasExplicitAddressConfig(countryId)  -- not just the default
+  checks.duties_policy_configured = (marketCountry.duties_policy ?? market.duties_policy) != null
+  checks.no_manual_block = not countries.get(countryId).operational_block_flag       -- simple admin override escape hatch
 
-Every group is additive-only: new tables, or nullable new columns on existing tables. None require an `ALTER ... NOT NULL` on an existing populated column, none require a data backfill to remain valid (nullable FKs default to `NULL`, which is a legitimate, meaningful "not yet categorized" state everywhere in this design).
+  return { ready: all(checks.values()), checks }
+```
+Surfaced in the admin International Control Center's country page as a literal checklist widget (green/red per item) **and** enforced server-side on the activation endpoint — a `PATCH` attempting `status='ACTIVE', checkout_enabled=true` while any check fails is rejected with the specific failing reasons, not silently accepted. A country can freely sit in `TESTING` with some checks failing (internal/staff access only); it cannot reach public `ACTIVE` + `checkout_enabled` that way.
+
+---
+
+## 22. Security / privacy considerations
+
+Unchanged from the first draft (original §29), plus: `order_commerce_snapshots` carries no new PII beyond what `orders`/`user_addresses` already hold (it references configuration rows by ID, not raw customer data), so no new sensitive-data-handling question is introduced by this table.
+
+---
+
+## 23. Revised migration sequence
+
+Numbers remain **placeholders**, re-confirmed against `schema_migrations` immediately before each group is actually written, per your standing instruction. Sequenced by dependency, assuming `040`/`041` land first:
+
+- **GLOBAL-COMMERCE-1A** — `regions`, `countries`, `platform_settings`, `markets`, `market_countries` (with the partial unique index from day one, not retrofitted). Seed `countries` from static ISO 3166 data; seed zero `markets` initially.
+- **GLOBAL-COMMERCE-1B** — `tax_strategies`, `price_lists`, `price_list_entries`. Depends on `markets`/`countries`.
+- **GLOBAL-COMMERCE-1C** *(new, split out from the original 1B)* — `product_markets` (availability grain only now — no pricing columns, per §7) and `order_commerce_snapshots` (§16). The snapshot table has no dependency on fulfilment/shipping tables, so it can land as soon as `markets`/`price_lists` exist, ahead of the fulfilment work below.
+- **GLOBAL-COMMERCE-2** — `user_addresses` gains `country_id`/`region`/`district`/`quarter`/`landmark`/`delivery_instructions`/lat-lng (nullable), **and** `postal_code` loses its `NOT NULL` in the same migration as the application validation change ships (§13) — not before, not after, to avoid a window where the column is optional but the API still rejects omitting it (harmless but confusing) or vice versa (a real regression). Checkout-eligibility function (§15) implemented in application code alongside this.
+- **GLOBAL-COMMERCE-3** — `fulfillment_locations`, `product_fulfillment_options` (with the `supply_strategy`/origin-source `CHECK` constraint from §12 from day one), `shipping_zones.market_id` (nullable addition), `shipping_methods.method_type` CHECK extended with `'consolidated_freight'`/`'local_delivery'`. `inventory.fulfillment_location_id` (nullable) only once real location data exists.
+- **GLOBAL-COMMERCE-4** — `market_payment_methods`. `fx_rates` only if/when `BASE_CONVERTED` pricing is actually needed (may never be required).
+- **Later, unnumbered** — `freight_shipments`/`freight_shipment_items` (unchanged from the first draft, still explicitly deferred to a real freight pilot); future `staff_market_scopes` (§19, unchanged, still not this phase).
+
+Every group remains additive-only: new tables, nullable new columns, or a `NOT NULL`→nullable relaxation (never the reverse) on an existing column. None require a data backfill to remain valid.
+
+---
+
+## 24. Test strategy (updated)
+
+All items from the first draft still apply (§27 there), plus, specific to this revision:
+- **Market resolution determinism**: attempting to insert a second `market_countries` row for the same country with `effective_to IS NULL` must fail at the database level (partial unique index) — test this as a hard constraint, not just an application-level check.
+- **Price list resolution order**: a country-scoped price list must always win over its market's price list when both exist for the same product; falling through to "not sellable" when neither exists must never silently show a price from an unrelated market.
+- **Order snapshot immutability**: writing a snapshot at order creation, then asserting no code path anywhere updates that row afterward (a repo-wide grep for `UPDATE order_commerce_snapshots` finding zero application call sites is itself a valid regression test).
+- **Activation checklist**: each of the eight checks individually forced to fail, confirming the activation endpoint rejects with that specific reason, and confirming a country can still be saved as `TESTING` with checks failing.
+- **Regression, unchanged**: every existing order/product/checkout test continues to pass unmodified.
+
+---
+
+## 25. Rollback strategy
+
+Unchanged principle from the first draft — every table here is new and additive, `DROP TABLE IF EXISTS` in reverse dependency order rolls back any group cleanly. The one addition this revision introduces: `ALTER TABLE user_addresses ALTER COLUMN postal_code DROP NOT NULL` rolls back with `ALTER TABLE user_addresses ALTER COLUMN postal_code SET NOT NULL` — **but only safely if every row still has a non-null value at rollback time**, which won't be true forever once countries with `postal_code_required=false` start accepting real orders without one. Recommendation: treat that specific column relaxation as a one-way door in practice (safe to roll back the *application validation* change immediately; the column constraint itself should only be reapplied if you're certain no null-postal-code row has been written yet) — flagged explicitly here so it isn't assumed symmetric with every other rollback in this document.
 
 ---
 
 ## 26. Rollout strategy
 
-Per your brief, as an *initial proposal only* — the architecture doesn't depend on this exact order, and country/market activation is always an explicit per-country action (§3), never inferred from a wave being "next":
-
-1. **Wave 1**: formalize the existing EU footprint (Italy, Germany, France, Spain, ...) as the first real `markets` row — mechanically, this is the lowest-risk wave, since it's re-describing traffic that already exists rather than opening anything new.
-2. **Wave 2**: UK, Switzerland, Norway — near-EU, likely similar fulfilment/payment story, `TESTING` → `ACTIVE` per the standard lifecycle.
-3. **Wave 3**: US, Canada — first real currency (`USD`) and first real cross-Atlantic fulfilment decision.
-4. **Wave 4**: Australia, New Zealand.
-5. **African pilot**: Cameroon, as `TESTING`, operated by the planned `MARKET_MANAGER` — the concrete first use of `product_fulfillment_options.strategy='CONSOLIDATED_FREIGHT'` and `countries.postal_code_required=false`.
-6. **Later Africa**: Ghana, Nigeria, Kenya, South Africa — each independently promoted from `SUPPORTED`/`TESTING`, informed by what the Cameroon pilot actually reveals about fulfilment/payment/customs friction.
-7. **Selected Asia**: UAE, Singapore, Japan, South Korea, Malaysia — likely each needs its own `tax_strategies`/`market_payment_methods` configuration; no shared assumption across them.
+Unchanged from the first draft (§26 there) — Wave 1 (existing EU footprint) through the African/Asia pilots, still an initial proposal only, still not something the architecture depends on in a fixed order.
 
 ---
 
-## 27. Test strategy
+## 27. Risks / open founder decisions (revised)
 
-Once any part of this is implemented (future phase, not this one):
-- **Unit**: `checkEligibility()` (§18) — every `INELIGIBLE` branch individually, plus the happy path, using fixture `countries`/`markets`/`product_markets` rows (mirroring the pattern already established for `staff_memberships` permission tests in the MARKET-OPS design).
-- **Integration**: a product visible/sellable in `market_id=A` but not `market_id=B` is correctly rejected for a `market_id=B` destination address, and correctly accepted for `market_id=A`.
-- **Regression**: every existing order/product/checkout test (from LAUNCH-FOUNDATION-1 and earlier) continues to pass unmodified — this architecture must not require touching any existing test.
-- **Data integrity**: no `product_markets`/`market_countries` row can reference a `product_id`/`country_id` that doesn't exist (standard FK enforcement) — and a query confirming every `ACTIVE` market has at least one `market_payment_methods` row and one `tax_strategy_id` set, run as a pre-activation checklist, not an app-level constraint (a market mid-configuration is allowed to be incomplete; an `ACTIVE` one shouldn't be).
+Carried forward from the first draft, minus what this revision resolved (the EU-currency question, the tax-default question, and the market-determinism question are no longer open — they're designed above), plus what's newly surfaced:
 
----
-
-## 28. Rollback strategy
-
-Every table proposed here is new and additive — the rollback for any single migration group is `DROP TABLE IF EXISTS <new tables> [CASCADE]`, in reverse dependency order, exactly like the `040` repair migration's own rollback note. Nullable columns added to existing tables (`user_addresses`, `inventory`, `shipping_zones`) roll back with `ALTER TABLE ... DROP COLUMN IF EXISTS`, safe because nothing existing ever depended on them being present. No rollback in this entire architecture requires deleting or migrating existing customer/order/inventory data, because no phase of it ever writes to those rows — only reads them (to resolve a country/market) or adds new, optional rows/columns alongside them.
-
----
-
-## 29. Security / privacy considerations
-
-- `market_payment_methods.config` must never hold real credentials (§4) — same discipline already established for `shipping_carriers.credentials`, and the same credential-leak class of bug found and fixed in LAUNCH-FOUNDATION-1 (`getEnabledCarriers` was leaking `shipping_carriers.credentials` before that fix) must not be repeated for this new table — any future "list payment methods" endpoint must redact `config` the same way `getShippingCarriers` already correctly does.
-- `fulfillment_locations.address` (a real physical warehouse/hub address) is operational data, not customer PII, but should still be admin-only-readable — same `authorize('admin','super_admin')` pattern as everything else in this area, no new exposure surface.
-- Country/market data itself (`countries`, `markets`) is non-sensitive and could reasonably be public-readable (a storefront needs to know which countries to offer in a selector) — but the *admin* mutation endpoints (status changes, `checkout_enabled` toggles) are exactly the kind of action the `staff_memberships` permissions matrix (`MARKET-OPS-STAFF-ACCESS-AUDIT.md` §5) already reserves for `OWNER`/`SUPER_ADMIN`/`MARKET_MANAGER`-within-scope — this architecture doesn't need its own new permission model, it plugs into that one.
-- Market-scoped analytics (§22) must respect the same market-scoping a `MARKET_MANAGER` has for orders/suppliers — a Cameroon manager's dashboard access to `events_core`/`user_sessions` should be filtered by `country_code`/market the same way their order access is, not a separate, wider analytics permission by accident.
-
----
-
-## 30. Risks / open founder decisions
-
-1. **Currency display strategy** — is `MANUAL` (explicit price per market) acceptable long-term, or will `BASE_CONVERTED` (live FX) be needed soon? This materially changes whether `fx_rates`/FX-provider work belongs in `GLOBAL-COMMERCE-4` or can be deferred indefinitely. Recommend starting `MANUAL`-only and revisiting once there are enough markets that manually pricing every product everywhere becomes the actual bottleneck.
-2. **Tax strategy ownership** — real VAT/sales-tax math (`EU_VAT`, `US_SALES_TAX`, etc.) is a compliance question, not just an engineering one; likely needs either an external tax-calculation provider (`EXTERNAL_PROVIDER` strategy) or dedicated accounting/legal input before any strategy beyond `ZERO` is implemented for a real `ACTIVE` market. This architecture provides the slot; filling it is a founder + accountant decision, not something to default silently.
-3. **`shipping_zones.market_id`** — add now (§11) or leave the `countries TEXT[]`-only relationship? Low-risk either way; recommend adding it only when the first real market-aware shipping query is actually being written, not speculatively.
-4. **Consolidated freight** — is this genuinely near-term (needed for the Cameroon pilot to work at all) or a later-wave concern? The pilot could plausibly launch on `COURIER`/`SUPPLIER_DIRECT` alone for smaller/lighter goods first, deferring `CONSOLIDATED_FREIGHT` until volume justifies it — worth deciding before `GLOBAL-COMMERCE-3` is scoped in detail.
-5. **`preferred_country_id` on `users`** (§19) — small, obvious, but not designed in full here since it's a one-column addition once `countries` exists; flagging so it isn't forgotten rather than silently assumed.
-6. **Mobile money timing** — `market_payment_methods` makes adding MTN MoMo/Orange Money a config-plus-adapter change rather than a rewrite, but *when* that adapter work happens is a founder call tied to the Cameroon pilot's actual payment-method needs, not an architecture question.
+1. **Currency display strategy** (unchanged) — `MANUAL` vs. `BASE_CONVERTED` timing; still recommend starting `MANUAL`-only.
+2. **Tax strategy ownership** (unchanged) — real VAT/sales-tax math is a compliance question needing accounting/legal input before any strategy beyond `ZERO` goes live for a real `ACTIVE` market.
+3. **Consolidated freight timing** (unchanged) — could the Cameroon pilot launch on `COURIER`/`SUPPLIER_DIRECT` alone first, deferring `CONSOLIDATION_HUB` volume until it's justified?
+4. **New: does `product_markets` ever need a country-level override, not just market-level?** This revision kept availability/visibility at the market grain only (no evidence of a concrete need for finer granularity yet, per the ownership matrix in §14) — if a real case shows up (a product legal in Germany but restricted in France, both `EU` market), the same override pattern already used for tax/duties on `market_countries` generalizes directly to a `product_country_overrides` sparse table; not designed in full here since no concrete requirement exists yet.
+5. **New: `market_payment_methods` country-level override** — deferred (§14) for the same reason as #4; the pattern to add it later is identical if/when a real need appears.
+6. **Mobile money timing** (unchanged) — a founder call tied to the Cameroon pilot's actual payment-method needs, not an architecture question.
 
 ---
 
 ## Hardcoded assumptions this architecture is intended to eventually replace
 
-Listed explicitly, per your instruction — none of these are changed by this document itself, all are the concrete things each migration group above exists to remove:
+Unchanged from the first draft, still accurate:
 
-- `order.controller.ts`: `const taxRate = 0.08` (flat, universal) → `tax_strategies` per market.
-- `order.controller.ts`: `totalAmount >= 50 ? 0 : 5.99` (flat shipping) → `shipping_zones`/`shipping_methods`, finally wired to checkout.
-- `order.controller.ts`/`stripe.service.ts`: `'EUR'` hardcoded at every order-creation/Stripe call site → `markets.base_currency` resolved per destination.
-- `user_addresses.postal_code NOT NULL` enforced unconditionally in app validation → `countries.postal_code_required`-driven.
-- `payment.controller.ts`: implicit "Stripe is the only payment method" → `market_payment_methods`-driven availability.
-- Web/mobile checkout: `country || 'US'` fallback patterns → resolved market/country becomes explicit and required, not defaulted.
-- `products` treated as globally, uniformly sellable the instant `is_active=true` → `product_markets.sellable` becomes the real per-market gate, defaulting closed, not open.
+- `order.controller.ts`: `const taxRate = 0.08` → `tax_strategies`, resolved per market/country, `NULL`-checked at activation.
+- `order.controller.ts`: `totalAmount >= 50 ? 0 : 5.99` → `shipping_zones`/`shipping_methods`, finally wired to checkout.
+- `order.controller.ts`/`stripe.service.ts`: `'EUR'` hardcoded → resolved `price_lists.currency` per destination.
+- `user_addresses.postal_code NOT NULL` enforced unconditionally → `countries.postal_code_required`-driven, column relaxed (§13).
+- `payment.controller.ts`: implicit "Stripe is the only payment method" → `market_payment_methods`-driven.
+- Web/mobile checkout: `country || 'US'` fallback patterns → resolved market/country required, not defaulted.
+- `products` treated as globally sellable the instant `is_active=true` → `product_markets.sellable` is the real per-market gate, default closed.
 
 ---
 
 ## Status
 
-**READY FOR GLOBAL-COMMERCE-1A** — with the three open decisions in §30 (items 1, 2, 4) flagged as worth a founder call before `GLOBAL-COMMERCE-1B`/`3` are scoped in implementation detail; none of them block starting `1A` (`regions`/`countries`/`markets`/`market_countries`), since that group doesn't depend on any of those decisions being made yet.
+**READY FOR GLOBAL-COMMERCE-1A** — all thirteen Round 1 issues are resolved in this design (not merely acknowledged); none of the three remaining open founder decisions (§27: FX-strategy timing, tax-law ownership, consolidated-freight timing) block starting `1A` (`regions`/`countries`/`platform_settings`/`markets`/`market_countries`), since that group depends on none of them.
 
-This remains contingent on `040`/`041` (analytics-alerts repair, staff_memberships) actually landing first, per your own migration-sequencing instruction in §27/§5 of the phase brief — this document does not change that ordering.
+Still explicitly contingent on `040` (analytics-alerts repair) and `041` (staff_memberships) landing first, per your standing migration-sequencing instruction — this revision does not change that ordering, and no migration number in §23 is final until re-checked against `schema_migrations` at implementation time.

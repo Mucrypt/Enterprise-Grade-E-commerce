@@ -7,6 +7,7 @@ import { Response } from 'express';
 import { query } from '../../../database/connection';
 import logger from '../../../utils/logger';
 import { AuthRequest } from '../../../middleware/auth';
+import { webSocketService } from '../../../services/websocket.service';
 
 export const getActiveAlerts = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -147,6 +148,7 @@ export const acknowledgeAlert = async (req: AuthRequest, res: Response): Promise
     const row = result.rows[0];
 
     logger.info(`Alert acknowledged: ${id} by admin ${adminId}`);
+    webSocketService.broadcastAlertAcknowledged(row.id, adminId);
 
     res.json({
       id: row.id,
@@ -198,6 +200,7 @@ export const dismissAlert = async (req: AuthRequest, res: Response): Promise<voi
     const row = result.rows[0];
 
     logger.info(`Alert dismissed: ${id} by admin ${adminId}`);
+    webSocketService.broadcastAlertDismissed(row.id);
 
     res.json({
       id: row.id,

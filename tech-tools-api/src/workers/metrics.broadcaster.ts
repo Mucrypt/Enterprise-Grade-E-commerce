@@ -137,7 +137,7 @@ async function getConversionRate(): Promise<number> {
 /**
  * Get active alerts count by severity
  */
-async function getActiveAlertStats(): Promise<{
+export async function getActiveAlertStats(): Promise<{
   critical: number
   high: number
   medium: number
