@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken'
 import logger from '../../../utils/logger'
 import { query } from '../../../database/connection'
 import { AuthRequest } from '../../../middleware/auth'
+import { JWT_SECRET } from '../../../config/jwt.config'
 
 const isLibraryEnabled = () => {
   const globalEnabled =
@@ -193,7 +194,6 @@ export const getSignedAccessUrl = async (req: AuthRequest, res: Response) => {
     }
 
     const asset = assetResult.rows[0]
-    const secret = process.env.JWT_SECRET || 'development-secret'
 
     const token = jwt.sign(
       {
@@ -202,7 +202,7 @@ export const getSignedAccessUrl = async (req: AuthRequest, res: Response) => {
         assetId: asset.id,
         access: 'library_download',
       },
-      secret,
+      JWT_SECRET,
       { expiresIn: 120 },
     )
 
@@ -244,8 +244,7 @@ export const resolveSignedAccess = async (req: Request, res: Response) => {
       })
     }
 
-    const secret = process.env.JWT_SECRET || 'development-secret'
-    const decoded = jwt.verify(token, secret) as jwt.JwtPayload
+    const decoded = jwt.verify(token, JWT_SECRET) as jwt.JwtPayload
 
     if (
       decoded.access !== 'library_download' ||

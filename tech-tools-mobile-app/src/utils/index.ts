@@ -3,9 +3,7 @@
 // ============================================
 
 import { Product, ProductMedia } from '../types'
-
-// Image base URL
-const IMAGE_BASE_URL = 'https://techtoolstore.com'
+import { IMAGE_BASE_URL } from '../config/env'
 
 /**
  * Format price with currency symbol

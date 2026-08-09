@@ -6,6 +6,7 @@
 
 import * as DeviceInfo from 'expo-device';
 import { AnyEvent, EventSource, EventContext } from '../types/events';
+import { API_BASE_URL } from '../config/env';
 
 interface EventQueueItem {
   event: AnyEvent;
@@ -24,13 +25,11 @@ export class MobileEventTrackingService {
   private deviceInfo: any = null;
 
   constructor(
-    // EXPO_PUBLIC_API_URL is never actually set anywhere in this app (grep
-    // confirms zero references outside this file) -- every build silently
-    // fell back to localhost:3001, which doesn't exist on a device. Match
-    // the same production URL the real, working API client in
-    // src/api/index.ts uses (API_BASE_URL), already including /api/v1.
-    apiUrl: string = process.env.EXPO_PUBLIC_API_URL ||
-      'https://techtoolstore.com/api/v1',
+    // Reuse the same env-resolved base URL as the real API client
+    // (src/api/index.ts) instead of a second, independently-configured
+    // literal, so analytics always points at the same backend as the rest
+    // of the app.
+    apiUrl: string = API_BASE_URL,
   ) {
     this.apiUrl = apiUrl.replace(/\/api\/v1\/?$/, '');
     this.sessionId = this.generateSessionId();

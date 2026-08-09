@@ -11,10 +11,26 @@ import {
   ShipmentRequest,
   ShipmentLabel,
 } from '../index'
+import {
+  isMockShippingAllowed,
+  ShippingUnavailableError,
+} from '../../../config/shipping.config'
 
 export abstract class BaseCarrier {
   protected sandbox: boolean = true
   protected credentials: any = {}
+
+  // Call this immediately before falling back to fabricated (mock) data.
+  // Throws instead of returning fake data unless mock shipping has been
+  // explicitly enabled outside production (see shipping.config.ts).
+  protected assertMockAllowed(carrierName: string, context: string): void {
+    if (!isMockShippingAllowed()) {
+      throw new ShippingUnavailableError(
+        `${carrierName} ${context} unavailable: no live carrier credentials/response, and mock shipping data is disabled. ` +
+          'Set ALLOW_MOCK_SHIPPING=true outside production to allow mock data for local development.',
+      )
+    }
+  }
 
   abstract setCredentials(credentials: any): void
   abstract getRates(

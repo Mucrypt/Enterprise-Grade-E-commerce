@@ -142,8 +142,9 @@ export class FedExService extends BaseCarrier {
     to: ShippingAddress,
     packages: Package[],
   ): Promise<ShippingRate[]> {
-    // If no credentials, return mock rates
+    // If no credentials, fall back to mock rates only when explicitly allowed
     if (!this.apiKey) {
+      this.assertMockAllowed('FedEx', 'rates')
       return this.getMockRates(from, to, packages)
     }
 
@@ -217,6 +218,7 @@ export class FedExService extends BaseCarrier {
       return this.parseRates(data)
     } catch (error) {
       logger.error('FedEx rate error:', error)
+      this.assertMockAllowed('FedEx', 'rates')
       return this.getMockRates(from, to, packages)
     }
   }
@@ -338,6 +340,7 @@ export class FedExService extends BaseCarrier {
 
   async track(trackingNumber: string): Promise<TrackingInfo> {
     if (!this.apiKey) {
+      this.assertMockAllowed('FedEx', 'tracking')
       return this.getMockTracking(trackingNumber)
     }
 
@@ -372,6 +375,7 @@ export class FedExService extends BaseCarrier {
       return this.parseTracking(trackingNumber, data)
     } catch (error) {
       logger.error('FedEx tracking error:', error)
+      this.assertMockAllowed('FedEx', 'tracking')
       return this.getMockTracking(trackingNumber)
     }
   }
@@ -462,6 +466,7 @@ export class FedExService extends BaseCarrier {
 
   async createShipment(request: ShipmentRequest): Promise<ShipmentLabel> {
     if (!this.apiKey) {
+      this.assertMockAllowed('FedEx', 'label creation')
       return this.getMockLabel(request)
     }
 
@@ -593,6 +598,7 @@ export class FedExService extends BaseCarrier {
     address: ShippingAddress,
   ): Promise<{ valid: boolean; suggestions?: ShippingAddress[] }> {
     if (!this.apiKey) {
+      this.assertMockAllowed('FedEx', 'address validation')
       return { valid: true }
     }
 
@@ -667,6 +673,7 @@ export class FedExService extends BaseCarrier {
 
   async cancelShipment(trackingNumber: string): Promise<boolean> {
     if (!this.apiKey) {
+      this.assertMockAllowed('FedEx', 'shipment cancellation')
       return true
     }
 

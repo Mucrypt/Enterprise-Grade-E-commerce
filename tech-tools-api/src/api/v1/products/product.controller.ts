@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
 import { AuthRequest } from '../../../middleware/auth'
-import { query } from '../../../database/connection'
+import { query, getClient } from '../../../database/connection'
 import logger from '../../../utils/logger'
 import {
   processProductImage,
@@ -242,6 +242,11 @@ export const getProductById = async (req: Request, res: Response) => {
           WHERE i.product_id = p.id
         ) as inventory,
         (
+          SELECT COALESCE(SUM(i.available_stock), 0)
+          FROM inventory i
+          WHERE i.product_id = p.id
+        ) as total_stock,
+        (
           SELECT COALESCE(AVG(r.rating), 0)
           FROM reviews r
           WHERE r.product_id = p.id AND r.is_approved = true
@@ -353,49 +358,79 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
       })
     }
 
-    // Create the product first
-    const result = await query(
-      `INSERT INTO products (
-        sku, name, slug, description, short_description,
-        brand_id, category_id, base_price, sale_price, cost_price,
-        tax_rate, stock_quantity, weight, weight_unit, length, width, height,
-        dimensions_unit, is_active, is_digital, is_featured,
-        is_backorder_allowed, min_order_quantity, max_order_quantity,
-        meta_title, meta_description
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-               $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
-      RETURNING *`,
-      [
-        sku,
-        name,
-        slug,
-        description,
-        shortDescription,
-        brandId,
-        categoryId,
-        basePrice,
-        salePrice,
-        costPrice,
-        taxRate,
-        stockQuantity,
-        weight,
-        weightUnit,
-        length,
-        width,
-        height,
-        dimensionsUnit,
-        isActive,
-        isDigital,
-        isFeatured,
-        isBackorderAllowed,
-        minOrderQuantity,
-        maxOrderQuantity,
-        metaTitle,
-        metaDescription,
-      ],
-    )
+    // Create the product and its inventory record together, in one
+    // transaction. Previously only `products.stock_quantity` was written
+    // here and no `inventory` row was ever created -- checkout only ever
+    // trusts `inventory.available_stock` (see order.controller.ts), so
+    // every product created through this endpoint had real available_stock
+    // of 0 forever, regardless of the stock quantity entered here, and
+    // would fail checkout with "Insufficient stock" immediately.
+    const client = await getClient()
+    let product: any
+    try {
+      await client.query('BEGIN')
 
-    const product = result.rows[0]
+      const result = await client.query(
+        `INSERT INTO products (
+          sku, name, slug, description, short_description,
+          brand_id, category_id, base_price, sale_price, cost_price,
+          tax_rate, stock_quantity, weight, weight_unit, length, width, height,
+          dimensions_unit, is_active, is_digital, is_featured,
+          is_backorder_allowed, min_order_quantity, max_order_quantity,
+          meta_title, meta_description
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+                 $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+        RETURNING *`,
+        [
+          sku,
+          name,
+          slug,
+          description,
+          shortDescription,
+          brandId,
+          categoryId,
+          basePrice,
+          salePrice,
+          costPrice,
+          taxRate,
+          stockQuantity,
+          weight,
+          weightUnit,
+          length,
+          width,
+          height,
+          dimensionsUnit,
+          isActive,
+          isDigital,
+          isFeatured,
+          isBackorderAllowed,
+          minOrderQuantity,
+          maxOrderQuantity,
+          metaTitle,
+          metaDescription,
+        ],
+      )
+
+      product = result.rows[0]
+
+      await client.query(
+        `INSERT INTO inventory (product_id, current_stock, reserved_stock)
+         VALUES ($1, $2, 0)`,
+        [product.id, stockQuantity],
+      )
+
+      await client.query('COMMIT')
+    } catch (error) {
+      await client.query('ROLLBACK')
+      logger.error('Create product error (transaction rolled back):', error)
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to create product',
+      })
+    } finally {
+      client.release()
+    }
+
     const productId = product.id
 
     // Process uploaded media files if any

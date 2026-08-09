@@ -2,6 +2,7 @@ import { Request, Response } from 'express'
 import { query } from '../../../database/connection'
 import logger from '../../../utils/logger'
 import jwt from 'jsonwebtoken'
+import { JWT_SECRET } from '../../../config/jwt.config'
 
 const isBooksFeatureEnabled = () =>
   String(process.env.ENABLE_BOOKS_WEB3 || 'false').toLowerCase() === 'true'
@@ -341,14 +342,13 @@ export const getBookSampleAccess = async (req: Request, res: Response) => {
     }
 
     const asset = assetResult.rows[0]
-    const secret = process.env.JWT_SECRET || 'development-secret'
     const token = jwt.sign(
       {
         bookId: book.id,
         assetId: asset.id,
         access: 'book_sample',
       },
-      secret,
+      JWT_SECRET,
       { expiresIn: 90 },
     )
 
@@ -393,8 +393,7 @@ export const resolveBookSampleAccess = async (req: Request, res: Response) => {
       })
     }
 
-    const secret = process.env.JWT_SECRET || 'development-secret'
-    const decoded = jwt.verify(token, secret) as jwt.JwtPayload
+    const decoded = jwt.verify(token, JWT_SECRET) as jwt.JwtPayload
 
     if (
       decoded.access !== 'book_sample' ||

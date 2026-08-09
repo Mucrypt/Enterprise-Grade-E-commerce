@@ -23,6 +23,7 @@ import {
 } from './workers/metrics.broadcaster'
 import { webSocketService } from './services/websocket.service'
 import { notificationDispatcher } from './services/notification-dispatcher.service'
+import shippingService from './services/shipping'
 import logger from './utils/logger'
 
 const PORT = process.env.PORT || 9000
@@ -39,6 +40,21 @@ async function startServer() {
     // Connect to Redis
     await connectRedis()
     logger.info('✅ Redis connected successfully')
+
+    // Load shipping carrier credentials from the database. Previously this
+    // only ran when an admin edited a carrier via the dashboard, so a fresh
+    // deploy (or a restart before any admin touched carrier settings) had
+    // zero enabled carriers until someone happened to open that screen.
+    // Non-fatal on failure -- ShippingService.initialize() already logs and
+    // leaves carriers disabled rather than throwing, which now correctly
+    // surfaces as "carrier unavailable" (see shipping.config.ts) instead of
+    // silently falling back to mock data outside development.
+    await shippingService.initialize()
+    logger.info(
+      `✅ Shipping carriers initialized: ${
+        shippingService.getEnabledCarriers().join(', ') || 'none enabled'
+      }`,
+    )
 
     // Initialize Socket.io
     webSocketService.initialize(httpServer)

@@ -19,6 +19,24 @@
       },
       "ios": {
         "simulator": true
+      },
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "development",
+        "EXPO_PUBLIC_API_URL": "http://localhost:9000/api/v1"
+      }
+    },
+    "staging": {
+      "distribution": "internal",
+      "channel": "staging",
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "simulator": true
+      },
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "staging",
+        "EXPO_PUBLIC_API_URL": ""
       }
     },
     "preview": {
@@ -29,6 +47,10 @@
       },
       "ios": {
         "simulator": true
+      },
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "production",
+        "EXPO_PUBLIC_API_URL": "https://techtoolstore.com/api/v1"
       }
     },
     "production": {
@@ -38,7 +60,9 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_live_51OmeWZKQ56fnaANWRRrfMRUaVlFqcQNzjPc8b15g3JvTs2LgIHItreq6fuKFzndwt7N3dNtKJwYlAoVN2tof2Cab00lAQDEBFs"
+        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_live_51OmeWZKQ56fnaANWRRrfMRUaVlFqcQNzjPc8b15g3JvTs2LgIHItreq6fuKFzndwt7N3dNtKJwYlAoVN2tof2Cab00lAQDEBFs",
+        "EXPO_PUBLIC_APP_ENV": "production",
+        "EXPO_PUBLIC_API_URL": "https://techtoolstore.com/api/v1"
       }
     }
   },

@@ -12,6 +12,7 @@ import {
 } from '../../../utils/email'
 import type { AuthRequest } from '../../../middleware/auth'
 import NotificationEvents from '../../../services/notification.events'
+import { JWT_SECRET, JWT_REFRESH_SECRET } from '../../../config/jwt.config'
 
 export const register = async (req: Request, res: Response) => {
   try {
@@ -91,17 +92,13 @@ export const register = async (req: Request, res: Response) => {
     await sendVerificationEmail(email, verificationToken)
 
     // Generate tokens
-    const jwtSecret = process.env.JWT_SECRET || 'default-secret'
-    const jwtRefreshSecret =
-      process.env.JWT_REFRESH_SECRET || 'default-refresh-secret'
-
     const accessToken = jwt.sign(
       { userId: user.id, email: user.email, userType: user.user_type },
-      jwtSecret,
+      JWT_SECRET,
       { expiresIn: '15m' },
     )
 
-    const refreshToken = jwt.sign({ userId: user.id }, jwtRefreshSecret, {
+    const refreshToken = jwt.sign({ userId: user.id }, JWT_REFRESH_SECRET, {
       expiresIn: '7d',
     })
 
@@ -225,17 +222,13 @@ export const login = async (req: Request, res: Response) => {
     }
 
     // Generate tokens
-    const jwtSecret = process.env.JWT_SECRET || 'default-secret'
-    const jwtRefreshSecret =
-      process.env.JWT_REFRESH_SECRET || 'default-refresh-secret'
-
     const accessToken = jwt.sign(
       { userId: user.id, email: user.email, userType: user.user_type },
-      jwtSecret,
+      JWT_SECRET,
       { expiresIn: '15m' },
     )
 
-    const refreshToken = jwt.sign({ userId: user.id }, jwtRefreshSecret, {
+    const refreshToken = jwt.sign({ userId: user.id }, JWT_REFRESH_SECRET, {
       expiresIn: '7d',
     })
 
@@ -296,10 +289,7 @@ export const logout = async (req: Request, res: Response) => {
     const token = authHeader.split(' ')[1]
 
     try {
-      const decoded = jwt.verify(
-        token,
-        process.env.JWT_SECRET!,
-      ) as jwt.JwtPayload
+      const decoded = jwt.verify(token, JWT_SECRET) as jwt.JwtPayload
 
       // Remove refresh token from Redis
       const redisClient = getRedisClient()

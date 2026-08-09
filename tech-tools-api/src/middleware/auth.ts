@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 import logger from '../utils/logger'
 import getRedisClient from '../config/redis'
+import { JWT_SECRET, JWT_REFRESH_SECRET } from '../config/jwt.config'
 
 export interface AuthRequest extends Request {
   user?: {
@@ -30,10 +31,7 @@ export const authenticate = async (
     const token = authHeader.split(' ')[1]
 
     try {
-      const decoded = jwt.verify(
-        token,
-        process.env.JWT_SECRET!,
-      ) as jwt.JwtPayload
+      const decoded = jwt.verify(token, JWT_SECRET) as jwt.JwtPayload
 
       req.user = {
         id: decoded.userId,
@@ -70,10 +68,7 @@ export const authenticateIfPresent = async (
     const token = authHeader.split(' ')[1]
 
     try {
-      const decoded = jwt.verify(
-        token,
-        process.env.JWT_SECRET!,
-      ) as jwt.JwtPayload
+      const decoded = jwt.verify(token, JWT_SECRET) as jwt.JwtPayload
 
       req.user = {
         id: decoded.userId,
@@ -129,7 +124,7 @@ export const refreshToken = async (
 
     const decoded = jwt.verify(
       refreshToken,
-      process.env.JWT_REFRESH_SECRET!,
+      JWT_REFRESH_SECRET,
     ) as jwt.JwtPayload
 
     const redisClient = getRedisClient()
@@ -152,14 +147,13 @@ export const refreshToken = async (
       })
     }
 
-    const jwtSecret = process.env.JWT_SECRET || 'default-secret'
     const newAccessToken = jwt.sign(
       {
         userId: user.id,
         email: user.email,
         userType: user.user_type,
       },
-      jwtSecret,
+      JWT_SECRET,
       { expiresIn: '15m' },
     )
 

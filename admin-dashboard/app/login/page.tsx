@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -27,9 +27,21 @@ type LoginFormData = z.infer<typeof loginSchema>
 
 export default function LoginPage() {
   const router = useRouter()
-  const { login } = useAuth()
+  const { login, isAuthenticated, isLoading: isSessionLoading } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+
+  // A session that's still valid from before this deploy (or before the
+  // browser's admin-role cookie was set/expired) lands here because
+  // middleware.ts can't see a role cookie yet. AuthProvider's own
+  // session-load check (loadUser) still runs on this page and sets the
+  // cookie once it confirms the token -- once that resolves, send them
+  // straight through instead of making them re-enter credentials.
+  useEffect(() => {
+    if (!isSessionLoading && isAuthenticated) {
+      router.replace('/dashboard')
+    }
+  }, [isSessionLoading, isAuthenticated, router])
 
   const {
     register,

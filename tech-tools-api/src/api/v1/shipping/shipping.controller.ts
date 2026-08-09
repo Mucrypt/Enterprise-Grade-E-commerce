@@ -82,6 +82,16 @@ export const getRates = async (req: AuthRequest, res: Response) => {
       success: true,
       data: {
         rates,
+        // Every carrier attempt failed (no credentials, or every live call
+        // errored) -- an empty array alone reads as "no shipping options
+        // exist" rather than "rates are currently unavailable". Individual
+        // carrier failures are already logged server-side by
+        // ShippingService.getRates.
+        ratesAvailable: rates.length > 0,
+        ...(rates.length === 0 && {
+          message:
+            'Shipping rates are temporarily unavailable. No carrier returned a live quote.',
+        }),
         fromAddress,
         toAddress,
       },
@@ -381,9 +391,19 @@ export const getEnabledCarriers = async (req: AuthRequest, res: Response) => {
   try {
     const enabledCarriers = shippingService.getEnabledCarriers()
 
-    // Also get from database
+    // `SELECT *` here used to include the raw `credentials` column (API
+    // keys/secrets), sending them straight into the JSON response body.
+    // Match the redaction already used by getShippingCarriers below --
+    // this is a health/availability view, not a credentials export.
     const result = await query(
-      `SELECT * FROM shipping_carriers WHERE is_active = true ORDER BY carrier_code`,
+      `SELECT
+        id, carrier_code, carrier_name, is_active, is_sandbox,
+        created_at, updated_at,
+        CASE WHEN credentials IS NOT NULL AND credentials::text != '{}'
+          THEN true ELSE false END as is_configured
+      FROM shipping_carriers
+      WHERE is_active = true
+      ORDER BY carrier_code`,
     ).catch(() => ({ rows: [] }))
 
     res.json({
@@ -734,6 +754,11 @@ export const calculateShipping = async (req: AuthRequest, res: Response) => {
       success: true,
       data: {
         rates: adjustedRates,
+        ratesAvailable: adjustedRates.length > 0,
+        ...(adjustedRates.length === 0 && {
+          message:
+            'Shipping rates are temporarily unavailable. No carrier returned a live quote.',
+        }),
         qualifiesForFreeShipping,
         freeShippingThreshold,
         orderValue: totalValue,

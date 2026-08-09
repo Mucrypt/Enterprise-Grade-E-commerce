@@ -279,6 +279,27 @@ export const commitSupplierImport = async (req: AuthRequest, res: Response) => {
 
       if (!productId) continue
 
+      // Ensure an inventory row exists for this product. Checkout only ever
+      // trusts inventory.available_stock, never products.stock_quantity, so
+      // without this a newly-imported (or previously supplier-linked but
+      // never-stocked) product would show a stock_quantity from the CSV but
+      // have real available_stock of 0 and fail checkout immediately.
+      // `inventory` has no unique constraint on product_id (it supports
+      // multiple per-warehouse rows per product), so this uses an explicit
+      // existence check rather than ON CONFLICT, which would fail with no
+      // matching constraint. If a row already exists (e.g. tracked from
+      // another source), it is left untouched -- a single supplier's
+      // offered quantity is not necessarily the whole operational stock
+      // picture for a product multiple suppliers or channels contribute to.
+      await client.query(
+        `INSERT INTO inventory (product_id, current_stock, reserved_stock)
+         SELECT $1, $2, 0
+         WHERE NOT EXISTS (
+           SELECT 1 FROM inventory WHERE product_id = $1
+         )`,
+        [productId, row.stockQuantity],
+      )
+
       await client.query(
         `INSERT INTO supplier_products
           (supplier_id, product_id, supplier_sku, cost_price, currency_code, stock_quantity, lead_time_days, is_available, last_updated)

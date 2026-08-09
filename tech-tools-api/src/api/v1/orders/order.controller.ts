@@ -1410,26 +1410,21 @@ export const createGuestOrderCheckoutSession = async (req: any, res: Response) =
   }
 }
 
-export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
-  try {
-    const { id } = req.params
-    const { status } = req.body
-
-    res.json({
-      success: true,
-      message: 'Update order status - Not yet fully implemented',
-      data: {
-        orderId: id,
-        status,
-      },
-    })
-  } catch (error) {
-    logger.error('Update order status error:', error)
-    res.status(500).json({
-      success: false,
-      error: 'Failed to update order status',
-    })
-  }
+/**
+ * Legacy customer-facing status-update route, kept mounted at PUT /:id/status
+ * for backward compatibility only. It never actually wrote to the database
+ * (previously returned a fake 200 success with the input echoed back) --
+ * confirmed unreachable from both admin-dashboard and e-commerce-web-store,
+ * which use the real implementation at PUT /admin/:id/status
+ * (adminUpdateOrderStatus) instead. Returns an honest 501 rather than lying
+ * about success, in case anything external still calls this legacy path.
+ */
+export const updateOrderStatus = async (_req: AuthRequest, res: Response) => {
+  res.status(501).json({
+    success: false,
+    error:
+      'This endpoint is not implemented. Use PUT /orders/admin/:id/status instead.',
+  })
 }
 
 export const cancelOrder = async (req: AuthRequest, res: Response) => {
@@ -1545,16 +1540,40 @@ export const cancelOrder = async (req: AuthRequest, res: Response) => {
   }
 }
 
+/**
+ * Legacy route, kept mounted at GET /:id/items for backward compatibility.
+ * Previously a stub that always returned an empty array regardless of the
+ * order -- order_items already exists and is trivial to actually query
+ * (unlike updateOrderStatus's stub above, which duplicates real business
+ * logic that already lives in adminUpdateOrderStatus), so this one is
+ * implemented for real rather than just made to fail honestly.
+ */
 export const getOrderItems = async (req: AuthRequest, res: Response) => {
   try {
+    const userId = req.user?.userId
     const { id } = req.params
+
+    const orderCheck = await query(
+      `SELECT id FROM orders WHERE id = $1 AND user_id = $2`,
+      [id, userId],
+    )
+    if (orderCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Order not found',
+      })
+    }
+
+    const itemsResult = await query(
+      `SELECT * FROM order_items WHERE order_id = $1 ORDER BY created_at`,
+      [id],
+    )
 
     res.json({
       success: true,
-      message: 'Get order items - Not yet fully implemented',
       data: {
         orderId: id,
-        items: [],
+        items: itemsResult.rows,
       },
     })
   } catch (error) {

@@ -10,6 +10,7 @@ import React, {
 import { useRouter } from 'next/navigation'
 import { authService, User } from '@/services/auth.service'
 import { toast } from 'sonner'
+import { setAdminRoleCookie, clearAdminRoleCookie } from '@/lib/admin-role-cookie'
 
 interface AuthContextType {
   user: User | null
@@ -45,11 +46,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const userData = await authService.getCurrentUser()
       if (userData.data?.user) {
         setUser(userData.data.user)
+        setAdminRoleCookie(userData.data.user.userType)
       }
     } catch (error) {
       console.error('Failed to load user:', error)
       localStorage.removeItem('accessToken')
       localStorage.removeItem('refreshToken')
+      clearAdminRoleCookie()
     } finally {
       setIsLoading(false)
     }
@@ -84,6 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       setUser(userData)
+      setAdminRoleCookie(userData.userType)
       toast.success('Login successful')
       router.push('/dashboard')
     } catch (error: any) {
@@ -103,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       localStorage.removeItem('accessToken')
       localStorage.removeItem('refreshToken')
+      clearAdminRoleCookie()
       setUser(null)
       router.push('/login')
       toast.success('Logged out successfully')

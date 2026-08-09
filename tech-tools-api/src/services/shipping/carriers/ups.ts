@@ -157,6 +157,7 @@ export class UPSService extends BaseCarrier {
     packages: Package[],
   ): Promise<ShippingRate[]> {
     if (!this.clientId) {
+      this.assertMockAllowed('UPS', 'rates')
       return this.getMockRates(from, to, packages)
     }
 
@@ -253,6 +254,7 @@ export class UPSService extends BaseCarrier {
       return this.parseRates(data)
     } catch (error) {
       logger.error('UPS rate error:', error)
+      this.assertMockAllowed('UPS', 'rates')
       return this.getMockRates(from, to, packages)
     }
   }
@@ -399,6 +401,7 @@ export class UPSService extends BaseCarrier {
 
   async track(trackingNumber: string): Promise<TrackingInfo> {
     if (!this.clientId) {
+      this.assertMockAllowed('UPS', 'tracking')
       return this.getMockTracking(trackingNumber)
     }
 
@@ -429,6 +432,7 @@ export class UPSService extends BaseCarrier {
       return this.parseTracking(trackingNumber, data)
     } catch (error) {
       logger.error('UPS tracking error:', error)
+      this.assertMockAllowed('UPS', 'tracking')
       return this.getMockTracking(trackingNumber)
     }
   }
@@ -521,6 +525,7 @@ export class UPSService extends BaseCarrier {
 
   async createShipment(request: ShipmentRequest): Promise<ShipmentLabel> {
     if (!this.clientId) {
+      this.assertMockAllowed('UPS', 'label creation')
       return this.getMockLabel(request)
     }
 
@@ -676,6 +681,7 @@ export class UPSService extends BaseCarrier {
     address: ShippingAddress,
   ): Promise<{ valid: boolean; suggestions?: ShippingAddress[] }> {
     if (!this.clientId) {
+      this.assertMockAllowed('UPS', 'address validation')
       return { valid: true }
     }
 
@@ -755,6 +761,7 @@ export class UPSService extends BaseCarrier {
 
   async cancelShipment(trackingNumber: string): Promise<boolean> {
     if (!this.clientId) {
+      this.assertMockAllowed('UPS', 'shipment cancellation')
       return true
     }
 

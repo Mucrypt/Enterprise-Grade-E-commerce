@@ -101,6 +101,7 @@ export class DHLService extends BaseCarrier {
     packages: Package[],
   ): Promise<ShippingRate[]> {
     if (!this.siteId) {
+      this.assertMockAllowed('DHL', 'rates')
       return this.getMockRates(from, to, packages)
     }
 
@@ -174,6 +175,7 @@ export class DHLService extends BaseCarrier {
       return this.parseRates(data)
     } catch (error) {
       logger.error('DHL rate error:', error)
+      this.assertMockAllowed('DHL', 'rates')
       return this.getMockRates(from, to, packages)
     }
   }
@@ -301,6 +303,7 @@ export class DHLService extends BaseCarrier {
 
   async track(trackingNumber: string): Promise<TrackingInfo> {
     if (!this.siteId) {
+      this.assertMockAllowed('DHL', 'tracking')
       return this.getMockTracking(trackingNumber)
     }
 
@@ -329,6 +332,7 @@ export class DHLService extends BaseCarrier {
       return this.parseTracking(trackingNumber, data)
     } catch (error) {
       logger.error('DHL tracking error:', error)
+      this.assertMockAllowed('DHL', 'tracking')
       return this.getMockTracking(trackingNumber)
     }
   }
@@ -421,6 +425,7 @@ export class DHLService extends BaseCarrier {
 
   async createShipment(request: ShipmentRequest): Promise<ShipmentLabel> {
     if (!this.siteId) {
+      this.assertMockAllowed('DHL', 'label creation')
       return this.getMockLabel(request)
     }
 
@@ -556,6 +561,7 @@ export class DHLService extends BaseCarrier {
     address: ShippingAddress,
   ): Promise<{ valid: boolean; suggestions?: ShippingAddress[] }> {
     if (!this.siteId) {
+      this.assertMockAllowed('DHL', 'address validation')
       return { valid: true }
     }
 
@@ -611,6 +617,7 @@ export class DHLService extends BaseCarrier {
 
   async cancelShipment(trackingNumber: string): Promise<boolean> {
     if (!this.siteId) {
+      this.assertMockAllowed('DHL', 'shipment cancellation')
       return true
     }
 

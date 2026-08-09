@@ -5,6 +5,7 @@ import { query } from '../../../database/connection'
 import type { AuthRequest } from '../../../middleware/auth'
 import emailService from '../../../services/email.service'
 import NotificationEvents from '../../../services/notification.events'
+import { JWT_SECRET } from '../../../config/jwt.config'
 
 // Contact form submission types
 interface ContactFormData {
@@ -160,7 +161,7 @@ const getAuthenticatedContactIdentity = async (req: AuthRequest) => {
 
   try {
     const token = authHeader.split(' ')[1]
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as jwt.JwtPayload
+    const decoded = jwt.verify(token, JWT_SECRET) as jwt.JwtPayload
 
     const userId = decoded.userId as string | undefined
     if (!userId) {

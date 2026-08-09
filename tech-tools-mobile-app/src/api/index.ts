@@ -32,9 +32,7 @@ import {
   SellerVerificationRequest,
   CreatorDashboardActivity,
 } from '../types'
-
-// API Configuration
-const API_BASE_URL = 'https://techtoolstore.com/api/v1'
+import { API_BASE_URL } from '../config/env'
 
 // Create axios instance
 const apiClient: AxiosInstance = axios.create({
