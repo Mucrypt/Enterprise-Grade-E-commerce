@@ -10,10 +10,60 @@ import {
 } from '../../../services/whatsapp.service'
 import { resolveSupplierForOrderItem } from '../../../services/fulfillment.service'
 import { buildOrderAdminAlertHtml } from '../../../utils/order-notifications'
+import {
+  StaffAuthRequest,
+  applyMarketScope,
+  isCountryInScope,
+} from '../../../middleware/staff'
+import { recordStaffAuditEvent } from '../../../services/staff-audit.service'
 
 // =====================================================
 // Admin Order Management
+//
+// Every admin/:id route below is reachable two ways: a legacy
+// admin/super_admin (req.staff is never populated for them -- see
+// requirePermissionOrLegacyRole's short-circuit in middleware/staff.ts --
+// so applyMarketScope/isCountryInScope both correctly treat them as
+// unrestricted, unchanged from before this phase), or a staff-permission
+// holder like MARKET_MANAGER (req.staff IS populated, and is scoped by
+// market_scope). assertOrderInScope() is the IDOR guard for the second
+// case: a scoped caller must not be able to fetch/mutate an order outside
+// their market just by knowing its ID, even though the list endpoint
+// already filters it out of view.
 // =====================================================
+
+async function assertOrderInScope(
+  req: StaffAuthRequest,
+  orderId: string,
+): Promise<{ ok: true; order: any } | { ok: false }> {
+  const result = await query(
+    'SELECT id, shipping_address FROM orders WHERE id = $1',
+    [orderId],
+  )
+
+  if (result.rows.length === 0) {
+    return { ok: false }
+  }
+
+  const order = result.rows[0]
+  const country = order.shipping_address?.country
+
+  if (!isCountryInScope(req, country)) {
+    recordStaffAuditEvent({
+      action: 'PERMISSION_DENIED',
+      actorUserId: req.user?.userId,
+      metadata: {
+        check: 'market_scope',
+        resourceType: 'order',
+        resourceId: orderId,
+        requestedCountry: country || null,
+      },
+    })
+    return { ok: false }
+  }
+
+  return { ok: true, order }
+}
 
 export const getAdminOrders = async (req: AuthRequest, res: Response) => {
   try {
@@ -85,8 +135,17 @@ export const getAdminOrders = async (req: AuthRequest, res: Response) => {
       paramIndex++
     }
 
-    const whereClause =
-      conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+    // Market-scope filter -- no-op (empty clause/params) for legacy
+    // admin/super_admin or a globally-scoped staff member; restricts to
+    // the caller's market_scope countries otherwise. See
+    // assertOrderInScope() above for the matching :id-route IDOR guard.
+    const scope = applyMarketScope(req as StaffAuthRequest, 'orders', paramIndex)
+    params.push(...scope.params)
+    paramIndex += scope.params.length
+
+    const whereClause = `WHERE 1=1 ${
+      conditions.length > 0 ? `AND ${conditions.join(' AND ')}` : ''
+    } ${scope.clause}`
 
     // Validate sort column
     const validSortColumns = [
@@ -181,6 +240,32 @@ export const getAdminOrderById = async (req: AuthRequest, res: Response) => {
       })
     }
 
+    // IDOR guard: a market-scoped staff member must not be able to fetch
+    // an order outside their scope just by knowing its ID -- the list
+    // endpoint already filters it out, this closes the direct-ID path.
+    // No-op for legacy admin/super_admin or a globally-scoped staff
+    // member (see isCountryInScope). Same 404 (not 403) as "not found",
+    // matching this codebase's existing ownership-check convention
+    // (getOrderById's customer-facing WHERE id = $1 AND user_id = $2).
+    const requestedCountry = orderResult.rows[0].shipping_address?.country
+    if (!isCountryInScope(req as StaffAuthRequest, requestedCountry)) {
+      recordStaffAuditEvent({
+        action: 'PERMISSION_DENIED',
+        actorUserId: (req as StaffAuthRequest).user?.userId,
+        metadata: {
+          check: 'market_scope',
+          resourceType: 'order',
+          resourceId: id,
+          requestedCountry: requestedCountry || null,
+        },
+      })
+      logger.warn(`Order ${id} outside caller's market scope`)
+      return res.status(404).json({
+        success: false,
+        error: 'Order not found',
+      })
+    }
+
     logger.debug('Executing order items query...')
     // Get order items with product info and image from product_media table
     const itemsResult = await query(
@@ -246,36 +331,57 @@ export const getAdminOrderById = async (req: AuthRequest, res: Response) => {
 
 export const getOrderStats = async (req: AuthRequest, res: Response) => {
   try {
+    // Market-scope filter, reused across all four queries below -- a
+    // MARKET_MANAGER's stats must never include another market's orders,
+    // even in an aggregate count/sum (see Part 5 of the phase brief: "no
+    // global counts derived from those orders"). No-op for legacy
+    // admin/super_admin or a globally-scoped staff member.
+    const scope = applyMarketScope(req as StaffAuthRequest, 'orders', 1)
+
     // Get order counts by status
-    const statusCountsResult = await query(`
-      SELECT order_status, COUNT(*) as count 
-      FROM orders 
+    const statusCountsResult = await query(
+      `
+      SELECT order_status, COUNT(*) as count
+      FROM orders o
+      WHERE 1=1 ${scope.clause}
       GROUP BY order_status
-    `)
+    `,
+      scope.params,
+    )
 
     // Get total revenue
-    const revenueResult = await query(`
-      SELECT 
+    const revenueResult = await query(
+      `
+      SELECT
         COUNT(*) as total_orders,
         COALESCE(SUM(grand_total), 0) as total_revenue,
         COALESCE(AVG(grand_total), 0) as average_order_value
-      FROM orders 
-      WHERE order_status NOT IN ('cancelled', 'refunded')
-    `)
+      FROM orders o
+      WHERE order_status NOT IN ('cancelled', 'refunded') ${scope.clause}
+    `,
+      scope.params,
+    )
 
     // Get today's orders
-    const todayResult = await query(`
+    const todayResult = await query(
+      `
       SELECT COUNT(*) as today_orders, COALESCE(SUM(grand_total), 0) as today_revenue
-      FROM orders 
-      WHERE created_at >= CURRENT_DATE
-    `)
+      FROM orders o
+      WHERE created_at >= CURRENT_DATE ${scope.clause}
+    `,
+      scope.params,
+    )
 
     // Get orders by payment status
-    const paymentStatusResult = await query(`
-      SELECT payment_status, COUNT(*) as count 
-      FROM orders 
+    const paymentStatusResult = await query(
+      `
+      SELECT payment_status, COUNT(*) as count
+      FROM orders o
+      WHERE 1=1 ${scope.clause}
       GROUP BY payment_status
-    `)
+    `,
+      scope.params,
+    )
 
     // Build status counts object
     const statusCounts: Record<string, number> = {}
@@ -336,6 +442,42 @@ export const adminUpdateOrderStatus = async (
         success: false,
         error: `Invalid status. Must be one of: ${validStatuses.join(', ')}`,
       })
+    }
+
+    const scopeCheck = await assertOrderInScope(req as StaffAuthRequest, id)
+    if (!scopeCheck.ok) {
+      return res.status(404).json({
+        success: false,
+        error: 'Order not found',
+      })
+    }
+
+    // orders.manage (the route-level permission gate) is deliberately
+    // broader than orders.refund -- MARKET_MANAGER holds the former but
+    // never the latter (Part 6 of the phase brief: "NO refunds"). Without
+    // this extra check, orders.manage alone would let a market-scoped
+    // caller mark an order 'refunded' through this same endpoint.
+    if (status === 'refunded') {
+      const staffReq = req as StaffAuthRequest
+      const isLegacyAdmin =
+        staffReq.user?.userType === 'admin' ||
+        staffReq.user?.userType === 'super_admin'
+      const hasRefundPermission = staffReq.staff?.permissions.has('orders.refund')
+      if (!isLegacyAdmin && !hasRefundPermission) {
+        recordStaffAuditEvent({
+          action: 'PERMISSION_DENIED',
+          actorUserId: staffReq.user?.userId,
+          metadata: {
+            check: 'orders.refund',
+            resourceType: 'order',
+            resourceId: id,
+          },
+        })
+        return res.status(403).json({
+          success: false,
+          error: 'Insufficient permissions to mark an order as refunded',
+        })
+      }
     }
 
     // Build update query
@@ -417,8 +559,27 @@ export const bulkUpdateOrderStatus = async (
       })
     }
 
+    if (status === 'refunded') {
+      const staffReq = req as StaffAuthRequest
+      const isLegacyAdmin =
+        staffReq.user?.userType === 'admin' ||
+        staffReq.user?.userType === 'super_admin'
+      const hasRefundPermission = staffReq.staff?.permissions.has('orders.refund')
+      if (!isLegacyAdmin && !hasRefundPermission) {
+        recordStaffAuditEvent({
+          action: 'PERMISSION_DENIED',
+          actorUserId: staffReq.user?.userId,
+          metadata: { check: 'orders.refund', resourceType: 'order', bulk: true },
+        })
+        return res.status(403).json({
+          success: false,
+          error: 'Insufficient permissions to mark orders as refunded',
+        })
+      }
+    }
+
     // Build update query
-    let updateQuery = 'UPDATE orders SET order_status = $1, updated_at = NOW()'
+    let updateQuery = 'UPDATE orders o SET order_status = $1, updated_at = NOW()'
     const params: any[] = [status]
     let paramIndex = 2
 
@@ -439,16 +600,47 @@ export const bulkUpdateOrderStatus = async (
     // Create placeholders for orderIds
     const placeholders = orderIds.map((_, i) => `$${paramIndex + i}`).join(', ')
     params.push(...orderIds)
+    paramIndex += orderIds.length
 
-    updateQuery += ` WHERE id IN (${placeholders}) RETURNING id`
+    // Market-scope filter: an out-of-scope ID in the request is silently
+    // excluded from the update (not an error for the whole batch) -- the
+    // response's updatedCount/updatedIds already tell the caller exactly
+    // what happened, and any discrepancy vs. the requested count is
+    // audited below. No-op for legacy admin/super_admin or a globally-
+    // scoped staff member.
+    const scope = applyMarketScope(req as StaffAuthRequest, 'orders', paramIndex)
+    params.push(...scope.params)
+
+    updateQuery += ` WHERE o.id IN (${placeholders}) ${scope.clause} RETURNING o.id`
 
     const result = await query(updateQuery, params)
+    const updatedIds = result.rows.map((r: any) => r.id)
+
+    // Only worth auditing when scope was actually in effect -- for a
+    // legacy admin/super_admin or globally-scoped staff member (empty
+    // scope.clause), any discrepancy here is just nonexistent IDs, not a
+    // cross-market access attempt.
+    if (scope.clause && updatedIds.length < orderIds.length) {
+      const skippedIds = orderIds.filter((id: string) => !updatedIds.includes(id))
+      recordStaffAuditEvent({
+        action: 'PERMISSION_DENIED',
+        actorUserId: (req as StaffAuthRequest).user?.userId,
+        metadata: {
+          check: 'market_scope',
+          resourceType: 'order',
+          bulk: true,
+          requestedCount: orderIds.length,
+          updatedCount: updatedIds.length,
+          skippedIds,
+        },
+      })
+    }
 
     res.json({
       success: true,
       data: {
-        updatedCount: result.rows.length,
-        updatedIds: result.rows.map((r: any) => r.id),
+        updatedCount: updatedIds.length,
+        updatedIds,
       },
     })
   } catch (error) {
@@ -464,6 +656,14 @@ export const updateOrderShipping = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params
     const { trackingNumber, carrier, estimatedDeliveryDate } = req.body
+
+    const scopeCheck = await assertOrderInScope(req as StaffAuthRequest, id)
+    if (!scopeCheck.ok) {
+      return res.status(404).json({
+        success: false,
+        error: 'Order not found',
+      })
+    }
 
     const updates: string[] = ['updated_at = NOW()']
     const params: any[] = []
@@ -548,12 +748,16 @@ export const exportOrders = async (req: AuthRequest, res: Response) => {
       paramIndex++
     }
 
-    const whereClause =
-      conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+    const scope = applyMarketScope(req as StaffAuthRequest, 'orders', paramIndex)
+    params.push(...scope.params)
+
+    const whereClause = `WHERE 1=1 ${
+      conditions.length > 0 ? `AND ${conditions.join(' AND ')}` : ''
+    } ${scope.clause}`
 
     const result = await query(
       `
-      SELECT 
+      SELECT
         o.order_number,
         o.order_status,
         o.payment_status,

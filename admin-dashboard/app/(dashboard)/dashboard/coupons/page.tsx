@@ -76,6 +76,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import apiClient from '@/lib/api-client'
+import { RequirePagePermission } from '@/components/auth/RequirePagePermission'
 
 // Types
 interface Coupon {
@@ -143,6 +144,14 @@ const TYPE_ICONS: Record<string, typeof Percent> = {
 }
 
 export default function CouponsPage() {
+  return (
+    <RequirePagePermission permission='marketing.view'>
+      <CouponsPageContent />
+    </RequirePagePermission>
+  )
+}
+
+function CouponsPageContent() {
   const queryClient = useQueryClient()
   const [filters, setFilters] = useState<CouponFilters>({
     search: '',

@@ -1,7 +1,9 @@
 'use client'
 
+import { useQuery } from '@tanstack/react-query'
 import { useRealtimeMetrics } from '@/hooks/useRealtimeMetrics'
 import { useStaffAccess } from '@/contexts/StaffAccessContext'
+import trendingService from '@/services/trending.service'
 import { MetricCard } from '@/components/dashboard/MetricCard'
 import { AttentionCard, type AttentionItem } from '@/components/dashboard/AttentionCard'
 import { EmptyState } from '@/components/dashboard/EmptyState'
@@ -16,6 +18,8 @@ import {
   ListTodo,
   Activity,
   History,
+  Truck,
+  MessageSquareWarning,
 } from 'lucide-react'
 
 const currency = (value: number) =>
@@ -35,21 +39,27 @@ const currency = (value: number) =>
  * about the current default landing experience changes in this phase.
  */
 export default function CommandCenterPage() {
-  const { metrics, isConnected } = useRealtimeMetrics()
-  const { legacyUserType, memberships, isLegacyAdmin } = useStaffAccess()
-
-  const alertItems: AttentionItem[] = metrics
-    ? [
-        { label: 'Critical alerts', count: metrics.activeAlerts.critical, severity: 'critical', href: '/dashboard/analytics' },
-        { label: 'High severity alerts', count: metrics.activeAlerts.high, severity: 'high', href: '/dashboard/analytics' },
-        { label: 'Medium severity alerts', count: metrics.activeAlerts.medium, severity: 'medium' },
-        { label: 'Low severity alerts', count: metrics.activeAlerts.low, severity: 'low' },
-      ]
-    : []
+  const { legacyUserType, memberships, isLegacyAdmin, hasPermission, isLoading: staffLoading } =
+    useStaffAccess()
 
   const roleLabel = isLegacyAdmin
     ? legacyUserType
     : memberships.map((m) => m.role).join(', ') || 'No staff role'
+
+  // useRealtimeMetrics is a GLOBAL, unscoped live feed -- showing it (or
+  // the alert counts derived from it) to a market-scoped role would be
+  // exactly the "global numbers mislabeled as market numbers" this phase
+  // was explicit about avoiding. A caller who holds analytics.view_market
+  // but not the global analytics.view_global (i.e. MARKET_MANAGER and any
+  // other market-scoped role, but never a legacy admin or an
+  // OWNER/SUPER_ADMIN staff membership, both of which hold view_global
+  // too) gets the Market Overview panel instead of Business Pulse/Live
+  // Business below.
+  const isMarketScoped =
+    !staffLoading &&
+    !isLegacyAdmin &&
+    hasPermission('analytics.view_market') &&
+    !hasPermission('analytics.view_global')
 
   return (
     <div className='space-y-6'>
@@ -60,11 +70,131 @@ export default function CommandCenterPage() {
         </div>
         <div className='flex items-center gap-2'>
           <Badge variant='outline'>{roleLabel}</Badge>
-          <Badge variant={isConnected ? 'default' : 'secondary'}>
-            <Activity className='mr-1 h-3 w-3' />
-            {isConnected ? 'Live' : 'Connecting...'}
-          </Badge>
         </div>
+      </div>
+
+      {isMarketScoped ? <MarketOverviewSection /> : <GlobalOverviewSection />}
+
+      {/* RECENT ACTIVITY -- a global cross-membership feed needs a new
+          endpoint (today's staff_audit_log is queried per-membership from
+          the Staff detail view); not built this phase. Not scope-sensitive
+          -- same honest placeholder for every role. */}
+      <section>
+        <h2 className='mb-3 text-sm font-semibold text-muted-foreground'>Recent activity</h2>
+        <EmptyState
+          icon={History}
+          title='Global activity feed not built yet'
+          description='Per-staff-member audit history is already available from Organization -> Staff -> (select a person). A combined cross-organization feed is proposed for ADMIN-2C.'
+        />
+      </section>
+    </div>
+  )
+}
+
+/**
+ * MARKET_MANAGER (and any other market-scoped role) view -- everything
+ * here comes from GET /analytics/market-overview, which is server-side
+ * filtered by the caller's market_scope (see getMarketOverview in
+ * analytics.controller.ts). Support and alerts have no market/country
+ * dimension in the current schema (confirmed during this phase's schema
+ * inspection) so they stay honest EmptyStates rather than a fabricated
+ * scope.
+ */
+function MarketOverviewSection() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['market-overview'],
+    queryFn: () => trendingService.getMarketOverview(7),
+    refetchInterval: 30_000,
+  })
+
+  const marketLabel = data?.markets?.length ? data.markets.join(', ') : null
+
+  return (
+    <>
+      <section>
+        <div className='mb-3 flex items-center justify-between'>
+          <h2 className='text-sm font-semibold text-muted-foreground'>
+            Market overview{marketLabel ? ` -- ${marketLabel}` : ''}
+          </h2>
+          {data?.message && <Badge variant='secondary'>{data.message}</Badge>}
+        </div>
+        <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
+          <MetricCard
+            label='Revenue (last 7 days)'
+            value={!isLoading && data ? currency(data.orders.revenue) : '—'}
+            icon={DollarSign}
+          />
+          <MetricCard
+            label='Orders (last 7 days)'
+            value={!isLoading && data ? data.orders.orderCount : '—'}
+            icon={ShoppingCart}
+          />
+          <MetricCard
+            label='Visitors (last 7 days)'
+            value={!isLoading && data ? data.visitors.uniqueVisitors : '—'}
+            icon={Users}
+          />
+          <MetricCard
+            label='Suppliers in market'
+            value={!isLoading && data ? data.suppliers.supplierCount : '—'}
+            icon={Truck}
+          />
+        </div>
+      </section>
+
+      <section>
+        <h2 className='mb-3 text-sm font-semibold text-muted-foreground'>Needs attention</h2>
+        <div className='grid gap-4 lg:grid-cols-2'>
+          <Card>
+            <CardHeader>
+              <CardTitle className='text-base'>Alerts</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <EmptyState
+                icon={MessageSquareWarning}
+                title='Alerts are not market-scoped yet'
+                description='The unified analytics alerts table has no country/market dimension, so a scoped alert feed cannot be built without inventing one. Not shown here rather than showing the (misleading) global alert count.'
+              />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className='text-base'>Support</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <EmptyState
+                icon={ListTodo}
+                title='Support is not market-scoped yet'
+                description='email_messages/contact_analytics have no market/country field either -- support.view/support.manage are granted to MARKET_MANAGER in the permission matrix but the routes are not wired to staff permissions this phase. See the integration report.'
+              />
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+    </>
+  )
+}
+
+/** OWNER/SUPER_ADMIN and legacy admin/super_admin -- unchanged from before this phase. */
+function GlobalOverviewSection() {
+  const { metrics, isConnected } = useRealtimeMetrics()
+
+  const alertItems: AttentionItem[] = metrics
+    ? [
+        { label: 'Critical alerts', count: metrics.activeAlerts.critical, severity: 'critical', href: '/dashboard/analytics' },
+        { label: 'High severity alerts', count: metrics.activeAlerts.high, severity: 'high', href: '/dashboard/analytics' },
+        { label: 'Medium severity alerts', count: metrics.activeAlerts.medium, severity: 'medium' },
+        { label: 'Low severity alerts', count: metrics.activeAlerts.low, severity: 'low' },
+      ]
+    : []
+
+  return (
+    <>
+      <div className='flex justify-end'>
+        <Badge variant={isConnected ? 'default' : 'secondary'}>
+          <Activity className='mr-1 h-3 w-3' />
+          {isConnected ? 'Live' : 'Connecting...'}
+        </Badge>
       </div>
 
       {/* BUSINESS PULSE -- real, from useRealtimeMetrics */}
@@ -157,18 +287,6 @@ export default function CommandCenterPage() {
           description='Per-market panels (EU/USA/Cameroon/...) need the countries/markets schema from docs/GLOBAL-COMMERCE-ARCHITECTURE.md -- proposed for ADMIN-2D, deliberately not built ahead of that schema existing.'
         />
       </section>
-
-      {/* RECENT ACTIVITY -- a global cross-membership feed needs a new
-          endpoint (today's staff_audit_log is queried per-membership from
-          the Staff detail view); not built this phase. */}
-      <section>
-        <h2 className='mb-3 text-sm font-semibold text-muted-foreground'>Recent activity</h2>
-        <EmptyState
-          icon={History}
-          title='Global activity feed not built yet'
-          description='Per-staff-member audit history is already available from Organization -> Staff -> (select a person). A combined cross-organization feed is proposed for ADMIN-2C.'
-        />
-      </section>
-    </div>
+    </>
   )
 }

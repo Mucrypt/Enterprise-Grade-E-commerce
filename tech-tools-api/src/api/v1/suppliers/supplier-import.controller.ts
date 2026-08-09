@@ -4,6 +4,8 @@ import { parse } from 'csv-parse/sync'
 import { AuthRequest } from '../../../middleware/auth'
 import { query, getClient } from '../../../database/connection'
 import logger from '../../../utils/logger'
+import { StaffAuthRequest, isCountryInScope } from '../../../middleware/staff'
+import { recordStaffAuditEvent } from '../../../services/staff-audit.service'
 
 // v1 supports a fixed CSV header format only. Flexible column-mapping is a future improvement.
 const REQUIRED_COLUMNS = ['sku', 'product_name', 'cost_price', 'stock_quantity', 'lead_time_days']
@@ -143,10 +145,24 @@ export const previewSupplierImport = async (req: AuthRequest, res: Response) => 
     }
 
     const supplierResult = await query(
-      'SELECT id FROM suppliers WHERE id = $1 AND deleted_at IS NULL',
+      'SELECT id, country_code FROM suppliers WHERE id = $1 AND deleted_at IS NULL',
       [supplierId],
     )
     if (supplierResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Supplier not found' })
+    }
+    const supplierCountry = supplierResult.rows[0].country_code
+    if (!isCountryInScope(req as StaffAuthRequest, supplierCountry)) {
+      recordStaffAuditEvent({
+        action: 'PERMISSION_DENIED',
+        actorUserId: (req as StaffAuthRequest).user?.userId,
+        metadata: {
+          check: 'market_scope',
+          resourceType: 'supplier',
+          resourceId: supplierId,
+          requestedCountry: supplierCountry || null,
+        },
+      })
       return res.status(404).json({ success: false, error: 'Supplier not found' })
     }
 
@@ -218,6 +234,28 @@ export const previewSupplierImport = async (req: AuthRequest, res: Response) => 
 
 export const commitSupplierImport = async (req: AuthRequest, res: Response) => {
   const { id: supplierId, batchId } = req.params
+
+  const supplierResult = await query(
+    'SELECT id, country_code FROM suppliers WHERE id = $1 AND deleted_at IS NULL',
+    [supplierId],
+  )
+  if (supplierResult.rows.length === 0) {
+    return res.status(404).json({ success: false, error: 'Supplier not found' })
+  }
+  const supplierCountry = supplierResult.rows[0].country_code
+  if (!isCountryInScope(req as StaffAuthRequest, supplierCountry)) {
+    recordStaffAuditEvent({
+      action: 'PERMISSION_DENIED',
+      actorUserId: (req as StaffAuthRequest).user?.userId,
+      metadata: {
+        check: 'market_scope',
+        resourceType: 'supplier',
+        resourceId: supplierId,
+        requestedCountry: supplierCountry || null,
+      },
+    })
+    return res.status(404).json({ success: false, error: 'Supplier not found' })
+  }
 
   const batchResult = await query(
     'SELECT * FROM supplier_import_batches WHERE id = $1 AND supplier_id = $2',

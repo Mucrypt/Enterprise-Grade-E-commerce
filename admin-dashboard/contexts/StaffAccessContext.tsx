@@ -18,6 +18,8 @@ interface StaffAccessContextType {
    * Everyone else is checked against their actual staff permission set.
    */
   hasPermission: (permission: string) => boolean
+  /** True if any one of the given permissions is held (or the caller is a legacy admin). */
+  hasAnyPermission: (permissions: string[]) => boolean
 }
 
 const StaffAccessContext = createContext<StaffAccessContextType | undefined>(undefined)
@@ -44,6 +46,8 @@ export function StaffAccessProvider({ children }: { children: ReactNode }) {
       memberships: data?.data?.memberships || [],
       permissions,
       hasPermission: (permission: string) => isLegacyAdmin || permissions.has(permission),
+      hasAnyPermission: (perms: string[]) =>
+        isLegacyAdmin || perms.some((permission) => permissions.has(permission)),
     }
   }, [data, isLoading])
 

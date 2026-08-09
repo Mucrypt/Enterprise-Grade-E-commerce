@@ -3,6 +3,7 @@ import {
   requirePermission,
   requirePermissionOrLegacyRole,
   applyMarketScope,
+  isCountryInScope,
   StaffAuthRequest,
 } from './staff'
 import { query } from '../database/connection'
@@ -206,8 +207,16 @@ describe('applyMarketScope', () => {
     } as any as StaffAuthRequest
 
     const result = applyMarketScope(req, 'orders', 3)
-    expect(result.clause).toBe(`AND shipping_address->>'country' = ANY($3)`)
-    expect(result.params).toEqual([['CM', 'GH', 'NG']])
+    expect(result.clause).toBe(`AND LOWER(o.shipping_address->>'country') = ANY($3)`)
+    // Expanded to include both the ISO code and its known full name, since
+    // production's actual stored format isn't confirmed -- see
+    // config/country-reference.config.ts.
+    expect(result.params).toEqual([
+      expect.arrayContaining(['cm', 'cameroon', 'gh', 'ghana', 'ng', 'nigeria']),
+    ])
+    expect((result.params[0] as string[]).sort()).toEqual(
+      ['cm', 'cameroon', 'gh', 'ghana', 'ng', 'nigeria'].sort(),
+    )
   })
 
   it('uses the suppliers.country_code expression for the suppliers resource', () => {
@@ -219,7 +228,7 @@ describe('applyMarketScope', () => {
     } as any as StaffAuthRequest
 
     const result = applyMarketScope(req, 'suppliers', 2)
-    expect(result.clause).toBe('AND country_code = ANY($2)')
+    expect(result.clause).toBe('AND LOWER(country_code) = ANY($2)')
   })
 
   it('fails closed (matches nothing) if scope resolves to an empty set', () => {
@@ -232,5 +241,80 @@ describe('applyMarketScope', () => {
 
     const result = applyMarketScope(req, 'orders', 1)
     expect(result.clause).toBe('AND 1 = 0')
+  })
+})
+
+describe('isCountryInScope (IDOR guard for :id routes)', () => {
+  it('allows any country when the caller has global (null) scope', () => {
+    const req = {
+      staff: {
+        memberships: [{ id: 'm1', role: 'ADMIN', marketScope: null }],
+        permissions: new Set(),
+      },
+    } as any as StaffAuthRequest
+
+    expect(isCountryInScope(req, 'IT')).toBe(true)
+    expect(isCountryInScope(req, 'Some Unknown Country')).toBe(true)
+  })
+
+  it('allows a row whose country matches the ISO code in scope', () => {
+    const req = {
+      staff: {
+        memberships: [{ id: 'm1', role: 'MARKET_MANAGER', marketScope: ['CM'] }],
+        permissions: new Set(),
+      },
+    } as any as StaffAuthRequest
+
+    expect(isCountryInScope(req, 'CM')).toBe(true)
+    expect(isCountryInScope(req, 'cm')).toBe(true)
+  })
+
+  it('allows a row whose country matches the full name of a scoped ISO code', () => {
+    const req = {
+      staff: {
+        memberships: [{ id: 'm1', role: 'MARKET_MANAGER', marketScope: ['CM'] }],
+        permissions: new Set(),
+      },
+    } as any as StaffAuthRequest
+
+    expect(isCountryInScope(req, 'Cameroon')).toBe(true)
+    expect(isCountryInScope(req, 'cameroon')).toBe(true)
+  })
+
+  it('denies a row outside the caller scope -- the actual IDOR case', () => {
+    const req = {
+      staff: {
+        memberships: [{ id: 'm1', role: 'MARKET_MANAGER', marketScope: ['CM'] }],
+        permissions: new Set(),
+      },
+    } as any as StaffAuthRequest
+
+    expect(isCountryInScope(req, 'IT')).toBe(false)
+    expect(isCountryInScope(req, 'Italy')).toBe(false)
+    expect(isCountryInScope(req, 'US')).toBe(false)
+  })
+
+  it('denies when the row has no country value at all', () => {
+    const req = {
+      staff: {
+        memberships: [{ id: 'm1', role: 'MARKET_MANAGER', marketScope: ['CM'] }],
+        permissions: new Set(),
+      },
+    } as any as StaffAuthRequest
+
+    expect(isCountryInScope(req, null)).toBe(false)
+    expect(isCountryInScope(req, undefined)).toBe(false)
+    expect(isCountryInScope(req, '')).toBe(false)
+  })
+
+  it('denies everything when scope is an explicitly empty array (fails closed)', () => {
+    const req = {
+      staff: {
+        memberships: [{ id: 'm1', role: 'MARKET_MANAGER', marketScope: [] }],
+        permissions: new Set(),
+      },
+    } as any as StaffAuthRequest
+
+    expect(isCountryInScope(req, 'CM')).toBe(false)
   })
 })

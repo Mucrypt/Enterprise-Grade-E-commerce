@@ -42,6 +42,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
+import { RequirePagePermission } from '@/components/auth/RequirePagePermission'
 
 type SupplierFormState = {
   companyName: string
@@ -76,6 +77,14 @@ const EMPTY_SUPPLIER_FORM: SupplierFormState = {
 }
 
 export default function SuppliersPage() {
+  return (
+    <RequirePagePermission permission='suppliers.view'>
+      <SuppliersPageContent />
+    </RequirePagePermission>
+  )
+}
+
+function SuppliersPageContent() {
   const queryClient = useQueryClient()
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [sourceFilter, setSourceFilter] = useState<string>('all')

@@ -61,6 +61,7 @@ import {
   type AccountType,
 } from '@/services/customer.service'
 import { useDebounce } from '@/hooks/useDebounce'
+import { RequirePagePermission } from '@/components/auth/RequirePagePermission'
 
 const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   customer: 'Customers',
@@ -70,6 +71,19 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
 }
 
 export default function CustomersPage() {
+  return (
+    <RequirePagePermission permission='customers.view' legacyOnly>
+      <CustomersPageContent />
+    </RequirePagePermission>
+  )
+}
+
+// This is the GLOBAL customer directory (backed by admin/customers.routes.ts,
+// which is deliberately still legacy-admin-only -- customers have no
+// country column to scope by, so a market-scoped role must never reach the
+// full list, only the order-linked customer data already embedded in
+// scoped order responses). See ADMIN-2A5-STAFF-ACCESS-INTEGRATION-REPORT.md.
+function CustomersPageContent() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [stats, setStats] = useState<CustomerStats | null>(null)
   const [loading, setLoading] = useState(true)

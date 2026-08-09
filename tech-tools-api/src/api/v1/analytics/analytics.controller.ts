@@ -12,6 +12,7 @@ import { AuthRequest } from '../../../middleware/auth'
 import { getClientIp } from '../../../utils/helpers'
 import { createEventService } from '../../../services/event.service'
 import { EventSource } from '../../../types/events'
+import { StaffAuthRequest, applyMarketScope } from '../../../middleware/staff'
 
 const eventService = createEventService(pool)
 
@@ -707,5 +708,120 @@ export const getChannelBreakdown = async (
   } catch (error) {
     logger.error('Error fetching channel breakdown:', error)
     res.status(500).json({ error: 'Failed to fetch channel breakdown' })
+  }
+}
+
+/**
+ * Market-scoped analytics for the Command Center's Market Overview panel
+ * (MARKET_MANAGER and any other market-scoped role holding
+ * analytics.view_market). Deliberately a separate endpoint from the global
+ * analytics above, rather than adding an optional filter to them -- a
+ * scoped caller must get server-side-filtered numbers with no path to the
+ * global figures, not a global payload the frontend happens to filter.
+ *
+ * Visitor/session filtering uses user_sessions.country_code directly
+ * (CHAR(2), populated by geoip-lite's IP lookup -- see event.service.ts's
+ * resolveGeo -- always an uppercase ISO alpha-2 code, no ambiguity).
+ * Order filtering goes through applyMarketScope(), which is deliberately
+ * more defensive: orders.shipping_address->>'country' is customer-entered
+ * checkout data whose historical format isn't confirmed, so it matches
+ * against both the ISO code and known full name (see
+ * config/country-reference.config.ts).
+ */
+export const getMarketOverview = async (
+  req: StaffAuthRequest,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { days = 7 } = req.query
+    const numDays = parseInt(days as string) || 7
+
+    const staff = req.staff
+    const hasGlobalMembership =
+      !staff ||
+      staff.memberships.length === 0 ||
+      staff.memberships.some((m) => m.marketScope === null)
+
+    const scopedCountries = hasGlobalMembership
+      ? null
+      : Array.from(new Set(staff!.memberships.flatMap((m) => m.marketScope || [])))
+
+    // An explicitly empty market_scope fails closed -- the same rule
+    // applyMarketScope() enforces for orders/suppliers, applied here too:
+    // an ambiguous/cleared scope must never widen into visibility.
+    if (!hasGlobalMembership && (!scopedCountries || scopedCountries.length === 0)) {
+      res.json({
+        period: `${numDays}_days`,
+        scoped: true,
+        markets: [],
+        visitors: { activeSessionCount: 0, uniqueVisitors: 0 },
+        orders: { orderCount: 0, revenue: 0 },
+        message: 'No market is currently assigned to this account.',
+      })
+      return
+    }
+
+    const upperCountries = scopedCountries
+      ? scopedCountries.map((c) => c.toUpperCase())
+      : null
+
+    const visitorsResult = await query(
+      `SELECT
+         COUNT(DISTINCT session_id) as session_count,
+         COUNT(DISTINCT COALESCE(user_id::text, session_id)) as unique_visitors
+       FROM user_sessions
+       WHERE start_time >= NOW() - INTERVAL '${numDays} days'
+       ${upperCountries ? 'AND country_code = ANY($1)' : ''}`,
+      upperCountries ? [upperCountries] : [],
+    )
+    const visitorsRow = visitorsResult.rows[0]
+
+    const ordersScope = applyMarketScope(req, 'orders', 1)
+    const ordersResult = await query(
+      `SELECT
+         COUNT(*) as order_count,
+         COALESCE(SUM(o.grand_total), 0) as revenue
+       FROM orders o
+       WHERE o.created_at >= NOW() - INTERVAL '${numDays} days'
+       AND o.order_status IN ('confirmed', 'processing', 'ready_to_ship', 'shipped', 'delivered')
+       ${ordersScope.clause}`,
+      ordersScope.params,
+    )
+    const ordersRow = ordersResult.rows[0]
+
+    const suppliersScope = applyMarketScope(req, 'suppliers', 1)
+    const suppliersResult = await query(
+      `SELECT COUNT(*) as supplier_count
+       FROM suppliers
+       WHERE deleted_at IS NULL
+       ${suppliersScope.clause}`,
+      suppliersScope.params,
+    )
+    const suppliersRow = suppliersResult.rows[0]
+
+    res.json({
+      period: `${numDays}_days`,
+      scoped: !hasGlobalMembership,
+      markets: upperCountries || [],
+      visitors: {
+        activeSessionCount: parseInt(visitorsRow.session_count) || 0,
+        uniqueVisitors: parseInt(visitorsRow.unique_visitors) || 0,
+      },
+      orders: {
+        orderCount: parseInt(ordersRow.order_count) || 0,
+        revenue: parseFloat(ordersRow.revenue) || 0,
+      },
+      suppliers: {
+        supplierCount: parseInt(suppliersRow.supplier_count) || 0,
+      },
+      // alerts/support are intentionally omitted here -- neither table has a
+      // reliable market/country dimension (see
+      // docs/ADMIN-2A5-STAFF-ACCESS-INTEGRATION-REPORT.md); the dashboard
+      // should render an honest EmptyState for those panels rather than
+      // this endpoint inventing a scope that doesn't exist in the schema.
+    })
+  } catch (error) {
+    logger.error('Error fetching market overview:', error)
+    res.status(500).json({ error: 'Failed to fetch market overview' })
   }
 }

@@ -16,8 +16,10 @@ import {
   getLiveVisitors,
   getVisitorsByCountry,
   getChannelBreakdown,
+  getMarketOverview,
 } from './analytics.controller';
 import { authenticate, authorize } from '../../../middleware/auth';
+import { requirePermissionOrLegacyRole } from '../../../middleware/staff';
 
 const router = Router();
 
@@ -97,6 +99,20 @@ router.get(
   authenticate,
   authorize('admin', 'super_admin'),
   getChannelBreakdown
+);
+
+/**
+ * Market-scoped overview for MARKET_MANAGER (and any other market-scoped
+ * staff role) -- feeds the Command Center's Market Overview panel. Kept as
+ * its own endpoint/permission rather than adding a scope flag to the
+ * global endpoints above, so a scoped caller never even reaches a query
+ * capable of returning global figures.
+ */
+router.get(
+  '/market-overview',
+  authenticate,
+  requirePermissionOrLegacyRole('analytics.view_market', 'admin', 'super_admin'),
+  getMarketOverview
 );
 
 export default router;

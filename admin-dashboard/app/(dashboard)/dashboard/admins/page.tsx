@@ -2,8 +2,20 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Shield, ShieldCheck, ShieldAlert, UserCog } from 'lucide-react'
+import { RequirePagePermission } from '@/components/auth/RequirePagePermission'
 
 export default function AdminsPage() {
+  return (
+    <RequirePagePermission legacyOnly>
+      <AdminsPageContent />
+    </RequirePagePermission>
+  )
+}
+
+// Manages legacy users.user_type = admin/super_admin accounts -- a
+// different system from staff_memberships, so there is no matching
+// staff-permission matrix entry for it; legacy-admin-only by definition.
+function AdminsPageContent() {
   return (
     <div className='space-y-6'>
       <div>

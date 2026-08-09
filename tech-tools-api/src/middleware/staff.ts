@@ -8,6 +8,7 @@ import {
   STAFF_ROLE_PERMISSIONS,
 } from '../config/staff-permissions.config'
 import { recordStaffAuditEvent } from '../services/staff-audit.service'
+import { expandCountryScopeForMatching } from '../config/country-reference.config'
 
 // Additive authorization layer for the staff system. Deliberately does not
 // touch authenticate()/authorize() from ./auth -- legacy admin/super_admin
@@ -168,11 +169,16 @@ export interface MarketScopeFilter {
 type ScopableResource = 'orders' | 'suppliers'
 
 const RESOURCE_COUNTRY_EXPRESSIONS: Record<ScopableResource, string> = {
-  // Matches the shape already used in shipping.controller.ts/order.controller.ts
-  // for shipping_address, and suppliers.country_code from
-  // 025_supplier_profitability_controls.sql.
-  orders: `shipping_address->>'country'`,
-  suppliers: `country_code`,
+  // Table-alias-qualified to match this codebase's actual query style:
+  // order.controller.ts's admin queries consistently alias orders as `o`
+  // (see getAdminOrders/getAdminOrderById); supplier.controller.ts never
+  // aliases suppliers at all (see getSuppliers/getSupplierById). Wrapped
+  // in LOWER(...) here and matched against expandCountryScopeForMatching's
+  // lowercased output, since production's actual stored format (ISO code
+  // vs. full name) isn't confirmed -- see
+  // docs/ADMIN-2A5-STAFF-ACCESS-INTEGRATION-REPORT.md §4.
+  orders: `LOWER(o.shipping_address->>'country')`,
+  suppliers: `LOWER(country_code)`,
 }
 
 /**
@@ -217,6 +223,39 @@ export function applyMarketScope(
   const expression = RESOURCE_COUNTRY_EXPRESSIONS[resource]
   return {
     clause: `AND ${expression} = ANY($${nextParamIndex})`,
-    params: [scopedCountries],
+    params: [expandCountryScopeForMatching(scopedCountries)],
   }
+}
+
+/**
+ * Resource-scope check for a single already-fetched row (an :id route) --
+ * the IDOR guard. A scoped caller must not be able to bypass list
+ * filtering by directly requesting an ID outside their market: this
+ * checks the row's own country value the same way applyMarketScope()
+ * filters a list, using the same alias/case-insensitive matching. Returns
+ * true if the caller may access this specific row.
+ */
+export function isCountryInScope(
+  req: StaffAuthRequest,
+  countryValue: string | null | undefined,
+): boolean {
+  const staff = req.staff
+  if (!staff || staff.memberships.length === 0) {
+    // No staff context at all -- this guard is only meaningful for
+    // staff-scoped access; legacy admin/super_admin never reach here (see
+    // callers, which only invoke this for staff-permission-based access).
+    return true
+  }
+
+  const hasGlobalMembership = staff.memberships.some((m) => m.marketScope === null)
+  if (hasGlobalMembership) return true
+
+  const scopedCountries = Array.from(
+    new Set(staff.memberships.flatMap((m) => m.marketScope || [])),
+  )
+  if (scopedCountries.length === 0) return false
+  if (!countryValue) return false
+
+  const allowed = new Set(expandCountryScopeForMatching(scopedCountries))
+  return allowed.has(countryValue.trim().toLowerCase())
 }

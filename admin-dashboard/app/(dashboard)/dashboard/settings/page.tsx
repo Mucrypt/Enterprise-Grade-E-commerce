@@ -26,8 +26,17 @@ import {
   Save,
   Image,
 } from 'lucide-react'
+import { RequirePagePermission } from '@/components/auth/RequirePagePermission'
 
 export default function SettingsPage() {
+  return (
+    <RequirePagePermission permission='settings.view'>
+      <SettingsPageContent />
+    </RequirePagePermission>
+  )
+}
+
+function SettingsPageContent() {
   const queryClient = useQueryClient()
 
   const [brandName, setBrandName] = useState('')

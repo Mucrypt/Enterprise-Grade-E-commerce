@@ -57,6 +57,19 @@ interface NavItem {
    * permission server-side; hiding a link is never itself authorization.
    */
   permission?: string
+  /** Same idea as `permission`, but visible if ANY of these is held (e.g. analytics.view OR analytics.view_market). */
+  permissions?: string[]
+  /**
+   * Escape hatch for an item whose *page* is not actually reachable by a
+   * scoped permission holder even though the permission matrix grants them
+   * the nominal permission -- e.g. MARKET_MANAGER holds `customers.view`
+   * (meant for order-linked customer data embedded in scoped order
+   * responses), but the global customer directory route
+   * (admin/customers.routes.ts) is deliberately still legacy-admin-only,
+   * since customers have no country column to scope by. Set this rather
+   * than silently showing a link that always 403s.
+   */
+  requiresLegacyAdmin?: boolean
 }
 
 const navigation: NavItem[] = [
@@ -75,6 +88,12 @@ const navigation: NavItem[] = [
     badge: 'New',
   },
   {
+    // Not gated at the parent level -- its children require different
+    // permissions (catalog.view vs. suppliers.view for the Suppliers
+    // child), and filterNavByPermission drops a parent (and everything
+    // under it) before recursing if the parent's own `permission` fails.
+    // A MARKET_MANAGER holding only suppliers.view must still see the
+    // Suppliers child even without catalog.view.
     title: 'Products',
     href: '/products',
     icon: Package,
@@ -83,31 +102,37 @@ const navigation: NavItem[] = [
         title: 'All Products',
         href: '/products',
         icon: Package,
+        permission: 'catalog.view',
       },
       {
         title: 'Add Product',
         href: '/products/new',
         icon: Package,
+        permission: 'catalog.view',
       },
       {
         title: 'Categories',
         href: '/categories',
         icon: FolderTree,
+        permission: 'catalog.view',
       },
       {
         title: 'Collections',
         href: '/collections',
         icon: Layers,
+        permission: 'catalog.view',
       },
       {
         title: 'Brands',
         href: '/brands',
         icon: Tag,
+        permission: 'catalog.view',
       },
       {
         title: 'Suppliers',
         href: '/suppliers',
         icon: Truck,
+        permission: 'suppliers.view',
       },
     ],
   },
@@ -167,6 +192,8 @@ const navigation: NavItem[] = [
     badge: 'New',
   },
   {
+    // Not gated at the parent level -- same reasoning as Products above:
+    // Orders/Customers/Shipping require different permissions.
     title: 'Sales',
     href: '/dashboard/orders',
     icon: ShoppingCart,
@@ -175,16 +202,20 @@ const navigation: NavItem[] = [
         title: 'Orders',
         href: '/dashboard/orders',
         icon: ShoppingCart,
+        permission: 'orders.view',
       },
       {
         title: 'Customers',
         href: '/dashboard/customers',
         icon: Users,
+        permission: 'customers.view',
+        requiresLegacyAdmin: true,
       },
       {
         title: 'Shipping',
         href: '/dashboard/shipping',
         icon: Truck,
+        permission: 'shipping.view',
       },
     ],
   },
@@ -226,23 +257,33 @@ const navigation: NavItem[] = [
     title: 'Marketing',
     href: '/dashboard/marketing',
     icon: Megaphone,
+    permission: 'marketing.view',
     children: [
       {
         title: 'Promotions',
         href: '/dashboard/promotions',
         icon: Ticket,
+        permission: 'marketing.view',
       },
       {
         title: 'Coupons',
         href: '/dashboard/coupons',
         icon: Tag,
+        permission: 'marketing.view',
       },
     ],
   },
   {
+    // This is the GLOBAL analytics page (revenue-trend/top-products/etc.
+    // -- all still legacy-admin-only server-side, see
+    // analytics.routes.ts). A MARKET_MANAGER's analytics.view_market does
+    // NOT unlock this link -- their market-scoped numbers live in the
+    // Command Center's Market Overview panel instead (getMarketOverview /
+    // GET /analytics/market-overview), a separate page, not this one.
     title: 'Analytics',
     href: '/dashboard/analytics',
     icon: BarChart3,
+    permission: 'analytics.view',
   },
   {
     title: 'Admins',
@@ -280,35 +321,61 @@ const navigation: NavItem[] = [
   },
 ]
 
-function filterNavByPermission(
-  items: NavItem[],
-  hasPermission: (permission: string) => boolean,
-): NavItem[] {
+interface NavAccess {
+  hasPermission: (permission: string) => boolean
+  hasAnyPermission: (permissions: string[]) => boolean
+  isLegacyAdmin: boolean
+}
+
+function isNavItemVisible(item: NavItem, access: NavAccess): boolean {
+  if (item.requiresLegacyAdmin && !access.isLegacyAdmin) return false
+  if (item.permission && !access.hasPermission(item.permission)) return false
+  if (item.permissions && !access.hasAnyPermission(item.permissions)) return false
+  return true
+}
+
+function filterNavByPermission(items: NavItem[], access: NavAccess): NavItem[] {
   return items
-    .filter((item) => !item.permission || hasPermission(item.permission))
+    .filter((item) => isNavItemVisible(item, access))
     .map((item) =>
       item.children
-        ? { ...item, children: filterNavByPermission(item.children, hasPermission) }
+        ? { ...item, children: filterNavByPermission(item.children, access) }
         : item,
+    )
+}
+
+/**
+ * Used only while /staff/me is still resolving. Recurses into children too
+ * -- several parents (Products, Sales, Marketing) are intentionally left
+ * ungated themselves so a caller missing one child's permission still sees
+ * the others, which means a shallow top-level-only filter would leak
+ * gated children (Customers, Suppliers, ...) during the loading flash.
+ */
+function stripGatedItems(items: NavItem[]): NavItem[] {
+  return items
+    .filter((item) => !item.permission && !item.permissions && !item.requiresLegacyAdmin)
+    .map((item) =>
+      item.children ? { ...item, children: stripGatedItems(item.children) } : item,
     )
 }
 
 export function Sidebar() {
   const pathname = usePathname()
   const { user, logout } = useAuth()
-  const { hasPermission, isLoading: staffLoading } = useStaffAccess()
+  const { hasPermission, hasAnyPermission, isLegacyAdmin, isLoading: staffLoading } =
+    useStaffAccess()
   const [expandedItems, setExpandedItems] = React.useState<string[]>([])
 
-  // While /staff/me is still resolving, show only ungated items -- avoids
-  // a flash of a permission-gated link (e.g. Organization/Settings)
+  // While /staff/me is still resolving, show only fully-ungated items --
+  // avoids a flash of a permission-gated link (e.g. Organization/Settings)
   // followed by it disappearing a moment later for someone who turns out
   // not to have that permission.
   const visibleNavigation = React.useMemo(
     () =>
       staffLoading
-        ? navigation.filter((item) => !item.permission)
-        : filterNavByPermission(navigation, hasPermission),
-    [staffLoading, hasPermission],
+        ? stripGatedItems(navigation)
+        : filterNavByPermission(navigation, { hasPermission, hasAnyPermission, isLegacyAdmin }),
+    [staffLoading, hasPermission, hasAnyPermission, isLegacyAdmin],
   )
 
   const toggleExpand = (title: string) => {

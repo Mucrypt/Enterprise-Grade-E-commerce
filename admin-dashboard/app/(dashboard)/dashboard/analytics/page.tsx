@@ -45,6 +45,7 @@ import { useRealtimeMetrics, useRealtimeAlerts } from '@/hooks/useRealtimeMetric
 import type { ConversionFunnelStep, TopProductMetric } from '@/types/events'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { SectionEyebrow } from '@/components/dashboard/SectionEyebrow'
+import { RequirePagePermission } from '@/components/auth/RequirePagePermission'
 
 type Period = 'today' | 'week' | 'month'
 
@@ -109,6 +110,16 @@ function CountryBadge({ code }: { code: string }) {
 }
 
 export default function AnalyticsPage() {
+  return (
+    <RequirePagePermission permission='analytics.view'>
+      <AnalyticsPageContent />
+    </RequirePagePermission>
+  )
+}
+
+// The GLOBAL analytics page -- see the Sidebar.tsx nav entry's comment for
+// why analytics.view_market does not unlock this page.
+function AnalyticsPageContent() {
   const [period, setPeriod] = useState<Period>('week')
   const [now, setNow] = useState(() => Date.now())
 

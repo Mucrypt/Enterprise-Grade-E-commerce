@@ -532,6 +532,42 @@ export const trendingService = {
       }
     }
   },
+
+  /**
+   * Market-scoped overview for the Command Center's Market Overview panel
+   * (analytics.view_market). Server-side scoped -- see GET
+   * /analytics/market-overview / getMarketOverview in
+   * analytics.controller.ts. Never call this to derive global numbers;
+   * use the endpoints above for that.
+   */
+  async getMarketOverview(days: number = 7) {
+    try {
+      const response = (await apiClient.get('/analytics/market-overview', {
+        params: { days },
+      })) as any
+
+      return {
+        period: response?.period || `${days}_days`,
+        scoped: Boolean(response?.scoped),
+        markets: response?.markets || [],
+        visitors: response?.visitors || { activeSessionCount: 0, uniqueVisitors: 0 },
+        orders: response?.orders || { orderCount: 0, revenue: 0 },
+        suppliers: response?.suppliers || { supplierCount: 0 },
+        message: response?.message as string | undefined,
+      }
+    } catch (error) {
+      console.error('Error fetching market overview:', error)
+      return {
+        period: `${days}_days`,
+        scoped: true,
+        markets: [] as string[],
+        visitors: { activeSessionCount: 0, uniqueVisitors: 0 },
+        orders: { orderCount: 0, revenue: 0 },
+        suppliers: { supplierCount: 0 },
+        message: undefined as string | undefined,
+      }
+    }
+  },
 }
 
 export default trendingService

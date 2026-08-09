@@ -2,6 +2,42 @@ import { Response } from 'express'
 import { AuthRequest } from '../../../middleware/auth'
 import { query } from '../../../database/connection'
 import logger from '../../../utils/logger'
+import {
+  StaffAuthRequest,
+  applyMarketScope,
+  isCountryInScope,
+} from '../../../middleware/staff'
+import { recordStaffAuditEvent } from '../../../services/staff-audit.service'
+
+// Resource-scope check for a single already-fetched supplier row -- the
+// IDOR guard, mirroring assertOrderInScope in order.controller.ts. A
+// scoped caller must not be able to bypass list filtering by directly
+// requesting a supplier ID outside their market.
+async function assertSupplierInScope(
+  req: StaffAuthRequest,
+  supplierId: string,
+): Promise<{ ok: true; supplier: any } | { ok: false }> {
+  const result = await query(
+    'SELECT id, country_code, status FROM suppliers WHERE id = $1 AND deleted_at IS NULL',
+    [supplierId],
+  )
+  if (result.rows.length === 0) return { ok: false }
+  const supplier = result.rows[0]
+  if (!isCountryInScope(req, supplier.country_code)) {
+    recordStaffAuditEvent({
+      action: 'PERMISSION_DENIED',
+      actorUserId: req.user?.userId,
+      metadata: {
+        check: 'market_scope',
+        resourceType: 'supplier',
+        resourceId: supplierId,
+        requestedCountry: supplier.country_code || null,
+      },
+    })
+    return { ok: false }
+  }
+  return { ok: true, supplier }
+}
 
 async function logAdminActivity(options: {
   req: AuthRequest
@@ -58,12 +94,17 @@ export const getSuppliers = async (req: AuthRequest, res: Response) => {
       )
     }
 
+    const scope = applyMarketScope(req as StaffAuthRequest, 'suppliers', values.length + 1)
+    scope.params.forEach((p) => values.push(p as string))
+
     values.push(Number(limit), offset)
+
+    const whereClause = `${filters.join(' AND ')} ${scope.clause}`
 
     const result = await query(
       `SELECT *
        FROM suppliers
-       WHERE ${filters.join(' AND ')}
+       WHERE ${whereClause}
        ORDER BY company_name ASC
        LIMIT $${values.length - 1} OFFSET $${values.length}`,
       values,
@@ -73,7 +114,7 @@ export const getSuppliers = async (req: AuthRequest, res: Response) => {
     const countResult = await query(
       `SELECT COUNT(*)
        FROM suppliers
-       WHERE ${filters.join(' AND ')}`,
+       WHERE ${whereClause}`,
       countValues,
     )
 
@@ -116,10 +157,28 @@ export const getSupplierById = async (req: AuthRequest, res: Response) => {
       })
     }
 
+    const supplier = result.rows[0]
+    if (!isCountryInScope(req as StaffAuthRequest, supplier.country_code)) {
+      recordStaffAuditEvent({
+        action: 'PERMISSION_DENIED',
+        actorUserId: (req as StaffAuthRequest).user?.userId,
+        metadata: {
+          check: 'market_scope',
+          resourceType: 'supplier',
+          resourceId: id,
+          requestedCountry: supplier.country_code || null,
+        },
+      })
+      return res.status(404).json({
+        success: false,
+        error: 'Supplier not found',
+      })
+    }
+
     res.json({
       success: true,
       data: {
-        supplier: result.rows[0],
+        supplier,
       },
     })
   } catch (error) {
@@ -208,22 +267,15 @@ export const updateSupplier = async (req: AuthRequest, res: Response) => {
       leadTimeDays,
     } = req.body
 
-    const previousResult = await query(
-      `SELECT status
-       FROM suppliers
-       WHERE id = $1
-         AND deleted_at IS NULL`,
-      [id],
-    )
-
-    if (previousResult.rows.length === 0) {
+    const scopeCheck = await assertSupplierInScope(req as StaffAuthRequest, id)
+    if (!scopeCheck.ok) {
       return res.status(404).json({
         success: false,
         error: 'Supplier not found',
       })
     }
 
-    const previousStatus = previousResult.rows[0].status
+    const previousStatus = scopeCheck.supplier.status
 
     const result = await query(
       `UPDATE suppliers
@@ -300,6 +352,14 @@ export const deleteSupplier = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params
 
+    const scopeCheck = await assertSupplierInScope(req as StaffAuthRequest, id)
+    if (!scopeCheck.ok) {
+      return res.status(404).json({
+        success: false,
+        error: 'Supplier not found',
+      })
+    }
+
     const result = await query(
       `UPDATE suppliers
        SET deleted_at = CURRENT_TIMESTAMP,
@@ -337,6 +397,14 @@ export const syncSupplierProducts = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params
 
+    const scopeCheck = await assertSupplierInScope(req as StaffAuthRequest, id)
+    if (!scopeCheck.ok) {
+      return res.status(404).json({
+        success: false,
+        error: 'Supplier not found',
+      })
+    }
+
     res.json({
       success: true,
       message: 'Sync supplier products - Not yet implemented',
@@ -356,6 +424,14 @@ export const syncSupplierProducts = async (req: AuthRequest, res: Response) => {
 export const getSupplierProducts = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params
+
+    const scopeCheck = await assertSupplierInScope(req as StaffAuthRequest, id)
+    if (!scopeCheck.ok) {
+      return res.status(404).json({
+        success: false,
+        error: 'Supplier not found',
+      })
+    }
 
     const result = await query(
       `SELECT
@@ -427,6 +503,14 @@ export const upsertSupplierProductOffer = async (
       return res.status(400).json({
         success: false,
         error: 'productId and costPrice are required',
+      })
+    }
+
+    const scopeCheck = await assertSupplierInScope(req as StaffAuthRequest, id)
+    if (!scopeCheck.ok) {
+      return res.status(404).json({
+        success: false,
+        error: 'Supplier not found',
       })
     }
 

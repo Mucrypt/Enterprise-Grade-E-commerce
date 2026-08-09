@@ -76,8 +76,17 @@ import {
   formatDeliveryTime,
   getTrackingUrl,
 } from '@/services/shipping.service'
+import { RequirePagePermission } from '@/components/auth/RequirePagePermission'
 
 export default function ShippingPage() {
+  return (
+    <RequirePagePermission permission='shipping.view'>
+      <ShippingPageContent />
+    </RequirePagePermission>
+  )
+}
+
+function ShippingPageContent() {
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState('carriers')
   const [selectedCarrier, setSelectedCarrier] = useState<CarrierConfig | null>(

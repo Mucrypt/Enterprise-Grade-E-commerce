@@ -79,6 +79,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { orderService, Order, OrderFilters } from '@/services/order.service'
 import { useAuth } from '@/contexts/AuthContext'
+import { RequirePagePermission } from '@/components/auth/RequirePagePermission'
 
 // Order status config with colors and icons
 const ORDER_STATUS_CONFIG: Record<
@@ -177,6 +178,14 @@ const DATE_PRESETS = [
 ]
 
 export default function OrdersPage() {
+  return (
+    <RequirePagePermission permission='orders.view'>
+      <OrdersPageContent />
+    </RequirePagePermission>
+  )
+}
+
+function OrdersPageContent() {
   const queryClient = useQueryClient()
   const { isLoading: authLoading, isAuthenticated } = useAuth()
 
