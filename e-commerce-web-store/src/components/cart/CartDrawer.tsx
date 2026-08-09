@@ -3,6 +3,7 @@
 // ============================================
 
 import { Link } from 'react-router-dom';
+import { useTranslation, Trans } from 'react-i18next';
 import {
   X,
   Minus,
@@ -19,8 +20,9 @@ import { formatPrice, getProductImage } from '../../utils';
 const FREE_SHIPPING_THRESHOLD = 50;
 
 export default function CartDrawer() {
+  const { t } = useTranslation(['cart', 'common']);
   const { items, isOpen, closeCart, removeItem, updateQuantity, getSubtotal } = useCartStore();
-  
+
   const subtotal = getSubtotal();
   const shippingProgress = Math.min((subtotal / FREE_SHIPPING_THRESHOLD) * 100, 100);
   const amountToFreeShipping = Math.max(FREE_SHIPPING_THRESHOLD - subtotal, 0);
@@ -41,9 +43,9 @@ export default function CartDrawer() {
         <div className="flex items-center justify-between p-4 border-b">
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <ShoppingBag className="w-5 h-5" />
-            Shopping Cart
+            {t('title')}
             <span className="text-sm font-normal text-gray-500">
-              ({items.length} {items.length === 1 ? 'item' : 'items'})
+              ({t('itemCount', { count: items.length })})
             </span>
           </h2>
           <button
@@ -62,7 +64,12 @@ export default function CartDrawer() {
                 <div className="flex items-center gap-2 text-sm">
                   <Truck className="w-4 h-4 text-orange-500" />
                   <span>
-                    Add <span className="font-semibold text-orange-600">{formatPrice(amountToFreeShipping)}</span> for FREE shipping!
+                    <Trans
+                      i18nKey="freeShippingProgress"
+                      ns="cart"
+                      values={{ amount: formatPrice(amountToFreeShipping) }}
+                      components={{ 1: <span className="font-semibold text-orange-600" /> }}
+                    />
                   </span>
                 </div>
                 <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
@@ -75,7 +82,7 @@ export default function CartDrawer() {
             ) : (
               <div className="flex items-center gap-2 text-sm text-green-600 font-medium">
                 <Truck className="w-4 h-4" />
-                You've unlocked FREE shipping!
+                {t('freeShippingUnlocked')}
               </div>
             )}
           </div>
@@ -89,17 +96,17 @@ export default function CartDrawer() {
                 <ShoppingBag className="w-12 h-12 text-gray-300" />
               </div>
               <h3 className="text-lg font-medium text-gray-900 mb-2">
-                Your cart is empty
+                {t('empty')}
               </h3>
               <p className="text-gray-500 mb-6">
-                Looks like you haven't added any items yet
+                {t('emptyDescription')}
               </p>
               <Link
                 to="/shop"
                 onClick={closeCart}
                 className="px-6 py-3 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 transition-colors"
               >
-                Start Shopping
+                {t('startShopping')}
               </Link>
             </div>
           ) : (
@@ -195,31 +202,31 @@ export default function CartDrawer() {
                 <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Coupon code"
+                  placeholder={t('couponPlaceholder')}
                   className="w-full pl-10 pr-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                 />
               </div>
               <button className="px-4 py-2.5 bg-gray-900 text-white font-medium rounded-lg hover:bg-gray-800 transition-colors">
-                Apply
+                {t('common:buttons.apply')}
               </button>
             </div>
 
             {/* Totals */}
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-gray-500">Subtotal</span>
+                <span className="text-gray-500">{t('subtotal')}</span>
                 <span className="font-medium">{formatPrice(subtotal)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500">Shipping</span>
+                <span className="text-gray-500">{t('shipping')}</span>
                 <span className="font-medium text-green-600">
-                  {subtotal >= FREE_SHIPPING_THRESHOLD ? 'FREE' : 'Calculated at checkout'}
+                  {subtotal >= FREE_SHIPPING_THRESHOLD ? t('shippingFree') : t('shippingCalculated')}
                 </span>
               </div>
             </div>
 
             <div className="flex justify-between items-center pt-3 border-t">
-              <span className="text-lg font-semibold">Total</span>
+              <span className="text-lg font-semibold">{t('total')}</span>
               <span className="text-2xl font-bold text-orange-600">
                 {formatPrice(subtotal)}
               </span>
@@ -232,7 +239,7 @@ export default function CartDrawer() {
                 onClick={closeCart}
                 className="flex items-center justify-center gap-2 w-full py-3.5 bg-orange-500 text-white font-semibold rounded-lg hover:bg-orange-600 transition-colors"
               >
-                Proceed to Checkout
+                {t('checkout')}
                 <ArrowRight className="w-5 h-5" />
               </Link>
               <Link
@@ -240,7 +247,7 @@ export default function CartDrawer() {
                 onClick={closeCart}
                 className="block w-full py-3 text-center text-gray-600 font-medium hover:text-gray-900 transition-colors"
               >
-                View Cart
+                {t('viewCart')}
               </Link>
             </div>
           </div>

@@ -4,11 +4,13 @@
 
 import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Eye, EyeOff, Mail, Lock, AlertCircle, ArrowRight } from 'lucide-react'
 import { useAuthStore } from '../stores'
 import { cn } from '../utils'
 
 export default function LoginPage() {
+  const { t } = useTranslation('auth')
   const navigate = useNavigate()
   const location = useLocation()
   const { login, isLoading } = useAuthStore()
@@ -84,10 +86,10 @@ export default function LoginPage() {
         {/* Login Card */}
         <div className='bg-white rounded-2xl shadow-xl p-8'>
           <h1 className='text-2xl font-bold text-gray-900 text-center mb-2'>
-            Welcome Back
+            {t('login.title')}
           </h1>
           <p className='text-gray-500 text-center mb-8'>
-            Sign in to continue shopping
+            {t('login.subtitle')}
           </p>
 
           {/* Error Alert */}
@@ -102,7 +104,7 @@ export default function LoginPage() {
             {/* Email */}
             <div>
               <label className='block text-sm font-medium text-gray-700 mb-2'>
-                Email Address
+                {t('login.emailLabel')}
               </label>
               <div className='relative'>
                 <Mail className='absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400' />
@@ -119,7 +121,7 @@ export default function LoginPage() {
                       }))
                     }
                   }}
-                  placeholder='Enter your email'
+                  placeholder={t('login.emailPlaceholder')}
                   className={cn(
                     'w-full pl-12 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-2 transition-all',
                     validationErrors.email
@@ -138,7 +140,7 @@ export default function LoginPage() {
             {/* Password */}
             <div>
               <label className='block text-sm font-medium text-gray-700 mb-2'>
-                Password
+                {t('login.passwordLabel')}
               </label>
               <div className='relative'>
                 <Lock className='absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400' />
@@ -155,7 +157,7 @@ export default function LoginPage() {
                       }))
                     }
                   }}
-                  placeholder='Enter your password'
+                  placeholder={t('login.passwordPlaceholder')}
                   className={cn(
                     'w-full pl-12 pr-12 py-3 border rounded-xl focus:outline-none focus:ring-2 transition-all',
                     validationErrors.password
@@ -191,13 +193,13 @@ export default function LoginPage() {
                   onChange={(e) => setRememberMe(e.target.checked)}
                   className='w-4 h-4 text-orange-500 border-gray-300 rounded focus:ring-orange-500'
                 />
-                <span className='text-sm text-gray-600'>Remember me</span>
+                <span className='text-sm text-gray-600'>{t('login.rememberMe')}</span>
               </label>
               <Link
                 to='/forgot-password'
                 className='text-sm text-orange-500 hover:text-orange-600 font-medium'
               >
-                Forgot password?
+                {t('login.forgotPassword')}
               </Link>
             </div>
 
@@ -211,7 +213,7 @@ export default function LoginPage() {
                 <div className='w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin' />
               ) : (
                 <>
-                  Sign In
+                  {t('login.submit')}
                   <ArrowRight className='w-5 h-5' />
                 </>
               )}
@@ -225,7 +227,7 @@ export default function LoginPage() {
             </div>
             <div className='relative flex justify-center'>
               <span className='bg-white px-4 text-sm text-gray-500'>
-                or continue with
+                {t('login.orContinueWith')}
               </span>
             </div>
           </div>
@@ -263,12 +265,12 @@ export default function LoginPage() {
 
           {/* Sign Up Link */}
           <p className='text-center text-gray-600 mt-8'>
-            Don't have an account?{' '}
+            {t('login.noAccount')}{' '}
             <Link
               to='/register'
               className='text-orange-500 hover:text-orange-600 font-semibold'
             >
-              Sign up free
+              {t('login.signUpFree')}
             </Link>
           </p>
         </div>

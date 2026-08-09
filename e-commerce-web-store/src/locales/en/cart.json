@@ -1,0 +1,18 @@
+{
+  "title": "Shopping Cart",
+  "itemCount_one": "{{count}} item",
+  "itemCount_other": "{{count}} items",
+  "empty": "Your cart is empty",
+  "emptyDescription": "Looks like you haven't added any items yet",
+  "startShopping": "Start Shopping",
+  "freeShippingProgress": "Add <1>{{amount}}</1> for FREE shipping!",
+  "freeShippingUnlocked": "You've unlocked FREE shipping!",
+  "couponPlaceholder": "Coupon code",
+  "subtotal": "Subtotal",
+  "shipping": "Shipping",
+  "shippingFree": "FREE",
+  "shippingCalculated": "Calculated at checkout",
+  "total": "Total",
+  "checkout": "Proceed to Checkout",
+  "viewCart": "View Cart"
+}

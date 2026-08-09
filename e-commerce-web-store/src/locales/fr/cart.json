@@ -1,0 +1,18 @@
+{
+  "title": "Panier",
+  "itemCount_one": "{{count}} article",
+  "itemCount_other": "{{count}} articles",
+  "empty": "Votre panier est vide",
+  "emptyDescription": "Vous n'avez encore ajouté aucun article",
+  "startShopping": "Commencer mes achats",
+  "freeShippingProgress": "Ajoutez <1>{{amount}}</1> pour la livraison GRATUITE !",
+  "freeShippingUnlocked": "Vous avez débloqué la livraison GRATUITE !",
+  "couponPlaceholder": "Code promo",
+  "subtotal": "Sous-total",
+  "shipping": "Livraison",
+  "shippingFree": "GRATUITE",
+  "shippingCalculated": "Calculée à la commande",
+  "total": "Total",
+  "checkout": "Passer la commande",
+  "viewCart": "Voir le panier"
+}

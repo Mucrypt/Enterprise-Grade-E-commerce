@@ -1,0 +1,18 @@
+{
+  "title": "Carrello",
+  "itemCount_one": "{{count}} articolo",
+  "itemCount_other": "{{count}} articoli",
+  "empty": "Il tuo carrello è vuoto",
+  "emptyDescription": "Sembra che tu non abbia ancora aggiunto articoli",
+  "startShopping": "Inizia lo shopping",
+  "freeShippingProgress": "Aggiungi <1>{{amount}}</1> per la spedizione GRATUITA!",
+  "freeShippingUnlocked": "Hai sbloccato la spedizione GRATUITA!",
+  "couponPlaceholder": "Codice sconto",
+  "subtotal": "Subtotale",
+  "shipping": "Spedizione",
+  "shippingFree": "GRATUITA",
+  "shippingCalculated": "Calcolata al checkout",
+  "total": "Totale",
+  "checkout": "Procedi al pagamento",
+  "viewCart": "Vedi carrello"
+}

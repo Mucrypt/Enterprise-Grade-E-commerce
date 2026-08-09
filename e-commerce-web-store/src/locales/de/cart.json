@@ -1,0 +1,18 @@
+{
+  "title": "Warenkorb",
+  "itemCount_one": "{{count}} Artikel",
+  "itemCount_other": "{{count}} Artikel",
+  "empty": "Ihr Warenkorb ist leer",
+  "emptyDescription": "Sie haben noch keine Artikel hinzugefügt",
+  "startShopping": "Jetzt einkaufen",
+  "freeShippingProgress": "Fügen Sie <1>{{amount}}</1> hinzu für KOSTENLOSEN Versand!",
+  "freeShippingUnlocked": "Sie haben kostenlosen Versand freigeschaltet!",
+  "couponPlaceholder": "Gutscheincode",
+  "subtotal": "Zwischensumme",
+  "shipping": "Versand",
+  "shippingFree": "KOSTENLOS",
+  "shippingCalculated": "Wird an der Kasse berechnet",
+  "total": "Gesamt",
+  "checkout": "Zur Kasse",
+  "viewCart": "Warenkorb ansehen"
+}

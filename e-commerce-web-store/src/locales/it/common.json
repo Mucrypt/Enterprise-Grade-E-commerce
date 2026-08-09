@@ -1,0 +1,25 @@
+{
+  "search": {
+    "placeholder": "Cerca prodotti, marchi e altro..."
+  },
+  "account": {
+    "signIn": "Accedi",
+    "account": "Account",
+    "welcomeBack": "Bentornato"
+  },
+  "wishlist": "Lista dei desideri",
+  "cart": "Carrello",
+  "topBar": {
+    "freeShipping": "Spedizione gratuita oltre 50 €",
+    "trackOrder": "Traccia ordine",
+    "dailyDeals": "Offerte del giorno",
+    "support247": "Assistenza 24/7"
+  },
+  "buttons": {
+    "save": "Salva",
+    "cancel": "Annulla",
+    "apply": "Applica",
+    "continueShopping": "Continua lo shopping"
+  },
+  "loading": "Caricamento..."
+}

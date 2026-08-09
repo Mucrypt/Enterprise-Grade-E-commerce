@@ -1,0 +1,25 @@
+{
+  "search": {
+    "placeholder": "Search for products, brands, and more..."
+  },
+  "account": {
+    "signIn": "Sign in",
+    "account": "Account",
+    "welcomeBack": "Welcome back"
+  },
+  "wishlist": "Wishlist",
+  "cart": "Cart",
+  "topBar": {
+    "freeShipping": "Free Shipping €50+",
+    "trackOrder": "Track Order",
+    "dailyDeals": "Daily Deals",
+    "support247": "24/7 Support"
+  },
+  "buttons": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "apply": "Apply",
+    "continueShopping": "Continue Shopping"
+  },
+  "loading": "Loading..."
+}

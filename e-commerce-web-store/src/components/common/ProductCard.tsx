@@ -4,6 +4,7 @@
 
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Heart, ShoppingCart, Eye, Star, Truck } from 'lucide-react';
 import { useCartStore, useWishlistStore } from '../../stores';
 import { formatPrice, calculateDiscount, getProductImage, cn } from '../../utils';
@@ -20,9 +21,10 @@ export default function ProductCard({
   variant = 'default',
   showQuickView = true,
 }: ProductCardProps) {
+  const { t } = useTranslation('products');
   const [isHovered, setIsHovered] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
-  
+
   const { addItem } = useCartStore();
   const { toggleItem, isInWishlist } = useWishlistStore();
 
@@ -166,7 +168,7 @@ export default function ProductCard({
               className="w-full py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg flex items-center justify-center gap-2 transition-colors shadow-lg"
             >
               <ShoppingCart className="w-4 h-4" />
-              Add to Cart
+              {t('addToCart')}
             </button>
           </div>
         )}

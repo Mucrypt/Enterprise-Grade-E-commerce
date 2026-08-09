@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import {
   Search,
   User,
@@ -30,6 +31,7 @@ import MegaMenu from './MegaMenu'
 import MobileMenu from './MobileMenu'
 import CartDrawer from '../cart/CartDrawer'
 import { NotificationBell } from '../notifications/NotificationBell'
+import LanguageSelector from './LanguageSelector'
 
 // Navigation Categories Data
 const navigationCategories = [
@@ -105,7 +107,22 @@ const navigationCategories = [
   },
 ]
 
+// Only the plain UI-chrome nav labels are translated -- the megaMenu-backed
+// entries above (Lighting, Audio & Entertainment, ...) are real catalog
+// category names, which are product/catalog content, not UI copy; see
+// B9's product_translations design (product-content translation is
+// design-only this phase, not implemented). navigation.json's keys match
+// these ids 1:1 by design.
+const TRANSLATED_NAV_IDS: Record<string, string> = {
+  'new-in': 'navigation:newIn',
+  sale: 'navigation:sale',
+  trending: 'navigation:trending',
+  books: 'navigation:books',
+  brands: 'navigation:brands',
+}
+
 export default function Header() {
+  const { t } = useTranslation(['common', 'navigation'])
   const [isScrolled, setIsScrolled] = useState(false)
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [showPromoBar, setShowPromoBar] = useState(true)
@@ -177,14 +194,14 @@ export default function Header() {
               className='flex items-center gap-1 hover:text-white transition-colors'
             >
               <Truck className='w-3.5 h-3.5' />
-              Free Shipping €50+
+              {t('common:topBar.freeShipping')}
             </Link>
             <Link
               to='/track-order'
               className='flex items-center gap-1 hover:text-white transition-colors'
             >
               <MapPin className='w-3.5 h-3.5' />
-              Track Order
+              {t('common:topBar.trackOrder')}
             </Link>
           </div>
           <div className='flex items-center gap-6'>
@@ -193,15 +210,20 @@ export default function Header() {
               className='flex items-center gap-1 hover:text-white transition-colors'
             >
               <Percent className='w-3.5 h-3.5' />
-              Daily Deals
+              {t('common:topBar.dailyDeals')}
             </Link>
             <Link
               to='/support'
               className='flex items-center gap-1 hover:text-white transition-colors'
             >
               <Headphones className='w-3.5 h-3.5' />
-              24/7 Support
+              {t('common:topBar.support247')}
             </Link>
+            {/* Language selector is deliberately here, not near cart/currency
+                -- keeps it visually distinct from the future "Ship to /
+                Currency" cluster (see B12: language must never imply a
+                country/currency change). */}
+            <LanguageSelector />
           </div>
         </div>
       </div>
@@ -244,7 +266,7 @@ export default function Header() {
               >
                 <Search className='w-5 h-5 text-gray-400 group-hover:text-gray-600' />
                 <span className='ml-3 text-gray-500 text-sm'>
-                  Search for products, brands, and more...
+                  {t('common:search.placeholder')}
                 </span>
                 <kbd className='ml-auto hidden xl:block text-xs text-gray-400 bg-white px-2 py-1 rounded border'>
                   ⌘K
@@ -278,7 +300,7 @@ export default function Header() {
                         'U'}
                     </div>
                     <div className='hidden xl:block text-left'>
-                      <p className='text-xs text-gray-500'>Welcome back</p>
+                      <p className='text-xs text-gray-500'>{t('common:account.welcomeBack')}</p>
                       <p className='text-sm font-medium'>
                         {user.first_name || 'User'}
                       </p>
@@ -288,8 +310,8 @@ export default function Header() {
                   <>
                     <User className='w-6 h-6' />
                     <div className='hidden xl:block text-left'>
-                      <p className='text-xs text-gray-500'>Sign in</p>
-                      <p className='text-sm font-medium'>Account</p>
+                      <p className='text-xs text-gray-500'>{t('common:account.signIn')}</p>
+                      <p className='text-sm font-medium'>{t('common:account.account')}</p>
                     </div>
                   </>
                 )}
@@ -336,7 +358,7 @@ export default function Header() {
               >
                 <button className='flex items-center gap-2 px-4 py-3 bg-gray-900 text-white rounded-t-lg font-medium hover:bg-gray-800 transition-colors'>
                   <Menu className='w-4 h-4' />
-                  <span>Categories</span>
+                  <span>{t('navigation:categories')}</span>
                   <ChevronDown className='w-4 h-4' />
                 </button>
               </li>
@@ -359,7 +381,9 @@ export default function Header() {
                       activeCategory === category.id && 'text-orange-600',
                     )}
                   >
-                    {category.label}
+                    {TRANSLATED_NAV_IDS[category.id]
+                      ? t(TRANSLATED_NAV_IDS[category.id])
+                      : category.label}
                     {category.megaMenu && (
                       <ChevronDown
                         className={cn(

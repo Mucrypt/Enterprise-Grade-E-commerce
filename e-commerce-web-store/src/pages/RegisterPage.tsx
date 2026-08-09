@@ -4,6 +4,7 @@
 
 import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import {
   Eye,
   EyeOff,
@@ -19,6 +20,7 @@ import { useAuthStore } from '../stores'
 import { cn } from '../utils'
 
 export default function RegisterPage() {
+  const { t } = useTranslation('auth')
   const navigate = useNavigate()
   const location = useLocation()
   const { register, isLoading } = useAuthStore()
@@ -136,7 +138,7 @@ export default function RegisterPage() {
         {/* Register Card */}
         <div className='bg-white rounded-2xl shadow-xl p-8'>
           <h1 className='text-2xl font-bold text-gray-900 text-center mb-2'>
-            Create Account
+            {t('register.title')}
           </h1>
           <p className='text-gray-500 text-center mb-8'>
             Join us and start shopping today
@@ -155,7 +157,7 @@ export default function RegisterPage() {
             <div className='grid grid-cols-2 gap-4'>
               <div>
                 <label className='block text-sm font-medium text-gray-700 mb-2'>
-                  First Name
+                  {t('register.firstNameLabel')}
                 </label>
                 <div className='relative'>
                   <User className='absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400' />
@@ -181,7 +183,7 @@ export default function RegisterPage() {
               </div>
               <div>
                 <label className='block text-sm font-medium text-gray-700 mb-2'>
-                  Last Name
+                  {t('register.lastNameLabel')}
                 </label>
                 <div className='relative'>
                   <User className='absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400' />
@@ -210,7 +212,7 @@ export default function RegisterPage() {
             {/* Email */}
             <div>
               <label className='block text-sm font-medium text-gray-700 mb-2'>
-                Email Address
+                {t('register.emailLabel')}
               </label>
               <div className='relative'>
                 <Mail className='absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400' />
@@ -256,7 +258,7 @@ export default function RegisterPage() {
             {/* Password */}
             <div>
               <label className='block text-sm font-medium text-gray-700 mb-2'>
-                Password
+                {t('register.passwordLabel')}
               </label>
               <div className='relative'>
                 <Lock className='absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400' />
@@ -317,7 +319,7 @@ export default function RegisterPage() {
             {/* Confirm Password */}
             <div>
               <label className='block text-sm font-medium text-gray-700 mb-2'>
-                Confirm Password
+                {t('register.confirmPasswordLabel')}
               </label>
               <div className='relative'>
                 <Lock className='absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400' />
@@ -409,7 +411,7 @@ export default function RegisterPage() {
                 <div className='w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin' />
               ) : (
                 <>
-                  Create Account
+                  {t('register.submit')}
                   <ArrowRight className='w-5 h-5' />
                 </>
               )}
@@ -461,12 +463,12 @@ export default function RegisterPage() {
 
           {/* Sign In Link */}
           <p className='text-center text-gray-600 mt-8'>
-            Already have an account?{' '}
+            {t('register.haveAccount')}{' '}
             <Link
               to='/login'
               className='text-orange-500 hover:text-orange-600 font-semibold'
             >
-              Sign in
+              {t('register.signIn')}
             </Link>
           </p>
         </div>
