@@ -274,16 +274,18 @@ const navigation: NavItem[] = [
     ],
   },
   {
-    // This is the GLOBAL analytics page (revenue-trend/top-products/etc.
-    // -- all still legacy-admin-only server-side, see
-    // analytics.routes.ts). A MARKET_MANAGER's analytics.view_market does
-    // NOT unlock this link -- their market-scoped numbers live in the
-    // Command Center's Market Overview panel instead (getMarketOverview /
-    // GET /analytics/market-overview), a separate page, not this one.
+    // ADMIN-2B: transformed into the Analytics 2.0 workspace, whose
+    // endpoints (analytics-v2.controller.ts) resolve market scope
+    // per-request -- so unlike the ADMIN-2A.5-era restriction this used
+    // to have, a MARKET_MANAGER's analytics.view_market now DOES unlock
+    // this link, and every tab shows them genuinely scoped data (not the
+    // global figures). Command Center's Market Overview panel remains a
+    // separate, lighter-weight summary, not the only place they can see
+    // their numbers.
     title: 'Analytics',
     href: '/dashboard/analytics',
     icon: BarChart3,
-    permission: 'analytics.view',
+    permissions: ['analytics.view', 'analytics.view_market'],
   },
   {
     title: 'Admins',

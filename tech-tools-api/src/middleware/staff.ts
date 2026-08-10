@@ -159,6 +159,53 @@ export const requirePermissionOrLegacyRole = (
   }
 }
 
+/**
+ * Same bootstrap/legacy-bypass behavior as requirePermissionOrLegacyRole,
+ * but passes if the caller holds ANY ONE of the given permissions --
+ * needed for the Analytics 2.0 aggregate endpoints (ADMIN-2B), which are
+ * reachable by both global viewers (`analytics.view`, held by
+ * ADMIN/CATALOG_MANAGER/ORDER_MANAGER/MARKETING_MANAGER) and market-scoped
+ * viewers (`analytics.view_market`, held by MARKET_MANAGER) -- the two are
+ * mutually exclusive in the permission matrix (see
+ * config/staff-permissions.config.ts), so a single-permission gate can't
+ * cover both. The GLOBAL-vs-SCOPED decision itself still happens inside
+ * the controller (same pattern as getMarketOverview), not here -- this
+ * only decides who may call the route at all.
+ */
+export const requireAnyPermissionOrLegacyRole = (
+  permissions: Permission[],
+  ...legacyRoles: string[]
+) => {
+  return async (req: StaffAuthRequest, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({ success: false, error: 'Authentication required' })
+    }
+
+    if (legacyRoles.includes(req.user.userType)) {
+      return next()
+    }
+
+    try {
+      const staff = await getStaffContext(req)
+      const hasAny = permissions.some((permission) => staff.permissions.has(permission))
+
+      if (!hasAny) {
+        recordStaffAuditEvent({
+          action: 'PERMISSION_DENIED',
+          actorUserId: req.user.userId,
+          metadata: { check: 'requireAnyPermissionOrLegacyRole', permissions },
+        })
+        return res.status(403).json({ success: false, error: 'Insufficient permissions' })
+      }
+
+      next()
+    } catch (error) {
+      logger.error('requireAnyPermissionOrLegacyRole error:', error)
+      next(error)
+    }
+  }
+}
+
 export interface MarketScopeFilter {
   /** SQL fragment to AND onto an existing WHERE clause. Empty string = no restriction (global access). */
   clause: string

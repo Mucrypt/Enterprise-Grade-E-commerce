@@ -16,7 +16,7 @@ import { StaffAuthRequest, applyMarketScope } from '../../../middleware/staff'
 
 const eventService = createEventService(pool)
 
-async function tableExists(tableName: string): Promise<boolean> {
+export async function tableExists(tableName: string): Promise<boolean> {
   const result = await query('SELECT to_regclass($1) IS NOT NULL AS exists', [
     tableName,
   ])
