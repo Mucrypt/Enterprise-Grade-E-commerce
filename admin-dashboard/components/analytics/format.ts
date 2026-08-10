@@ -21,3 +21,26 @@ export function formatPercent(value: number | null | undefined, decimals = 1): s
   if (value === null || value === undefined || !Number.isFinite(value)) return '—'
   return `${value.toFixed(decimals)}%`
 }
+
+const currencyFormatterCache = new Map<string, Intl.NumberFormat>()
+
+/**
+ * Unlike formatCurrency (hardcoded EUR, correct for every single-currency
+ * response), this formats a value tagged with its own currency code -- used
+ * only for currencyBreakdown rows, which are exactly the case where more
+ * than one currency exists in the same response and EUR would be wrong for
+ * some of the rows.
+ */
+export function formatCurrencyWithCode(value: number | null | undefined, currency: string): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '—'
+  let formatter = currencyFormatterCache.get(currency)
+  if (!formatter) {
+    try {
+      formatter = new Intl.NumberFormat('en-US', { style: 'currency', currency })
+    } catch {
+      formatter = new Intl.NumberFormat('en-US', { style: 'decimal' })
+    }
+    currencyFormatterCache.set(currency, formatter)
+  }
+  return formatter.format(value)
+}

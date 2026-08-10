@@ -10,12 +10,13 @@ import {
   YAxis,
   Tooltip,
 } from 'recharts'
-import analyticsV2Service, { SalesResponse } from '@/services/analytics-v2.service'
+import analyticsV2Service, { SalesDataPayload } from '@/services/analytics-v2.service'
 import type { UseAnalyticsFiltersReturn } from '../useAnalyticsFilters'
 import { AnalyticsFilterBar } from '../AnalyticsFilterBar'
 import { ChartCard } from '../ChartCard'
 import { AnalyticsTable, AnalyticsTableColumn } from '../AnalyticsTable'
 import { ExportButton } from '../ExportButton'
+import { MixedCurrencyNotice } from '../MixedCurrencyNotice'
 import { MetricCard } from '@/components/dashboard/MetricCard'
 import { formatCurrency, formatNumber, formatPercent } from '../format'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -40,7 +41,7 @@ export function SalesTab({ filters, onScopeResolved }: SalesTabProps) {
 
   if (data) onScopeResolved?.({ scoped: data.scoped, markets: data.markets })
 
-  const productColumns: AnalyticsTableColumn<SalesResponse['revenueByProduct'][number]>[] = [
+  const productColumns: AnalyticsTableColumn<SalesDataPayload['revenueByProduct'][number]>[] = [
     { key: 'product', header: 'Product', render: (r) => <span className='font-medium'>{r.productName}</span> },
     { key: 'sku', header: 'SKU', render: (r) => r.sku },
     { key: 'units', header: 'Units Sold', align: 'right', render: (r) => formatNumber(r.unitsSold) },
@@ -59,6 +60,8 @@ export function SalesTab({ filters, onScopeResolved }: SalesTabProps) {
 
       {isLoading ? (
         <Skeleton className='h-64 rounded-lg' />
+      ) : data && data.mixedCurrencies ? (
+        <MixedCurrencyNotice message={data.message} breakdown={data.currencyBreakdown} />
       ) : data ? (
         <>
           <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>

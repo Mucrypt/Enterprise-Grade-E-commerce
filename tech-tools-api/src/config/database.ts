@@ -11,6 +11,16 @@ const dbConfig: PoolConfig = {
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000, // Increased from 2s to 10s
   statement_timeout: 30000, // Add 30s query timeout
+  // Pins every session's TimeZone GUC to UTC regardless of what the
+  // Postgres server/OS default happens to be -- nothing else in this
+  // codebase set this explicitly before (ADMIN-2B Production Review Round
+  // 1 §6). Without it, NOW()/CURRENT_TIMESTAMP, any DATE(timestamptz_col)
+  // cast (used by every Sales/Search-Demand trend query's day bucketing),
+  // and writes to the schema's several `timestamp without time zone`
+  // columns (user_sessions, events_core, alerts) would each depend on
+  // whatever timezone Postgres happens to default to on a given host --
+  // silently different between a laptop, CI, and the production VPS.
+  options: '-c TimeZone=UTC',
 }
 
 const pool = new Pool(dbConfig)

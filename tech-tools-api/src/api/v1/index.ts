@@ -32,6 +32,8 @@ import adminBooksRoutes from './admin/books.routes'
 import sellerRoutes from './seller/seller.routes'
 import adminSellersRoutes from './admin/sellers.routes'
 import staffRoutes from './staff/staff.routes'
+import promotionCampaignRoutes from './promotions/promotion-campaign.routes'
+import socialConnectionRoutes from './promotions/social-connection.routes'
 
 const router = Router()
 
@@ -79,6 +81,12 @@ router.use('/books', booksRoutes)
 router.use('/creator', creatorRoutes)
 router.use('/library', libraryRoutes)
 router.use('/staff', staffRoutes)
+// /promotions/connections must be mounted before /promotions/campaigns'
+// implicit '/' base doesn't collide with it (distinct path segments), but
+// ordering here matches this file's existing "more specific path first"
+// convention (see customersRoutes above /admin).
+router.use('/promotions/connections', socialConnectionRoutes)
+router.use('/promotions/campaigns', promotionCampaignRoutes)
 
 // Documentation route
 router.get('/docs', (_req, res) => {

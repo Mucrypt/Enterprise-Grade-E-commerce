@@ -36,6 +36,8 @@ import {
   UserCheck,
   Building2,
   Activity,
+  CalendarDays,
+  Link2,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useStaffAccess } from '@/contexts/StaffAccessContext'
@@ -262,14 +264,38 @@ const navigation: NavItem[] = [
       {
         title: 'Promotions',
         href: '/dashboard/promotions',
+        // PROMOTION-OPS-1: the page itself gates on 'campaigns.view'
+        // (matches its RequirePagePermission), a narrower/more accurate
+        // permission than the parent's 'marketing.view' -- a caller who
+        // can see the Marketing section but holds no campaigns permission
+        // (there is no such role today, but the matrix allows for one)
+        // would otherwise see a nav link to a page that immediately
+        // redirects them away.
         icon: Ticket,
-        permission: 'marketing.view',
+        permission: 'campaigns.view',
+      },
+      {
+        title: 'Calendar',
+        href: '/dashboard/promotions/calendar',
+        icon: CalendarDays,
+        permission: 'campaigns.view',
       },
       {
         title: 'Coupons',
         href: '/dashboard/coupons',
         icon: Tag,
         permission: 'marketing.view',
+      },
+      {
+        title: 'Connections',
+        href: '/dashboard/promotions/connections',
+        // Deliberately gated tighter than the rest of Marketing --
+        // connecting/disconnecting a company social account is
+        // OWNER/SUPER_ADMIN-only this phase (see
+        // staff-permissions.config.ts's social.accounts.* grants), never
+        // implied by marketing.view or campaigns.manage.
+        icon: Link2,
+        permission: 'social.accounts.view',
       },
     ],
   },

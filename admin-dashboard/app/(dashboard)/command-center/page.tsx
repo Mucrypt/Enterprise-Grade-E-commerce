@@ -42,7 +42,7 @@ import {
  */
 export default function CommandCenterPage() {
   const { legacyUserType, memberships, isLegacyAdmin } = useStaffAccess()
-  const { metrics, isConnected } = useRealtimeMetrics()
+  const { metrics, isConnected, access: realtimeAccess } = useRealtimeMetrics()
 
   const roleLabel = isLegacyAdmin
     ? legacyUserType
@@ -79,18 +79,34 @@ export default function CommandCenterPage() {
         </div>
       </div>
 
-      {/* RIGHT NOW -- genuinely real-time, WebSocket-driven, not a period aggregate. */}
+      {/* RIGHT NOW -- genuinely real-time, WebSocket-driven, not a period
+          aggregate. Global-only (see websocket.service.ts's
+          resolveDashboardAccess) -- a market-scoped caller gets an honest
+          notice instead of the global numbers or an endless "—". */}
       <section>
         <h2 className='mb-3 text-sm font-semibold text-muted-foreground'>Right now</h2>
-        <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>
-          <MetricCard label='Active visitors' value={metrics ? metrics.activeUsers : '—'} icon={Users} />
-          <MetricCard label='Orders (last hour)' value={metrics ? metrics.lastHourOrders : '—'} icon={ShoppingCart} />
-          <MetricCard
-            label='Revenue (last hour)'
-            value={metrics ? formatCurrency(metrics.lastHourRevenue) : '—'}
-            icon={DollarSign}
+        {realtimeAccess === 'global' ? (
+          <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>
+            <MetricCard label='Active visitors' value={metrics ? metrics.activeUsers : '—'} icon={Users} />
+            <MetricCard label='Orders (last hour)' value={metrics ? metrics.lastHourOrders : '—'} icon={ShoppingCart} />
+            <MetricCard
+              label='Revenue (last hour)'
+              value={metrics ? formatCurrency(metrics.lastHourRevenue) : '—'}
+              icon={DollarSign}
+            />
+          </div>
+        ) : realtimeAccess === 'pending' ? (
+          <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className='h-24 animate-pulse rounded-lg border bg-muted/30' />
+            ))}
+          </div>
+        ) : (
+          <DataQualityNotice
+            variant='banner'
+            message='Real-time metrics are global-only today -- there is no per-market live stream yet.'
           />
-        </div>
+        )}
       </section>
 
       {/* OVERVIEW -- same analyticsV2Service.getOverview() the Analytics workspace's Overview tab uses. */}
@@ -103,7 +119,9 @@ export default function CommandCenterPage() {
             </Button>
           </Link>
         </div>
-        {overview.data ? (
+        {overview.data && overview.data.mixedCurrencies ? (
+          <DataQualityNotice variant='banner' message={overview.data.message} />
+        ) : overview.data ? (
           <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
             <TrendMetric label='Revenue' comparison={overview.data.metrics.revenue} icon={DollarSign} format={formatCurrency} />
             <TrendMetric label='Orders' comparison={overview.data.metrics.orders} icon={ShoppingCart} />
@@ -200,8 +218,10 @@ export default function CommandCenterPage() {
         )}
       </section>
 
-      {/* LIVE BUSINESS -- global only; a scoped caller's own country breakdown lives in Analytics > Country Performance instead, not duplicated here. */}
-      {!overview.data?.scoped && (
+      {/* LIVE BUSINESS -- global only (same realtimeAccess gate as "Right
+          now" above); a scoped caller's own country breakdown lives in
+          Analytics > Country Performance instead, not duplicated here. */}
+      {realtimeAccess === 'global' && (
         <section>
           <h2 className='mb-3 text-sm font-semibold text-muted-foreground'>Live business</h2>
           <Card>
@@ -229,7 +249,7 @@ export default function CommandCenterPage() {
         </section>
       )}
 
-      {overview.data && overview.data.dataQuality.marginCoveragePercent < 90 && (
+      {overview.data && !overview.data.mixedCurrencies && overview.data.dataQuality.marginCoveragePercent < 90 && (
         <DataQualityNotice
           variant='banner'
           message={`Gross margin figures are based on ${overview.data.dataQuality.marginCoveragePercent.toFixed(0)}% of revenue -- see Analytics > Overview for detail.`}

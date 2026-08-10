@@ -127,6 +127,7 @@ export function ProductsTab({ filters, onScopeResolved }: ProductsTabProps) {
             emptyTitle='No product activity in this period'
           />
           <div className='space-y-1'>
+            {data.dataQuality.currencyNote && <DataQualityNotice variant='banner' message={data.dataQuality.currencyNote} />}
             <DataQualityNotice message={data.dataQuality.checkoutStartsNote} />
             <DataQualityNotice message={data.dataQuality.marginNote} />
             <DataQualityNotice message={data.dataQuality.stockNote} />

@@ -55,6 +55,30 @@ function parseDateParam(value: unknown): Date | null {
   return Number.isNaN(date.getTime()) ? null : date
 }
 
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * A bare "YYYY-MM-DD" `to`/`compareTo` value -- every admin-dashboard date
+ * preset sends exactly this, including "Today" and "Yesterday" (see
+ * useAnalyticsFilters.ts's `isoDate()`) -- parses via `new Date(...)` to
+ * UTC MIDNIGHT, the *start* of that day. Every endpoint queries with an
+ * exclusive upper bound (`created_at < to`), so used as-is that would
+ * silently exclude the entire day; for "Today"/"Yesterday" specifically,
+ * where `from` and `to` are the identical date-only string, `from === to`
+ * exactly and the query becomes `>= X AND < X` -- always zero rows,
+ * regardless of real data. Advancing a date-only `to` by one day makes it
+ * mean "through the end of that UTC day," matching what a human types
+ * "to: Aug 10" to mean, and fixes the single-day presets outright. A full
+ * datetime string (has a time component) is trusted as an exact instant
+ * and left untouched.
+ */
+function endOfDayIfDateOnly(raw: unknown, date: Date): Date {
+  if (typeof raw === 'string' && DATE_ONLY_RE.test(raw)) {
+    return new Date(date.getTime() + MS_PER_DAY)
+  }
+  return date
+}
+
 /**
  * Reads `from`/`to`/`comparisonMode`/`compareFrom`/`compareTo` off an
  * Express query object. Defaults to the last 30 days (matching this
@@ -71,7 +95,7 @@ export function parseDateRangeParams(query: Record<string, unknown>): DateRangeP
   if (query.from && !explicitFrom) return { ok: false, error: 'Invalid "from" date' }
   if (query.to && !explicitTo) return { ok: false, error: 'Invalid "to" date' }
 
-  const to = explicitTo || now
+  const to = explicitTo ? endOfDayIfDateOnly(query.to, explicitTo) : now
   const from = explicitFrom || new Date(to.getTime() - 30 * MS_PER_DAY)
 
   if (from.getTime() > to.getTime()) {
@@ -91,14 +115,24 @@ export function parseDateRangeParams(query: Record<string, unknown>): DateRangeP
 
   let compare: DateRange | null = null
   if (explicitCompareFrom && explicitCompareTo) {
-    compare = { from: explicitCompareFrom, to: explicitCompareTo }
+    compare = { from: explicitCompareFrom, to: endOfDayIfDateOnly(query.compareTo, explicitCompareTo) }
   } else if (comparisonMode === 'previous_period') {
     const durationMs = to.getTime() - from.getTime()
     compare = { from: new Date(from.getTime() - durationMs), to: new Date(from.getTime()) }
   } else if (comparisonMode === 'previous_year') {
+    // UTC getters, not local (getFullYear/getMonth/...) -- from/to are
+    // already UTC instants (see parseDateParam/endOfDayIfDateOnly above),
+    // and this codebase's whole date-range model is documented as UTC
+    // (Production Review Round 1 §6). Local getters would silently shift
+    // this range by the server process's own TZ offset whenever that
+    // isn't UTC, with nothing in the code to catch it.
     compare = {
-      from: new Date(from.getFullYear() - 1, from.getMonth(), from.getDate(), from.getHours(), from.getMinutes(), from.getSeconds()),
-      to: new Date(to.getFullYear() - 1, to.getMonth(), to.getDate(), to.getHours(), to.getMinutes(), to.getSeconds()),
+      from: new Date(
+        Date.UTC(from.getUTCFullYear() - 1, from.getUTCMonth(), from.getUTCDate(), from.getUTCHours(), from.getUTCMinutes(), from.getUTCSeconds()),
+      ),
+      to: new Date(
+        Date.UTC(to.getUTCFullYear() - 1, to.getUTCMonth(), to.getUTCDate(), to.getUTCHours(), to.getUTCMinutes(), to.getUTCSeconds()),
+      ),
     }
   }
 

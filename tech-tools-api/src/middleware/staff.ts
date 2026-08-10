@@ -31,7 +31,11 @@ export interface StaffAuthRequest extends AuthRequest {
   staff?: StaffContext
 }
 
-async function loadStaffContext(userId: string): Promise<StaffContext> {
+// Exported for reuse by websocket.service.ts's connection-time auth check
+// (ADMIN-2B Production Review Round 1) -- the Socket.IO 'dashboard' room
+// needs the exact same ACTIVE-membership/global-vs-scoped resolution every
+// REST endpoint already uses, not a second reimplementation of it.
+export async function loadStaffContext(userId: string): Promise<StaffContext> {
   const result = await query(
     `SELECT id, role, market_scope
      FROM staff_memberships

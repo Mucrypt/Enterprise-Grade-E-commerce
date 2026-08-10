@@ -25,10 +25,23 @@ interface DashboardMetrics {
   }[]
 }
 
+/**
+ * What the server told us about this connection's right to see GLOBAL
+ * dashboard metrics (see websocket.service.ts's resolveDashboardAccess) --
+ * 'pending' until the 'registered' response arrives. 'global' is the only
+ * status that will ever actually receive a metrics-update event; 'scoped'
+ * (a market-scoped staff member, e.g. MARKET_MANAGER) and 'denied'
+ * (unauthenticated/no analytics access) are told apart so the UI can show
+ * an honest "not available for your role" notice instead of an endless
+ * loading state that looks like a bug.
+ */
+export type DashboardAccess = 'pending' | 'global' | 'scoped' | 'denied'
+
 interface UseRealtimeMetricsReturn {
   metrics: DashboardMetrics | null
   isConnected: boolean
   error: string | null
+  access: DashboardAccess
 }
 
 // NEXT_PUBLIC_API_URL includes the /api/v1 path suffix (e.g. https://techtoolstore.com/api/v1);
@@ -41,17 +54,22 @@ export function useRealtimeMetrics(): UseRealtimeMetricsReturn {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [access, setAccess] = useState<DashboardAccess>('pending')
   const [socket, setSocket] = useState<Socket | null>(null)
 
   useEffect(() => {
     try {
-      // Create socket connection
+      // Create socket connection -- the JWT travels in the handshake `auth`
+      // payload (not a header, since browsers can't set custom headers on
+      // a websocket upgrade request); the server verifies it before ever
+      // joining this socket to the 'dashboard' room.
       const newSocket = io(API_URL, {
         transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
         reconnectionAttempts: 5,
+        auth: { token: typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null },
       })
 
       // Handle connection
@@ -63,6 +81,10 @@ export function useRealtimeMetrics(): UseRealtimeMetricsReturn {
         newSocket.emit('register', {
           type: 'dashboard',
         })
+      })
+
+      newSocket.on('registered', (data: { access?: DashboardAccess }) => {
+        if (data.access) setAccess(data.access)
       })
 
       // Handle metrics updates
@@ -109,7 +131,7 @@ export function useRealtimeMetrics(): UseRealtimeMetricsReturn {
     return () => clearInterval(pingInterval)
   }, [socket, isConnected])
 
-  return { metrics, isConnected, error }
+  return { metrics, isConnected, error, access }
 }
 
 /**
@@ -132,6 +154,7 @@ interface UseRealtimeAlertsReturn {
   dismissedAlert: { alertId: string } | null
   isConnected: boolean
   error: string | null
+  access: DashboardAccess
 }
 
 export function useRealtimeAlerts(): UseRealtimeAlertsReturn {
@@ -140,17 +163,20 @@ export function useRealtimeAlerts(): UseRealtimeAlertsReturn {
   const [dismissedAlert, setDismissedAlert] = useState<{ alertId: string } | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [access, setAccess] = useState<DashboardAccess>('pending')
   const [socket, setSocket] = useState<Socket | null>(null)
 
   useEffect(() => {
     try {
-      // Create socket connection
+      // Create socket connection -- same handshake-auth token as
+      // useRealtimeMetrics; alert-* broadcasts are equally global-only.
       const newSocket = io(API_URL, {
         transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
         reconnectionAttempts: 5,
+        auth: { token: typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null },
       })
 
       // Handle connection
@@ -162,6 +188,10 @@ export function useRealtimeAlerts(): UseRealtimeAlertsReturn {
         newSocket.emit('register', {
           type: 'dashboard',
         })
+      })
+
+      newSocket.on('registered', (data: { access?: DashboardAccess }) => {
+        if (data.access) setAccess(data.access)
       })
 
       // Handle new alerts
@@ -201,7 +231,7 @@ export function useRealtimeAlerts(): UseRealtimeAlertsReturn {
     }
   }, [])
 
-  return { newAlert, acknowledgedAlert, dismissedAlert, isConnected, error }
+  return { newAlert, acknowledgedAlert, dismissedAlert, isConnected, error, access }
 }
 
 /**

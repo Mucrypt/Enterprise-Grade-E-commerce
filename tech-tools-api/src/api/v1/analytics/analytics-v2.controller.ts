@@ -59,6 +59,88 @@ function applyCountryFilterOverride(scope: StaffScope, requestedCountry: unknown
 }
 
 // ============================================================
+// Currency safety (Production Review Round 1 §5)
+// ============================================================
+// Every endpoint that sums a monetary order/payment-level field (revenue,
+// AOV, gross margin, payment-failure amounts) must never blindly SUM
+// across different currencies into one meaningless blended number.
+// orders.currency defaults to 'EUR' and production is EUR-only today, but
+// the column exists precisely because Global Commerce will introduce
+// other transaction currencies later -- this check makes every endpoint
+// safe for that day without waiting for it. No FX conversion is ever
+// performed; a mixed-currency period is reported as such (grouped by
+// currency), never summed into a fabricated total.
+
+export interface CurrencyCheck {
+  mixed: boolean
+  /** Set only when every matching row shares one currency; null otherwise (including the zero-rows case, where currency is simply unknown). */
+  currency: string | null
+}
+
+async function checkOrderCurrency(
+  range: DateRange,
+  scope: StaffScope,
+): Promise<CurrencyCheck> {
+  const scopeFilter = orderCountryScopeFilter(scope, 3, "o.shipping_address->>'country'")
+  const result = await query(
+    `SELECT DISTINCT o.currency
+     FROM orders o
+     WHERE o.created_at >= $1 AND o.created_at < $2
+       AND o.order_status IN ${COMPLETED_ORDER_STATUSES}
+       ${scopeFilter.clause}`,
+    [range.from, range.to, ...scopeFilter.params],
+  )
+  if (result.rows.length === 0) return { mixed: false, currency: null }
+  if (result.rows.length === 1) return { mixed: false, currency: result.rows[0].currency }
+  return { mixed: true, currency: null }
+}
+
+/**
+ * Mirrors getOperations' own paymentFailures query exactly (same join,
+ * same scope filter) -- checking currency spread across ALL failed
+ * payments globally would give a scoped caller a wrong answer (mixed when
+ * their own subset is single-currency, or vice versa).
+ */
+async function checkPaymentCurrency(range: DateRange, scope: StaffScope): Promise<CurrencyCheck> {
+  const scopeFilter = orderCountryScopeFilter(scope, 3, "o.shipping_address->>'country'")
+  const result = await query(
+    `SELECT DISTINCT pay.currency
+     FROM payments pay
+     JOIN orders o ON o.id = pay.order_id
+     WHERE pay.status = 'failed' AND pay.created_at >= $1 AND pay.created_at < $2
+       ${scopeFilter.clause}`,
+    [range.from, range.to, ...scopeFilter.params],
+  )
+  if (result.rows.length === 0) return { mixed: false, currency: null }
+  if (result.rows.length === 1) return { mixed: false, currency: result.rows[0].currency }
+  return { mixed: true, currency: null }
+}
+
+/**
+ * Grouped-by-currency revenue breakdown -- used only once an endpoint
+ * already knows (via checkOrderCurrency) that its period is mixed, so the
+ * response can show real per-currency figures instead of just refusing to
+ * answer.
+ */
+async function getRevenueByCurrency(range: DateRange, scope: StaffScope) {
+  const scopeFilter = orderCountryScopeFilter(scope, 3, "o.shipping_address->>'country'")
+  const result = await query(
+    `SELECT o.currency, COUNT(*) as order_count, COALESCE(SUM(o.grand_total), 0) as revenue
+     FROM orders o
+     WHERE o.created_at >= $1 AND o.created_at < $2
+       AND o.order_status IN ${COMPLETED_ORDER_STATUSES}
+       ${scopeFilter.clause}
+     GROUP BY o.currency`,
+    [range.from, range.to, ...scopeFilter.params],
+  )
+  return result.rows.map((row: any) => ({
+    currency: row.currency,
+    orderCount: safeNumber(row.order_count),
+    revenue: safeNumber(row.revenue),
+  }))
+}
+
+// ============================================================
 // Overview
 // ============================================================
 
@@ -219,6 +301,23 @@ export const getOverview = async (req: StaffAuthRequest, res: Response): Promise
     const scope = applyCountryFilterOverride(resolveStaffScope(req), req.query.country)
     const range = parsed.range
 
+    const currencyCheck = await checkOrderCurrency({ from: range.from, to: range.to }, scope)
+    if (currencyCheck.mixed) {
+      const breakdown = await getRevenueByCurrency({ from: range.from, to: range.to }, scope)
+      res.json({
+        success: true,
+        mixedCurrencies: true,
+        currency: null,
+        currencyBreakdown: breakdown,
+        period: { from: range.from.toISOString(), to: range.to.toISOString() },
+        scoped: !scope.isGlobal,
+        markets: scope.isGlobal ? [] : scope.countries,
+        message:
+          'This period includes orders in more than one currency -- revenue, AOV, and gross margin cannot be safely combined into one figure without currency conversion, which this system does not perform. See currencyBreakdown for real per-currency totals.',
+      })
+      return
+    }
+
     const [current, previous] = await Promise.all([
       computeOverviewMetrics({ from: range.from, to: range.to }, scope),
       range.compare ? computeOverviewMetrics(range.compare, scope) : Promise.resolve(null),
@@ -243,6 +342,8 @@ export const getOverview = async (req: StaffAuthRequest, res: Response): Promise
 
     res.json({
       success: true,
+      mixedCurrencies: false,
+      currency: currencyCheck.currency,
       period: { from: range.from.toISOString(), to: range.to.toISOString() },
       comparisonMode: range.comparisonMode,
       compare: range.compare
@@ -318,6 +419,23 @@ export const getSales = async (req: StaffAuthRequest, res: Response): Promise<vo
     const { from, to } = parsed.range
     const productId = parseUuidParam(req.query.productId)
     const categoryId = parseUuidParam(req.query.categoryId)
+
+    const currencyCheck = await checkOrderCurrency({ from, to }, scope)
+    if (currencyCheck.mixed) {
+      const breakdown = await getRevenueByCurrency({ from, to }, scope)
+      res.json({
+        success: true,
+        mixedCurrencies: true,
+        currency: null,
+        currencyBreakdown: breakdown,
+        period: { from: from.toISOString(), to: to.toISOString() },
+        scoped: !scope.isGlobal,
+        markets: scope.isGlobal ? [] : scope.countries,
+        message:
+          'This period includes orders in more than one currency -- revenue-shaped figures (trend, by-product, by-country, units/AOV) cannot be safely combined into one number without currency conversion, which this system does not perform. See currencyBreakdown for real per-currency totals.',
+      })
+      return
+    }
 
     // Every sub-query below shares the same three building blocks --
     // [date range params, order-scope filter, product/category filter] --
@@ -435,6 +553,8 @@ export const getSales = async (req: StaffAuthRequest, res: Response): Promise<vo
 
     res.json({
       success: true,
+      mixedCurrencies: false,
+      currency: currencyCheck.currency,
       period: { from: from.toISOString(), to: to.toISOString() },
       scoped: !scope.isGlobal,
       markets: scope.isGlobal ? [] : scope.countries,
@@ -714,6 +834,15 @@ export const getProductIntelligence = async (req: StaffAuthRequest, res: Respons
     const categoryFilter = categoryId ? `AND p.category_id = $${4 + sessionScope.params.length + orderScope.params.length}` : ''
     const categoryParam = categoryId ? [categoryId] : []
 
+    // Views/carts/stock are currency-independent and stay real regardless;
+    // only the money fields (revenue, margin) get hidden when the period's
+    // orders span more than one currency -- see Production Review Round 1
+    // §5. Sort order (which may be revenue-based) is left as-is even when
+    // hidden: a ranking isn't the same kind of claim as a displayed number,
+    // so an unconverted-but-internally-consistent SQL ORDER BY is an
+    // acceptable approximation where a displayed blended total would not be.
+    const currencyCheck = await checkOrderCurrency({ from, to }, scope)
+
     const result = await query(
       `WITH view_stats AS (
          SELECT e.product_id,
@@ -778,10 +907,10 @@ export const getProductIntelligence = async (req: StaffAuthRequest, res: Respons
       const uniqueVisitors = safeNumber(row.unique_visitors)
       const addToCarts = safeNumber(row.add_to_carts)
       const unitsPurchased = safeNumber(row.units_purchased)
-      const revenue = safeNumber(row.revenue)
+      const revenue = currencyCheck.mixed ? null : safeNumber(row.revenue)
       const hasCostPrice = row.cost_price !== null && row.cost_price !== undefined
       const sellPrice = safeNumber(row.sale_price) || safeNumber(row.base_price)
-      const marginPerUnit = hasCostPrice ? safeRound(sellPrice - safeNumber(row.cost_price)) : null
+      const marginPerUnit = !currencyCheck.mixed && hasCostPrice ? safeRound(sellPrice - safeNumber(row.cost_price)) : null
 
       return {
         productId: row.product_id,
@@ -801,6 +930,8 @@ export const getProductIntelligence = async (req: StaffAuthRequest, res: Respons
 
     res.json({
       success: true,
+      mixedCurrencies: currencyCheck.mixed,
+      currency: currencyCheck.currency,
       period: { from: from.toISOString(), to: to.toISOString() },
       scoped: !scope.isGlobal,
       markets: scope.isGlobal ? [] : scope.countries,
@@ -813,6 +944,9 @@ export const getProductIntelligence = async (req: StaffAuthRequest, res: Respons
           'Margin is shown only for products with a recorded cost price (products.cost_price); products without one show no margin figure rather than an assumed 0.',
         stockNote:
           'currentStock is summed from inventory.available_stock across all warehouse rows for the product -- the same source checkout itself trusts, not the separate (and potentially stale) products.stock_quantity column.',
+        currencyNote: currencyCheck.mixed
+          ? 'Revenue and margin are hidden for every product this period -- orders span more than one currency and this system never sums or converts across currencies. Views, carts, and stock are unaffected and still shown.'
+          : null,
       },
     })
   } catch (error) {
@@ -1074,6 +1208,24 @@ export const getAcquisition = async (req: StaffAuthRequest, res: Response): Prom
   try {
     const scope = applyCountryFilterOverride(resolveStaffScope(req), req.query.country)
     const { from, to } = parsed.range
+
+    const currencyCheck = await checkOrderCurrency({ from, to }, scope)
+    if (currencyCheck.mixed) {
+      const breakdown = await getRevenueByCurrency({ from, to }, scope)
+      res.json({
+        success: true,
+        mixedCurrencies: true,
+        currency: null,
+        currencyBreakdown: breakdown,
+        period: { from: from.toISOString(), to: to.toISOString() },
+        scoped: !scope.isGlobal,
+        markets: scope.isGlobal ? [] : scope.countries,
+        message:
+          'This period includes orders in more than one currency -- per-channel revenue cannot be safely combined into one number without currency conversion, which this system does not perform. See currencyBreakdown for real per-currency totals.',
+      })
+      return
+    }
+
     const sessionScope = sessionCountryScopeFilter(scope, 3)
 
     const [funnelResult, revenueResult] = await Promise.all([
@@ -1122,7 +1274,7 @@ export const getAcquisition = async (req: StaffAuthRequest, res: Response): Prom
       ),
     ])
 
-    const key = (row: any) => `${row.source} ${row.medium} ${row.campaign}`
+    const key = (row: any) => `${row.source}|${row.medium}|${row.campaign}`
     const revenueByKey = new Map(revenueResult.rows.map((row: any) => [key(row), row]))
 
     const channels = funnelResult.rows.map((row: any) => {
@@ -1146,6 +1298,8 @@ export const getAcquisition = async (req: StaffAuthRequest, res: Response): Prom
 
     res.json({
       success: true,
+      mixedCurrencies: false,
+      currency: currencyCheck.currency,
       period: { from: from.toISOString(), to: to.toISOString() },
       scoped: !scope.isGlobal,
       markets: scope.isGlobal ? [] : scope.countries,
@@ -1271,6 +1425,7 @@ export const getOperations = async (req: StaffAuthRequest, res: Response): Promi
       supplierImportFailures,
       lowStockHighDemand,
       refunds,
+      paymentCurrencyCheck,
     ] = await Promise.all([
       queries.paymentFailures,
       queries.cancellations,
@@ -1279,6 +1434,7 @@ export const getOperations = async (req: StaffAuthRequest, res: Response): Promi
       queries.supplierImportFailures,
       queries.lowStockHighDemand,
       queries.refunds,
+      checkPaymentCurrency({ from, to }, scope),
     ])
 
     let activeAlerts: { critical: number; high: number; medium: number; low: number } | null = null
@@ -1328,7 +1484,9 @@ export const getOperations = async (req: StaffAuthRequest, res: Response): Promi
       recentAlerts,
       paymentFailures: {
         count: safeNumber(paymentFailures.rows[0]?.count),
-        amount: safeNumber(paymentFailures.rows[0]?.amount),
+        amount: paymentCurrencyCheck.mixed ? null : safeNumber(paymentFailures.rows[0]?.amount),
+        currency: paymentCurrencyCheck.currency,
+        mixedCurrencies: paymentCurrencyCheck.mixed,
       },
       cancellations: safeNumber(cancellations.rows[0]?.count),
       refunds: refunds.available ? refunds.refundCount : null,
@@ -1351,6 +1509,9 @@ export const getOperations = async (req: StaffAuthRequest, res: Response): Promi
           : 'Alerts are not shown for a market-scoped view -- the alerts table has no country/market dimension, so a scoped alert feed would either be empty or misleadingly global. See docs/ADMIN-2A5-STAFF-ACCESS-INTEGRATION-REPORT.md.',
         shippingNote:
           'overdueShipments approximates "shipping failures" as shipped orders past their estimated_delivery_date with no recorded actual_delivery_date -- there is no explicit shipping-failure status in this schema.',
+        currencyNote: paymentCurrencyCheck.mixed
+          ? 'paymentFailures.amount is hidden this period -- the failed payments span more than one currency and this system never sums or converts across currencies.'
+          : null,
       },
     })
   } catch (error) {
@@ -1391,8 +1552,14 @@ export const getCountryPerformance = async (req: StaffAuthRequest, res: Response
          GROUP BY country_code`,
         [from, to, ...sessionScope.params],
       ),
+      // Grouped by (country, currency), not just country -- a single
+      // country's orders could themselves span more than one currency
+      // once Global Commerce lands. Aggregated per-country in JS below,
+      // where a country with more than one currency row gets a
+      // currencyBreakdown instead of one (potentially blended) revenue
+      // number -- see Production Review Round 1 §5.
       query(
-        `SELECT s.country_code as country, COUNT(DISTINCT o.id) as orders, COALESCE(SUM(o.grand_total), 0) as revenue
+        `SELECT s.country_code as country, o.currency, COUNT(DISTINCT o.id) as orders, COALESCE(SUM(o.grand_total), 0) as revenue
          FROM events_core e
          JOIN user_sessions s ON s.session_id = e.session_id
          JOIN orders o ON o.id = e.order_id AND o.order_status IN ${COMPLETED_ORDER_STATUSES}
@@ -1400,7 +1567,7 @@ export const getCountryPerformance = async (req: StaffAuthRequest, res: Response
            AND e.event_time >= $1 AND e.event_time < $2
            AND s.country_code IS NOT NULL
            ${sessionScope.clause}
-         GROUP BY s.country_code`,
+         GROUP BY s.country_code, o.currency`,
         [from, to, ...sessionScope.params],
       ),
       query(
@@ -1453,7 +1620,15 @@ export const getCountryPerformance = async (req: StaffAuthRequest, res: Response
       ),
     ])
 
-    const ordersByCountry = new Map(ordersResult.rows.map((row: any) => [row.country, row]))
+    // Multiple rows per country now (one per currency) -- grouped here
+    // rather than in SQL so the mixed-currency decision can be made
+    // per-country in plain JS.
+    const orderRowsByCountry = new Map<string, any[]>()
+    for (const row of ordersResult.rows) {
+      const existing = orderRowsByCountry.get(row.country) || []
+      existing.push(row)
+      orderRowsByCountry.set(row.country, existing)
+    }
     const topProductByCountry = new Map(topProductResult.rows.map((row: any) => [row.country, row]))
     const topSearchByCountry = new Map(topSearchResult.rows.map((row: any) => [row.country, row]))
     const topChannelByCountry = new Map(topChannelResult.rows.map((row: any) => [row.country, row]))
@@ -1461,24 +1636,33 @@ export const getCountryPerformance = async (req: StaffAuthRequest, res: Response
     const countries = visitorsResult.rows.map((row: any) => {
       const country = row.country
       const visitors = safeNumber(row.visitors)
-      const orderRow: any = ordersByCountry.get(country)
+      const currencyRows = orderRowsByCountry.get(country) || []
       const productRow: any = topProductByCountry.get(country)
       const searchRow: any = topSearchByCountry.get(country)
       const channelRow: any = topChannelByCountry.get(country)
-      const orders = safeNumber(orderRow?.orders)
+      const orders = currencyRows.reduce((sum, r) => sum + safeNumber(r.orders), 0)
+
+      const isMixedCurrency = currencyRows.length > 1
+      const revenue = isMixedCurrency ? null : currencyRows.length === 1 ? safeNumber(currencyRows[0].revenue) : 0
+      const currency = isMixedCurrency ? null : currencyRows[0]?.currency ?? null
 
       return {
         country,
         visitors,
         orders,
-        revenue: safeNumber(orderRow?.revenue),
+        revenue,
+        currency,
+        mixedCurrencies: isMixedCurrency,
+        currencyBreakdown: isMixedCurrency
+          ? currencyRows.map((r) => ({ currency: r.currency, orders: safeNumber(r.orders), revenue: safeNumber(r.revenue) }))
+          : undefined,
         conversionRate: safeRound(safeDivide(orders, visitors) * 100),
         topProduct: productRow ? { productId: productRow.product_id, productName: productRow.product_name } : null,
         topSearch: searchRow ? { query: searchRow.search_query, count: safeNumber(searchRow.search_count) } : null,
         topChannel: channelRow ? channelRow.source : null,
       }
     })
-    countries.sort((a, b) => b.revenue - a.revenue)
+    countries.sort((a, b) => (b.revenue ?? 0) - (a.revenue ?? 0))
 
     res.json({
       success: true,

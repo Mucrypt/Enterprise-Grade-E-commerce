@@ -34,7 +34,19 @@ export function CountryPerformanceTab({ filters, onScopeResolved }: CountryPerfo
     { key: 'country', header: 'Country', render: (r) => r.country },
     { key: 'visitors', header: 'Visitors', align: 'right', render: (r) => formatNumber(r.visitors) },
     { key: 'orders', header: 'Orders', align: 'right', render: (r) => formatNumber(r.orders) },
-    { key: 'revenue', header: 'Revenue', align: 'right', render: (r) => formatCurrency(r.revenue) },
+    {
+      key: 'revenue',
+      header: 'Revenue',
+      align: 'right',
+      render: (r) =>
+        r.mixedCurrencies ? (
+          <span className='text-xs text-muted-foreground' title='This country has orders in more than one currency this period -- see the export for a per-currency breakdown.'>
+            Mixed currencies
+          </span>
+        ) : (
+          formatCurrency(r.revenue)
+        ),
+    },
     { key: 'conversion', header: 'Conversion', align: 'right', render: (r) => formatPercent(r.conversionRate) },
     { key: 'topProduct', header: 'Top Product', render: (r) => r.topProduct?.productName || '—' },
     { key: 'topSearch', header: 'Top Search', render: (r) => r.topSearch?.query || '—' },

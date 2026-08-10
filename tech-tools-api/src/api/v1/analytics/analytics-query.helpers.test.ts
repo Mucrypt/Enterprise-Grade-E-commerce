@@ -73,6 +73,61 @@ describe('parseDateRangeParams', () => {
     const result = parseDateRangeParams({ comparisonMode: 'yesterday' })
     expect(result.ok).toBe(false)
   })
+
+  // Production Review Round 1 §6 -- the admin dashboard's "Today"/
+  // "Yesterday" presets send identical date-only from/to strings (see
+  // useAnalyticsFilters.ts's isoDate()). Every endpoint queries with an
+  // exclusive upper bound (`created_at < to`), so from===to used to mean
+  // "zero rows, always," regardless of real data -- a single-day preset
+  // could never show anything.
+  it('a single-day range ("Today", from===to as date-only strings) spans the whole day, not zero width', () => {
+    const result = parseDateRangeParams({ from: '2026-08-10', to: '2026-08-10', comparisonMode: 'none' })
+    expect(result.ok).toBe(true)
+    if (!result.ok || !result.range) return
+    expect(result.range.from.toISOString()).toBe('2026-08-10T00:00:00.000Z')
+    expect(result.range.to.toISOString()).toBe('2026-08-11T00:00:00.000Z')
+    expect(result.range.to.getTime()).toBeGreaterThan(result.range.from.getTime())
+  })
+
+  it('a date-only "to" in a multi-day range includes that whole day, not excludes it', () => {
+    const result = parseDateRangeParams({ from: '2026-01-01', to: '2026-01-08', comparisonMode: 'none' })
+    expect(result.ok).toBe(true)
+    if (!result.ok || !result.range) return
+    // Jan 8 00:00Z (bumped to Jan 9 00:00Z) so `created_at < to` still
+    // captures every moment of Jan 8th, not just up to its first instant.
+    expect(result.range.to.toISOString()).toBe('2026-01-09T00:00:00.000Z')
+  })
+
+  it('leaves a full datetime "to" (has a time component) untouched -- only bare YYYY-MM-DD gets the end-of-day bump', () => {
+    const result = parseDateRangeParams({ from: '2026-01-01', to: '2026-01-08T15:30:00.000Z', comparisonMode: 'none' })
+    expect(result.ok).toBe(true)
+    if (!result.ok || !result.range) return
+    expect(result.range.to.toISOString()).toBe('2026-01-08T15:30:00.000Z')
+  })
+
+  it('applies the same date-only end-of-day fix to an explicit compareTo', () => {
+    const result = parseDateRangeParams({
+      from: '2026-03-01',
+      to: '2026-03-31',
+      compareFrom: '2020-01-01',
+      compareTo: '2020-01-01',
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok || !result.range) return
+    expect(result.range.compare!.to.toISOString()).toBe('2020-01-02T00:00:00.000Z')
+    expect(result.range.compare!.to.getTime()).toBeGreaterThan(result.range.compare!.from.getTime())
+  })
+
+  it('computes previous_year using UTC calendar fields, immune to the server process\'s local TZ', () => {
+    const result = parseDateRangeParams({ from: '2026-03-01', to: '2026-03-31', comparisonMode: 'previous_year' })
+    expect(result.ok).toBe(true)
+    if (!result.ok || !result.range) return
+    expect(result.range.compare!.from.toISOString()).toBe('2025-03-01T00:00:00.000Z')
+    // to was bumped to 2026-04-01T00:00Z by the date-only end-of-day fix
+    // before the previous_year shift, so the previous-year range mirrors
+    // the same (correct, inclusive) span, not the original unbumped date.
+    expect(result.range.compare!.to.toISOString()).toBe('2025-04-01T00:00:00.000Z')
+  })
 })
 
 describe('safeNumber / safeDivide / safeRound -- never NaN/Infinity', () => {

@@ -38,10 +38,37 @@ interface ScopedResponse {
   markets: string[]
 }
 
+// ---------- Currency safety (Production Review Round 1 §5) ----------
+// orders.currency defaults to 'EUR' today, but the column exists precisely
+// so Global Commerce can introduce other currencies later. No endpoint here
+// ever sums or converts across currencies -- a period spanning more than
+// one currency comes back as an honest "mixed" shape instead of a fake
+// blended total. See tech-tools-api's analytics-v2.controller.ts §5 and
+// docs/ADMIN-2B-ANALYTICS-2-IMPLEMENTATION-REPORT.md's Production Review
+// Round 1 section.
+
+export interface CurrencyBreakdownRow {
+  currency: string
+  orderCount: number
+  revenue: number
+}
+
+/** Whole-endpoint circuit-breaker shape used by Overview/Sales/Acquisition -- these are single-aggregate-shaped responses where the primary purpose IS the revenue figure, so a mixed period replaces the entire payload rather than hiding individual fields. */
+interface MixedCurrencyPayload extends ScopedResponse {
+  success: true
+  mixedCurrencies: true
+  currency: null
+  currencyBreakdown: CurrencyBreakdownRow[]
+  period: AnalyticsPeriod
+  message: string
+}
+
 // ---------- Overview ----------
 
-export interface OverviewResponse extends ScopedResponse {
+export interface OverviewMetricsPayload extends ScopedResponse {
   success: true
+  mixedCurrencies: false
+  currency: string | null
   period: AnalyticsPeriod
   comparisonMode: ComparisonMode
   compare: AnalyticsPeriod | null
@@ -63,14 +90,18 @@ export interface OverviewResponse extends ScopedResponse {
   }
 }
 
+export type OverviewResponse = OverviewMetricsPayload | MixedCurrencyPayload
+
 async function getOverview(filters: AnalyticsDateFilters = {}): Promise<OverviewResponse> {
   return apiClient.get<OverviewResponse>('/analytics/overview', { params: filters })
 }
 
 // ---------- Sales ----------
 
-export interface SalesResponse extends ScopedResponse {
+export interface SalesDataPayload extends ScopedResponse {
   success: true
+  mixedCurrencies: false
+  currency: string | null
   period: AnalyticsPeriod
   filters: { productId: string | null; categoryId: string | null }
   trend: { date: string; revenue: number; orders: number; aov: number }[]
@@ -84,6 +115,8 @@ export interface SalesResponse extends ScopedResponse {
   refundRate: number | null
   dataQuality: { refundRateAvailable: boolean }
 }
+
+export type SalesResponse = SalesDataPayload | MixedCurrencyPayload
 
 async function getSales(
   filters: AnalyticsDateFilters & { productId?: string; categoryId?: string } = {},
@@ -143,7 +176,8 @@ export interface ProductIntelligenceRow {
   uniqueVisitors: number
   addToCarts: number
   purchases: number
-  revenue: number
+  /** null when the period's orders span more than one currency -- see mixedCurrencies below. Views/carts/stock stay real regardless. */
+  revenue: number | null
   conversionRate: number
   cartToPurchaseRate: number
   currentStock: number | null
@@ -152,10 +186,12 @@ export interface ProductIntelligenceRow {
 
 export interface ProductIntelligenceResponse extends ScopedResponse {
   success: true
+  mixedCurrencies: boolean
+  currency: string | null
   period: AnalyticsPeriod
   sort: ProductSort
   products: ProductIntelligenceRow[]
-  dataQuality: { checkoutStartsNote: string; marginNote: string; stockNote: string }
+  dataQuality: { checkoutStartsNote: string; marginNote: string; stockNote: string; currencyNote: string | null }
 }
 
 async function getProductIntelligence(
@@ -199,13 +235,17 @@ export interface AcquisitionChannel {
   conversionRate: number
 }
 
-export interface AcquisitionResponse extends ScopedResponse {
+export interface AcquisitionDataPayload extends ScopedResponse {
   success: true
+  mixedCurrencies: false
+  currency: string | null
   period: AnalyticsPeriod
   channels: AcquisitionChannel[]
   totals: { sessions: number; orders: number; revenue: number }
   dataQuality: { note: string }
 }
+
+export type AcquisitionResponse = AcquisitionDataPayload | MixedCurrencyPayload
 
 async function getAcquisition(filters: AnalyticsDateFilters = {}): Promise<AcquisitionResponse> {
   return apiClient.get<AcquisitionResponse>('/analytics/acquisition', { params: filters })
@@ -218,14 +258,14 @@ export interface OperationsResponse extends ScopedResponse {
   period: AnalyticsPeriod
   activeAlerts: { critical: number; high: number; medium: number; low: number } | null
   recentAlerts: { id: string; type: string; severity: string; title: string; triggeredAt: string }[]
-  paymentFailures: { count: number; amount: number }
+  paymentFailures: { count: number; amount: number | null; currency: string | null; mixedCurrencies: boolean }
   cancellations: number
   refunds: number | null
   overdueShipments: number
   stuckOrders: { count: number; thresholdDays: number }
   supplierImportFailures: number
   lowStockHighDemand: { productId: string; productName: string; sku: string; addToCartCount: number; currentStock: number }[]
-  dataQuality: { alertsNote: string | null; shippingNote: string }
+  dataQuality: { alertsNote: string | null; shippingNote: string; currencyNote: string | null }
 }
 
 async function getOperations(filters: AnalyticsDateFilters = {}): Promise<OperationsResponse> {
@@ -238,7 +278,11 @@ export interface CountryPerformanceRow {
   country: string
   visitors: number
   orders: number
-  revenue: number
+  /** null when this country's orders span more than one currency this period -- see currencyBreakdown. */
+  revenue: number | null
+  currency: string | null
+  mixedCurrencies: boolean
+  currencyBreakdown?: { currency: string; orders: number; revenue: number }[]
   conversionRate: number
   topProduct: { productId: string; productName: string } | null
   topSearch: { query: string; count: number } | null

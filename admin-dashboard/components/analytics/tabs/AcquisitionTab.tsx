@@ -7,6 +7,7 @@ import { AnalyticsFilterBar } from '../AnalyticsFilterBar'
 import { AnalyticsTable, AnalyticsTableColumn } from '../AnalyticsTable'
 import { ExportButton } from '../ExportButton'
 import { DataQualityNotice } from '../DataQualityNotice'
+import { MixedCurrencyNotice } from '../MixedCurrencyNotice'
 import { MetricCard } from '@/components/dashboard/MetricCard'
 import { formatCurrency, formatNumber, formatPercent } from '../format'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -44,11 +45,13 @@ export function AcquisitionTab({ filters, onScopeResolved }: AcquisitionTabProps
       <AnalyticsFilterBar
         filters={filters}
         visible={[]}
-        trailing={data && <ExportButton filename='acquisition.csv' rows={data.channels} />}
+        trailing={data && !data.mixedCurrencies && <ExportButton filename='acquisition.csv' rows={data.channels} />}
       />
 
       {isLoading ? (
         <Skeleton className='h-80 rounded-lg' />
+      ) : data && data.mixedCurrencies ? (
+        <MixedCurrencyNotice message={data.message} breakdown={data.currencyBreakdown} />
       ) : data ? (
         <>
           <div className='grid gap-4 sm:grid-cols-3'>

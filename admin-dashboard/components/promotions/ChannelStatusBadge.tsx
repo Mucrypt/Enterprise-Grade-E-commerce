@@ -1,0 +1,28 @@
+import { Badge } from '@/components/ui/badge'
+import type { ChannelPostStatus, PlatformReadiness } from '@/services/promotion.service'
+
+const STATUS_STYLE: Record<ChannelPostStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+  DRAFT: { label: 'Draft', variant: 'outline' },
+  QUEUED: { label: 'Queued', variant: 'secondary' },
+  PUBLISHING: { label: 'Publishing', variant: 'secondary' },
+  PUBLISHED: { label: 'Published', variant: 'default' },
+  FAILED: { label: 'Failed', variant: 'destructive' },
+  CANCELLED: { label: 'Cancelled', variant: 'outline' },
+  SKIPPED_DRY_RUN: { label: 'Skipped (dry run)', variant: 'outline' },
+}
+
+export function ChannelStatusBadge({ status }: { status: ChannelPostStatus }) {
+  const style = STATUS_STYLE[status]
+  return <Badge variant={style.variant}>{style.label}</Badge>
+}
+
+const READINESS_STYLE: Record<PlatformReadiness, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+  NOT_CONFIGURED: { label: 'Not configured', variant: 'outline' },
+  NEEDS_CREDENTIALS: { label: 'Needs credentials', variant: 'secondary' },
+  AVAILABLE: { label: 'Available', variant: 'default' },
+}
+
+export function PlatformReadinessBadge({ readiness }: { readiness: PlatformReadiness }) {
+  const style = READINESS_STYLE[readiness]
+  return <Badge variant={style.variant}>{style.label}</Badge>
+}

@@ -1,6 +1,14 @@
 import * as dotenv from 'dotenv'
 dotenv.config()
 
+// Pins the whole Node process to UTC, so every `new Date()`/local-getter
+// call (event ingestion timestamps written to the schema's several
+// `timestamp without time zone` columns, the previous-year comparison
+// math, etc.) behaves identically regardless of host/OS default -- see
+// docs/ADMIN-2B-ANALYTICS-2-IMPLEMENTATION-REPORT.md's Production Review
+// Round 1 §6. Must run before any other module constructs a Date.
+process.env.TZ = process.env.TZ || 'UTC'
+
 import http from 'http'
 import app from './app'
 import { connectDatabase } from './database/connection'
@@ -21,6 +29,10 @@ import {
   startMetricsBroadcaster,
   stopMetricsBroadcaster,
 } from './workers/metrics.broadcaster'
+import {
+  startPromotionQueueWorker,
+  stopPromotionQueueWorker,
+} from './services/promotion-campaign.queue'
 import { webSocketService } from './services/websocket.service'
 import { notificationDispatcher } from './services/notification-dispatcher.service'
 import shippingService from './services/shipping'
@@ -67,6 +79,7 @@ async function startServer() {
     startSupplierGuardrailsWorker()
     startAnomalyDetectionWorker()
     startMetricsBroadcaster()
+    startPromotionQueueWorker()
 
     // Start server
     httpServer.listen(PORT, () => {
@@ -90,6 +103,7 @@ process.on('SIGTERM', () => {
   stopSupplierGuardrailsWorker()
   stopAnomalyDetectionWorker()
   stopMetricsBroadcaster()
+  stopPromotionQueueWorker()
   httpServer.close(() => {
     logger.info('Server closed')
     process.exit(0)
@@ -102,6 +116,7 @@ process.on('SIGINT', () => {
   stopSupplierGuardrailsWorker()
   stopAnomalyDetectionWorker()
   stopMetricsBroadcaster()
+  stopPromotionQueueWorker()
   httpServer.close(() => {
     logger.info('Server closed')
     process.exit(0)

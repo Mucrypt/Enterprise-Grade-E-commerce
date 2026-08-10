@@ -51,6 +51,12 @@ export type Permission =
   | 'marketing.manage'
   | 'campaigns.view'
   | 'campaigns.manage'
+  | 'social.view'
+  | 'social.publish'
+  | 'social.schedule'
+  | 'social.analytics'
+  | 'social.accounts.view'
+  | 'social.accounts.manage'
   | 'support.view'
   | 'support.manage'
   | 'shipping.view'
@@ -90,6 +96,12 @@ const ALL_PERMISSIONS: Permission[] = [
   'marketing.manage',
   'campaigns.view',
   'campaigns.manage',
+  'social.view',
+  'social.publish',
+  'social.schedule',
+  'social.analytics',
+  'social.accounts.view',
+  'social.accounts.manage',
   'support.view',
   'support.manage',
   'shipping.view',
@@ -145,6 +157,10 @@ export const STAFF_ROLE_PERMISSIONS: Record<StaffRole, ReadonlySet<Permission>> 
     'marketing.manage',
     'campaigns.view',
     'campaigns.manage',
+    'social.view',
+    'social.publish',
+    'social.schedule',
+    'social.analytics',
     'support.view',
     'support.manage',
     'shipping.view',
@@ -159,6 +175,11 @@ export const STAFF_ROLE_PERMISSIONS: Record<StaffRole, ReadonlySet<Permission>> 
   // narrower than what a market manager might eventually need, expanded
   // later once the first real deployment is proven out, not guessed at
   // up front.
+  // PROMOTION-OPS-1: deliberately holds none of the 6 new social.*
+  // permissions -- keeps 'marketing.view' only, unchanged. A market-scoped
+  // manager must never silently gain global social-publishing authority;
+  // see staff-permissions.config.test.ts's matrix regression test for this
+  // exact invariant.
   MARKET_MANAGER: new Set<Permission>([
     'dashboard.view',
     'analytics.view_market',
@@ -198,6 +219,17 @@ export const STAFF_ROLE_PERMISSIONS: Record<StaffRole, ReadonlySet<Permission>> 
     'shipping.view',
   ]),
 
+  // PROMOTION-OPS-1: campaigns.view/manage already existed but were unused
+  // anywhere in code before this phase -- adopted here as their evidently-
+  // intended purpose (campaign CRUD/composer/list/detail). The new
+  // social.* grants split "run a campaign" (view/publish/schedule/
+  // analytics) from "connect a platform account" (social.accounts.*) --
+  // MARKETING_MANAGER deliberately does NOT get social.accounts.*, per the
+  // explicit requirement that posting content and connecting company
+  // accounts are not the same privilege. That stays OWNER/SUPER_ADMIN-only
+  // this phase, expanded later once a real deployment proves the workflow
+  // (same "not guessed at up front" reasoning already used for
+  // MARKET_MANAGER above).
   MARKETING_MANAGER: new Set<Permission>([
     'dashboard.view',
     'analytics.view',
@@ -206,6 +238,10 @@ export const STAFF_ROLE_PERMISSIONS: Record<StaffRole, ReadonlySet<Permission>> 
     'marketing.manage',
     'campaigns.view',
     'campaigns.manage',
+    'social.view',
+    'social.publish',
+    'social.schedule',
+    'social.analytics',
   ]),
 
   SUPPORT_AGENT: new Set<Permission>([

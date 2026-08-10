@@ -66,6 +66,8 @@ export function OperationsTab({ filters, onScopeResolved }: OperationsTabProps) 
             data.dataQuality.alertsNote && <DataQualityNotice variant='banner' message={data.dataQuality.alertsNote} />
           )}
 
+          {data.dataQuality.currencyNote && <DataQualityNotice variant='banner' message={data.dataQuality.currencyNote} />}
+
           <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
             <MetricCard
               label='Payment Failures'

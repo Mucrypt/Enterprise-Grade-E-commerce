@@ -219,6 +219,35 @@ describe('getOverview', () => {
     expect(payload.dataQuality.refundRateAvailable).toBe(true)
     expect(payload.metrics.refundRate.value).toBeCloseTo(7.5, 1) // 3/40*100
   })
+
+  it('never sums across currencies -- returns a per-currency breakdown instead of a blended metrics object when the period is mixed', async () => {
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('DISTINCT o.currency')) return { rows: [{ currency: 'EUR' }, { currency: 'USD' }] }
+      if (sql.includes('GROUP BY o.currency')) {
+        return {
+          rows: [
+            { currency: 'EUR', order_count: '30', revenue: '9000' },
+            { currency: 'USD', order_count: '10', revenue: '4000' },
+          ],
+        }
+      }
+      return { rows: [] }
+    })
+    const req: any = globalReq({ query: { comparisonMode: 'none' } })
+    const res = makeRes()
+
+    await getOverview(req, res)
+
+    const payload = res.json.mock.calls[0][0]
+    expect(payload.mixedCurrencies).toBe(true)
+    expect(payload.currency).toBeNull()
+    expect(payload.metrics).toBeUndefined()
+    expect(payload.currencyBreakdown).toEqual([
+      { currency: 'EUR', orderCount: 30, revenue: 9000 },
+      { currency: 'USD', orderCount: 10, revenue: 4000 },
+    ])
+    expect(payload.message).toMatch(/more than one currency/i)
+  })
 })
 
 function mockSalesQueries() {
@@ -333,6 +362,25 @@ describe('getSales', () => {
 
     expect(res.status).toHaveBeenCalledWith(400)
     expect(mockQuery).not.toHaveBeenCalled()
+  })
+
+  it('never sums across currencies -- short-circuits to a currency breakdown instead of trend/by-product/by-country figures', async () => {
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('DISTINCT o.currency')) return { rows: [{ currency: 'EUR' }, { currency: 'USD' }] }
+      if (sql.includes('GROUP BY o.currency')) {
+        return { rows: [{ currency: 'EUR', order_count: '4', revenue: '900' }] }
+      }
+      return { rows: [] }
+    })
+    const req: any = globalReq({ query: { comparisonMode: 'none' } })
+    const res = makeRes()
+
+    await getSales(req, res)
+
+    const payload = res.json.mock.calls[0][0]
+    expect(payload.mixedCurrencies).toBe(true)
+    expect(payload.trend).toBeUndefined()
+    expect(payload.currencyBreakdown).toEqual([{ currency: 'EUR', orderCount: 4, revenue: 900 }])
   })
 })
 
@@ -561,6 +609,47 @@ describe('getProductIntelligence', () => {
     const payload = res.json.mock.calls[0][0]
     expect(payload.scoped).toBe(true)
   })
+
+  it('never sums across currencies -- hides revenue/margin (but not views/carts/stock) when the period is mixed', async () => {
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('DISTINCT o.currency')) return { rows: [{ currency: 'EUR' }, { currency: 'USD' }] }
+      if (sql.includes('FROM products p')) {
+        return {
+          rows: [
+            {
+              product_id: 'p1',
+              product_name: 'Drill',
+              sku: 'DRL-1',
+              cost_price: '20.00',
+              base_price: '50.00',
+              sale_price: null,
+              views: '400',
+              unique_visitors: '300',
+              add_to_carts: '80',
+              units_purchased: '20',
+              revenue: '1000.00',
+              current_stock: '15',
+            },
+          ],
+        }
+      }
+      return { rows: [] }
+    })
+    const req: any = globalReq({ query: { comparisonMode: 'none' } })
+    const res = makeRes()
+
+    await getProductIntelligence(req, res)
+
+    const payload = res.json.mock.calls[0][0]
+    expect(payload.mixedCurrencies).toBe(true)
+    expect(payload.currency).toBeNull()
+    const drill = payload.products[0]
+    expect(drill.revenue).toBeNull()
+    expect(drill.margin).toBeNull()
+    expect(drill.views).toBe(400)
+    expect(drill.currentStock).toBe(15)
+    expect(payload.dataQuality.currencyNote).toMatch(/hidden/i)
+  })
 })
 
 function mockSearchDemandQueries() {
@@ -746,9 +835,28 @@ describe('getAcquisition', () => {
     const payload = res.json.mock.calls[0][0]
     expect(payload.scoped).toBe(true)
   })
+
+  it('never sums across currencies -- short-circuits to a currency breakdown instead of per-channel revenue', async () => {
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('DISTINCT o.currency')) return { rows: [{ currency: 'EUR' }, { currency: 'USD' }] }
+      if (sql.includes('GROUP BY o.currency')) {
+        return { rows: [{ currency: 'EUR', order_count: '20', revenue: '4000' }] }
+      }
+      return { rows: [] }
+    })
+    const req: any = globalReq({ query: { comparisonMode: 'none' } })
+    const res = makeRes()
+
+    await getAcquisition(req, res)
+
+    const payload = res.json.mock.calls[0][0]
+    expect(payload.mixedCurrencies).toBe(true)
+    expect(payload.channels).toBeUndefined()
+    expect(payload.currencyBreakdown).toEqual([{ currency: 'EUR', orderCount: 20, revenue: 4000 }])
+  })
 })
 
-function mockOperationsQueries(opts: { alertsTableExists?: boolean } = {}) {
+function mockOperationsQueries(opts: { alertsTableExists?: boolean; paymentCurrencyRows?: any[] } = {}) {
   mockQuery.mockImplementation(async (sql: string, params?: any[]) => {
     if (sql.includes('to_regclass')) {
       const tableName = params?.[0]
@@ -756,6 +864,7 @@ function mockOperationsQueries(opts: { alertsTableExists?: boolean } = {}) {
       if (tableName === 'public.alerts') return { rows: [{ exists: Boolean(opts.alertsTableExists) }] }
       return { rows: [{ exists: false }] }
     }
+    if (sql.includes('DISTINCT pay.currency')) return { rows: opts.paymentCurrencyRows ?? [{ currency: 'EUR' }] }
     if (sql.includes('FROM payments pay')) return { rows: [{ count: '3', amount: '450.00' }] }
     if (sql.includes("o.order_status = 'cancelled'")) return { rows: [{ count: '2' }] }
     if (sql.includes('o.estimated_delivery_date')) return { rows: [{ count: '1' }] }
@@ -786,7 +895,7 @@ describe('getOperations', () => {
 
     expect(res.status).not.toHaveBeenCalled()
     const payload = res.json.mock.calls[0][0]
-    expect(payload.paymentFailures).toEqual({ count: 3, amount: 450 })
+    expect(payload.paymentFailures).toEqual({ count: 3, amount: 450, currency: 'EUR', mixedCurrencies: false })
     expect(payload.cancellations).toBe(2)
     expect(payload.overdueShipments).toBe(1)
     expect(payload.stuckOrders).toEqual({ count: 4, thresholdDays: 3 })
@@ -831,8 +940,20 @@ describe('getOperations', () => {
 
     await expect(getOperations(req, res)).resolves.not.toThrow()
     const payload = res.json.mock.calls[0][0]
-    expect(payload.paymentFailures).toEqual({ count: 0, amount: 0 })
+    expect(payload.paymentFailures).toEqual({ count: 0, amount: 0, currency: null, mixedCurrencies: false })
     expect(payload.lowStockHighDemand).toEqual([])
+  })
+
+  it('hides paymentFailures.amount (never sums across currencies) when failed payments span more than one currency', async () => {
+    mockOperationsQueries({ alertsTableExists: false, paymentCurrencyRows: [{ currency: 'EUR' }, { currency: 'USD' }] })
+    const req: any = globalReq({ query: { comparisonMode: 'none' } })
+    const res = makeRes()
+
+    await getOperations(req, res)
+
+    const payload = res.json.mock.calls[0][0]
+    expect(payload.paymentFailures).toEqual({ count: 3, amount: null, currency: null, mixedCurrencies: true })
+    expect(payload.dataQuality.currencyNote).toMatch(/hidden/i)
   })
 
   it('scopes order-derived operational queries to a MARKET_MANAGER caller\'s country', async () => {
@@ -929,5 +1050,44 @@ describe('getCountryPerformance', () => {
 
     expect(res.status).toHaveBeenCalledWith(400)
     expect(mockQuery).not.toHaveBeenCalled()
+  })
+
+  it('never sums across currencies -- a country whose orders span more than one currency gets a null revenue plus a per-currency breakdown, without hiding unaffected countries', async () => {
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('as visitors')) return { rows: [{ country: 'CM', visitors: '500' }, { country: 'IT', visitors: '200' }] }
+      if (sql.includes('as orders')) {
+        return {
+          rows: [
+            { country: 'CM', currency: 'EUR', orders: '15', revenue: '3000.00' },
+            { country: 'CM', currency: 'USD', orders: '10', revenue: '2000.00' },
+            { country: 'IT', currency: 'EUR', orders: '8', revenue: '1200.00' },
+          ],
+        }
+      }
+      return { rows: [] }
+    })
+    const req: any = globalReq({ query: { comparisonMode: 'none' } })
+    const res = makeRes()
+
+    await getCountryPerformance(req, res)
+
+    const payload = res.json.mock.calls[0][0]
+    const cm = payload.countries.find((c: any) => c.country === 'CM')
+    const it = payload.countries.find((c: any) => c.country === 'IT')
+
+    expect(cm.mixedCurrencies).toBe(true)
+    expect(cm.revenue).toBeNull()
+    expect(cm.currency).toBeNull()
+    expect(cm.orders).toBe(25) // still summed -- order counts are currency-independent
+    expect(cm.currencyBreakdown).toEqual([
+      { currency: 'EUR', orders: 15, revenue: 3000 },
+      { currency: 'USD', orders: 10, revenue: 2000 },
+    ])
+
+    // IT has a single currency and must be entirely unaffected by CM's mix.
+    expect(it.mixedCurrencies).toBe(false)
+    expect(it.revenue).toBe(1200)
+    expect(it.currency).toBe('EUR')
+    expect(it.currencyBreakdown).toBeUndefined()
   })
 })

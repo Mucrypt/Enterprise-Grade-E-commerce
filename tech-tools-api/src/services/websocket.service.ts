@@ -5,7 +5,57 @@
 
 import { Server as SocketIOServer, Socket } from 'socket.io'
 import { Server as HTTPServer } from 'http'
+import jwt from 'jsonwebtoken'
 import logger from '../utils/logger'
+import { JWT_SECRET } from '../config/jwt.config'
+import { loadStaffContext } from '../middleware/staff'
+
+/**
+ * Who may join the 'dashboard' room and therefore receive
+ * metrics-update/alert-* broadcasts -- these are GLOBAL, unscoped figures
+ * by construction (see metrics.broadcaster.ts), the real-time equivalent
+ * of the legacy analytics.controller.ts endpoints, not a market-scoped
+ * feed. There is no per-market realtime stream to join instead (out of
+ * scope for ADMIN-2B per its own "do not redesign Analytics" instruction)
+ * -- a scoped caller gets 'scoped' back (not silently 'denied', so the
+ * frontend can render an honest notice instead of a connection error) and
+ * is never added to the room.
+ *
+ * Historically this checked nothing at all: any socket, authenticated or
+ * not, could `emit('register', {type:'dashboard'})` and receive live
+ * global revenue/orders/conversion/alerts/visitor-country data. Found and
+ * fixed in ADMIN-2B Production Review Round 1 -- see
+ * docs/ADMIN-2B-ANALYTICS-2-IMPLEMENTATION-REPORT.md.
+ */
+export type DashboardAccess = 'global' | 'scoped' | 'denied'
+
+export async function resolveDashboardAccess(token: unknown): Promise<DashboardAccess> {
+  if (typeof token !== 'string' || !token) return 'denied'
+
+  let decoded: jwt.JwtPayload
+  try {
+    decoded = jwt.verify(token, JWT_SECRET) as jwt.JwtPayload
+  } catch {
+    return 'denied'
+  }
+
+  const userType = decoded.userType
+  if (userType === 'admin' || userType === 'super_admin') return 'global'
+
+  const userId = decoded.userId
+  if (!userId) return 'denied'
+
+  try {
+    const staff = await loadStaffContext(userId)
+    const hasGlobalMembership = staff.memberships.some((m) => m.marketScope === null)
+    if (hasGlobalMembership) return 'global'
+    if (staff.permissions.has('analytics.view_market')) return 'scoped'
+    return 'denied'
+  } catch (error) {
+    logger.error('resolveDashboardAccess: failed to load staff context', error)
+    return 'denied'
+  }
+}
 
 export interface DashboardMetrics {
   activeUsers: number
@@ -71,7 +121,7 @@ class WebSocketService {
       // Store connected client info
       socket.on(
         'register',
-        (data: { type: 'dashboard' | 'mobile' | 'web'; userId?: string }) => {
+        async (data: { type: 'dashboard' | 'mobile' | 'web'; userId?: string }) => {
           const client: ConnectedClient = {
             id: socket.id,
             type: data.type,
@@ -83,8 +133,22 @@ class WebSocketService {
 
           // Join room based on client type
           if (data.type === 'dashboard') {
-            socket.join('dashboard')
-            logger.info(`Dashboard connected: ${socket.id}`)
+            // metrics-update/alert-* are GLOBAL, unscoped broadcasts (see
+            // resolveDashboardAccess's doc comment above) -- only join the
+            // room if the caller actually holds global access. A scoped
+            // (MARKET_MANAGER-shaped) or unauthenticated caller is told
+            // their status via 'registered' but never added to 'dashboard',
+            // so they structurally cannot receive a single global metric,
+            // regardless of what the frontend chooses to render.
+            const access = await resolveDashboardAccess(socket.handshake.auth?.token)
+            if (access === 'global') {
+              socket.join('dashboard')
+              logger.info(`Dashboard connected (global): ${socket.id}`)
+            } else {
+              logger.info(`Dashboard registration without global access (${access}): ${socket.id}`)
+            }
+            socket.emit('registered', { clientId: socket.id, type: data.type, access })
+            return
           } else if (data.type === 'mobile') {
             socket.join('mobile-app')
           } else if (data.type === 'web') {

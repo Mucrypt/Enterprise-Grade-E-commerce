@@ -7,6 +7,7 @@ import type { UseAnalyticsFiltersReturn } from '../useAnalyticsFilters'
 import { AnalyticsFilterBar } from '../AnalyticsFilterBar'
 import { TrendMetric } from '../TrendMetric'
 import { DataQualityNotice } from '../DataQualityNotice'
+import { MixedCurrencyNotice } from '../MixedCurrencyNotice'
 import { formatCurrency, formatPercent } from '../format'
 import { Skeleton } from '@/components/ui/skeleton'
 
@@ -46,6 +47,8 @@ export function OverviewTab({ filters, onScopeResolved }: OverviewTabProps) {
             <Skeleton key={i} className='h-28 rounded-lg' />
           ))}
         </div>
+      ) : data && data.mixedCurrencies ? (
+        <MixedCurrencyNotice message={data.message} breakdown={data.currencyBreakdown} />
       ) : data ? (
         <>
           <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
