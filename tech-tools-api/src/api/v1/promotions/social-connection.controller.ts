@@ -7,7 +7,6 @@
  * social-connection.routes.ts, not here.
  */
 import { Response } from 'express'
-import { randomBytes } from 'crypto'
 import { query } from '../../../database/connection'
 import logger from '../../../utils/logger'
 import { StaffAuthRequest } from '../../../middleware/staff'
@@ -15,31 +14,13 @@ import { getAdapter, getAllCapabilities } from '../../../services/social-adapter
 import { PlatformNotConfiguredError, SOCIAL_PLATFORMS, SocialPlatform } from '../../../services/social-adapters/social-adapter.types'
 import { encryptSecret } from '../../../utils/secret-encryption'
 import { toSocialConnectionDto } from './promotion.types'
-
-/**
- * In-memory OAuth state store -- state/PKCE-verifier pairs are short-lived
- * (an OAuth authorization round-trip completes in seconds to minutes) and
- * single-process, matching this codebase's existing worker/session
- * conventions (no Redis-backed session store exists for this purpose).
- * Entries are one-time-use, deleted on consumption, and swept of anything
- * older than 10 minutes on every start() call so a never-completed flow
- * cannot accumulate indefinitely.
- */
-interface PendingOAuthState {
-  platform: SocialPlatform
-  codeVerifier: string
-  createdAt: number
-  userId: string
-}
-const pendingOAuthStates = new Map<string, PendingOAuthState>()
-const OAUTH_STATE_TTL_MS = 10 * 60 * 1000
-
-function sweepExpiredStates(): void {
-  const now = Date.now()
-  for (const [state, entry] of pendingOAuthStates) {
-    if (now - entry.createdAt > OAUTH_STATE_TTL_MS) pendingOAuthStates.delete(state)
-  }
-}
+import {
+  consumeOAuthState,
+  generateCodeVerifier,
+  generateOAuthState,
+  isAllowedRedirectOrigin,
+  storeOAuthState,
+} from './promotion-oauth-state.helpers'
 
 export const listConnections = async (_req: StaffAuthRequest, res: Response): Promise<void> => {
   try {
@@ -76,11 +57,19 @@ export const startOAuth = async (req: StaffAuthRequest, res: Response): Promise<
       res.status(400).json({ success: false, error: '"redirectUri" is required' })
       return
     }
+    // Fail-closed allowlist (Production Review Round 1 §12) -- prevents an
+    // open-redirect/callback-substitution attack where a caller supplies
+    // an arbitrary redirectUri. Checked BEFORE building any real
+    // authorize URL, so a disallowed origin never even reaches the
+    // platform-configured check below.
+    if (!isAllowedRedirectOrigin(redirectUri)) {
+      res.status(400).json({ success: false, error: 'redirectUri is not an allowed origin for this deployment.' })
+      return
+    }
 
-    sweepExpiredStates()
     const adapter = getAdapter(platform)
-    const state = randomBytes(24).toString('hex')
-    const codeVerifier = randomBytes(32).toString('base64url')
+    const state = generateOAuthState()
+    const codeVerifier = generateCodeVerifier()
 
     let authorizeUrl: string
     try {
@@ -93,7 +82,10 @@ export const startOAuth = async (req: StaffAuthRequest, res: Response): Promise<
       throw error
     }
 
-    pendingOAuthStates.set(state, { platform, codeVerifier, createdAt: Date.now(), userId: req.user!.userId })
+    // Bound into the stored state (§12/§13): the exact redirectUri and the
+    // initiating user's id are both re-checked at completeOAuth() before
+    // any token exchange happens.
+    await storeOAuthState(state, { platform, codeVerifier, userId: req.user!.userId, redirectUri })
     res.json({ success: true, authorizeUrl, state })
   } catch (error) {
     logger.error('Error starting social OAuth flow:', error)
@@ -109,12 +101,28 @@ export const completeOAuth = async (req: StaffAuthRequest, res: Response): Promi
       return
     }
 
-    const pending = pendingOAuthStates.get(state)
+    const pending = await consumeOAuthState(state) // one-time use, regardless of outcome below
     if (!pending) {
       res.status(400).json({ success: false, error: 'Unknown or expired OAuth state -- start the connection flow again.' })
       return
     }
-    pendingOAuthStates.delete(state) // one-time use, regardless of outcome below
+
+    // Actor binding (§13) -- a state issued to one staff member must never
+    // be completable by another, even if they somehow obtained the state
+    // value (e.g. a shared/misdirected callback URL).
+    if (pending.userId !== req.user!.userId) {
+      logger.warn(`[SocialOAuth] OAuth state completion attempted by a different user than initiated it (platform=${pending.platform})`)
+      res.status(403).json({ success: false, error: 'This connection attempt was not initiated by you.' })
+      return
+    }
+    // redirectUri binding (§12) -- must exactly match what the authorize
+    // URL was actually built with; prevents completing the exchange
+    // against a different redirect target than the one this state was
+    // issued for.
+    if (pending.redirectUri !== redirectUri) {
+      res.status(400).json({ success: false, error: 'redirectUri does not match the one used to start this connection.' })
+      return
+    }
 
     const adapter = getAdapter(pending.platform)
     const accountInfo = await adapter.exchangeCodeForToken({ code, redirectUri, codeVerifier: pending.codeVerifier })

@@ -38,7 +38,12 @@ export function ProductsCouponStep({ campaign, isEditable, onSaved }: StepProps)
         <CardHeader>
           <CardTitle className='text-base'>Products</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className='space-y-3'>
+          <p className='text-sm text-muted-foreground'>
+            The catalog is global today. A market scope on this campaign controls who may manage or promote it -- it does
+            not guarantee every selected product is actually sellable in that market. Confirm real availability before
+            publishing.
+          </p>
           <ProductPicker selectedProductIds={productIds} onChange={setProductIds} />
         </CardContent>
       </Card>

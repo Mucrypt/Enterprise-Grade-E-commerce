@@ -10,9 +10,11 @@ import { query } from '../../../database/connection'
 import logger from '../../../utils/logger'
 import { StaffAuthRequest } from '../../../middleware/staff'
 import { getAdapter } from '../../../services/social-adapters/registry'
-import { isDryRunDefault } from '../../../services/promotion-campaign.queue'
+import { isDryRunDefault, reconcileCampaignStatuses } from '../../../services/promotion-campaign.queue'
 import { SocialPlatform } from '../../../services/social-adapters/social-adapter.types'
 import { buildUtmUrl } from './promotion.utm'
+import { resolveStaffScope } from '../analytics/analytics-query.helpers'
+import { campaignScopeFilter, isCampaignInScope, validateCampaignScopeForCreation } from './promotion-scope.helpers'
 
 function slugify(input: string): string {
   return input
@@ -37,6 +39,36 @@ async function logActivity(campaignId: string, actorUserId: string | null, actio
   )
 }
 
+/**
+ * IDOR guard shared by every direct-by-ID campaign route (Production
+ * Review Round 1 §8) -- fetches the requested columns plus market_scope,
+ * 404s if the campaign doesn't exist OR if it exists but is outside the
+ * caller's own market scope (same "404, not 403" convention
+ * order.controller.ts's assertOrderInScope() already uses -- never
+ * confirms existence of an out-of-scope resource). A scoped caller who
+ * lists campaigns already never sees an out-of-scope one (campaignScopeFilter
+ * in listCampaigns); this closes the direct-ID path the list filter alone
+ * doesn't cover.
+ */
+async function loadCampaignWithScopeCheck(
+  req: StaffAuthRequest,
+  res: Response,
+  columns: string,
+): Promise<Record<string, any> | null> {
+  const result = await query(`SELECT ${columns}, market_scope FROM promotion_campaigns WHERE id = $1`, [req.params.id])
+  const campaign = result.rows[0]
+  if (!campaign) {
+    res.status(404).json({ success: false, error: 'Campaign not found' })
+    return null
+  }
+  const scope = resolveStaffScope(req)
+  if (!isCampaignInScope(scope, campaign.market_scope)) {
+    res.status(404).json({ success: false, error: 'Campaign not found' })
+    return null
+  }
+  return campaign
+}
+
 async function loadCampaignDetail(campaignId: string) {
   const campaignResult = await query(`SELECT * FROM promotion_campaigns WHERE id = $1`, [campaignId])
   if (campaignResult.rows.length === 0) return null
@@ -50,7 +82,7 @@ async function loadCampaignDetail(campaignId: string) {
     ),
     query(
       `SELECT id, channel, connection_id, status, message_override, hashtags, creative_asset_key, link_url,
-              scheduled_at, published_at, remote_post_id, remote_permalink, last_error, attempt_count, max_retries,
+              scheduled_at, published_at, remote_post_id, remote_permalink, last_error, last_error_code, attempt_count, max_retries,
               dry_run, validation_errors
        FROM promotion_channel_posts WHERE campaign_id = $1 ORDER BY channel ASC`,
       [campaignId],
@@ -65,6 +97,7 @@ async function loadCampaignDetail(campaignId: string) {
     objective: campaign.objective,
     masterMessage: campaign.master_message,
     couponId: campaign.coupon_id,
+    marketScope: campaign.market_scope,
     landingUrl: campaign.landing_url,
     creativeAssets: campaign.creative_assets || [],
     timezone: campaign.timezone,
@@ -99,6 +132,7 @@ async function loadCampaignDetail(campaignId: string) {
       remotePostId: r.remote_post_id,
       remotePermalink: r.remote_permalink,
       lastError: r.last_error,
+      lastErrorCode: r.last_error_code,
       attemptCount: r.attempt_count,
       maxRetries: r.max_retries,
       dryRun: r.dry_run,
@@ -128,6 +162,17 @@ export const listCampaigns = async (req: StaffAuthRequest, res: Response): Promi
     if (typeof req.query.channel === 'string' && req.query.channel) {
       conditions.push(`EXISTS (SELECT 1 FROM promotion_channel_posts cp WHERE cp.campaign_id = pc.id AND cp.channel = $${idx++})`)
       params.push(req.query.channel)
+    }
+
+    // Market-scope enforcement (Production Review Round 1 §8) -- a scoped
+    // MARKETING_MANAGER must never see a global campaign or one scoped to
+    // a different market, at the SQL layer, not filtered client-side.
+    const scope = resolveStaffScope(req)
+    const scopeFilter = campaignScopeFilter(scope, idx)
+    if (scopeFilter.clause) {
+      conditions.push(scopeFilter.clause.replace(/^AND /, ''))
+      params.push(...scopeFilter.params)
+      idx += scopeFilter.params.length
     }
 
     const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
@@ -173,11 +218,10 @@ export const listCampaigns = async (req: StaffAuthRequest, res: Response): Promi
 
 export const getCampaign = async (req: StaffAuthRequest, res: Response): Promise<void> => {
   try {
+    const scopeCheck = await loadCampaignWithScopeCheck(req, res, 'id')
+    if (!scopeCheck) return
+
     const detail = await loadCampaignDetail(req.params.id)
-    if (!detail) {
-      res.status(404).json({ success: false, error: 'Campaign not found' })
-      return
-    }
     res.json({ success: true, campaign: detail })
   } catch (error) {
     logger.error('Error fetching promotion campaign:', error)
@@ -187,16 +231,38 @@ export const getCampaign = async (req: StaffAuthRequest, res: Response): Promise
 
 export const createCampaign = async (req: StaffAuthRequest, res: Response): Promise<void> => {
   try {
-    const { name, objective, masterMessage, landingUrl, couponId, timezone } = req.body
+    const { name, objective, masterMessage, landingUrl, couponId, timezone, marketScope } = req.body
     if (typeof name !== 'string' || !name.trim()) {
       res.status(400).json({ success: false, error: '"name" is required' })
       return
     }
 
+    // Campaign-creation scope rules (Production Review Round 1 §9): a
+    // global caller may create a global or explicitly-scoped campaign; a
+    // scoped caller may only create a campaign scoped to a non-empty
+    // subset of their own market_scope -- never global, never an empty
+    // array, never a country outside it. Omitting marketScope entirely
+    // defaults a scoped caller's own campaign to their own scope (the
+    // natural default -- they can only ever operate in one market
+    // anyway), and a global caller's to global (NULL).
+    const scope = resolveStaffScope(req)
+    const requestedMarketScope: string[] | null = Array.isArray(marketScope)
+      ? marketScope
+      : marketScope === null
+        ? null
+        : !scope.isGlobal
+          ? scope.countries
+          : null
+    const scopeValidation = validateCampaignScopeForCreation(scope, requestedMarketScope)
+    if (!scopeValidation.valid) {
+      res.status(403).json({ success: false, error: scopeValidation.error })
+      return
+    }
+
     const campaignKey = generateCampaignKey(name)
     const result = await query(
-      `INSERT INTO promotion_campaigns (name, campaign_key, objective, master_message, landing_url, coupon_id, timezone, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO promotion_campaigns (name, campaign_key, objective, master_message, landing_url, coupon_id, timezone, market_scope, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING id`,
       [
         name.trim(),
@@ -206,6 +272,7 @@ export const createCampaign = async (req: StaffAuthRequest, res: Response): Prom
         typeof landingUrl === 'string' ? landingUrl : null,
         typeof couponId === 'string' ? couponId : null,
         typeof timezone === 'string' ? timezone : 'UTC',
+        requestedMarketScope,
         req.user!.userId,
       ],
     )
@@ -220,13 +287,9 @@ export const createCampaign = async (req: StaffAuthRequest, res: Response): Prom
   }
 }
 
-async function assertEditable(campaignId: string, res: Response): Promise<{ id: string; status: string } | null> {
-  const result = await query(`SELECT id, status FROM promotion_campaigns WHERE id = $1`, [campaignId])
-  const campaign = result.rows[0]
-  if (!campaign) {
-    res.status(404).json({ success: false, error: 'Campaign not found' })
-    return null
-  }
+async function assertEditable(req: StaffAuthRequest, res: Response): Promise<Record<string, any> | null> {
+  const campaign = await loadCampaignWithScopeCheck(req, res, 'id, status')
+  if (!campaign) return null
   if (campaign.status !== 'DRAFT') {
     res.status(409).json({ success: false, error: `Campaign cannot be edited in status ${campaign.status} -- only DRAFT campaigns can be edited.` })
     return null
@@ -236,7 +299,7 @@ async function assertEditable(campaignId: string, res: Response): Promise<{ id: 
 
 export const updateCampaign = async (req: StaffAuthRequest, res: Response): Promise<void> => {
   try {
-    const campaign = await assertEditable(req.params.id, res)
+    const campaign = await assertEditable(req, res)
     if (!campaign) return
 
     const { name, objective, masterMessage, landingUrl, couponId, timezone, creativeAssets, products, channels } = req.body
@@ -334,6 +397,8 @@ export const updateCampaign = async (req: StaffAuthRequest, res: Response): Prom
 
 export const validateCampaign = async (req: StaffAuthRequest, res: Response): Promise<void> => {
   try {
+    const scopeCheck = await loadCampaignWithScopeCheck(req, res, 'id')
+    if (!scopeCheck) return
     const detail = await loadCampaignDetail(req.params.id)
     if (!detail) {
       res.status(404).json({ success: false, error: 'Campaign not found' })
@@ -406,12 +471,8 @@ export const scheduleCampaign = async (req: StaffAuthRequest, res: Response): Pr
       res.status(400).json({ success: false, error: '"scheduledAt" must be a valid date/time' })
       return
     }
-    const campaignResult = await query(`SELECT id, campaign_key, landing_url, status FROM promotion_campaigns WHERE id = $1`, [req.params.id])
-    const campaign = campaignResult.rows[0]
-    if (!campaign) {
-      res.status(404).json({ success: false, error: 'Campaign not found' })
-      return
-    }
+    const campaign = await loadCampaignWithScopeCheck(req, res, 'id, campaign_key, landing_url, status')
+    if (!campaign) return
     if (!['DRAFT', 'SCHEDULED'].includes(campaign.status)) {
       res.status(409).json({ success: false, error: `Campaign cannot be scheduled from status ${campaign.status}` })
       return
@@ -433,12 +494,8 @@ export const scheduleCampaign = async (req: StaffAuthRequest, res: Response): Pr
 
 export const publishCampaignNow = async (req: StaffAuthRequest, res: Response): Promise<void> => {
   try {
-    const campaignResult = await query(`SELECT id, campaign_key, landing_url, status FROM promotion_campaigns WHERE id = $1`, [req.params.id])
-    const campaign = campaignResult.rows[0]
-    if (!campaign) {
-      res.status(404).json({ success: false, error: 'Campaign not found' })
-      return
-    }
+    const campaign = await loadCampaignWithScopeCheck(req, res, 'id, campaign_key, landing_url, status')
+    if (!campaign) return
     if (!['DRAFT', 'SCHEDULED'].includes(campaign.status)) {
       res.status(409).json({ success: false, error: `Campaign cannot be published from status ${campaign.status}` })
       return
@@ -476,12 +533,8 @@ export const publishCampaignNow = async (req: StaffAuthRequest, res: Response): 
 
 export const cancelCampaign = async (req: StaffAuthRequest, res: Response): Promise<void> => {
   try {
-    const campaignResult = await query(`SELECT id, status FROM promotion_campaigns WHERE id = $1`, [req.params.id])
-    const campaign = campaignResult.rows[0]
-    if (!campaign) {
-      res.status(404).json({ success: false, error: 'Campaign not found' })
-      return
-    }
+    const campaign = await loadCampaignWithScopeCheck(req, res, 'id, status')
+    if (!campaign) return
     if (!['DRAFT', 'SCHEDULED'].includes(campaign.status)) {
       res.status(409).json({ success: false, error: `Campaign cannot be cancelled from status ${campaign.status} -- publishing has already started.` })
       return
@@ -503,6 +556,9 @@ export const cancelCampaign = async (req: StaffAuthRequest, res: Response): Prom
 
 export const getCampaignActivity = async (req: StaffAuthRequest, res: Response): Promise<void> => {
   try {
+    const scopeCheck = await loadCampaignWithScopeCheck(req, res, 'id')
+    if (!scopeCheck) return
+
     const result = await query(
       `SELECT id, channel_post_id, actor_user_id, action, metadata, created_at
        FROM promotion_activity_log WHERE campaign_id = $1 ORDER BY created_at DESC LIMIT 200`,
@@ -527,17 +583,13 @@ export const getCampaignActivity = async (req: StaffAuthRequest, res: Response):
 
 export const getCampaignMetrics = async (req: StaffAuthRequest, res: Response): Promise<void> => {
   try {
+    const scopeCheck = await loadCampaignWithScopeCheck(req, res, 'id')
+    if (!scopeCheck) return
+
     const channelsResult = await query(
       `SELECT id, channel, remote_post_id, remote_permalink, status, dry_run FROM promotion_channel_posts WHERE campaign_id = $1`,
       [req.params.id],
     )
-    if (channelsResult.rows.length === 0) {
-      const exists = await query(`SELECT id FROM promotion_campaigns WHERE id = $1`, [req.params.id])
-      if (exists.rows.length === 0) {
-        res.status(404).json({ success: false, error: 'Campaign not found' })
-        return
-      }
-    }
 
     const channels = []
     for (const row of channelsResult.rows) {
@@ -577,5 +629,86 @@ export const getCampaignMetrics = async (req: StaffAuthRequest, res: Response): 
   } catch (error) {
     logger.error('Error fetching promotion campaign metrics:', error)
     res.status(500).json({ success: false, error: 'Failed to fetch campaign metrics' })
+  }
+}
+
+/**
+ * Human resolution for a channel post stuck in REQUIRES_ACTION (Production
+ * Review Round 1 §4/§6) -- the queue itself never auto-retries an
+ * ambiguous outcome, since a retry could create a real duplicate post if
+ * the original attempt actually reached the provider. A staff member with
+ * campaigns.manage must explicitly decide:
+ *
+ * - PUBLISHED: they verified (by checking the platform directly) that the
+ *   post genuinely exists, and supplies its real remotePostId so this
+ *   record matches reality.
+ * - FAILED: they verified it does NOT exist -- terminal, matching what a
+ *   normal DO_NOT_RETRY failure would have produced.
+ * - RETRY: they've confirmed it's safe to attempt again (e.g. nothing was
+ *   ever created) -- requeues for the next tick, resetting the backoff
+ *   timer but not attempt_count, so max_retries is still respected.
+ */
+export const resolveChannelPost = async (req: StaffAuthRequest, res: Response): Promise<void> => {
+  try {
+    const scopeCheck = await loadCampaignWithScopeCheck(req, res, 'id')
+    if (!scopeCheck) return
+
+    const { outcome, remotePostId, remotePermalink } = req.body
+    if (!['PUBLISHED', 'FAILED', 'RETRY'].includes(outcome)) {
+      res.status(400).json({ success: false, error: '"outcome" must be one of PUBLISHED, FAILED, RETRY' })
+      return
+    }
+
+    const channelResult = await query(
+      `SELECT id, channel, status FROM promotion_channel_posts WHERE id = $1 AND campaign_id = $2`,
+      [req.params.channelPostId, req.params.id],
+    )
+    const channelPost = channelResult.rows[0]
+    if (!channelPost) {
+      res.status(404).json({ success: false, error: 'Channel post not found' })
+      return
+    }
+    if (channelPost.status !== 'REQUIRES_ACTION') {
+      res.status(409).json({ success: false, error: `Channel post is not awaiting resolution (status: ${channelPost.status})` })
+      return
+    }
+
+    if (outcome === 'PUBLISHED') {
+      if (typeof remotePostId !== 'string' || !remotePostId.trim()) {
+        res.status(400).json({ success: false, error: '"remotePostId" is required to confirm PUBLISHED' })
+        return
+      }
+      await query(
+        `UPDATE promotion_channel_posts
+         SET status = 'PUBLISHED', remote_post_id = $2, remote_permalink = $3, published_at = now(),
+             last_error = NULL, last_error_code = NULL, updated_at = now()
+         WHERE id = $1`,
+        [channelPost.id, remotePostId.trim(), typeof remotePermalink === 'string' ? remotePermalink : null],
+      )
+    } else if (outcome === 'FAILED') {
+      await query(`UPDATE promotion_channel_posts SET status = 'FAILED', updated_at = now() WHERE id = $1`, [channelPost.id])
+    } else {
+      await query(
+        `UPDATE promotion_channel_posts SET status = 'QUEUED', queued_at = now(), next_attempt_at = NULL, updated_at = now() WHERE id = $1`,
+        [channelPost.id],
+      )
+    }
+
+    await logActivity(req.params.id, req.user!.userId, 'CHANNEL_MANUALLY_RESOLVED', {
+      channelPostId: channelPost.id,
+      channel: channelPost.channel,
+      outcome,
+    })
+
+    // A campaign parked at PARTIAL_SUCCESS because of this exact
+    // REQUIRES_ACTION channel should re-settle now that it's resolved --
+    // reuses the queue's own reconciliation logic rather than a second
+    // implementation of the same rule.
+    await reconcileCampaignStatuses([req.params.id])
+
+    res.json({ success: true, message: 'Channel post resolved.' })
+  } catch (error) {
+    logger.error('Error resolving promotion channel post:', error)
+    res.status(500).json({ success: false, error: 'Failed to resolve channel post' })
   }
 }

@@ -140,18 +140,11 @@ export class PinterestAdapter extends BaseSocialAdapter {
       link: input.link,
       description: input.message,
     }
-    const res = await fetch(`${API_BASE}/pins`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${input.connection.accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    })
-    if (!res.ok) {
-      const errorBody = await res.json().catch(() => ({}))
-      throw new Error(`Pinterest publish failed: ${(errorBody as any)?.message || `HTTP ${res.status}`}`)
-    }
+    const res = await this.fetchOrThrow(
+      `${API_BASE}/pins`,
+      { method: 'POST', headers: { Authorization: `Bearer ${input.connection.accessToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+      'Pinterest publish',
+    )
     const created = (await res.json()) as { id: string }
     return { remotePostId: created.id, remotePermalink: `https://www.pinterest.com/pin/${created.id}/` }
   }

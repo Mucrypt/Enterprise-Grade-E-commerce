@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Plus, Calendar as CalendarIcon, Link2 } from 'lucide-react'
 
-const STATUS_OPTIONS: (CampaignStatus | 'all')[] = ['all', 'DRAFT', 'SCHEDULED', 'PUBLISHING', 'PARTIAL_SUCCESS', 'PUBLISHED', 'FAILED', 'CANCELLED']
+const STATUS_OPTIONS: (CampaignStatus | 'all')[] = ['all', 'DRAFT', 'SCHEDULED', 'PUBLISHING', 'PARTIAL_SUCCESS', 'PUBLISHED', 'DRY_RUN_COMPLETED', 'FAILED', 'CANCELLED']
 
 function PromotionsPageContent() {
   const router = useRouter()

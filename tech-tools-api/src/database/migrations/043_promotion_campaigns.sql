@@ -19,6 +19,25 @@
 -- schema_migrations table when this file was written (confirmed via
 -- `pg_isready` failure in the working environment) -- verify the actual
 -- next-free migration number in the target database before applying.
+-- Production Review Round 1 subsequently applied 001-043 (with two
+-- unrelated, pre-existing, documented FK gaps in 016/026 worked around in
+-- a throwaway local Postgres 16 instance, never in this repo's files) to
+-- confirm this file's real structural correctness -- see
+-- docs/PROMOTION-OPS-1-IMPLEMENTATION-REPORT.md's Production Review Round
+-- 1 section.
+--
+-- Production Review Round 1 also revised the two status enums below
+-- BEFORE this migration was ever applied anywhere (safe to do -- see that
+-- report): the original design let a dry-run channel post become
+-- indistinguishable from a genuinely published one (status='PUBLISHED'
+-- with a synthetic remote_post_id) -- rejected as unacceptable historical
+-- truth. DRY_RUN_SUCCEEDED and DRY_RUN_COMPLETED are now the only status
+-- a simulated publish can ever reach. REQUIRES_ACTION was added for the
+-- case where a real publish attempt's outcome is genuinely unknown (e.g.
+-- the HTTP request may or may not have reached the provider before the
+-- connection failed) -- such a channel is never auto-retried, since a
+-- retry could create a real duplicate post if the first attempt actually
+-- succeeded.
 
 CREATE TYPE promotion_campaign_status AS ENUM (
     'DRAFT',
@@ -27,7 +46,8 @@ CREATE TYPE promotion_campaign_status AS ENUM (
     'PARTIAL_SUCCESS',
     'PUBLISHED',
     'FAILED',
-    'CANCELLED'
+    'CANCELLED',
+    'DRY_RUN_COMPLETED'
 );
 
 CREATE TYPE promotion_channel_post_status AS ENUM (
@@ -37,7 +57,8 @@ CREATE TYPE promotion_channel_post_status AS ENUM (
     'PUBLISHED',
     'FAILED',
     'CANCELLED',
-    'SKIPPED_DRY_RUN'
+    'DRY_RUN_SUCCEEDED',
+    'REQUIRES_ACTION'
 );
 
 -- =====================================================
@@ -155,6 +176,12 @@ CREATE TABLE IF NOT EXISTS promotion_channel_posts (
     remote_post_id TEXT,
     remote_permalink TEXT,
     last_error TEXT,
+    -- Machine-readable classification of the last failure (e.g.
+    -- 'AUTH_EXPIRED', 'RATE_LIMITED', 'REMOTE_STATE_UNKNOWN',
+    -- 'STUCK_PUBLISHING_TIMEOUT') -- last_error stays the human-readable
+    -- message; this is what the queue/UI branch on. See
+    -- promotion-campaign.queue.ts's error-classification logic.
+    last_error_code TEXT,
     attempt_count INTEGER NOT NULL DEFAULT 0,
     max_retries INTEGER NOT NULL DEFAULT 3,
     next_attempt_at TIMESTAMPTZ,

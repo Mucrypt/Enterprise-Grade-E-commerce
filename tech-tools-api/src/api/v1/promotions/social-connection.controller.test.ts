@@ -7,7 +7,26 @@ jest.mock('../../../utils/logger', () => ({
   default: { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: jest.fn() },
 }))
 
+// promotion-oauth-state.helpers.ts stores OAuth state in Redis (Production
+// Review Round 1 §11) -- faked here as a simple in-memory Map with the
+// same get/set/del surface node-redis's client exposes, so these tests
+// exercise the real controller logic without a live Redis instance.
+const fakeRedisStore = new Map<string, string>()
+jest.mock('../../../config/redis', () => ({
+  __esModule: true,
+  default: () => ({
+    get: jest.fn(async (key: string) => fakeRedisStore.get(key) ?? null),
+    set: jest.fn(async (key: string, value: string) => {
+      fakeRedisStore.set(key, value)
+    }),
+    del: jest.fn(async (key: string) => {
+      fakeRedisStore.delete(key)
+    }),
+  }),
+}))
+
 const mockQuery = query as jest.Mock
+const ALLOWED_ORIGIN = 'https://admin.example.com'
 
 const makeRes = () => {
   const res: any = {}
@@ -93,10 +112,18 @@ describe('listConnections -- response DTO never leaks token columns', () => {
 })
 
 describe('startOAuth', () => {
-  beforeEach(() => jest.clearAllMocks())
+  const REAL_ENV = process.env
+  beforeEach(() => {
+    jest.clearAllMocks()
+    fakeRedisStore.clear()
+    process.env = { ...REAL_ENV, SOCIAL_OAUTH_ALLOWED_REDIRECT_ORIGINS: ALLOWED_ORIGIN }
+  })
+  afterAll(() => {
+    process.env = REAL_ENV
+  })
 
   it('returns 409 with readiness info for a platform with no credentials configured in this environment, and issues no DB query', async () => {
-    const req: any = makeReq({ params: { platform: 'facebook' }, body: { redirectUri: 'https://admin.example.com/callback' } })
+    const req: any = makeReq({ params: { platform: 'facebook' }, body: { redirectUri: `${ALLOWED_ORIGIN}/callback` } })
     const res = makeRes()
 
     await startOAuth(req, res)
@@ -108,7 +135,7 @@ describe('startOAuth', () => {
   })
 
   it('rejects an unknown platform', async () => {
-    const req: any = makeReq({ params: { platform: 'friendster' }, body: { redirectUri: 'https://admin.example.com/callback' } })
+    const req: any = makeReq({ params: { platform: 'friendster' }, body: { redirectUri: `${ALLOWED_ORIGIN}/callback` } })
     const res = makeRes()
 
     await startOAuth(req, res)
@@ -124,13 +151,42 @@ describe('startOAuth', () => {
 
     expect(res.status).toHaveBeenCalledWith(400)
   })
+
+  it('rejects a redirectUri whose origin is not on the allowlist -- fails BEFORE checking platform readiness', async () => {
+    const req: any = makeReq({ params: { platform: 'facebook' }, body: { redirectUri: 'https://attacker.example.com/callback' } })
+    const res = makeRes()
+
+    await startOAuth(req, res)
+
+    expect(res.status).toHaveBeenCalledWith(400)
+    const payload = res.json.mock.calls[0][0]
+    expect(payload.error).toMatch(/not an allowed origin/i)
+  })
+
+  it('fails closed -- rejects every redirectUri when SOCIAL_OAUTH_ALLOWED_REDIRECT_ORIGINS is unset, never treating "unconfigured" as "allow anything"', async () => {
+    delete process.env.SOCIAL_OAUTH_ALLOWED_REDIRECT_ORIGINS
+    const req: any = makeReq({ params: { platform: 'facebook' }, body: { redirectUri: `${ALLOWED_ORIGIN}/callback` } })
+    const res = makeRes()
+
+    await startOAuth(req, res)
+
+    expect(res.status).toHaveBeenCalledWith(400)
+  })
 })
 
-describe('completeOAuth -- CSRF state handling', () => {
-  beforeEach(() => jest.clearAllMocks())
+describe('completeOAuth -- CSRF state, redirectUri, and actor binding', () => {
+  const REAL_ENV = process.env
+  beforeEach(() => {
+    jest.clearAllMocks()
+    fakeRedisStore.clear()
+    process.env = { ...REAL_ENV, SOCIAL_OAUTH_ALLOWED_REDIRECT_ORIGINS: ALLOWED_ORIGIN }
+  })
+  afterAll(() => {
+    process.env = REAL_ENV
+  })
 
   it('rejects a completion attempt with an unknown/expired state -- never proceeds to a token exchange for an unrecognized state', async () => {
-    const req: any = makeReq({ body: { code: 'auth-code', state: 'never-issued-state', redirectUri: 'https://admin.example.com/callback' } })
+    const req: any = makeReq({ body: { code: 'auth-code', state: 'never-issued-state', redirectUri: `${ALLOWED_ORIGIN}/callback` } })
     const res = makeRes()
 
     await completeOAuth(req, res)
@@ -146,6 +202,60 @@ describe('completeOAuth -- CSRF state handling', () => {
     await completeOAuth(req, res)
 
     expect(res.status).toHaveBeenCalledWith(400)
+  })
+
+  it('rejects completion by a different user than the one who initiated the OAuth flow (actor binding)', async () => {
+    fakeRedisStore.set(
+      'promotion_oauth_state:state-abc',
+      JSON.stringify({ platform: 'FACEBOOK', codeVerifier: 'verifier', userId: 'owner-1', redirectUri: `${ALLOWED_ORIGIN}/callback` }),
+    )
+    const req: any = makeReq({
+      user: { userId: 'a-different-user', userType: 'customer' },
+      body: { code: 'auth-code', state: 'state-abc', redirectUri: `${ALLOWED_ORIGIN}/callback` },
+    })
+    const res = makeRes()
+
+    await completeOAuth(req, res)
+
+    expect(res.status).toHaveBeenCalledWith(403)
+    expect(mockQuery).not.toHaveBeenCalled()
+    // One-time use regardless of outcome -- a retry with the same state must also fail.
+    expect(fakeRedisStore.has('promotion_oauth_state:state-abc')).toBe(false)
+  })
+
+  it('rejects completion with a redirectUri that does not match the one the flow was started with', async () => {
+    fakeRedisStore.set(
+      'promotion_oauth_state:state-abc',
+      JSON.stringify({ platform: 'FACEBOOK', codeVerifier: 'verifier', userId: 'owner-1', redirectUri: `${ALLOWED_ORIGIN}/callback` }),
+    )
+    const req: any = makeReq({
+      body: { code: 'auth-code', state: 'state-abc', redirectUri: `${ALLOWED_ORIGIN}/different-callback` },
+    })
+    const res = makeRes()
+
+    await completeOAuth(req, res)
+
+    expect(res.status).toHaveBeenCalledWith(400)
+    const payload = res.json.mock.calls[0][0]
+    expect(payload.error).toMatch(/redirectUri does not match/i)
+  })
+
+  it('a state is single-use -- completing it once consumes it, a second attempt with the same state fails', async () => {
+    fakeRedisStore.set(
+      'promotion_oauth_state:state-xyz',
+      JSON.stringify({ platform: 'FACEBOOK', codeVerifier: 'verifier', userId: 'owner-1', redirectUri: `${ALLOWED_ORIGIN}/callback` }),
+    )
+    // First completion will fail downstream (Facebook adapter not
+    // configured -> exchangeCodeForToken throws), but the state must still
+    // be consumed on that first read, before the exchange is attempted.
+    const req1: any = makeReq({ body: { code: 'auth-code', state: 'state-xyz', redirectUri: `${ALLOWED_ORIGIN}/callback` } })
+    await completeOAuth(req1, makeRes())
+    expect(fakeRedisStore.has('promotion_oauth_state:state-xyz')).toBe(false)
+
+    const req2: any = makeReq({ body: { code: 'auth-code', state: 'state-xyz', redirectUri: `${ALLOWED_ORIGIN}/callback` } })
+    const res2 = makeRes()
+    await completeOAuth(req2, res2)
+    expect(res2.status).toHaveBeenCalledWith(400)
   })
 })
 

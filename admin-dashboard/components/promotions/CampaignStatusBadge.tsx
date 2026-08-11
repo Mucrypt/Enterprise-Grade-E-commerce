@@ -9,6 +9,9 @@ const STATUS_STYLE: Record<CampaignStatus, { label: string; variant: 'default' |
   PUBLISHED: { label: 'Published', variant: 'default' },
   FAILED: { label: 'Failed', variant: 'destructive' },
   CANCELLED: { label: 'Cancelled', variant: 'outline' },
+  // Distinct, unmissable label -- a dry-run completion must never read as
+  // (or be visually confusable with) a real PUBLISHED campaign.
+  DRY_RUN_COMPLETED: { label: 'Dry Run Completed', variant: 'outline' },
 }
 
 export function CampaignStatusBadge({ status }: { status: CampaignStatus }) {

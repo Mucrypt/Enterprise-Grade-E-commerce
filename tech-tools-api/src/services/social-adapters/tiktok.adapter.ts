@@ -154,18 +154,15 @@ export class TikTokAdapter extends BaseSocialAdapter {
         video_url: input.mediaRefs[0],
       },
     }
-    const res = await fetch(`${API_BASE}/post/publish/video/init/`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${input.connection.accessToken}`,
-        'Content-Type': 'application/json; charset=UTF-8',
+    const res = await this.fetchOrThrow(
+      `${API_BASE}/post/publish/video/init/`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${input.connection.accessToken}`, 'Content-Type': 'application/json; charset=UTF-8' },
+        body: JSON.stringify(initBody),
       },
-      body: JSON.stringify(initBody),
-    })
-    if (!res.ok) {
-      const errorBody = await res.json().catch(() => ({}))
-      throw new Error(`TikTok publish init failed: ${(errorBody as any)?.error?.message || `HTTP ${res.status}`}`)
-    }
+      'TikTok publish init',
+    )
     const body = (await res.json()) as { data: { publish_id: string } }
     // TikTok's publish is asynchronous -- publish_id must be polled via
     // getPostStatus() until it reports success and a real video id.

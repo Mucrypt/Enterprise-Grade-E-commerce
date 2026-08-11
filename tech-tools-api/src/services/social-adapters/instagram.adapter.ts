@@ -156,12 +156,11 @@ export class InstagramAdapter extends BaseSocialAdapter {
       })
       if (!isCarousel) containerParams.set('caption', input.message)
       if (isCarousel) containerParams.set('is_carousel_item', 'true')
-      const containerRes = await fetch(`${GRAPH_BASE}/${input.connection.externalAccountId}/media`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: containerParams.toString(),
-      })
-      if (!containerRes.ok) throw new Error(`Instagram media container creation failed: HTTP ${containerRes.status}`)
+      const containerRes = await this.fetchOrThrow(
+        `${GRAPH_BASE}/${input.connection.externalAccountId}/media`,
+        { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: containerParams.toString() },
+        'Instagram media container creation',
+      )
       const container = (await containerRes.json()) as { id: string }
       containerIds.push(container.id)
     }
@@ -174,12 +173,11 @@ export class InstagramAdapter extends BaseSocialAdapter {
         children: containerIds.join(','),
         access_token: input.connection.accessToken,
       })
-      const carouselRes = await fetch(`${GRAPH_BASE}/${input.connection.externalAccountId}/media`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: carouselParams.toString(),
-      })
-      if (!carouselRes.ok) throw new Error(`Instagram carousel container creation failed: HTTP ${carouselRes.status}`)
+      const carouselRes = await this.fetchOrThrow(
+        `${GRAPH_BASE}/${input.connection.externalAccountId}/media`,
+        { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: carouselParams.toString() },
+        'Instagram carousel container creation',
+      )
       publishContainerId = ((await carouselRes.json()) as { id: string }).id
     }
 
@@ -187,15 +185,11 @@ export class InstagramAdapter extends BaseSocialAdapter {
       creation_id: publishContainerId,
       access_token: input.connection.accessToken,
     })
-    const publishRes = await fetch(`${GRAPH_BASE}/${input.connection.externalAccountId}/media_publish`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: publishParams.toString(),
-    })
-    if (!publishRes.ok) {
-      const errorBody = await publishRes.json().catch(() => ({}))
-      throw new Error(`Instagram publish failed: ${(errorBody as any)?.error?.message || `HTTP ${publishRes.status}`}`)
-    }
+    const publishRes = await this.fetchOrThrow(
+      `${GRAPH_BASE}/${input.connection.externalAccountId}/media_publish`,
+      { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: publishParams.toString() },
+      'Instagram publish',
+    )
     const published = (await publishRes.json()) as { id: string }
     return { remotePostId: published.id }
   }

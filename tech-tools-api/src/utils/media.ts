@@ -16,7 +16,7 @@ import {
 // =====================================================
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || 'uploads'
-const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || '10485760') // 10MB default
+export const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || '10485760') // 10MB default
 const MAX_VIDEO_SIZE = parseInt(process.env.MAX_VIDEO_SIZE || '104857600') // 100MB default
 const MAX_BOOK_ASSET_SIZE = parseInt(
   process.env.MAX_BOOK_ASSET_SIZE || '52428800',
@@ -31,7 +31,7 @@ const IMAGE_SIZES = {
 }
 
 // Allowed file types
-const ALLOWED_IMAGE_TYPES = [
+export const ALLOWED_IMAGE_TYPES = [
   'image/jpeg',
   'image/jpg',
   'image/png',
@@ -104,7 +104,7 @@ export async function ensureUploadDirectories() {
 // =====================================================
 
 // Configure multer storage
-const storage = multer.diskStorage({
+export const mediaTempStorage = multer.diskStorage({
   destination: async (_req, _file, cb) => {
     const tempDir = `${UPLOAD_DIR}/temp`
     await ensureUploadDirectories()
@@ -141,7 +141,7 @@ const fileFilter = (
 
 // Configure multer with limits
 export const upload = multer({
-  storage,
+  storage: mediaTempStorage,
   fileFilter,
   limits: {
     fileSize: MAX_VIDEO_SIZE, // Use max video size as the upper limit
@@ -191,7 +191,7 @@ const bookAssetFileFilter = (
 }
 
 export const uploadBookAssets = multer({
-  storage,
+  storage: mediaTempStorage,
   fileFilter: bookAssetFileFilter,
   limits: {
     fileSize: MAX_BOOK_ASSET_SIZE,

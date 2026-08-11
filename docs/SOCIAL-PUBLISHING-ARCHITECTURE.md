@@ -2,6 +2,8 @@
 
 Technical reference for the omnichannel promotion/publishing system. Paired with `docs/PROMOTION-OPS-1-IMPLEMENTATION-REPORT.md`, which covers the phase narrative, audit findings, and test/gate results — this document is the durable "how it works" reference for whoever next touches this code.
 
+**Updated for Production Review Round 1** (see the implementation report's "Production Review Round 1" section for the full narrative): dry-run channel posts now resolve to `DRY_RUN_SUCCEEDED`/campaigns to `DRY_RUN_COMPLETED`, never `PUBLISHED` (§4); failures are classified `SAFE_TO_RETRY`/`DO_NOT_RETRY`/`REMOTE_STATE_UNKNOWN` at the adapter layer (§4); a stuck-`PUBLISHING` sweep and a `REQUIRES_ACTION` human-resolution flow replace the prior unsolved idempotency gap (§4); `market_scope` is now enforced server-side (§1); OAuth state moved from an in-memory `Map` to Redis with redirectUri and actor binding (§5); a connection's status now honestly downgrades on `AUTH_EXPIRED`/`MISSING_SCOPE` (§8).
+
 ---
 
 ## 1. Domain model
@@ -28,7 +30,9 @@ promotion_activity_log *──1 promotion_campaigns, *──? promotion_channel_
 
 **Why `promotion_channel_posts` is the unit of independent publishing, not a JSONB array on the campaign:** every founder requirement about partial success ("Facebook succeeded, LinkedIn failed, the successful posts must not be rolled back") requires a row with its own lifecycle, retry counters, and remote IDs — a real table with `UNIQUE(campaign_id, channel)`, not a nested structure a single UPDATE could accidentally overwrite in bulk.
 
-`promotion_campaigns.market_scope TEXT[]` exists in the schema but is **not enforced by any query this phase** — a deliberate, documented no-op (see §9), not a silently half-wired feature.
+`promotion_campaigns.market_scope TEXT[]` is enforced server-side as of Production Review Round 1 (see `docs/PROMOTION-OPS-1-IMPLEMENTATION-REPORT.md` §R1.8/R1.9) via `tech-tools-api/src/api/v1/promotions/promotion-scope.helpers.ts`, reusing `resolveStaffScope()` from Analytics 2.0 rather than a new scoping mechanism: list queries filter by array overlap (`market_scope && caller_scope`, fail-closed to `1=0` if the caller's own scope is empty), and every by-ID route loads the campaign through a shared `loadCampaignWithScopeCheck()` helper that 404s (never 403s) for an out-of-scope campaign, matching this codebase's existing IDOR convention.
+
+`promotion_channel_posts.last_error_code TEXT` (added in Production Review Round 1) carries the machine-readable failure reason (e.g. `AUTH_EXPIRED`, `RATE_LIMITED`, `REMOTE_STATE_UNKNOWN`, `STUCK_PUBLISHING_TIMEOUT`) that the queue and UI branch on; `last_error` stays the human-readable message. `promotion_channel_post_status` gained `DRY_RUN_SUCCEEDED` and `REQUIRES_ACTION` (replacing the original `SKIPPED_DRY_RUN`, before it was ever applied anywhere — see §4); `promotion_campaign_status` gained `DRY_RUN_COMPLETED`.
 
 ---
 
@@ -160,27 +164,45 @@ Graph API version numbers (`v25.0`) and LinkedIn's versioned `LinkedIn-Version` 
 
 `tech-tools-api/src/services/promotion-campaign.queue.ts` — same shape as the pre-existing `newsletter.queue.ts` (this codebase's one consistent async-worker convention: a plain `setInterval` poller with a re-entrancy guard, registered via `startX()`/`stopX()` in `src/index.ts`'s startup and graceful-shutdown blocks). **No job-queue library was introduced** — confirmed during this phase's own audit that none exists anywhere in this codebase, and Redis here is pure key-value (refresh tokens only), not a queue backend.
 
-### Tick sequence
+### Tick sequence (as of Production Review Round 1)
 
+0. **`isQueueEnabled()`** — `startPromotionQueueWorker()` checks `PROMOTION_QUEUE_ENABLED` (default `true`) before ever starting the interval; if `false`, it logs and returns immediately. Production topology (`infrastructure/docker-compose.prod.yml`'s fixed `container_name: techtools-api-prod`, which is incompatible with Compose's `--scale`) is concrete evidence exactly one API process runs today, so the default is safe as-is — this flag exists as the explicit off-switch for any future replica that must not double-publish.
 1. **`promoteScheduledChannelPosts()`** — bulk `UPDATE` moves `DRAFT` channel posts whose (own or campaign-inherited) `scheduled_at` has arrived into `QUEUED`, and flips the parent campaign from `SCHEDULED` to `PUBLISHING` the first time this happens for it.
-2. **`claimBatch()`** — `UPDATE promotion_channel_posts SET status='PUBLISHING', publishing_started_at=now() WHERE id IN (SELECT ... WHERE status='QUEUED' ... LIMIT N) RETURNING *`. **This claim happens before any network call** — the foundation of the idempotency guarantee below.
-3. Each claimed row is processed **sequentially** (not `Promise.all`) — bounded outbound concurrency, matching `newsletter.queue.ts`'s controlled-rate style:
-   - **Idempotency check**: if `remote_post_id` is already set (a prior attempt crashed after the real platform call succeeded but before this process recorded it), record a `SKIPPED_ALREADY_PUBLISHED` attempt and mark `PUBLISHED` — **never calls `adapter.publish()` again**.
-   - **Dry-run**: if `dry_run` is true, synthesize `remote_post_id = 'dry-run-<uuid>'`, record a `SUCCESS` attempt with `dry_run: true`, mark `PUBLISHED`. No adapter method is ever called.
+2. **`sweepStuckPublishingRows()`** — any channel post left in `PUBLISHING` with `remote_post_id IS NULL` and `publishing_started_at` older than `PROMOTION_STUCK_TIMEOUT_SECONDS` (default 300) is moved to `REQUIRES_ACTION` (never blindly back to `QUEUED` — see "Idempotency, precisely" below) and logged.
+3. **`claimBatch()`** — `UPDATE promotion_channel_posts SET status='PUBLISHING', publishing_started_at=now() WHERE id IN (SELECT ... WHERE status='QUEUED' ... LIMIT N) RETURNING *`. **This claim happens before any network call** — the foundation of the idempotency guarantee below.
+4. Each claimed row is processed **sequentially** (not `Promise.all`) — bounded outbound concurrency, matching `newsletter.queue.ts`'s controlled-rate style:
+   - **Idempotency check**: if `remote_post_id` is already set (a prior attempt crashed after the real platform call succeeded but before this process recorded it), record a `SKIPPED_ALREADY_PUBLISHED` attempt and mark `PUBLISHED` (or `DRY_RUN_SUCCEEDED` if `dry_run`) — **never calls `adapter.publish()` again**.
+   - **Dry-run**: if `dry_run` is true, synthesize `remote_post_id = 'dry-run-<uuid>'`, record a `SUCCESS` attempt with `dry_run: true`, mark `DRY_RUN_SUCCEEDED` — **structurally distinct from `PUBLISHED`**, so a simulated publish can never be read as a genuine one (Production Review Round 1 §R1.3; this was the one CRITICAL fix in that round). No adapter method is ever called.
    - **Missing connection**: if no `connection_id`, immediately terminal `FAILED` (`MISSING_CONNECTION`) — never attempts a call with no credentials.
-   - **Real publish**: calls `getAdapter(channel).publish()`. Success → `remote_post_id`/`remote_permalink` set, `PUBLISHED`. Failure → attempt recorded, `attempt_count++`; requeued with linear backoff (`next_attempt_at = now() + RETRY_BACKOFF_SECONDS * attempt_count`) if under `max_retries` (default 3), else terminal `FAILED` plus a `promotion_activity_log` entry.
-4. **`reconcileCampaignStatuses()`** — recomputes each touched campaign's aggregate status from its channel posts' actual current statuses: all `PUBLISHED` → campaign `PUBLISHED`; a mix of `PUBLISHED` and terminal-failed → `PARTIAL_SUCCESS`; all failed → `FAILED`; anything still in-flight → left alone (still `PUBLISHING`). **Never rolls back an already-published channel** — this is the literal implementation of "a Facebook failure must never undo an already-succeeded Instagram post."
-5. **`syncMetrics()`** — gated to run at most once per `PROMOTION_METRICS_SYNC_INTERVAL_MS` (default 30 min, in-memory cursor — same tradeoff `metrics.broadcaster.ts` already accepts), fetches metrics for published, non-dry-run posts lacking a recent snapshot, inserts one row per post into `social_metric_snapshots`.
+   - **Real publish**: calls `getAdapter(channel).publish()`, which routes its network call through `fetchOrThrow()` (see §3.5 below) so any failure arrives pre-classified. Success → `remote_post_id`/`remote_permalink` set, `PUBLISHED`. `REMOTE_STATE_UNKNOWN` → `REQUIRES_ACTION`, never retried (a retry could create a real duplicate if the first attempt actually reached the provider). `DO_NOT_RETRY` → immediate terminal `FAILED`, and if the reason is `AUTH_EXPIRED`/`MISSING_SCOPE`, the underlying `social_connections.status` is downgraded to `TOKEN_EXPIRED`/`MISSING_PERMISSION` too (§8). `SAFE_TO_RETRY` → requeued with linear backoff (`next_attempt_at = now() + RETRY_BACKOFF_SECONDS * attempt_count`) if under `max_retries` (default 3), else terminal `FAILED`.
+5. **`reconcileCampaignStatuses()`** (exported, for the manual-resolution flow to call too — see below) — recomputes each touched campaign's aggregate status from its channel posts' actual current statuses: all channels `DRY_RUN_SUCCEEDED` → campaign `DRY_RUN_COMPLETED`; all real channels succeeded → `PUBLISHED`; any mix of outcomes, or any channel `REQUIRES_ACTION` → `PARTIAL_SUCCESS`; all terminally failed with none requiring action → `FAILED`; anything still in-flight → left alone (still `PUBLISHING`). **Never rolls back an already-published channel.**
+6. **`syncMetrics()`** — gated to run at most once per `PROMOTION_METRICS_SYNC_INTERVAL_MS` (default 30 min, in-memory cursor — same tradeoff `metrics.broadcaster.ts` already accepts), fetches metrics for published, **non-dry-run** posts lacking a recent snapshot (`WHERE status = 'PUBLISHED' AND dry_run = false` — a dry-run post's synthetic id can never reach a real adapter's `fetchMetrics()`), inserts one row per post into `social_metric_snapshots`.
+
+### Retry classification (§R1.5)
+
+`base-social-adapter.ts`'s `fetchOrThrow()` — which every adapter's `publish()` now routes its real network call through — classifies every failure into exactly one of three buckets at the moment it occurs, never post-hoc from a generic error message:
+
+```ts
+type PublishFailureClassification = 'SAFE_TO_RETRY' | 'DO_NOT_RETRY' | 'REMOTE_STATE_UNKNOWN'
+```
+
+- `fetch()` itself throwing (DNS/timeout/connection-reset — no HTTP response was ever received) is **always** `REMOTE_STATE_UNKNOWN` (`TRANSPORT_ERROR`) — whether the provider processed the request before the connection failed cannot be known.
+- A definitive HTTP response is classified by `classifyHttpFailure(status)`: `401`→`DO_NOT_RETRY`/`AUTH_EXPIRED`, `403`→`DO_NOT_RETRY`/`MISSING_SCOPE`, `429`→`SAFE_TO_RETRY`/`RATE_LIMITED`, `400`/`422`→`DO_NOT_RETRY`/`INVALID_MEDIA_OR_CAPTION`, `5xx`→`SAFE_TO_RETRY`/`TEMPORARY_PROVIDER_ERROR`, anything else→`REMOTE_STATE_UNKNOWN`/`UNKNOWN_PROVIDER_ERROR` (an unrecognized definitive response is never guessed to be safe).
+
+Only `SAFE_TO_RETRY` is ever automatically retried by the queue.
 
 ### Idempotency, precisely
 
-The property being protected: **a worker retry, restart, or overlapping tick must never cause a real duplicate post on a real platform.** Three mechanisms together provide this:
+The property being protected: **a worker retry, restart, or overlapping tick must never cause a real duplicate post on a real platform.** Four mechanisms together provide this:
 
 1. **Claim-before-call**: a row can only be picked up once per claim cycle (`QUEUED` → `PUBLISHING` via the atomic `UPDATE...RETURNING`); a second concurrent tick's claim query simply won't see it.
-2. **`remote_post_id`-presence check**: if a process crashes *after* a real platform call succeeds but *before* it records the result (network partition, process kill), the row is left in `PUBLISHING` with no `remote_post_id`. On the next tick, `claimBatch()`'s `WHERE status = 'QUEUED'` won't re-select a `PUBLISHING` row automatically — **this is a known gap, not a solved one**: a row stuck in `PUBLISHING` past a reasonable timeout needs a stuck-row sweep to requeue it, which is not implemented this phase (see §9). Once it *is* requeued and re-claimed, though, the idempotency check inside `processChannelPost()` (checking `remote_post_id` first) prevents a genuine double-post if the row does happen to carry a `remote_post_id` already (e.g. a manual reconciliation set it).
-3. **`social_publish_attempts`** is an append-only ledger of every attempt (`dry_run`, `response_status`, `remote_post_id`, timestamps) — not itself a locking mechanism, but the audit trail that makes any future investigation of a suspected duplicate possible.
+2. **`remote_post_id`-presence check**: if a process crashes *after* a real platform call succeeds but *before* it records the result, the row is left in `PUBLISHING` with no `remote_post_id`.
+3. **`sweepStuckPublishingRows()`** (§ above, added in Production Review Round 1 — this closes what was previously a documented, unsolved gap): a row stuck in `PUBLISHING` past `PROMOTION_STUCK_TIMEOUT_SECONDS` is moved to `REQUIRES_ACTION`, **not** blindly back to `QUEUED` — the outcome is genuinely unknown (the exact ambiguity `REMOTE_STATE_UNKNOWN` protects against elsewhere), so it requires the same explicit human decision via `POST /promotions/campaigns/:id/channels/:channelPostId/resolve` (which requires a real, verified `remotePostId` to mark it `PUBLISHED` — an operator must have actually checked the platform, not just clicked a button).
+4. **`social_publish_attempts`** is an append-only ledger of every attempt (`dry_run`, `response_status`, `remote_post_id`, timestamps) — the audit trail that makes any investigation of a suspected duplicate possible.
 
-**Known limitation, carried forward unchanged from every existing worker in this codebase** (`newsletter.queue.ts`, `supplier.guardrails.ts`, `workers/anomaly.detection.ts`, `workers/metrics.broadcaster.ts`): no `FOR UPDATE SKIP LOCKED`. Safety rests on the single-process assumption (one Node process running this worker) plus the in-process `busy` boolean preventing overlapping ticks — not row-level database locking. This is not a new risk introduced by this feature; it is this codebase's one existing worker pattern, applied consistently. Horizontal scaling to multiple API processes would need this addressed first (see §9).
+**Known limitation, carried forward unchanged from every existing worker in this codebase** (`newsletter.queue.ts`, `supplier.guardrails.ts`, `workers/anomaly.detection.ts`, `workers/metrics.broadcaster.ts`): no `FOR UPDATE SKIP LOCKED`. Safety rests on the single-process assumption (one Node process running this worker) plus the in-process `busy` boolean preventing overlapping ticks — not row-level database locking. `PROMOTION_QUEUE_ENABLED` (§ above) is the explicit safety valve if this assumption is ever violated before `FOR UPDATE SKIP LOCKED` is added. This is not a new risk introduced by this feature; it is this codebase's one existing worker pattern, applied consistently. Horizontal scaling to multiple API processes would need row-level locking addressed first (see §9).
+
+**What is still not solved, honestly**: none of the 6 adapters implement a "look up whether a post with this idempotency key already exists on the provider" reconciliation call — `getPostStatus()` exists on the interface but isn't wired into the `REQUIRES_ACTION` resolution flow yet. Today, resolving a `REQUIRES_ACTION` channel means a human checks the platform directly (via `remotePermalink` or the platform's own UI) and reports the outcome back through the resolve endpoint.
 
 ---
 
@@ -217,7 +239,13 @@ Admin browser                    admin-dashboard (Next.js)          tech-tools-a
      │                                    │  (no tokens in this response)│
 ```
 
-**State/CSRF**: a random 24-byte hex `state` and a 32-byte base64url PKCE `code_verifier` are generated per OAuth start and held in an in-memory `Map` (`pendingOAuthStates`), keyed by `state`, single-process/single-use, swept of entries older than 10 minutes on every `startOAuth()` call. `completeOAuth()` deletes the entry on lookup regardless of outcome (one-time use) and 400s on an unrecognized/expired state — the exact CSRF protection the phase required, verified by `social-connection.controller.test.ts`.
+**State/CSRF (updated in Production Review Round 1)**: a random 24-byte hex `state` and a 32-byte base64url PKCE `code_verifier` are generated per OAuth start and stored in **Redis** (`tech-tools-api/src/api/v1/promotions/promotion-oauth-state.helpers.ts`, using this codebase's existing `config/redis.ts` — the same infrastructure `middleware/auth.ts` already uses for refresh tokens, not a new dependency), keyed `promotion_oauth_state:<state>`, `EX` TTL of 10 minutes. This replaced the original in-memory `Map`, which was single-process-only and lost on restart — a real risk once weighed against this deployment's actual multi-container-capable production topology (§4's `PROMOTION_QUEUE_ENABLED` note applies the same reasoning). `consumeOAuthState()` deletes the Redis key on the first read regardless of outcome (one-time use, including against replay) and returns `null` on any miss/expiry, which `completeOAuth()` turns into a 400.
+
+**redirectUri binding (added in Production Review Round 1)**: `startOAuth()` calls `isAllowedRedirectOrigin(redirectUri)` — checked against `SOCIAL_OAUTH_ALLOWED_REDIRECT_ORIGINS` (comma-separated, fail-closed: unset means every redirectUri is rejected) — **before** building any authorize URL, and binds the exact `redirectUri` into the stored state. `completeOAuth()` requires the callback's `redirectUri` to match the bound value exactly, closing an open-redirect/callback-substitution path a naive "trust whatever the frontend sends" design would have left open.
+
+**Actor binding (added in Production Review Round 1)**: the initiating staff user's ID (`req.user.userId`) is bound into the stored state at `startOAuth()`; `completeOAuth()` 403s if the authenticated caller completing the flow doesn't match, so a connection attempt started by one admin can never be completed by another.
+
+All three are verified by `social-connection.controller.test.ts` (14 tests) using an in-memory fake matching the real Redis client's `get`/`set`/`del` surface.
 
 **Why the redirect target is a frontend page, not a backend route directly**: the phase instruction is "OAuth callback must execute server-side" — interpreted here as *the token exchange itself* (the step that uses `client_secret` and produces a real access token) must never happen in the browser. It doesn't. The frontend's `/connections/callback` page is a thin pass-through: it reads `code`/`state` off the URL (which the provider itself put there) and immediately POSTs them to the backend, which performs the actual exchange. The frontend never sees, stores, or forwards a token — `completeOAuth()`'s response is a `SocialConnectionDto` (§6) with no token fields at all.
 
@@ -255,6 +283,10 @@ Appended to `promotion_campaigns.landing_url` (or the campaign's chosen product/
 
 ## 8. Provider readiness in this environment
 
+**Two-layer readiness truth (Production Review Round 1 §R1.18)**: `PlatformReadiness` (below) is deliberately environment-level only — "can this deployment attempt an OAuth connection at all" — and never implies publish authority even at `AVAILABLE`, which is why `requiresAppReview` is a separate, always-surfaced field on every capability. The connection-level truth is carried by `social_connections.status` (`CONNECTED, TOKEN_EXPIRED, NEEDS_CREDENTIALS, MISSING_PERMISSION, APP_REVIEW_REQUIRED, DISABLED_BY_ADMIN, ERROR`), which — as of this review round — is no longer a set of unreachable enum values: the queue now downgrades a `CONNECTED` connection to `TOKEN_EXPIRED` on an `AUTH_EXPIRED` publish failure, or `MISSING_PERMISSION` on `MISSING_SCOPE`, so a connection that stops working stops silently claiming `CONNECTED` forever. This was judged sufficient to satisfy the review's request for a more granular truth model without a large-churn 5-state redesign of `PlatformReadiness` itself.
+
+
+
 None of the 6 platforms has real developer-app credentials configured in this development sandbox — confirmed no `SOCIAL_*_CLIENT_ID`/`_CLIENT_SECRET` env vars exist, and there is no publicly reachable callback URL this sandbox could register with any provider. **Every connector therefore reports `NOT_CONFIGURED` here** (the `SOCIAL_<PLATFORM>_ENABLED` flags are also unset by default). This is by design, not a gap: the adapter code, OAuth flow, encryption, and queue pipeline are complete and real; only the founder's own step of registering a developer app per platform and setting the resulting env vars can move any one of them to `AVAILABLE`.
 
 Bringing a connector to genuinely production-enabled additionally requires, per platform:
@@ -267,14 +299,19 @@ Bringing a connector to genuinely production-enabled additionally requires, per 
 
 ---
 
-## 9. Known gaps / deliberate non-implementations this phase
+## 9. Known gaps / deliberate non-implementations
 
-- **No `FOR UPDATE SKIP LOCKED`** in the queue worker (§4) — matches every existing worker's single-process assumption; not a new risk, but a real one for future horizontal scaling.
-- **No stuck-row sweep** for a channel post left in `PUBLISHING` past a reasonable timeout (e.g. a process crash mid-call) — the idempotency check protects against a *duplicate post* once such a row is eventually reprocessed, but nothing currently requeues it automatically.
+Resolved in Production Review Round 1 (kept here crossed off, not deleted, so the history is legible): ~~no stuck-row sweep~~ (§4, `sweepStuckPublishingRows()`); ~~market-scope enforcement~~ (§1/§R1.8-9, enforced server-side); ~~OAuth state in an unsafe in-memory Map~~ (§5, moved to Redis with redirectUri/actor binding).
+
+Still open:
+
+- **No `FOR UPDATE SKIP LOCKED`** in the queue worker (§4) — matches every existing worker's single-process assumption. `PROMOTION_QUEUE_ENABLED` (§4) is the explicit safety valve if production is ever scaled to multiple replicas before this is addressed; not a new risk, but a real one for future horizontal scaling.
+- **No per-provider remote-state reconciliation call** — `getPostStatus()` exists on the adapter interface but isn't wired into the `REQUIRES_ACTION` human-resolution flow; resolving an ambiguous outcome today means a human checks the platform directly. See "Idempotency, precisely" in §4.
 - **Real end-to-end OAuth exchange** against any of the 6 platforms is unexercisable in this environment (§8) — code is complete, untested against a live provider.
-- **Webhook receivers** for platforms that could push status/metric updates are not built this phase — would need signature verification, replay protection, and idempotent processing per the phase's own explicit requirements, none of which can be meaningfully tested without live credentials.
-- **Video/Reels creative** — confirmed no ffmpeg or any video-processing library exists anywhere in this codebase (`utils/media.ts`'s `processVideo()` is itself a placeholder with a literal `// TODO: Implement FFmpeg thumbnail extraction`). Creative upload this phase is **image-only**, reusing the existing Sharp pipeline via a new, narrowly-scoped `promotion-creative.controller.ts` that produces one optimized WebP derivative per upload (capped at 1600px) — deliberately not four platform-specific crop presets (square/portrait/story/landscape), and deliberately not added to `utils/media.ts`'s shared `IMAGE_SIZES` map, since that constant drives every existing product/category/blog image upload and adding social-specific derivatives there would generate unwanted extra output for all of them.
-- **Market-scope enforcement** on campaigns — the `market_scope` column exists; no query filters on it. Global-only this phase.
+- **Webhook receivers** for platforms that could push status/metric updates are not built — would need signature verification, replay protection, and idempotent processing, none of which can be meaningfully tested without live credentials.
+- **Video/Reels creative** — confirmed no ffmpeg or any video-processing library exists anywhere in this codebase (`utils/media.ts`'s `processVideo()` is itself a placeholder with a literal `// TODO: Implement FFmpeg thumbnail extraction`). Creative upload is **image-only**, reusing the existing Sharp pipeline via a narrowly-scoped `promotion-creative.controller.ts` (its own dedicated multer instance, image-MIME-only, 10MB cap — not the shared 100MB/video-capable `upload` instance) that produces one optimized WebP derivative per upload (capped at 1600px) — deliberately not four platform-specific crop presets, and deliberately not added to `utils/media.ts`'s shared `IMAGE_SIZES` map, since that constant drives every existing product/category/blog image upload.
+- **Product/coupon market-sellability** — a campaign's `market_scope` controls who may manage/promote it, not whether every selected product is actually sellable in that market (the catalog is global today); surfaced directly in the composer UI, not just in this doc.
 - **Key rotation** — plan documented (§6), script not written.
 - **Metrics-sync cursor** — in-memory, resets on worker restart (same tradeoff `metrics.broadcaster.ts` already accepts).
 - **A "Promotion Pulse" summary strip** on the campaign list page (active/scheduled/publishing/failed counts) was not built — the list page is a real, working, filterable table instead; a dedicated stats endpoint would be a small, clean follow-up.
+- **`email_sender_aliases.smtp_pass_encrypted` (plaintext) and WhatsApp's masking-only "encryption"** — pre-existing, unrelated to Promotions, deliberately not fixed here; see `docs/PROMOTION-OPS-1-IMPLEMENTATION-REPORT.md` §R1.26's security debt register.

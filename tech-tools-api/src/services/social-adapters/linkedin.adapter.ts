@@ -153,20 +153,20 @@ export class LinkedInAdapter extends BaseSocialAdapter {
       body.content = { article: { source: input.link } }
     }
 
-    const res = await fetch(`${API_BASE}/posts`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${input.connection.accessToken}`,
-        'LinkedIn-Version': LINKEDIN_API_VERSION,
-        'Content-Type': 'application/json',
-        'X-Restli-Protocol-Version': '2.0.0',
+    const res = await this.fetchOrThrow(
+      `${API_BASE}/posts`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${input.connection.accessToken}`,
+          'LinkedIn-Version': LINKEDIN_API_VERSION,
+          'Content-Type': 'application/json',
+          'X-Restli-Protocol-Version': '2.0.0',
+        },
+        body: JSON.stringify(body),
       },
-      body: JSON.stringify(body),
-    })
-    if (!res.ok) {
-      const errorBody = await res.json().catch(() => ({}))
-      throw new Error(`LinkedIn publish failed: ${(errorBody as any)?.message || `HTTP ${res.status}`}`)
-    }
+      'LinkedIn publish',
+    )
     // LinkedIn returns the created post's URN in the x-restli-id response header, not a JSON body.
     const postUrn = res.headers.get('x-restli-id') || res.headers.get('X-RestLi-Id') || ''
     return { remotePostId: postUrn }

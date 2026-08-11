@@ -7,6 +7,7 @@ import {
   StaffAuthRequest,
 } from './staff'
 import { query } from '../database/connection'
+import { STAFF_ROLE_PERMISSIONS } from '../config/staff-permissions.config'
 
 jest.mock('../database/connection', () => ({
   query: jest.fn(),
@@ -316,5 +317,110 @@ describe('isCountryInScope (IDOR guard for :id routes)', () => {
     } as any as StaffAuthRequest
 
     expect(isCountryInScope(req, 'CM')).toBe(false)
+  })
+})
+
+/**
+ * Production Review Round 1 §16 -- "test direct API access, not only page
+ * hiding." social-connection.routes.ts gates connect/disconnect/disable/
+ * list-with-tokens behind social.accounts.manage / social.accounts.view,
+ * strictly separate from social.publish/social.schedule (which
+ * MARKETING_MANAGER does hold). These exercise the exact middleware
+ * factory + exact permission strings those routes use, with req.staff
+ * pre-populated from the real permission matrix (never DB-loaded) --
+ * i.e. what actually runs on every request, not a UI visibility check.
+ */
+describe('requirePermissionOrLegacyRole -- social.accounts.* separation from social.publish/schedule', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  const staffReq = (role: keyof typeof STAFF_ROLE_PERMISSIONS, userType = 'customer') =>
+    ({
+      user: { userId: 'u1', userType },
+      staff: {
+        memberships: [{ id: 'm1', role, marketScope: null }],
+        permissions: STAFF_ROLE_PERMISSIONS[role],
+      },
+    } as any as StaffAuthRequest)
+
+  it('a MARKETING_MANAGER is denied direct API access to connect/disconnect/disable a social account (social.accounts.manage)', async () => {
+    const req = staffReq('MARKETING_MANAGER')
+    const res = makeRes()
+    const next = jest.fn()
+
+    await requirePermissionOrLegacyRole('social.accounts.manage', 'admin', 'super_admin')(req, res, next)
+
+    expect(res.status).toHaveBeenCalledWith(403)
+    expect(next).not.toHaveBeenCalled()
+  })
+
+  it('a MARKETING_MANAGER is denied direct API access to list connections with tokens (social.accounts.view)', async () => {
+    const req = staffReq('MARKETING_MANAGER')
+    const res = makeRes()
+    const next = jest.fn()
+
+    await requirePermissionOrLegacyRole('social.accounts.view', 'admin', 'super_admin')(req, res, next)
+
+    expect(res.status).toHaveBeenCalledWith(403)
+    expect(next).not.toHaveBeenCalled()
+  })
+
+  it('the same MARKETING_MANAGER IS allowed through the publish/schedule gates -- the denial above is specific to account management, not social.* as a whole', async () => {
+    for (const permission of ['social.publish', 'social.schedule', 'social.view', 'social.analytics'] as const) {
+      const req = staffReq('MARKETING_MANAGER')
+      const res = makeRes()
+      const next = jest.fn()
+
+      await requirePermissionOrLegacyRole(permission, 'admin', 'super_admin')(req, res, next)
+
+      expect(next).toHaveBeenCalled()
+      expect(res.status).not.toHaveBeenCalled()
+    }
+  })
+
+  it('ADMIN is likewise denied social.accounts.manage, matching its existing exclusion from settings/security/staff.manage', async () => {
+    const req = staffReq('ADMIN')
+    const res = makeRes()
+    const next = jest.fn()
+
+    await requirePermissionOrLegacyRole('social.accounts.manage', 'super_admin')(req, res, next)
+
+    expect(res.status).toHaveBeenCalledWith(403)
+  })
+
+  it('OWNER and SUPER_ADMIN are allowed through social.accounts.manage', async () => {
+    for (const role of ['OWNER', 'SUPER_ADMIN'] as const) {
+      const req = staffReq(role)
+      const res = makeRes()
+      const next = jest.fn()
+
+      await requirePermissionOrLegacyRole('social.accounts.manage', 'admin', 'super_admin')(req, res, next)
+
+      expect(next).toHaveBeenCalled()
+      expect(res.status).not.toHaveBeenCalled()
+    }
+  })
+
+  it('a legacy bootstrap admin userType bypasses the permission check entirely, by documented design, regardless of their staff permission set', async () => {
+    const req = staffReq('MARKET_MANAGER', 'admin')
+    const res = makeRes()
+    const next = jest.fn()
+
+    await requirePermissionOrLegacyRole('social.accounts.manage', 'admin', 'super_admin')(req, res, next)
+
+    expect(next).toHaveBeenCalled()
+    expect(res.status).not.toHaveBeenCalled()
+  })
+
+  it('a MARKET_MANAGER (no social.* permissions at all) is denied both account management and publish/schedule', async () => {
+    for (const permission of ['social.accounts.manage', 'social.publish', 'social.schedule'] as const) {
+      const req = staffReq('MARKET_MANAGER')
+      const res = makeRes()
+      const next = jest.fn()
+
+      await requirePermissionOrLegacyRole(permission, 'admin', 'super_admin')(req, res, next)
+
+      expect(res.status).toHaveBeenCalledWith(403)
+      expect(next).not.toHaveBeenCalled()
+    }
   })
 })

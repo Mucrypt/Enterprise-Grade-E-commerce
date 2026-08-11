@@ -1,7 +1,6 @@
 import { Router } from 'express'
 import { authenticate } from '../../../middleware/auth'
 import { requirePermissionOrLegacyRole } from '../../../middleware/staff'
-import { upload } from '../../../utils/media'
 import {
   listCampaigns,
   getCampaign,
@@ -13,8 +12,9 @@ import {
   cancelCampaign,
   getCampaignMetrics,
   getCampaignActivity,
+  resolveChannelPost,
 } from './promotion-campaign.controller'
-import { uploadCampaignCreative } from './promotion-creative.controller'
+import { campaignCreativeUpload, uploadCampaignCreative } from './promotion-creative.controller'
 
 const router = Router()
 
@@ -34,12 +34,17 @@ router.post('/', requirePermissionOrLegacyRole('campaigns.manage', 'admin', 'sup
 router.post(
   '/creative-upload',
   requirePermissionOrLegacyRole('campaigns.manage', 'admin', 'super_admin'),
-  upload.single('file'),
+  campaignCreativeUpload.single('file'),
   uploadCampaignCreative,
 )
 router.patch('/:id', requirePermissionOrLegacyRole('campaigns.manage', 'admin', 'super_admin'), updateCampaign)
 router.post('/:id/validate', requirePermissionOrLegacyRole('campaigns.manage', 'admin', 'super_admin'), validateCampaign)
 router.post('/:id/cancel', requirePermissionOrLegacyRole('campaigns.manage', 'admin', 'super_admin'), cancelCampaign)
+router.post(
+  '/:id/channels/:channelPostId/resolve',
+  requirePermissionOrLegacyRole('campaigns.manage', 'admin', 'super_admin'),
+  resolveChannelPost,
+)
 
 router.post('/:id/schedule', requirePermissionOrLegacyRole('social.schedule', 'admin', 'super_admin'), scheduleCampaign)
 router.post('/:id/publish-now', requirePermissionOrLegacyRole('social.publish', 'admin', 'super_admin'), publishCampaignNow)

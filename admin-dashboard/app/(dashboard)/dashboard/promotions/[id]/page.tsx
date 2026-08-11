@@ -1,9 +1,11 @@
 'use client'
 
+import { useState } from 'react'
+import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { RequirePagePermission } from '@/components/auth/RequirePagePermission'
-import promotionService from '@/services/promotion.service'
+import promotionService, { CampaignChannelPost, ChannelResolutionOutcome } from '@/services/promotion.service'
 import { CampaignStatusBadge } from '@/components/promotions/CampaignStatusBadge'
 import { ChannelStatusBadge } from '@/components/promotions/ChannelStatusBadge'
 import { Button } from '@/components/ui/button'
@@ -11,8 +13,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
-import { Pencil, ExternalLink } from 'lucide-react'
+import { Pencil, ExternalLink, AlertTriangle } from 'lucide-react'
 
 function CampaignDetailPageContent() {
   const params = useParams<{ id: string }>()
@@ -81,6 +86,7 @@ function CampaignDetailPageContent() {
                 <Row label='Objective' value={campaign.objective || '—'} />
                 <Row label='Coupon' value={campaign.couponId || 'None attached'} />
                 <Row label='Landing URL' value={campaign.landingUrl || '—'} />
+                <Row label='Market scope' value={campaign.marketScope && campaign.marketScope.length > 0 ? campaign.marketScope.join(', ') : 'Global'} />
                 <Row label='Timezone' value={campaign.timezone} />
                 <Row label='Scheduled' value={campaign.scheduledAt ? new Date(campaign.scheduledAt).toLocaleString() : '—'} />
                 <Row label='Published' value={campaign.publishedAt ? new Date(campaign.publishedAt).toLocaleString() : '—'} />
@@ -118,6 +124,13 @@ function CampaignDetailPageContent() {
         </TabsContent>
 
         <TabsContent value='channels'>
+          {campaign.channels.some((c) => c.status === 'REQUIRES_ACTION') && (
+            <div className='mb-3 flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm'>
+              <AlertTriangle className='h-4 w-4 shrink-0 text-destructive' />
+              One or more channels have an outcome that could not be automatically confirmed and were never retried
+              automatically -- verify directly on the platform, then resolve below.
+            </div>
+          )}
           <div className='rounded-lg border'>
             <Table>
               <TableHeader>
@@ -127,6 +140,7 @@ function CampaignDetailPageContent() {
                   <TableHead>Attempts</TableHead>
                   <TableHead>Last error</TableHead>
                   <TableHead>Link</TableHead>
+                  <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -149,6 +163,9 @@ function CampaignDetailPageContent() {
                         '—'
                       )}
                     </TableCell>
+                    <TableCell>
+                      {c.status === 'REQUIRES_ACTION' && <ResolveChannelButton campaignId={campaign.id} channel={c} />}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -157,7 +174,7 @@ function CampaignDetailPageContent() {
         </TabsContent>
 
         <TabsContent value='performance'>
-          <PerformanceTab campaignId={campaign.id} />
+          <PerformanceTab campaignId={campaign.id} campaignKey={campaign.campaignKey} />
         </TabsContent>
 
         <TabsContent value='activity'>
@@ -177,7 +194,71 @@ function Row({ label, value }: { label: string; value: string }) {
   )
 }
 
-function PerformanceTab({ campaignId }: { campaignId: string }) {
+/**
+ * Human resolution for a REQUIRES_ACTION channel (Production Review
+ * Round 1 §4/§6) -- the queue never auto-retries an ambiguous outcome, so
+ * a staff member must verify directly on the platform and tell TechTools
+ * what really happened.
+ */
+function ResolveChannelButton({ campaignId, channel }: { campaignId: string; channel: CampaignChannelPost }) {
+  const queryClient = useQueryClient()
+  const [open, setOpen] = useState(false)
+  const [remotePostId, setRemotePostId] = useState('')
+  const [remotePermalink, setRemotePermalink] = useState('')
+
+  const mutation = useMutation({
+    mutationFn: (outcome: ChannelResolutionOutcome) =>
+      promotionService.resolveChannelPost(campaignId, channel.id, outcome, { remotePostId: remotePostId || undefined, remotePermalink: remotePermalink || undefined }),
+    onSuccess: () => {
+      toast.success('Channel resolved.')
+      setOpen(false)
+      queryClient.invalidateQueries({ queryKey: ['promotions', 'campaign', campaignId] })
+    },
+    onError: () => toast.error('Failed to resolve -- please try again.'),
+  })
+
+  return (
+    <>
+      <Button size='sm' variant='outline' onClick={() => setOpen(true)}>
+        Resolve
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Resolve {channel.channel}</DialogTitle>
+          </DialogHeader>
+          <div className='space-y-3 text-sm'>
+            <p className='text-muted-foreground'>
+              {channel.lastError || 'The outcome of this publish attempt could not be automatically confirmed.'}
+            </p>
+            <p>Check {channel.channel} directly, then tell TechTools what actually happened:</p>
+            <div>
+              <Label htmlFor='resolve-remote-id'>Real post ID (only if it did publish)</Label>
+              <Input id='resolve-remote-id' value={remotePostId} onChange={(e) => setRemotePostId(e.target.value)} placeholder='e.g. the post ID from the platform' />
+            </div>
+            <div>
+              <Label htmlFor='resolve-permalink'>Post URL (optional)</Label>
+              <Input id='resolve-permalink' value={remotePermalink} onChange={(e) => setRemotePermalink(e.target.value)} placeholder='https://...' />
+            </div>
+          </div>
+          <DialogFooter className='flex-wrap gap-2'>
+            <Button variant='outline' onClick={() => mutation.mutate('RETRY')} disabled={mutation.isPending}>
+              It never posted -- retry
+            </Button>
+            <Button variant='destructive' onClick={() => mutation.mutate('FAILED')} disabled={mutation.isPending}>
+              It never posted -- give up
+            </Button>
+            <Button onClick={() => mutation.mutate('PUBLISHED')} disabled={mutation.isPending || !remotePostId.trim()}>
+              It did publish -- confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+function PerformanceTab({ campaignId, campaignKey }: { campaignId: string; campaignKey: string }) {
   const { data, isLoading } = useQuery({
     queryKey: ['promotions', 'campaign', campaignId, 'metrics'],
     queryFn: () => promotionService.getCampaignMetrics(campaignId),
@@ -188,6 +269,17 @@ function PerformanceTab({ campaignId }: { campaignId: string }) {
 
   return (
     <div className='space-y-3'>
+      <div className='flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 text-sm'>
+        <span>
+          TechTools commerce attribution (sessions/orders/revenue this campaign drove) lives in Analytics, not here --
+          look for campaign <code className='rounded bg-muted px-1'>{campaignKey}</code> in the Acquisition table.
+        </span>
+        <Link href='/dashboard/analytics?tab=acquisition'>
+          <Button variant='outline' size='sm' className='shrink-0'>
+            View Commerce Performance
+          </Button>
+        </Link>
+      </div>
       <div className='grid gap-3 md:grid-cols-2'>
         {data.channels.map((c) => (
           <Card key={c.channel}>

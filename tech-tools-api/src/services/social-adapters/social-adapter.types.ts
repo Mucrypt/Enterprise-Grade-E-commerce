@@ -125,6 +125,38 @@ export class PlatformNotConfiguredError extends Error {
   }
 }
 
+/**
+ * How a publish (or other real-network-call) failure should be handled by
+ * the queue -- Production Review Round 1 §5.
+ *
+ * SAFE_TO_RETRY       -- the provider gave a definitive response (a real
+ *                         HTTP status), and that response indicates a
+ *                         transient condition (rate limit, 5xx). The
+ *                         request was received and rejected/errored, not
+ *                         silently dropped -- retrying cannot double-post.
+ * DO_NOT_RETRY         -- the provider gave a definitive response
+ *                         indicating a permanent condition (expired/
+ *                         missing auth, invalid media/caption, account
+ *                         restricted, app review required). Retrying
+ *                         would fail identically forever.
+ * REMOTE_STATE_UNKNOWN -- no definitive response was ever received (the
+ *                         network call itself threw -- timeout, reset,
+ *                         DNS failure, aborted connection). Whether the
+ *                         provider received and processed the request
+ *                         before the connection failed cannot be known
+ *                         from here. Never auto-retried -- see
+ *                         promotion-campaign.queue.ts's REQUIRES_ACTION
+ *                         handling.
+ */
+export type PublishFailureClassification = 'SAFE_TO_RETRY' | 'DO_NOT_RETRY' | 'REMOTE_STATE_UNKNOWN'
+
+export class PublishError extends Error {
+  constructor(message: string, public classification: PublishFailureClassification, public errorCode: string) {
+    super(message)
+    this.name = 'PublishError'
+  }
+}
+
 export interface SocialPublisherAdapter {
   platform: SocialPlatform
 

@@ -10,8 +10,8 @@ export type SocialPlatform = 'FACEBOOK' | 'INSTAGRAM' | 'TIKTOK' | 'LINKEDIN' | 
 
 export const SOCIAL_PLATFORMS: SocialPlatform[] = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'LINKEDIN', 'PINTEREST', 'X']
 
-export type CampaignStatus = 'DRAFT' | 'SCHEDULED' | 'PUBLISHING' | 'PARTIAL_SUCCESS' | 'PUBLISHED' | 'FAILED' | 'CANCELLED'
-export type ChannelPostStatus = 'DRAFT' | 'QUEUED' | 'PUBLISHING' | 'PUBLISHED' | 'FAILED' | 'CANCELLED' | 'SKIPPED_DRY_RUN'
+export type CampaignStatus = 'DRAFT' | 'SCHEDULED' | 'PUBLISHING' | 'PARTIAL_SUCCESS' | 'PUBLISHED' | 'FAILED' | 'CANCELLED' | 'DRY_RUN_COMPLETED'
+export type ChannelPostStatus = 'DRAFT' | 'QUEUED' | 'PUBLISHING' | 'PUBLISHED' | 'FAILED' | 'CANCELLED' | 'DRY_RUN_SUCCEEDED' | 'REQUIRES_ACTION'
 export type PlatformReadiness = 'NOT_CONFIGURED' | 'NEEDS_CREDENTIALS' | 'AVAILABLE'
 
 export interface PlatformCapabilities {
@@ -74,6 +74,7 @@ export interface CampaignChannelPost {
   remotePostId: string | null
   remotePermalink: string | null
   lastError: string | null
+  lastErrorCode: string | null
   attemptCount: number
   maxRetries: number
   dryRun: boolean
@@ -97,6 +98,8 @@ export interface CampaignDetail {
   objective: string | null
   masterMessage: string
   couponId: string | null
+  /** NULL = global campaign. See docs/SOCIAL-PUBLISHING-ARCHITECTURE.md §8 -- not enforced against product/coupon availability, only campaign visibility. */
+  marketScope: string[] | null
   landingUrl: string | null
   creativeAssets: CreativeAsset[]
   timezone: string
@@ -205,6 +208,16 @@ async function getCampaignActivity(id: string) {
   return apiClient.get<{ success: true; activity: CampaignActivityEntry[] }>(`/promotions/campaigns/${id}/activity`)
 }
 
+export type ChannelResolutionOutcome = 'PUBLISHED' | 'FAILED' | 'RETRY'
+
+/** Human resolution for a channel post stuck in REQUIRES_ACTION -- the queue never auto-retries an ambiguous outcome, so a staff member must explicitly confirm what really happened. See docs/SOCIAL-PUBLISHING-ARCHITECTURE.md §4. */
+async function resolveChannelPost(campaignId: string, channelPostId: string, outcome: ChannelResolutionOutcome, details?: { remotePostId?: string; remotePermalink?: string }) {
+  return apiClient.post<{ success: true; message: string }>(
+    `/promotions/campaigns/${campaignId}/channels/${channelPostId}/resolve`,
+    { outcome, ...details },
+  )
+}
+
 // ---------- Connections ----------
 
 export interface SocialConnection {
@@ -256,6 +269,7 @@ export const promotionService = {
   cancelCampaign,
   getCampaignMetrics,
   getCampaignActivity,
+  resolveChannelPost,
   listConnections,
   getCapabilities,
   startOAuth,

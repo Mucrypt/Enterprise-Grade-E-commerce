@@ -143,15 +143,11 @@ export class FacebookAdapter extends BaseSocialAdapter {
         JSON.stringify(input.mediaRefs.map((ref) => ({ media_fbid: ref }))),
       )
     }
-    const res = await fetch(`${GRAPH_BASE}/${input.connection.externalAccountId}/feed`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: params.toString(),
-    })
-    if (!res.ok) {
-      const errorBody = await res.json().catch(() => ({}))
-      throw new Error(`Facebook publish failed: ${(errorBody as any)?.error?.message || `HTTP ${res.status}`}`)
-    }
+    const res = await this.fetchOrThrow(
+      `${GRAPH_BASE}/${input.connection.externalAccountId}/feed`,
+      { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: params.toString() },
+      'Facebook publish',
+    )
     const body = (await res.json()) as { id: string }
     return { remotePostId: body.id, remotePermalink: `https://www.facebook.com/${body.id}` }
   }

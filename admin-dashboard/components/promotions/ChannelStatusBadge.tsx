@@ -8,7 +8,13 @@ const STATUS_STYLE: Record<ChannelPostStatus, { label: string; variant: 'default
   PUBLISHED: { label: 'Published', variant: 'default' },
   FAILED: { label: 'Failed', variant: 'destructive' },
   CANCELLED: { label: 'Cancelled', variant: 'outline' },
-  SKIPPED_DRY_RUN: { label: 'Skipped (dry run)', variant: 'outline' },
+  // Distinct from PUBLISHED -- a simulated publish must never be
+  // confusable with a genuine one (Production Review Round 1 §3).
+  DRY_RUN_SUCCEEDED: { label: 'Dry Run Succeeded', variant: 'outline' },
+  // The outcome is genuinely unknown (e.g. a network failure with no
+  // definitive response) -- never auto-retried, needs a human decision
+  // (Production Review Round 1 §4).
+  REQUIRES_ACTION: { label: 'Requires Action', variant: 'destructive' },
 }
 
 export function ChannelStatusBadge({ status }: { status: ChannelPostStatus }) {

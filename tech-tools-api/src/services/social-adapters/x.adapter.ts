@@ -151,18 +151,11 @@ export class XAdapter extends BaseSocialAdapter {
     if (input.mediaRefs && input.mediaRefs.length > 0) {
       body.media = { media_ids: input.mediaRefs }
     }
-    const res = await fetch(`${API_BASE}/tweets`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${input.connection.accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    })
-    if (!res.ok) {
-      const errorBody = await res.json().catch(() => ({}))
-      throw new Error(`X publish failed: ${(errorBody as any)?.detail || `HTTP ${res.status}`}`)
-    }
+    const res = await this.fetchOrThrow(
+      `${API_BASE}/tweets`,
+      { method: 'POST', headers: { Authorization: `Bearer ${input.connection.accessToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+      'X publish',
+    )
     const created = (await res.json()) as { data: { id: string } }
     return { remotePostId: created.data.id, remotePermalink: `https://x.com/i/web/status/${created.data.id}` }
   }
