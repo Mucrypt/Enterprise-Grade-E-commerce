@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import analyticsV2Service from '@/services/analytics-v2.service'
 import type { UseAnalyticsFiltersReturn } from '../useAnalyticsFilters'
@@ -45,7 +46,9 @@ export function OperationsTab({ filters, onScopeResolved }: OperationsTabProps) 
     staleTime: 60_000,
   })
 
-  if (data) onScopeResolved?.({ scoped: data.scoped, markets: data.markets })
+  useEffect(() => {
+    if (data) onScopeResolved?.({ scoped: data.scoped, markets: data.markets })
+  }, [data, onScopeResolved])
 
   return (
     <div className='space-y-4'>

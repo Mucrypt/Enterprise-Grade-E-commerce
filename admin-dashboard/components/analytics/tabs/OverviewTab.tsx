@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { DollarSign, ShoppingCart, Percent, Users, LogOut, RotateCcw, Repeat, TrendingUp } from 'lucide-react'
 import analyticsV2Service from '@/services/analytics-v2.service'
@@ -31,7 +32,17 @@ export function OverviewTab({ filters, onScopeResolved }: OverviewTabProps) {
     staleTime: 60_000,
   })
 
-  if (data) onScopeResolved?.({ scoped: data.scoped, markets: data.markets })
+  // Reporting scope up to the parent must happen in an effect, not the
+  // render body -- calling the setter unconditionally during render with a
+  // fresh object literal every time never lets React bail out of the
+  // update, which reruns this render, which calls the setter again: an
+  // infinite render loop that pegs the tab's main thread (this was a real,
+  // reproducing-in-production bug across every Analytics tab that received
+  // onScopeResolved). The effect only reruns when the query's `data`
+  // reference actually changes (a genuine new fetch), not on every render.
+  useEffect(() => {
+    if (data) onScopeResolved?.({ scoped: data.scoped, markets: data.markets })
+  }, [data, onScopeResolved])
 
   return (
     <div className='space-y-4'>

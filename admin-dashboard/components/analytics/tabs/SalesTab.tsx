@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   ResponsiveContainer,
@@ -39,7 +40,9 @@ export function SalesTab({ filters, onScopeResolved }: SalesTabProps) {
     staleTime: 60_000,
   })
 
-  if (data) onScopeResolved?.({ scoped: data.scoped, markets: data.markets })
+  useEffect(() => {
+    if (data) onScopeResolved?.({ scoped: data.scoped, markets: data.markets })
+  }, [data, onScopeResolved])
 
   const productColumns: AnalyticsTableColumn<SalesDataPayload['revenueByProduct'][number]>[] = [
     { key: 'product', header: 'Product', render: (r) => <span className='font-medium'>{r.productName}</span> },

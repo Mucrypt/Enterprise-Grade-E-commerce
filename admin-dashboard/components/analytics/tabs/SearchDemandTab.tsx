@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip } from 'recharts'
 import analyticsV2Service from '@/services/analytics-v2.service'
@@ -45,7 +46,9 @@ export function SearchDemandTab({ filters, onScopeResolved }: SearchDemandTabPro
     staleTime: 60_000,
   })
 
-  if (data) onScopeResolved?.({ scoped: data.scoped, markets: data.markets })
+  useEffect(() => {
+    if (data) onScopeResolved?.({ scoped: data.scoped, markets: data.markets })
+  }, [data, onScopeResolved])
 
   const demandColumns: AnalyticsTableColumn<ProductFunnelRow>[] = [
     {

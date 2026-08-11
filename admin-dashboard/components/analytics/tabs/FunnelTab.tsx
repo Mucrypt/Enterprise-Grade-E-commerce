@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ResponsiveContainer, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, Cell } from 'recharts'
 import analyticsV2Service from '@/services/analytics-v2.service'
@@ -42,7 +43,9 @@ export function FunnelTab({ filters, onScopeResolved }: FunnelTabProps) {
     staleTime: 60_000,
   })
 
-  if (data) onScopeResolved?.({ scoped: data.scoped, markets: data.markets })
+  useEffect(() => {
+    if (data) onScopeResolved?.({ scoped: data.scoped, markets: data.markets })
+  }, [data, onScopeResolved])
 
   return (
     <div className='space-y-4'>

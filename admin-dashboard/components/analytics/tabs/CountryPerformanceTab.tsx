@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import analyticsV2Service, { CountryPerformanceRow } from '@/services/analytics-v2.service'
 import type { UseAnalyticsFiltersReturn } from '../useAnalyticsFilters'
@@ -28,7 +29,9 @@ export function CountryPerformanceTab({ filters, onScopeResolved }: CountryPerfo
     staleTime: 60_000,
   })
 
-  if (data) onScopeResolved?.({ scoped: data.scoped, markets: data.markets })
+  useEffect(() => {
+    if (data) onScopeResolved?.({ scoped: data.scoped, markets: data.markets })
+  }, [data, onScopeResolved])
 
   const columns: AnalyticsTableColumn<CountryPerformanceRow>[] = [
     { key: 'country', header: 'Country', render: (r) => r.country },

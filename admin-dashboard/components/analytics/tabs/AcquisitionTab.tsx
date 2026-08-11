@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import analyticsV2Service, { AcquisitionChannel } from '@/services/analytics-v2.service'
 import type { UseAnalyticsFiltersReturn } from '../useAnalyticsFilters'
@@ -25,7 +26,9 @@ export function AcquisitionTab({ filters, onScopeResolved }: AcquisitionTabProps
     staleTime: 60_000,
   })
 
-  if (data) onScopeResolved?.({ scoped: data.scoped, markets: data.markets })
+  useEffect(() => {
+    if (data) onScopeResolved?.({ scoped: data.scoped, markets: data.markets })
+  }, [data, onScopeResolved])
 
   const columns: AnalyticsTableColumn<AcquisitionChannel>[] = [
     { key: 'source', header: 'Source', render: (r) => r.source },

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import analyticsV2Service, { ProductSort, ProductIntelligenceRow } from '@/services/analytics-v2.service'
 import type { UseAnalyticsFiltersReturn } from '../useAnalyticsFilters'
@@ -50,7 +50,9 @@ export function ProductsTab({ filters, onScopeResolved }: ProductsTabProps) {
     staleTime: 60_000,
   })
 
-  if (data) onScopeResolved?.({ scoped: data.scoped, markets: data.markets })
+  useEffect(() => {
+    if (data) onScopeResolved?.({ scoped: data.scoped, markets: data.markets })
+  }, [data, onScopeResolved])
 
   const columns: AnalyticsTableColumn<ProductRow>[] = [
     {
