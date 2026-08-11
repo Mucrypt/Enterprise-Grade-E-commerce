@@ -46,17 +46,19 @@ Six new permissions (`social.view`, `social.publish`, `social.schedule`, `social
 
 ## 5. Campaign lifecycle
 
+*(Originally published with a `PUBLISHED`-only success terminus and a `SKIPPED_DRY_RUN` channel status; corrected in Production Review Round 1 §R1.3 — a dry-run campaign can now only ever reach `DRY_RUN_COMPLETED`, never `PUBLISHED`, and `REQUIRES_ACTION` was added at the channel level for an ambiguous outcome. Diagram and enum list below reflect the current, actual code.)*
+
 ```
-DRAFT ──(schedule)──▶ SCHEDULED ──(queue tick, time arrives)──▶ PUBLISHING ──▶ PUBLISHED
+DRAFT ──(schedule)──▶ SCHEDULED ──(queue tick, time arrives)──▶ PUBLISHING ──▶ PUBLISHED (all channels really published)
   │                        │                                         │
-  │                        │(publish-now, immediate)                 ├──▶ PARTIAL_SUCCESS
+  │                        │(publish-now, immediate)                 ├──▶ DRY_RUN_COMPLETED (all channels simulated)
   │                        ▼                                         │
-  │                    PUBLISHING                                    └──▶ FAILED
-  │
-  └──(cancel)──▶ CANCELLED
+  │                    PUBLISHING                                    ├──▶ PARTIAL_SUCCESS (mixed outcomes, or any channel REQUIRES_ACTION)
+  │                                                                   │
+  └──(cancel)──▶ CANCELLED                                           └──▶ FAILED (every channel terminally failed)
 ```
 
-Editing (`PATCH /promotions/campaigns/:id`) is only permitted while `status = 'DRAFT'` — enforced server-side (`assertEditable()`), returns `409` otherwise, not merely hidden in the UI. Cancellation is only permitted from `DRAFT`/`SCHEDULED` (`409` once publishing has genuinely started — cancelling mid-publish would leave already-succeeded channels in an undefined state, so it isn't offered). Channel-post-level status (`DRAFT/QUEUED/PUBLISHING/PUBLISHED/FAILED/CANCELLED/SKIPPED_DRY_RUN`) is independent per channel — see the architecture doc §4 for the full reconciliation logic that derives campaign-level status from channel-level statuses.
+Editing (`PATCH /promotions/campaigns/:id`) is only permitted while `status = 'DRAFT'` — enforced server-side (`assertEditable()`), returns `409` otherwise, not merely hidden in the UI. Cancellation is only permitted from `DRAFT`/`SCHEDULED` (`409` once publishing has genuinely started — cancelling mid-publish would leave already-succeeded channels in an undefined state, so it isn't offered). Channel-post-level status (`DRAFT/QUEUED/PUBLISHING/PUBLISHED/FAILED/CANCELLED/DRY_RUN_SUCCEEDED/REQUIRES_ACTION`) is independent per channel — see the architecture doc §4 for the full reconciliation logic that derives campaign-level status from channel-level statuses.
 
 ---
 
@@ -83,7 +85,9 @@ One `SocialPublisherAdapter` interface, one class per platform (`facebook.adapte
 
 ## 9. Idempotency
 
-Three-part guarantee: (1) a row is claimed — moved to `PUBLISHING` via an atomic `UPDATE ... RETURNING` — **before** any network call; (2) a row already carrying a `remote_post_id` is never re-published, only reconciled; (3) `social_publish_attempts` is an append-only ledger of every attempt for audit/investigation. Verified by 10 tests in `promotion-campaign.queue.test.ts`, including an explicit idempotency-guard test (a claimed row with a pre-existing `remote_post_id` never calls `adapter.publish()`), dry-run rows never calling the adapter, and campaign-status reconciliation never touching an in-flight campaign. Known gap: no stuck-row sweep for a crash mid-call — documented, not solved, in the architecture doc §9.
+*(Originally shipped with the stuck-row-sweep gap below still open; closed in Production Review Round 1 §R1.6 — see the fourth guarantee added below. Failure classification, described here only at a high level, is detailed in §R1.5.)*
+
+Four-part guarantee: (1) a row is claimed — moved to `PUBLISHING` via an atomic `UPDATE ... RETURNING` — **before** any network call; (2) a row already carrying a `remote_post_id` is never re-published, only reconciled; (3) `social_publish_attempts` is an append-only ledger of every attempt for audit/investigation; (4) a row stuck in `PUBLISHING` past a safety timeout is swept to `REQUIRES_ACTION` — never blindly requeued, since the outcome of the interrupted attempt is genuinely unknown (`sweepStuckPublishingRows()`, §R1.6). Verified by 23 tests in `promotion-campaign.queue.test.ts` (up from the original 10), including an explicit idempotency-guard test (a claimed row with a pre-existing `remote_post_id` never calls `adapter.publish()`), dry-run rows never calling the adapter, campaign-status reconciliation never touching an in-flight campaign, and the stuck-row sweep itself. Still-open gap, honestly: none of the 6 adapters implement a provider-side "does this post already exist" reconciliation lookup — resolving a `REQUIRES_ACTION` channel today means a human checks the platform directly and reports the outcome via `POST /promotions/campaigns/:id/channels/:channelPostId/resolve`.
 
 ---
 
@@ -141,17 +145,19 @@ Full matrix (app review, media types, scheduling, metrics, rate limits, token ex
 
 ## 18. Tests / results
 
-**New this phase**: 7 test files, 71 new tests, covering exactly the scenarios achievable without real provider credentials (every adapter network call is mocked or never invoked in these tests — none hit a real social API):
+*(This section is a historical snapshot of the initial PROMOTION-OPS-1 build, kept for engineering history. It is no longer the current test count — Production Review Round 1 (§R1.27) added 44 more tests across 5 files, one of them new, and the Final Pre-Commit Corrections section below adds one more file on top of that. For the current, authoritative total, see "Final Pre-Commit Corrections" → quality gates at the end of this document.)*
+
+**New in the initial build**: 7 test files, 71 new tests, covering exactly the scenarios achievable without real provider credentials (every adapter network call is mocked or never invoked in these tests — none hit a real social API):
 
 - `staff-permissions.config.test.ts` (6) — the MARKET_MANAGER/social.accounts.* permission-matrix invariants (§4).
 - `secret-encryption.test.ts` (9) — round-trip, tamper detection (AES-GCM auth tag), wrong-key rejection, production-missing-key fail-closed, dev fallback.
 - `social-adapters/registry.test.ts` (20) — every platform reports `NOT_CONFIGURED`/`NEEDS_CREDENTIALS` (never `AVAILABLE`) in this environment; `buildAuthorizeUrl` throws when unconfigured and produces a real, correctly-parameterized URL once configured; X requires PKCE; `validatePost` catches over-length captions and empty posts without any network call.
-- `promotion-campaign.queue.test.ts` (10) — idempotency guard, dry-run never calling the real adapter, retry/backoff up to `max_retries` then terminal `FAILED`, missing-connection immediate failure, campaign-status reconciliation (`PARTIAL_SUCCESS`/`PUBLISHED`/left-alone-while-in-flight), and a query-throwing tick never crashing the process.
-- `promotion-campaign.controller.test.ts` (12) — campaign creation with a unique slugified `campaign_key`, the DRAFT-only edit lock (409 otherwise), product snapshotting (only display fields copied, a deleted/nonexistent product silently skipped, not inserted), schedule/publish-now/cancel lifecycle guards, and publish-now's "flip to QUEUED and return before any adapter call" behavior.
-- `social-connection.controller.test.ts` (9) — the response-DTO token-leak test described in §7, OAuth-start 409ing honestly for an unconfigured platform with zero DB queries issued, CSRF state rejection, and disconnect nulling both token columns.
+- `promotion-campaign.queue.test.ts` (10 originally, → 23 after Production Review Round 1) — idempotency guard, dry-run never calling the real adapter, retry/backoff up to `max_retries` then terminal `FAILED`, missing-connection immediate failure, campaign-status reconciliation (`PARTIAL_SUCCESS`/`PUBLISHED`/left-alone-while-in-flight), and a query-throwing tick never crashing the process.
+- `promotion-campaign.controller.test.ts` (12 originally, → 19 after Production Review Round 1) — campaign creation with a unique slugified `campaign_key`, the DRAFT-only edit lock (409 otherwise), product snapshotting (only display fields copied, a deleted/nonexistent product silently skipped, not inserted), schedule/publish-now/cancel lifecycle guards, and publish-now's "flip to QUEUED and return before any adapter call" behavior.
+- `social-connection.controller.test.ts` (9 originally, → 14 after Production Review Round 1) — the response-DTO token-leak test described in §7, OAuth-start 409ing honestly for an unconfigured platform with zero DB queries issued, CSRF state rejection, and disconnect nulling both token columns.
 - `promotion.utm.test.ts` (5) — exact UTM shape, per-platform lowercasing, query-param preservation, invalid-URL rejection.
 
-**Full backend suite, run for real (not just the new files)**: `npx tsc --noEmit` clean; `npx jest` — **30 test suites, 286 tests, all passing** (baseline before this phase, confirmed via the ADMIN-2B Production Review Round 1 report: 23 suites / 215 tests — the arithmetic reconciles exactly: 23+7=30 suites, 215+71=286 tests); `npm run build` (`tsc`) clean.
+**Full backend suite, run for real (not just the new files), as of the initial build**: `npx tsc --noEmit` clean; `npx jest` — 30 test suites, 286 tests, all passing (baseline before this phase, confirmed via the ADMIN-2B Production Review Round 1 report: 23 suites / 215 tests — the arithmetic reconciled exactly: 23+7=30 suites, 215+71=286 tests); `npm run build` (`tsc`) clean. **Superseded — see the current count at the end of this document.**
 
 **Frontend**: `npx tsc --noEmit` clean. `npm run lint` — zero errors in every file touched this phase (confirmed by targeted re-run after fixing 2 unescaped-entity errors, 4 `any`-type errors, and 1 `react-hooks/exhaustive-deps` warning found during the first pass); the one remaining warning anywhere in the codebase (`Sidebar.tsx`'s unused `Star` import) predates this phase. `NODE_OPTIONS=--max-old-space-size=3072 npm run build` — clean, all 43 routes compiled, including all 7 new Promotions routes (confirmed in the build's own route table: `/dashboard/promotions`, `/dashboard/promotions/[id]`, `/dashboard/promotions/[id]/edit`, `/dashboard/promotions/calendar`, `/dashboard/promotions/connections`, `/dashboard/promotions/connections/callback`, `/dashboard/promotions/new`). No new frontend test runner was installed (admin-dashboard still has none — same situation every prior phase encountered); manual smoke-test matrix below is the mitigation.
 
@@ -164,7 +170,7 @@ Full matrix (app review, media types, scheduling, metrics, rate limits, token ex
 - [ ] Message & Creative step: master message saves; image upload produces a real WebP derivative and displays it; removing an image before saving works.
 - [ ] Channels step: selecting a channel shows its connected-account dropdown (empty state if none connected) and per-channel message/hashtag overrides; saving persists exactly the selected channels.
 - [ ] Review & Validate step: running validation shows real per-channel errors/warnings (e.g. "no connected account selected," a platform reporting `NEEDS_CREDENTIALS`); the preview renders the correct effective message/link/hashtags per channel tab.
-- [ ] Schedule step: the DRY RUN banner is visible (expected in every environment without live credentials); scheduling for a future time succeeds; Publish Now returns immediately (does not hang the UI) and the campaign detail page shows `PUBLISHING` then (after the next queue tick, ≤15s) `PUBLISHED` with synthesized `dry-run-...` remote IDs per channel.
+- [ ] Schedule step: the DRY RUN banner is visible (expected in every environment without live credentials); scheduling for a future time succeeds; Publish Now returns immediately (does not hang the UI) and the campaign detail page shows `PUBLISHING` then (after the next queue tick, ≤15s) `DRY_RUN_COMPLETED` (channels: `DRY_RUN_SUCCEEDED`) with synthesized `dry-run-...` remote IDs per channel — **never `PUBLISHED`** (corrected in Production Review Round 1 §R1.3; originally this checklist said `PUBLISHED`, which was the exact CRITICAL issue that round fixed).
 - [ ] Campaign detail page: Overview/Channels/Performance/Activity tabs all render; Activity shows the real event trail (created/updated/scheduled/publish-initiated + the queue's own channel-publish events).
 - [ ] Calendar page renders a real month grid; a day with a scheduled/published campaign shows it; clicking opens the campaign detail page.
 - [ ] `/dashboard/promotions/connections` (as OWNER/SUPER_ADMIN): every one of the 6 platform cards shows an honest `NOT_CONFIGURED` badge and a disabled/labeled Connect button — never a fake "Connected" state.
@@ -209,15 +215,16 @@ Additive-only this phase: two new migrations (no existing table altered destruct
 
 ## 23. Known gaps
 
-Full list with rationale in `docs/SOCIAL-PUBLISHING-ARCHITECTURE.md` §9: no `FOR UPDATE SKIP LOCKED` (matches existing worker convention); no stuck-`PUBLISHING`-row sweep; OAuth flows unexercisable without live credentials; no webhook receivers; video/Reels creative unsupported (no ffmpeg in this codebase); market-scope column unenforced; key rotation undocumented-as-script (though the format supports it); metrics-sync cursor is in-memory; no "Promotion Pulse" summary strip on the list page; no newsletter/WhatsApp cross-linking.
+*(Originally listed "no stuck-PUBLISHING-row sweep" and "market-scope column unenforced" as open gaps; both were closed in Production Review Round 1 — §R1.6 and §R1.8/R1.9 respectively. Current, authoritative gap list is `docs/SOCIAL-PUBLISHING-ARCHITECTURE.md` §9, which marks those two resolved and lists what remains: no `FOR UPDATE SKIP LOCKED` (mitigated by `PROMOTION_QUEUE_ENABLED`, §R1.7); no per-provider remote-state reconciliation call for `REQUIRES_ACTION` resolution; OAuth flows unexercisable without live credentials; no webhook receivers; video/Reels creative unsupported; product/coupon market-sellability not proven by `market_scope`; key rotation undocumented-as-script; metrics-sync cursor is in-memory; no "Promotion Pulse" summary strip; no newsletter/WhatsApp cross-linking; the pre-existing, unrelated SMTP-plaintext/WhatsApp-masking-only secret storage (§R1.26's security debt register).)*
 
 ---
 
 ## 24. Next-phase recommendations
 
-- **PROMOTION-OPS-2**: stuck-row sweep + `FOR UPDATE SKIP LOCKED` if/when horizontal scaling is planned; webhook receivers for platforms that support them, once real credentials exist to test against; a `newsletter_campaign_id` FK on `promotion_campaigns` for the cross-channel linkage the founder's spec described; a "Promotion Pulse" stats endpoint/strip; per-platform crop presets in the Creative Studio; a formal review/approval workflow once a second marketer joins.
+- **PROMOTION-OPS-2**: `FOR UPDATE SKIP LOCKED` if/when horizontal scaling is planned (stuck-row sweep itself already shipped in Production Review Round 1); a provider-side remote-state reconciliation lookup to reduce manual `REQUIRES_ACTION` resolution; webhook receivers for platforms that support them, once real credentials exist to test against; a `newsletter_campaign_id` FK on `promotion_campaigns` for the cross-channel linkage the founder's spec described; a "Promotion Pulse" stats endpoint/strip; per-platform crop presets in the Creative Studio; a formal review/approval workflow once a second marketer joins.
 - **PROMOTION-OPS-3 / PAID-MEDIA** (explicitly future, per this phase's own boundary): Meta Marketing API, TikTok Ads, Google Ads integration — requires ad accounts, budgets, billing, and financial authorization this phase deliberately did not touch.
 - **Video support**: contingent on adding real video-processing infrastructure (ffmpeg or a managed transcoding service) to this codebase generally, not just for campaigns.
+- **`SECURITY-SECRETS-1`**: migrate `email_sender_aliases.smtp_pass_encrypted` and WhatsApp's masking-only "encryption" onto `secret-encryption.ts` (§R1.26).
 
 ---
 
@@ -233,7 +240,11 @@ No live production database connection is available in this environment. The fou
 SELECT id, filename, executed_at FROM schema_migrations ORDER BY id DESC LIMIT 10;
 ```
 
-If `041_staff_memberships.sql` is still the newest recorded row, `042`/`043` are valid as numbered. If a newer migration already exists in production that isn't in this repo's `src/database/migrations/`, **stop and renumber** `042`/`043` before applying — do not assume. (Any Global Commerce migration-number placeholders elsewhere in this repo's docs are placeholders, not reservations, and would need to shift accordingly.)
+What this check actually proves: that production has **no conflicting migration** that would make the repository's next numbers invalid — not that `041` specifically must already be applied. Three possible outcomes:
+
+- **Newest recorded row is `041` or earlier** (including if `041` itself hasn't been applied to production yet — e.g. newest is `040`): `042`/`043` are valid as numbered. Pending, unapplied migrations already in this repository's `src/database/migrations/` simply apply in filename order on the next `npm run migrate:up` — `041 → 042 → 043` — this is the normal, expected case, not a problem to fix.
+- **Newest recorded row is exactly `042` or `043` and it matches a file already in this repo** (i.e. someone already applied these very files): nothing to do: they're already applied, re-running `migrate:up` is a safe no-op (§R1.2's item C).
+- **Newest recorded row is `042`/`043` (or higher) and does NOT match a file in this repo** — i.e. a real, unexpected, conflicting migration exists in production that this repository doesn't know about: **stop and renumber** `042`/`043` before applying — do not assume, do not overwrite. (Any Global Commerce migration-number placeholders elsewhere in this repo's docs are placeholders, not reservations, and would need to shift accordingly.)
 
 ### R1.2 — Migration SQL review + real Postgres verification (A–F)
 
@@ -405,7 +416,7 @@ No video support was added, per explicit instruction.
 1. Run the R1.1 read-only `schema_migrations` check against production; confirm `041` is still the newest row (or renumber first).
 2. Generate and set `SOCIAL_TOKEN_ENCRYPTION_KEY` in the production environment (R1.15) — never logged, never committed.
 3. Confirm every `SOCIAL_<PLATFORM>_ENABLED` is `false` (or unset) and `SOCIAL_PUBLISH_DRY_RUN` is `true` (or unset) in the production environment — the safe starting posture (R1.17).
-4. Set `SOCIAL_OAUTH_ALLOWED_REDIRECT_ORIGINS` to the real production admin origin (this deployment serves the admin dashboard at `https://techtoolstore.com/admin`, per `infrastructure/nginx/prod.conf`'s `location /admin` path-based routing — not a separate subdomain) — leaving it unset means every OAuth start request is rejected (fails closed), which is safe but means Connect will not work until this is set.
+4. Set `SOCIAL_OAUTH_ALLOWED_REDIRECT_ORIGINS=https://techtoolstore.com` — the bare **origin** (scheme + host + port only, no path). `isAllowedRedirectOrigin()` compares `new URL(redirectUri).origin`, which never includes a path, so `https://techtoolstore.com/admin` is an invalid value here and would never match anything (fails closed to "nothing works," not a security hole, but still wrong — see "Final Pre-Commit Corrections" below for the two-part design this splits into). The admin dashboard happens to be served under an `/admin` path prefix at that same origin (`infrastructure/nginx/prod.conf`'s `location /admin`, not a separate subdomain) — that path is irrelevant to this env var and is instead handled by the separate exact-redirectUri binding stored in the OAuth state itself (R1.12). Leaving this var unset means every OAuth start request is rejected (fails closed), which is safe but means Connect will not work until it's set.
 5. Confirm `PROMOTION_QUEUE_ENABLED` is left at its default (`true`) on the single production API container only — if production is ever scaled to multiple replicas before `FOR UPDATE SKIP LOCKED` is added, set it `false` on every replica except one (R1.7).
 6. Apply the two migrations: `npm run migrate:up` (or the equivalent production migration step) — not run automatically by this review, per explicit instruction.
 7. Deploy/rebuild the API and admin-dashboard containers as normal.
@@ -525,11 +536,85 @@ This section. `docs/SOCIAL-PUBLISHING-ARCHITECTURE.md` updated in parallel — d
 
 ---
 
+## Final Pre-Commit Corrections
+
+Three small, targeted corrections requested after Production Review Round 1's approval, before commit/push. No new features — PROMOTION-OPS-2 remains explicitly not started.
+
+### C1 — OAuth allowed-origin semantics
+
+Audited the actual implementation of `isAllowedRedirectOrigin()` (`promotion-oauth-state.helpers.ts`) rather than assuming: it compares `new URL(redirectUri).origin` (scheme + host + port — **never** a path) against `SOCIAL_OAUTH_ALLOWED_REDIRECT_ORIGINS`. The **code was already correct** and needed no change. The risk was purely documentational: R1.23's deployment-order step 4 described the production value as "the admin origin (served at `https://techtoolstore.com/admin`...)" in a way that could be misread as meaning the env var's value should include the `/admin` path — which would silently break every OAuth start (fails closed to "nothing works," not a security hole, but still a real footgun for whoever deploys this).
+
+**Design chosen (Option A, as directed)** — already what the code does, now stated explicitly rather than implied: an **origin allowlist** (`SOCIAL_OAUTH_ALLOWED_REDIRECT_ORIGINS=https://techtoolstore.com` — bare origin, no path) decides which origins may *start* an OAuth flow at all, and the **exact full callback URL** (path included) is separately bound into the Redis-stored OAuth state at `startOAuth()` and exact-matched again at `completeOAuth()` (R1.12, unchanged) — the two mechanisms are deliberately different granularities for different jobs: the env var is a coarse, founder-configured allowlist; the state binding is a precise, per-flow, single-use check.
+
+**Updated**: `.env.example`'s comment (now explicit: "MUST NOT include a path," with the exact reasoning); this report's R1.23 step 4 (now states the bare-origin value directly and explains why the `/admin` path is irrelevant to this specific env var); `docs/SOCIAL-PUBLISHING-ARCHITECTURE.md` (unchanged claim, already accurate — it already documented origin-only comparison); the production deployment runbook is R1.23 itself, corrected in place. No helper code changed.
+
+**New tests** — `promotion-oauth-state.helpers.test.ts` (new file, 10 tests), calling `isAllowedRedirectOrigin()` directly against the real production domain rather than a placeholder one:
+
+| Input | Allowlist | Expected |
+|---|---|---|
+| `https://techtoolstore.com/admin/dashboard/promotions/connections/callback` | `https://techtoolstore.com` | ✅ allowed |
+| `https://techtoolstore.com` (bare) | `https://techtoolstore.com` | ✅ allowed |
+| `https://evil.example/admin/dashboard/promotions/connections/callback` | `https://techtoolstore.com` | ❌ rejected |
+| `https://techtoolstore.com.evil.example/callback` (lookalike suffix) | `https://techtoolstore.com` | ❌ rejected — proves this is a real origin match, not `string.includes()` |
+| `https://techtoolstore.com/admin/.../callback` | `https://techtoolstore.com/admin` (misconfigured, path included) | ❌ rejected — proves a path-containing allowlist entry can never match anything, so this class of misconfiguration fails safe rather than silently succeeding |
+| `http://techtoolstore.com/callback` (scheme mismatch) | `https://techtoolstore.com` | ❌ rejected |
+| any | unset / empty | ❌ rejected (fail-closed) |
+| both entries of a comma-separated list | `https://techtoolstore.com,http://localhost:3000` | ✅ each allowed |
+| malformed URL | any | ❌ rejected, does not throw |
+
+### C2 — PostgreSQL 15 compatibility
+
+Production Review Round 1's throwaway-database verification used PostgreSQL 16; this repository's actual production database engine is PostgreSQL 15.x (confirmed via `infrastructure/docker-compose.prod.yml`'s `postgres:15-alpine` image). Repeated the full structural verification against a **real, disposable PostgreSQL 15.18 instance** — no Docker daemon was available in this environment, so the PGDG `.deb` packages (`postgresql-15`, `postgresql-client-15`, official `apt.postgresql.org` PGDG repository, version `15.18-1.pgdg24.04+1`) were downloaded directly and extracted with `dpkg-deb -x` into a local, non-system prefix (no root required, nothing installed system-wide), then run as a normal user — the same throwaway-instance technique R1.2 used for PostgreSQL 16, just sourced differently.
+
+**Result: full pass, byte-for-byte consistent with the PostgreSQL 16 run.** The migrations were **not modified** to make this pass — none needed to be:
+
+- **(A)** Applied `042_social_connections.sql` (unmodified, real repo file) — clean.
+- **(B)** Applied `043_promotion_campaigns.sql` (unmodified, real repo file) — clean, including both trailing FK patch-ups.
+- **(D)** Verified all 4 enum types, all 7 new tables, all 26 indexes, and both new `promotion_channel_post_status`/`promotion_campaign_status` enum values (`DRY_RUN_SUCCEEDED`/`REQUIRES_ACTION`/`DRY_RUN_COMPLETED`) — every one present and matching the migration files exactly. Confirmed identical column/table/index counts to the PostgreSQL 16 baseline before applying 042 (1376 columns / 802 constraints / 109 tables on both engines, from the same 001–041 replay).
+- **(E)** Diffed the full column/constraint fingerprint of every table that existed **before** 042 against the fingerprint immediately after 043 — empty diff, confirming zero pre-existing table was altered on PostgreSQL 15 either.
+- **(F)** Re-ran the exact same manual rollback script from R1.2 (drop the two trailing FKs, then 043's tables/enums, then 042's tables/enums, in dependency order) inside a transaction, then `ROLLBACK` (not committed) — every statement succeeded with zero errors, identical to the PostgreSQL 16 result.
+- **(C)** Rerun safety is provided by `migrate.ts`'s `schema_migrations` bookkeeping (skip-already-executed-by-filename), which is plain SQL against a bookkeeping table — not PostgreSQL-version-specific behavior, and already verified once in R1.2; re-deriving it per engine version would test the same code path twice for no new information.
+
+**Conclusion: no PostgreSQL 15/16 incompatibility exists in these two migrations.** Both engines produce structurally identical results from the same, unmodified files.
+
+### C3 — Stale document contradictions removed
+
+Walked every claim in the report's pre-Production-Review-Round-1 sections (§1–§24) against the actual current code and corrected each one found to still assert something now false, in place, with an explicit "originally X; corrected in Production Review Round 1 to Y" annotation rather than silently rewriting history:
+
+- §5's campaign-lifecycle diagram and channel-status enum list (`SKIPPED_DRY_RUN` → `DRY_RUN_SUCCEEDED`/`REQUIRES_ACTION`; dry-run success terminus `PUBLISHED` → `DRY_RUN_COMPLETED`).
+- §9's idempotency guarantee (three-part → four-part, adding the stuck-row sweep; "known gap: no stuck-row sweep" removed since it's now closed).
+- §18's test counts and file list, now explicitly marked as a historical snapshot with a forward-pointer to the current, authoritative count in R1.27/R1.28 (and now further superseded by this section — see below).
+- §18's manual smoke-test checklist line claiming a dry-run publish shows `PUBLISHED` — corrected to `DRY_RUN_COMPLETED`/`DRY_RUN_SUCCEEDED`, with an explicit note that this was the exact issue R1.3 fixed.
+- §23's known-gaps list (removed "no stuck-row sweep" and "market-scope column unenforced," both resolved; pointed to the architecture doc's current §9 as the authoritative list).
+- §24's next-phase recommendations (removed "stuck-row sweep" as a PROMOTION-OPS-2 item since it already shipped; added the `SECURITY-SECRETS-1` recommendation that R1.26 introduced but this section hadn't yet mentioned).
+- R1.1 itself (this round) — clarified that the migration-number check proves "no conflicting production migration," not "041 must already be applied" (§ above).
+- R1.23 step 4 — the OAuth-origin wording fixed under C1 above.
+
+The document is now readable top-to-bottom without needing to mentally patch older sections against Production Review Round 1 or this section.
+
+### C4 — Final quality gates
+
+**tech-tools-api**: `npx tsc --noEmit` — clean. `npx jest` (full suite, real `jest.config.js`) — **32 test suites, 340 tests, all passing** (up from R1.28's 31/330 — the +1 suite / +10 tests is exactly `promotion-oauth-state.helpers.test.ts`, C1's new file; no other test count changed). `npm run build` — clean.
+
+**admin-dashboard**: `npx tsc --noEmit` — clean. Targeted lint on every Promotions file (`app/(dashboard)/dashboard/promotions/**/*.tsx`, `components/promotions/**/*.tsx`, `services/promotion.service.ts`) — **zero errors, zero warnings**. (Full-repo `npm run lint` still fails on the same 235 pre-existing, unrelated errors across 79 files documented in R1.26 — unchanged by this round, out of scope, not re-litigated here.) `NODE_OPTIONS="--max-old-space-size=3072" npm run build` — clean, all 43 routes compiled including all 7 Promotions routes.
+
+### C5 — Production migration-number check semantics
+
+The founder-facing check itself is unchanged:
+
+```sql
+SELECT id, filename, executed_at FROM schema_migrations ORDER BY id DESC LIMIT 10;
+```
+
+Its purpose was clarified in R1.1 (this round): it exists to prove **no conflicting production migration** makes `042`/`043` invalid — not that `041` must already be the newest applied row. If production's newest row is `040` and `041` is still pending in this repository, the sequence is simply `041 → 042 → 043` on the next `migrate:up`; that is the expected, normal case, not a blocker. Only a genuine, unexpected `042`/`043`-or-higher row that doesn't match a file in this repository's `src/database/migrations/` is a stop-and-renumber condition.
+
+---
+
 ## FINAL STATUS
 
 **PROMOTIONS PLATFORM: READY FOR PRODUCTION DEPLOYMENT**
 
-Every CRITICAL item from this production-hardening round (dry-run truth, remote-state ambiguity, retry classification, market-scope security, OAuth hardening, token-encryption audit, creative-upload security) is fixed, tested, and documented. The schema was verified against a real (throwaway) PostgreSQL 16 instance, not just read — including a real, executed rollback-order test. The full backend suite (31 suites / 330 tests) and both apps' type-checks and builds are clean; the only failing gate (`admin-dashboard` lint) fails on 235 pre-existing errors across 79 files this phase never touched, not on anything Promotions-related. Nothing was deployed, no production migration was applied, no provider credential was configured, and no live social post was ever made — all per explicit instruction. The founder's manual steps (§21, and the R1.23 deployment order above) are the remaining path to production.
+Every CRITICAL item from the production-hardening round (dry-run truth, remote-state ambiguity, retry classification, market-scope security, OAuth hardening, token-encryption audit, creative-upload security) is fixed, tested, and documented, and the three final pre-commit corrections above are closed. The schema was verified against real, disposable **PostgreSQL 16 and PostgreSQL 15** instances (production's actual engine, per `docker-compose.prod.yml`) — both byte-for-byte consistent, neither requiring any migration-file change — including a real, executed rollback-order test on both. The full backend suite (**32 suites / 340 tests**) and both apps' type-checks and builds are clean; every Promotions-related frontend file is lint-clean; the only failing gate (`admin-dashboard`'s full-repo lint) fails on 235 pre-existing errors across 79 files this phase never touched, not on anything Promotions-related. Nothing was deployed, no production migration was applied, no provider credential was configured, and no live social post was ever made — all per explicit instruction. The founder's manual steps (§21, and the R1.23 deployment order, including the corrected `SOCIAL_OAUTH_ALLOWED_REDIRECT_ORIGINS=https://techtoolstore.com` bare-origin value) are the remaining path to production.
 
 Provider status (this environment — unchanged from the initial build, still honest):
 
