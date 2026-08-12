@@ -149,12 +149,14 @@ export const getConversionFunnel = async (
       summary: {
         topOfFunnelUsers: funnelData[0]?.uniqueUsers || 0,
         paymentSuccessUsers: funnelData[3]?.uniqueUsers || 0,
+        // Math.round(...) / 100 keeps this a real number (rounded to 2
+        // decimals) -- .toFixed() returns a STRING, which crashed every
+        // frontend consumer that called .toFixed() on this value again
+        // (e.g. the Trending page's `(stats?.conversionRate || 0).toFixed(1)`
+        // -- a truthy string bypasses `|| 0` and has no .toFixed method).
         overallConversionRate:
           funnelData[3] && funnelData[0].eventCount > 0
-            ? (
-                (funnelData[3].eventCount / funnelData[0].eventCount) *
-                100
-              ).toFixed(2)
+            ? Math.round((funnelData[3].eventCount / funnelData[0].eventCount) * 100 * 100) / 100
             : 0,
       },
     })

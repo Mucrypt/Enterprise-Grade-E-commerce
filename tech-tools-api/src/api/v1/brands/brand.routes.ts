@@ -2,6 +2,7 @@ import { Router } from 'express'
 import {
   getBrands,
   getBrandById,
+  getBrandStats,
   createBrand,
   updateBrand,
   deleteBrand,
@@ -12,8 +13,10 @@ import { authenticate, authorize } from '../../../middleware/auth'
 
 const router = Router()
 
-// Public routes
+// Public routes -- /stats must be registered before /:id so it isn't
+// swallowed as a brand id.
 router.get('/', getBrands)
+router.get('/stats', getBrandStats)
 router.get('/:id', getBrandById)
 
 // Admin bulk routes (must be before /:id routes)

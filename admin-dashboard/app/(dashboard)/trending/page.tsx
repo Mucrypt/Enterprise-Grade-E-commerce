@@ -192,7 +192,7 @@ function CollectionsTable({
               {(collection.click_count || 0).toLocaleString()}
             </TableCell>
             <TableCell className='text-right'>
-              {(collection.conversion_rate || 0).toFixed(1)}%
+              {Number(collection.conversion_rate || 0).toFixed(1)}%
             </TableCell>
             <TableCell>
               <Switch
@@ -479,7 +479,7 @@ export default function TrendingPage() {
         />
         <StatsCard
           title='Conversion Rate'
-          value={`${(stats?.conversionRate || 0).toFixed(1)}%`}
+          value={`${Number(stats?.conversionRate || 0).toFixed(1)}%`}
           change='+0.8%'
           changeType='positive'
           description='from last week'

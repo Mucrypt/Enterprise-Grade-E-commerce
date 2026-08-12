@@ -66,6 +66,86 @@ export const getBrands = async (req: Request, res: Response) => {
   }
 }
 
+/**
+ * Real, per-brand engagement numbers -- units sold and revenue from
+ * actual paid orders, and product counts from the real catalog. Added to
+ * replace the Trending pages' (admin dashboard + mobile app) previous use
+ * of Math.random() for "sold count," "total sales," and "followers" --
+ * this endpoint intentionally has no follower-count field, since no real
+ * follow/subscribe feature exists yet; a fabricated number is worse than
+ * an absent one. Public (no auth) to match getBrands/getBrandById above --
+ * this is the same class of read-only, non-sensitive storefront data.
+ */
+export const getBrandStats = async (req: Request, res: Response) => {
+  try {
+    const idsParam = typeof req.query.ids === 'string' ? req.query.ids : ''
+    const ids = idsParam
+      .split(',')
+      .map((id) => id.trim())
+      .filter((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
+
+    if (ids.length === 0) {
+      return res.json({ success: true, data: { stats: {} } })
+    }
+
+    const [productCountsResult, salesResult, newProductsResult] = await Promise.all([
+      query(
+        `SELECT brand_id, COUNT(*) AS product_count
+         FROM products
+         WHERE brand_id = ANY($1) AND is_active = true
+         GROUP BY brand_id`,
+        [ids],
+      ),
+      // Only orders that actually collected payment count as real sales --
+      // a pending/failed/cancelled order was never a genuine sale.
+      query(
+        `SELECT p.brand_id,
+                COALESCE(SUM(oi.quantity), 0) AS units_sold,
+                COALESCE(SUM(oi.total_price), 0) AS revenue_total
+         FROM order_items oi
+         JOIN products p ON p.id = oi.product_id
+         JOIN orders o ON o.id = oi.order_id
+         WHERE p.brand_id = ANY($1) AND o.payment_status = 'paid'
+         GROUP BY p.brand_id`,
+        [ids],
+      ),
+      query(
+        `SELECT brand_id, COUNT(*) AS new_products_count
+         FROM products
+         WHERE brand_id = ANY($1) AND is_active = true AND created_at > now() - interval '30 days'
+         GROUP BY brand_id`,
+        [ids],
+      ),
+    ])
+
+    const stats: Record<
+      string,
+      { productCount: number; unitsSold: number; revenueTotal: number; newProductsCount: number }
+    > = {}
+    for (const id of ids) {
+      stats[id] = { productCount: 0, unitsSold: 0, revenueTotal: 0, newProductsCount: 0 }
+    }
+    for (const row of productCountsResult.rows) {
+      stats[row.brand_id].productCount = parseInt(row.product_count, 10)
+    }
+    for (const row of salesResult.rows) {
+      stats[row.brand_id].unitsSold = parseInt(row.units_sold, 10)
+      stats[row.brand_id].revenueTotal = Number(row.revenue_total)
+    }
+    for (const row of newProductsResult.rows) {
+      stats[row.brand_id].newProductsCount = parseInt(row.new_products_count, 10)
+    }
+
+    res.json({ success: true, data: { stats } })
+  } catch (error) {
+    logger.error('Get brand stats error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch brand stats',
+    })
+  }
+}
+
 // Get single brand
 export const getBrandById = async (req: Request, res: Response) => {
   try {
