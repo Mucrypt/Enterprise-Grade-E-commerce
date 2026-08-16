@@ -57,6 +57,14 @@ export type Permission =
   | 'social.analytics'
   | 'social.accounts.view'
   | 'social.accounts.manage'
+  | 'channels.tiktok.view'
+  | 'channels.tiktok.products'
+  | 'channels.tiktok.orders'
+  | 'channels.tiktok.fulfillment'
+  | 'channels.tiktok.finance'
+  | 'channels.tiktok.manage'
+  | 'channels.tiktok.connections'
+  | 'channels.tiktok.analytics'
   | 'support.view'
   | 'support.manage'
   | 'shipping.view'
@@ -102,6 +110,14 @@ const ALL_PERMISSIONS: Permission[] = [
   'social.analytics',
   'social.accounts.view',
   'social.accounts.manage',
+  'channels.tiktok.view',
+  'channels.tiktok.products',
+  'channels.tiktok.orders',
+  'channels.tiktok.fulfillment',
+  'channels.tiktok.finance',
+  'channels.tiktok.manage',
+  'channels.tiktok.connections',
+  'channels.tiktok.analytics',
   'support.view',
   'support.manage',
   'shipping.view',
@@ -161,6 +177,21 @@ export const STAFF_ROLE_PERMISSIONS: Record<StaffRole, ReadonlySet<Permission>> 
     'social.publish',
     'social.schedule',
     'social.analytics',
+    // TIKTOK-COMMERCE-1: same split PROMOTION-OPS-1 already established
+    // for social.* -- operating the channel (view/products/orders/
+    // fulfillment/finance/manage/analytics) is broad operational access
+    // ADMIN already holds elsewhere; connecting/disconnecting the account
+    // itself (channels.tiktok.connections) is grouped with this
+    // codebase's other sensitive-configuration permissions
+    // (social.accounts.manage, settings.*, security.*, staff.manage),
+    // OWNER/SUPER_ADMIN-only.
+    'channels.tiktok.view',
+    'channels.tiktok.products',
+    'channels.tiktok.orders',
+    'channels.tiktok.fulfillment',
+    'channels.tiktok.finance',
+    'channels.tiktok.manage',
+    'channels.tiktok.analytics',
     'support.view',
     'support.manage',
     'shipping.view',
@@ -180,6 +211,9 @@ export const STAFF_ROLE_PERMISSIONS: Record<StaffRole, ReadonlySet<Permission>> 
   // manager must never silently gain global social-publishing authority;
   // see staff-permissions.config.test.ts's matrix regression test for this
   // exact invariant.
+  // TIKTOK-COMMERCE-1: same reasoning, deliberately holds none of the 8
+  // new channels.tiktok.* permissions either -- expanded later once a
+  // real deployment proves the workflow, not guessed at up front.
   MARKET_MANAGER: new Set<Permission>([
     'dashboard.view',
     'analytics.view_market',
@@ -205,6 +239,10 @@ export const STAFF_ROLE_PERMISSIONS: Record<StaffRole, ReadonlySet<Permission>> 
     'suppliers.view',
     'suppliers.manage',
     'suppliers.import',
+    // TIKTOK-COMMERCE-1: in-remit -- product/SKU mappings and inventory
+    // diffs are catalog work, not order or finance work.
+    'channels.tiktok.view',
+    'channels.tiktok.products',
   ]),
 
   ORDER_MANAGER: new Set<Permission>([
@@ -217,6 +255,10 @@ export const STAFF_ROLE_PERMISSIONS: Record<StaffRole, ReadonlySet<Permission>> 
     'customers.view',
     'inventory.view',
     'shipping.view',
+    // TIKTOK-COMMERCE-1: in-remit -- imported channel orders are order
+    // work, not product/finance/connection work.
+    'channels.tiktok.view',
+    'channels.tiktok.orders',
   ]),
 
   // PROMOTION-OPS-1: campaigns.view/manage already existed but were unused
@@ -273,6 +315,11 @@ export const MARKET_SCOPED_PERMISSIONS: ReadonlySet<Permission> = new Set<Permis
   'analytics.view_market',
   'support.view',
   'support.manage',
+  // TIKTOK-COMMERCE-1: scoped by the channel account's own market_country
+  // (commerce_channel_accounts.market_country), not a per-order buyer
+  // country -- see RESOURCE_COUNTRY_EXPRESSIONS['channel_orders'] in
+  // middleware/staff.ts.
+  'channels.tiktok.orders',
 ])
 
 /**

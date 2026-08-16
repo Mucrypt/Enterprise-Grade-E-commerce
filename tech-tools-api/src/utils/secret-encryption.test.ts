@@ -96,3 +96,70 @@ describe('secret-encryption', () => {
     expect(() => encryptSecret('x')).toThrow(SecretEncryptionConfigError)
   })
 })
+
+/**
+ * TIKTOK-COMMERCE-1 -- channelTokenCipher (commerce_channel_accounts'
+ * tokens) is built from the same createSecretCipher() factory as the
+ * default social-token cipher above, but reads a completely separate env
+ * var (CHANNEL_TOKEN_ENCRYPTION_KEY) and must never share a key or
+ * dev-mode fallback with it -- rotating or compromising one domain's key
+ * must never affect the other's ciphertext.
+ */
+describe('secret-encryption -- channelTokenCipher / createSecretCipher independence', () => {
+  beforeEach(() => {
+    jest.resetModules()
+    process.env = { ...REAL_ENV }
+    delete process.env.SOCIAL_TOKEN_ENCRYPTION_KEY
+    delete process.env.CHANNEL_TOKEN_ENCRYPTION_KEY
+    process.env.NODE_ENV = 'test'
+  })
+
+  afterAll(() => {
+    process.env = REAL_ENV
+  })
+
+  it('round-trips a plaintext secret via channelTokenCipher using its own dev-fallback key', () => {
+    const { channelTokenCipher } = freshModule()
+    const original = 'tiktok-shop-access-token-value'
+    const stored = channelTokenCipher.encryptSecret(original)
+    expect(stored).not.toContain(original)
+    expect(channelTokenCipher.decryptSecret(stored)).toBe(original)
+  })
+
+  it('round-trips using an explicit CHANNEL_TOKEN_ENCRYPTION_KEY, independent of SOCIAL_TOKEN_ENCRYPTION_KEY', () => {
+    process.env.CHANNEL_TOKEN_ENCRYPTION_KEY = crypto.randomBytes(32).toString('base64')
+    const { channelTokenCipher } = freshModule()
+    const original = 'tiktok-shop-refresh-token'
+    expect(channelTokenCipher.decryptSecret(channelTokenCipher.encryptSecret(original))).toBe(original)
+  })
+
+  it('a value encrypted under the social cipher can never be decrypted by channelTokenCipher, even with both keys unset (different dev-fallback derivations)', () => {
+    const { encryptSecret, channelTokenCipher, SecretDecryptionError } = freshModule()
+    const stored = encryptSecret('social-connection-token')
+    expect(() => channelTokenCipher.decryptSecret(stored)).toThrow(SecretDecryptionError)
+  })
+
+  it('a value encrypted under an explicit CHANNEL_TOKEN_ENCRYPTION_KEY cannot be decrypted under a differently-set SOCIAL_TOKEN_ENCRYPTION_KEY', () => {
+    process.env.CHANNEL_TOKEN_ENCRYPTION_KEY = crypto.randomBytes(32).toString('base64')
+    process.env.SOCIAL_TOKEN_ENCRYPTION_KEY = crypto.randomBytes(32).toString('base64')
+    const { channelTokenCipher, decryptSecret, SecretDecryptionError } = freshModule()
+    const stored = channelTokenCipher.encryptSecret('channel-token')
+    // decrypting a channel-encrypted value with the social cipher must fail
+    expect(() => decryptSecret(stored)).toThrow(SecretDecryptionError)
+  })
+
+  it('a wrong-length CHANNEL_TOKEN_ENCRYPTION_KEY throws SecretEncryptionConfigError independently of the social key being valid', () => {
+    process.env.SOCIAL_TOKEN_ENCRYPTION_KEY = crypto.randomBytes(32).toString('base64')
+    process.env.CHANNEL_TOKEN_ENCRYPTION_KEY = Buffer.from('too-short').toString('base64')
+    const { channelTokenCipher, SecretEncryptionConfigError } = freshModule()
+    expect(() => channelTokenCipher.encryptSecret('x')).toThrow(SecretEncryptionConfigError)
+  })
+
+  it('fails closed in production when CHANNEL_TOKEN_ENCRYPTION_KEY is unset, even if SOCIAL_TOKEN_ENCRYPTION_KEY is configured', () => {
+    process.env.NODE_ENV = 'production'
+    process.env.SOCIAL_TOKEN_ENCRYPTION_KEY = crypto.randomBytes(32).toString('base64')
+    delete process.env.CHANNEL_TOKEN_ENCRYPTION_KEY
+    const { channelTokenCipher, SecretEncryptionConfigError } = freshModule()
+    expect(() => channelTokenCipher.encryptSecret('x')).toThrow(SecretEncryptionConfigError)
+  })
+})

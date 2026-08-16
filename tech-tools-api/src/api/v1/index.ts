@@ -34,6 +34,10 @@ import adminSellersRoutes from './admin/sellers.routes'
 import staffRoutes from './staff/staff.routes'
 import promotionCampaignRoutes from './promotions/promotion-campaign.routes'
 import socialConnectionRoutes from './promotions/social-connection.routes'
+import channelAccountRoutes from './channels/channel-account.routes'
+import channelProductRoutes from './channels/channel-product.routes'
+import channelOrderRoutes from './channels/channel-order.routes'
+import channelWebhookRoutes from './channels/channel-webhook.routes'
 
 const router = Router()
 
@@ -87,6 +91,12 @@ router.use('/staff', staffRoutes)
 // convention (see customersRoutes above /admin).
 router.use('/promotions/connections', socialConnectionRoutes)
 router.use('/promotions/campaigns', promotionCampaignRoutes)
+// TIKTOK-COMMERCE-1 -- unrelated to promotions/connections above (organic
+// social publishing); this is the TikTok Shop commerce channel.
+router.use('/channels/accounts', channelAccountRoutes)
+router.use('/channels/products', channelProductRoutes)
+router.use('/channels/orders', channelOrderRoutes)
+router.use('/channels', channelWebhookRoutes)
 
 // Documentation route
 router.get('/docs', (_req, res) => {

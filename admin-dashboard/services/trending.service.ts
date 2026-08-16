@@ -18,24 +18,38 @@ export interface TrendingStats {
   featuredCollections: number
   totalBrands: number
   featuredBrands: number
-  totalViews: number
+  // Real order count for the period -- there is no page/collection view
+  // tracking in this codebase today, so this is deliberately labeled
+  // "orders," not "views."
+  totalOrders: number
   totalSales: number
   conversionRate: number
 }
 
 export interface TrendingCollection extends ProductCollection {
   is_featured: boolean
-  trending_rank?: number
-  views_count?: number
-  click_count?: number
-  conversion_rate?: number
+  // Real manual sort order (product_collections.position), not a display
+  // index. Absent means unranked.
+  trending_rank?: number | null
+}
+
+export interface BrandRealStats {
+  productCount: number
+  unitsSold: number
+  revenueTotal: number
+  newProductsCount: number
 }
 
 export interface TrendingBrand extends Brand {
   is_featured?: boolean
-  follower_count?: number
+  // Real manual sort order (brands.trending_position). Absent means
+  // unranked. There is deliberately no follower_count field -- no real
+  // follow/subscribe feature exists yet, and a fabricated number is worse
+  // than an absent one.
+  trending_rank?: number | null
+  product_count?: number
+  units_sold?: number
   total_sales?: number
-  trending_rank?: number
   products?: any[]
 }
 
@@ -49,21 +63,16 @@ export interface UpdateTrendingSettingsDTO {
 
 export interface AnalyticsChartPoint {
   date: string
-  views: number
-  clicks: number
-  sales: number
-  revenue?: number
+  orders: number
+  revenue: number
 }
 
 export interface AnalyticsData {
   period: string
   data: AnalyticsChartPoint[]
   summary: {
-    totalViews: number
-    totalClicks: number
-    totalSales: number
+    totalOrders: number
     totalRevenue: number
-    avgConversionRate: number
   }
 }
 
@@ -300,7 +309,7 @@ export const trendingService = {
           .length,
         totalBrands: brands.length,
         featuredBrands: brands.filter((b: any) => b.is_featured).length,
-        totalViews: revenueTrendRes?.summary?.totalOrders || 0,
+        totalOrders: revenueTrendRes?.summary?.totalOrders || 0,
         totalSales: revenueTrendRes?.summary?.totalRevenue || 0,
         conversionRate: funnelRes?.summary?.overallConversionRate || 0,
       }
@@ -312,7 +321,7 @@ export const trendingService = {
         featuredCollections: 0,
         totalBrands: 0,
         featuredBrands: 0,
-        totalViews: 0,
+        totalOrders: 0,
         totalSales: 0,
         conversionRate: 0,
       }
@@ -320,22 +329,26 @@ export const trendingService = {
   },
 
   /**
-   * Get featured collections for trending page
+   * Get collections for the Trending admin table -- every active
+   * collection (not just currently-featured ones), so the admin can toggle
+   * any of them featured/ranked. is_featured and position are real,
+   * persisted columns (product_collections) -- no fabricated engagement
+   * metrics are attached here (views/clicks/conversion-rate for a
+   * collection have no real tracking backing them yet -- see Trending
+   * doc). Sorted the same way the backend list endpoint sorts them
+   * (position ASC, then newest).
    */
   async getFeaturedCollections(): Promise<TrendingCollection[]> {
     try {
       const response = (await apiClient.get('/collections/products', {
-        params: { limit: 20, isActive: true },
+        params: { limit: 50, isActive: true },
       })) as any
       const collections =
         response?.data?.collections || response?.collections || []
-      return collections.map((c: any, index: number) => ({
+      return collections.map((c: any) => ({
         ...c,
-        is_featured: c.is_featured || index < 5,
-        trending_rank: index + 1,
-        views_count: Math.floor(Math.random() * 10000) + 500,
-        click_count: Math.floor(Math.random() * 5000) + 200,
-        conversion_rate: Math.random() * 10 + 1,
+        is_featured: Boolean(c.is_featured),
+        trending_rank: c.position ?? null,
       }))
     } catch (error) {
       console.error('Error fetching featured collections:', error)
@@ -344,24 +357,51 @@ export const trendingService = {
   },
 
   /**
-   * Get featured brands for trending page
+   * Get brands for the Trending admin table, merged with real per-brand
+   * numbers (units sold + revenue from paid orders, real product count --
+   * see GET /brands/stats) instead of the Math.random() placeholders this
+   * used to ship. is_featured/trending_position are real, persisted
+   * columns (see 044_brand_trending_fields.sql) -- there is deliberately
+   * no follower count, since no real follow feature exists.
    */
   async getFeaturedBrands(): Promise<TrendingBrand[]> {
     try {
       const response = (await apiClient.get('/brands', {
-        params: { limit: 20, isActive: true },
+        params: { limit: 50, isActive: true },
       })) as any
       const brands = response?.data?.brands || response?.brands || []
-      return brands.map((b: any, index: number) => ({
+      const ids = brands.map((b: any) => b.id)
+      const stats = ids.length > 0 ? await this.getBrandStats(ids) : {}
+
+      return brands.map((b: any) => ({
         ...b,
-        is_featured: b.is_featured || index < 5,
-        follower_count: Math.floor(Math.random() * 100000) + 1000,
-        total_sales: Math.floor(Math.random() * 500000) + 10000,
-        trending_rank: index + 1,
+        is_featured: Boolean(b.is_featured),
+        trending_rank: b.trending_position ?? null,
+        product_count: stats[b.id]?.productCount ?? 0,
+        units_sold: stats[b.id]?.unitsSold ?? 0,
+        total_sales: stats[b.id]?.revenueTotal ?? 0,
       }))
     } catch (error) {
       console.error('Error fetching featured brands:', error)
       return []
+    }
+  },
+
+  /**
+   * Real per-brand engagement numbers (units sold, revenue, product
+   * count) -- see brand.controller.ts's getBrandStats for the underlying
+   * query. Never fabricated; a brand with no real orders/products yet
+   * simply comes back at zero.
+   */
+  async getBrandStats(ids: string[]): Promise<Record<string, BrandRealStats>> {
+    try {
+      const response = (await apiClient.get('/brands/stats', {
+        params: { ids: ids.join(',') },
+      })) as any
+      return response?.data?.stats || response?.stats || {}
+    } catch (error) {
+      console.error('Error fetching brand stats:', error)
+      return {}
     }
   },
 
@@ -384,12 +424,15 @@ export const trendingService = {
   },
 
   /**
-   * Toggle brand featured status
+   * Toggle brand featured status. updateBrand() reads camelCase fields
+   * only (matching logoUrl/websiteUrl, its own existing convention) --
+   * unlike the collections endpoint below, it does not also accept
+   * snake_case, so this must send isFeatured, not is_featured.
    */
   async toggleBrandFeatured(brandId: string, isFeatured: boolean) {
     try {
       const response = await apiClient.put(`/brands/${brandId}`, {
-        is_featured: isFeatured,
+        isFeatured,
       })
       return response
     } catch (error) {
@@ -417,6 +460,78 @@ export const trendingService = {
   },
 
   /**
+   * Update brand trending rank (brands.trending_position -- see
+   * 044_brand_trending_fields.sql).
+   */
+  async updateBrandRank(brandId: string, rank: number) {
+    try {
+      const response = await apiClient.put(`/brands/${brandId}`, {
+        trendingPosition: rank,
+      })
+      return response
+    } catch (error) {
+      console.error('Error updating brand rank:', error)
+      throw error
+    }
+  },
+
+  /**
+   * "Promote" bridge into the real Promotions/social-publishing system
+   * (PROMOTION-OPS-1) -- creates a DRAFT campaign pre-loaded with this
+   * collection's real product list, then hands off to the campaign editor
+   * for channel selection/scheduling. This is deliberately a thin bridge
+   * into the existing composer rather than a second, parallel "advertise
+   * from Trending" flow -- Promotions already owns organic social
+   * publishing; Trending shouldn't reimplement it.
+   */
+  async promoteCollection(collection: { id: string; name: string }): Promise<string> {
+    const { promotionService } = await import('./promotion.service')
+    const { collectionService } = await import('./collection.service')
+    const detail = (await collectionService.getProductCollection(collection.id)) as any
+    const productIds: string[] = (detail?.data?.products || detail?.products || [])
+      .map((p: any) => p.id)
+      .filter(Boolean)
+      .slice(0, 30)
+
+    const created = await promotionService.createCampaign({
+      name: `Promote: ${collection.name}`,
+      objective: 'SALES',
+      masterMessage: `Check out our ${collection.name} collection.`,
+    })
+    if (productIds.length > 0) {
+      await promotionService.updateCampaign(created.campaign.id, {
+        products: productIds.map((productId) => ({ productId })),
+      })
+    }
+    return created.campaign.id
+  },
+
+  /**
+   * Same bridge for a brand -- pulls that brand's real, currently active
+   * products (the same catalog filter the storefront's brand page uses).
+   */
+  async promoteBrand(brand: { id: string; name: string }): Promise<string> {
+    const { promotionService } = await import('./promotion.service')
+    const { productService } = await import('./product.service')
+    const productsRes = await productService.getProducts({ brandId: brand.id, limit: 30 })
+    const productIds: string[] = (productsRes?.data?.items || [])
+      .map((p) => p.id)
+      .filter((id): id is string => Boolean(id))
+
+    const created = await promotionService.createCampaign({
+      name: `Promote: ${brand.name}`,
+      objective: 'SALES',
+      masterMessage: `Shop ${brand.name} at TechTools.`,
+    })
+    if (productIds.length > 0) {
+      await promotionService.updateCampaign(created.campaign.id, {
+        products: productIds.map((productId) => ({ productId })),
+      })
+    }
+    return created.campaign.id
+  },
+
+  /**
    * Get comprehensive trending analytics (now using real data from API)
    */
   async getAnalytics(
@@ -426,12 +541,13 @@ export const trendingService = {
       const days = period === 'day' ? 1 : period === 'week' ? 7 : 30
       const revenueTrend = await this.getRevenueTrend(days)
 
-      // Transform revenue trend data to match old format
+      // Real orders/revenue per day, from the same revenue-trend endpoint
+      // the rest of Analytics uses -- no page/collection view tracking
+      // exists yet, so this no longer fabricates a "views" or "clicks"
+      // series.
       const data = revenueTrend.data.map((point: RevenueTrendPoint) => ({
         date: point.date,
-        views: 0, // Not tracked in revenue endpoint
-        clicks: point.orderCount,
-        sales: point.orderCount,
+        orders: point.orderCount,
         revenue: point.revenue,
       }))
 
@@ -439,14 +555,8 @@ export const trendingService = {
         period,
         data,
         summary: {
-          totalViews: data.reduce((acc: number, d: any) => acc + d.views, 0),
-          totalClicks: data.reduce((acc: number, d: any) => acc + d.clicks, 0),
-          totalSales: data.reduce((acc: number, d: any) => acc + d.sales, 0),
-          totalRevenue: data.reduce(
-            (acc: number, d: any) => acc + d.revenue,
-            0,
-          ),
-          avgConversionRate: (revenueTrend.summary as any).averageRevenue || 0,
+          totalOrders: data.reduce((acc: number, d: AnalyticsChartPoint) => acc + d.orders, 0),
+          totalRevenue: data.reduce((acc: number, d: AnalyticsChartPoint) => acc + d.revenue, 0),
         },
       }
     } catch (error) {
@@ -455,11 +565,8 @@ export const trendingService = {
         period,
         data: [],
         summary: {
-          totalViews: 0,
-          totalClicks: 0,
-          totalSales: 0,
+          totalOrders: 0,
           totalRevenue: 0,
-          avgConversionRate: 0,
         },
       }
     }

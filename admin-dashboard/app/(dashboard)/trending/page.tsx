@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card,
@@ -18,6 +19,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -33,18 +35,14 @@ import {
   TrendingUp,
   Layers,
   Store,
-  Eye,
-  MousePointer,
   ShoppingCart,
-  DollarSign,
   BarChart3,
   Star,
   ArrowUp,
   ArrowDown,
   RefreshCw,
-  Calendar,
   Percent,
-  Users,
+  Megaphone,
 } from 'lucide-react'
 import {
   trendingService,
@@ -118,10 +116,16 @@ function CollectionsTable({
   collections,
   isLoading,
   onToggleFeatured,
+  onUpdateRank,
+  onPromote,
+  promotingId,
 }: {
   collections: TrendingCollection[]
   isLoading: boolean
   onToggleFeatured: (id: string, featured: boolean) => void
+  onUpdateRank: (id: string, rank: number) => void
+  onPromote: (collection: TrendingCollection) => void
+  promotingId: string | null
 }) {
   if (isLoading) {
     return (
@@ -152,10 +156,9 @@ function CollectionsTable({
           <TableHead>Collection</TableHead>
           <TableHead>Status</TableHead>
           <TableHead className='text-right'>Items</TableHead>
-          <TableHead className='text-right'>Views</TableHead>
-          <TableHead className='text-right'>Clicks</TableHead>
-          <TableHead className='text-right'>Conv. Rate</TableHead>
+          <TableHead className='w-28'>Rank</TableHead>
           <TableHead>Featured</TableHead>
+          <TableHead className='text-right'>Advertise</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -166,12 +169,7 @@ function CollectionsTable({
                 <div className='w-10 h-10 rounded-lg bg-linear-to-br from-orange-500 to-orange-600 flex items-center justify-center'>
                   <Layers className='h-5 w-5 text-white' />
                 </div>
-                <div>
-                  <p className='font-medium'>{collection.name}</p>
-                  <p className='text-xs text-muted-foreground'>
-                    Rank #{collection.trending_rank}
-                  </p>
-                </div>
+                <p className='font-medium'>{collection.name}</p>
               </div>
             </TableCell>
             <TableCell>
@@ -185,14 +183,19 @@ function CollectionsTable({
             <TableCell className='text-right font-medium'>
               {collection.itemsCount || 0}
             </TableCell>
-            <TableCell className='text-right'>
-              {(collection.views_count || 0).toLocaleString()}
-            </TableCell>
-            <TableCell className='text-right'>
-              {(collection.click_count || 0).toLocaleString()}
-            </TableCell>
-            <TableCell className='text-right'>
-              {Number(collection.conversion_rate || 0).toFixed(1)}%
+            <TableCell>
+              <Input
+                type='number'
+                defaultValue={collection.trending_rank ?? ''}
+                placeholder='Unranked'
+                className='h-8 w-20'
+                onBlur={(e) => {
+                  const value = Number(e.target.value)
+                  if (e.target.value !== '' && !Number.isNaN(value)) {
+                    onUpdateRank(collection.id, value)
+                  }
+                }}
+              />
             </TableCell>
             <TableCell>
               <Switch
@@ -201,6 +204,18 @@ function CollectionsTable({
                   onToggleFeatured(collection.id, checked)
                 }
               />
+            </TableCell>
+            <TableCell className='text-right'>
+              <Button
+                variant='outline'
+                size='sm'
+                className='gap-1.5'
+                disabled={promotingId === collection.id}
+                onClick={() => onPromote(collection)}
+              >
+                <Megaphone className='h-3.5 w-3.5' />
+                {promotingId === collection.id ? 'Creating...' : 'Promote'}
+              </Button>
             </TableCell>
           </TableRow>
         ))}
@@ -216,10 +231,16 @@ function BrandsTable({
   brands,
   isLoading,
   onToggleFeatured,
+  onUpdateRank,
+  onPromote,
+  promotingId,
 }: {
   brands: TrendingBrand[]
   isLoading: boolean
   onToggleFeatured: (id: string, featured: boolean) => void
+  onUpdateRank: (id: string, rank: number) => void
+  onPromote: (brand: TrendingBrand) => void
+  promotingId: string | null
 }) {
   if (isLoading) {
     return (
@@ -248,9 +269,11 @@ function BrandsTable({
           <TableHead>Brand</TableHead>
           <TableHead>Status</TableHead>
           <TableHead className='text-right'>Products</TableHead>
-          <TableHead className='text-right'>Followers</TableHead>
-          <TableHead className='text-right'>Total Sales</TableHead>
+          <TableHead className='text-right'>Units Sold</TableHead>
+          <TableHead className='text-right'>Revenue</TableHead>
+          <TableHead className='w-28'>Rank</TableHead>
           <TableHead>Featured</TableHead>
+          <TableHead className='text-right'>Advertise</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -271,12 +294,7 @@ function BrandsTable({
                     <Store className='h-5 w-5 text-white' />
                   </div>
                 )}
-                <div>
-                  <p className='font-medium'>{brand.name}</p>
-                  <p className='text-xs text-muted-foreground'>
-                    Rank #{brand.trending_rank}
-                  </p>
-                </div>
+                <p className='font-medium'>{brand.name}</p>
               </div>
             </TableCell>
             <TableCell>
@@ -291,10 +309,24 @@ function BrandsTable({
               {brand.product_count || 0}
             </TableCell>
             <TableCell className='text-right'>
-              {(brand.follower_count || 0).toLocaleString()}
+              {(brand.units_sold || 0).toLocaleString()}
             </TableCell>
             <TableCell className='text-right'>
               ${(brand.total_sales || 0).toLocaleString()}
+            </TableCell>
+            <TableCell>
+              <Input
+                type='number'
+                defaultValue={brand.trending_rank ?? ''}
+                placeholder='Unranked'
+                className='h-8 w-20'
+                onBlur={(e) => {
+                  const value = Number(e.target.value)
+                  if (e.target.value !== '' && !Number.isNaN(value)) {
+                    onUpdateRank(brand.id, value)
+                  }
+                }}
+              />
             </TableCell>
             <TableCell>
               <Switch
@@ -303,6 +335,18 @@ function BrandsTable({
                   onToggleFeatured(brand.id, checked)
                 }
               />
+            </TableCell>
+            <TableCell className='text-right'>
+              <Button
+                variant='outline'
+                size='sm'
+                className='gap-1.5'
+                disabled={promotingId === brand.id}
+                onClick={() => onPromote(brand)}
+              >
+                <Megaphone className='h-3.5 w-3.5' />
+                {promotingId === brand.id ? 'Creating...' : 'Promote'}
+              </Button>
             </TableCell>
           </TableRow>
         ))}
@@ -317,24 +361,25 @@ function BrandsTable({
 function AnalyticsChart({
   data,
 }: {
-  data: { date: string; views: number; clicks: number; sales: number }[]
+  data: { date: string; orders: number; revenue: number }[]
 }) {
-  const maxViews = Math.max(...data.map((d) => d.views))
+  // Each series scales against its own max, not a shared one -- orders and
+  // revenue live on very different numeric scales, and sharing a divisor
+  // (as the previous "views/clicks/sales" version did) produced NaN/
+  // Infinity bar heights whenever the shared series was all zero.
+  const maxOrders = Math.max(1, ...data.map((d) => d.orders))
+  const maxRevenue = Math.max(1, ...data.map((d) => d.revenue))
 
   return (
     <div className='space-y-4'>
       <div className='flex items-center gap-4 text-sm'>
         <div className='flex items-center gap-2'>
-          <div className='w-3 h-3 rounded-full bg-orange-500' />
-          <span>Views</span>
-        </div>
-        <div className='flex items-center gap-2'>
           <div className='w-3 h-3 rounded-full bg-blue-500' />
-          <span>Clicks</span>
+          <span>Orders</span>
         </div>
         <div className='flex items-center gap-2'>
           <div className='w-3 h-3 rounded-full bg-green-500' />
-          <span>Sales</span>
+          <span>Revenue</span>
         </div>
       </div>
       <div className='flex items-end gap-1 h-48'>
@@ -342,19 +387,14 @@ function AnalyticsChart({
           <div key={index} className='flex-1 flex flex-col items-center gap-1'>
             <div className='w-full flex gap-0.5 items-end h-40'>
               <div
-                className='flex-1 bg-orange-500 rounded-t-sm transition-all'
-                style={{ height: `${(item.views / maxViews) * 100}%` }}
-                title={`Views: ${item.views}`}
-              />
-              <div
                 className='flex-1 bg-blue-500 rounded-t-sm transition-all'
-                style={{ height: `${(item.clicks / maxViews) * 100}%` }}
-                title={`Clicks: ${item.clicks}`}
+                style={{ height: `${(item.orders / maxOrders) * 100}%` }}
+                title={`Orders: ${item.orders}`}
               />
               <div
                 className='flex-1 bg-green-500 rounded-t-sm transition-all'
-                style={{ height: `${(item.sales / maxViews) * 100}%` }}
-                title={`Sales: ${item.sales}`}
+                style={{ height: `${(item.revenue / maxRevenue) * 100}%` }}
+                title={`Revenue: $${item.revenue.toLocaleString()}`}
               />
             </div>
             <span className='text-xs text-muted-foreground'>
@@ -374,9 +414,11 @@ function AnalyticsChart({
 // ============================================
 export default function TrendingPage() {
   const queryClient = useQueryClient()
+  const router = useRouter()
   const [analyticsPeriod, setAnalyticsPeriod] = useState<
     'day' | 'week' | 'month'
   >('week')
+  const [promotingId, setPromotingId] = useState<string | null>(null)
 
   // Queries
   const { data: stats, isLoading: statsLoading } = useQuery({
@@ -426,6 +468,52 @@ export default function TrendingPage() {
     },
   })
 
+  const updateCollectionRank = useMutation({
+    mutationFn: ({ id, rank }: { id: string; rank: number }) =>
+      trendingService.updateCollectionRank(id, rank),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['trending-collections'] })
+      toast.success('Collection rank updated')
+    },
+    onError: () => toast.error('Failed to update rank'),
+  })
+
+  const updateBrandRank = useMutation({
+    mutationFn: ({ id, rank }: { id: string; rank: number }) =>
+      trendingService.updateBrandRank(id, rank),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['trending-brands'] })
+      toast.success('Brand rank updated')
+    },
+    onError: () => toast.error('Failed to update rank'),
+  })
+
+  const handlePromoteCollection = async (collection: TrendingCollection) => {
+    setPromotingId(collection.id)
+    try {
+      const campaignId = await trendingService.promoteCollection(collection)
+      toast.success(`Draft campaign created from "${collection.name}" -- pick channels and schedule next.`)
+      router.push(`/dashboard/promotions/${campaignId}/edit`)
+    } catch {
+      toast.error('Failed to create a promotion campaign for this collection.')
+    } finally {
+      setPromotingId(null)
+    }
+  }
+
+  const handlePromoteBrand = async (brand: TrendingBrand) => {
+    setPromotingId(brand.id)
+    try {
+      const campaignId = await trendingService.promoteBrand(brand)
+      toast.success(`Draft campaign created from "${brand.name}" -- pick channels and schedule next.`)
+      router.push(`/dashboard/promotions/${campaignId}/edit`)
+    } catch {
+      toast.error('Failed to create a promotion campaign for this brand.')
+    } finally {
+      setPromotingId(null)
+    }
+  }
+
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ['trending-stats'] })
     queryClient.invalidateQueries({ queryKey: ['trending-collections'] })
@@ -470,19 +558,15 @@ export default function TrendingPage() {
           icon={Store}
         />
         <StatsCard
-          title='Total Views'
-          value={(stats?.totalViews || 0).toLocaleString()}
-          change='+12.5%'
-          changeType='positive'
-          description='from last week'
-          icon={Eye}
+          title='Orders (7d)'
+          value={(stats?.totalOrders || 0).toLocaleString()}
+          description='real order count, last 7 days'
+          icon={ShoppingCart}
         />
         <StatsCard
           title='Conversion Rate'
           value={`${Number(stats?.conversionRate || 0).toFixed(1)}%`}
-          change='+0.8%'
-          changeType='positive'
-          description='from last week'
+          description='visitors who completed payment'
           icon={Percent}
         />
       </div>
@@ -520,27 +604,15 @@ export default function TrendingPage() {
             <Skeleton className='h-48 w-full' />
           ) : (
             <>
-              <div className='grid grid-cols-4 gap-4 mb-6'>
-                <div className='text-center p-4 bg-orange-50 dark:bg-orange-950/30 rounded-lg'>
-                  <p className='text-2xl font-bold text-orange-600'>
-                    {(analytics?.summary.totalViews || 0).toLocaleString()}
-                  </p>
-                  <p className='text-sm text-muted-foreground'>Total Views</p>
-                </div>
+              <div className='grid grid-cols-2 gap-4 mb-6'>
                 <div className='text-center p-4 bg-blue-50 dark:bg-blue-950/30 rounded-lg'>
                   <p className='text-2xl font-bold text-blue-600'>
-                    {(analytics?.summary.totalClicks || 0).toLocaleString()}
+                    {(analytics?.summary.totalOrders || 0).toLocaleString()}
                   </p>
-                  <p className='text-sm text-muted-foreground'>Total Clicks</p>
+                  <p className='text-sm text-muted-foreground'>Orders</p>
                 </div>
                 <div className='text-center p-4 bg-green-50 dark:bg-green-950/30 rounded-lg'>
                   <p className='text-2xl font-bold text-green-600'>
-                    {(analytics?.summary.totalSales || 0).toLocaleString()}
-                  </p>
-                  <p className='text-sm text-muted-foreground'>Total Sales</p>
-                </div>
-                <div className='text-center p-4 bg-purple-50 dark:bg-purple-950/30 rounded-lg'>
-                  <p className='text-2xl font-bold text-purple-600'>
                     ${(analytics?.summary.totalRevenue || 0).toLocaleString()}
                   </p>
                   <p className='text-sm text-muted-foreground'>Revenue</p>
@@ -581,6 +653,9 @@ export default function TrendingPage() {
                 onToggleFeatured={(id, featured) =>
                   toggleCollectionFeatured.mutate({ id, featured })
                 }
+                onUpdateRank={(id, rank) => updateCollectionRank.mutate({ id, rank })}
+                onPromote={handlePromoteCollection}
+                promotingId={promotingId}
               />
             </CardContent>
           </Card>
@@ -602,6 +677,9 @@ export default function TrendingPage() {
                 onToggleFeatured={(id, featured) =>
                   toggleBrandFeatured.mutate({ id, featured })
                 }
+                onUpdateRank={(id, rank) => updateBrandRank.mutate({ id, rank })}
+                onPromote={handlePromoteBrand}
+                promotingId={promotingId}
               />
             </CardContent>
           </Card>

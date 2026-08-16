@@ -33,6 +33,18 @@ import {
   startPromotionQueueWorker,
   stopPromotionQueueWorker,
 } from './services/promotion-campaign.queue'
+import {
+  startChannelProductSyncWorker,
+  stopChannelProductSyncWorker,
+} from './services/channels/channel-product-sync.worker'
+import {
+  startChannelInventoryDiffWorker,
+  stopChannelInventoryDiffWorker,
+} from './services/channels/channel-inventory-diff.worker'
+import {
+  startChannelOrderImportWorker,
+  stopChannelOrderImportWorker,
+} from './services/channels/channel-order-import.worker'
 import { webSocketService } from './services/websocket.service'
 import { notificationDispatcher } from './services/notification-dispatcher.service'
 import shippingService from './services/shipping'
@@ -80,6 +92,9 @@ async function startServer() {
     startAnomalyDetectionWorker()
     startMetricsBroadcaster()
     startPromotionQueueWorker()
+    startChannelProductSyncWorker()
+    startChannelInventoryDiffWorker()
+    startChannelOrderImportWorker()
 
     // Start server
     httpServer.listen(PORT, () => {
@@ -104,6 +119,9 @@ process.on('SIGTERM', () => {
   stopAnomalyDetectionWorker()
   stopMetricsBroadcaster()
   stopPromotionQueueWorker()
+  stopChannelProductSyncWorker()
+  stopChannelInventoryDiffWorker()
+  stopChannelOrderImportWorker()
   httpServer.close(() => {
     logger.info('Server closed')
     process.exit(0)
@@ -117,6 +135,9 @@ process.on('SIGINT', () => {
   stopAnomalyDetectionWorker()
   stopMetricsBroadcaster()
   stopPromotionQueueWorker()
+  stopChannelProductSyncWorker()
+  stopChannelInventoryDiffWorker()
+  stopChannelOrderImportWorker()
   httpServer.close(() => {
     logger.info('Server closed')
     process.exit(0)

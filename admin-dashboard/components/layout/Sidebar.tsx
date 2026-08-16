@@ -38,6 +38,7 @@ import {
   Activity,
   CalendarDays,
   Link2,
+  Store,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useStaffAccess } from '@/contexts/StaffAccessContext'
@@ -296,6 +297,53 @@ const navigation: NavItem[] = [
         // implied by marketing.view or campaigns.manage.
         icon: Link2,
         permission: 'social.accounts.view',
+      },
+    ],
+  },
+  {
+    // TIKTOK-COMMERCE-1 -- an external SALES channel (TikTok Shop), not
+    // organic social publishing. Deliberately its own top-level group,
+    // never nested under Marketing -- cloned from that group's structure
+    // (base channels.tiktok.view gate, tighter-gated children), but the
+    // two domains stay separate everywhere: schema, permissions, and nav.
+    title: 'Channels',
+    href: '/dashboard/channels/tiktok',
+    icon: Store,
+    permission: 'channels.tiktok.view',
+    // Children list starts minimal and grows with each build step that
+    // actually ships a page -- never a link to a route that doesn't exist
+    // yet (that exact mistake -- a sidebar link with no page behind it --
+    // is what caused /dashboard/promotions to 404 before PROMOTION-OPS-1).
+    // Sync History is added here once that page lands.
+    children: [
+      {
+        title: 'Overview',
+        href: '/dashboard/channels/tiktok',
+        icon: Store,
+        permission: 'channels.tiktok.view',
+      },
+      {
+        title: 'Product Mappings',
+        href: '/dashboard/channels/tiktok/products',
+        icon: Package,
+        permission: 'channels.tiktok.products',
+      },
+      {
+        title: 'Orders',
+        href: '/dashboard/channels/tiktok/orders',
+        icon: ShoppingCart,
+        permission: 'channels.tiktok.orders',
+      },
+      {
+        title: 'Connection',
+        href: '/dashboard/channels/tiktok/connection',
+        // Deliberately gated tighter than the rest of Channels --
+        // connecting/disconnecting the TikTok Shop account is
+        // OWNER/SUPER_ADMIN-only this phase (see
+        // staff-permissions.config.ts's channels.tiktok.connections
+        // grant), never implied by channels.tiktok.view/manage.
+        icon: Link2,
+        permission: 'channels.tiktok.connections',
       },
     ],
   },

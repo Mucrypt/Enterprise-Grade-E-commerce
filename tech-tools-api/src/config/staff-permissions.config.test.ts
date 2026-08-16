@@ -1,4 +1,4 @@
-import { STAFF_ROLE_PERMISSIONS, Permission, StaffRole } from './staff-permissions.config'
+import { STAFF_ROLE_PERMISSIONS, Permission, StaffRole, MARKET_SCOPED_PERMISSIONS } from './staff-permissions.config'
 
 /**
  * PROMOTION-OPS-1 -- regression tests for the exact access-control
@@ -62,5 +62,80 @@ describe('staff-permissions.config -- PROMOTION-OPS-1 social.* invariants', () =
     expect(grantedOf('CATALOG_MANAGER', SOCIAL_PERMISSIONS)).toEqual([])
     expect(grantedOf('ORDER_MANAGER', SOCIAL_PERMISSIONS)).toEqual([])
     expect(grantedOf('SUPPORT_AGENT', SOCIAL_PERMISSIONS)).toEqual([])
+  })
+})
+
+/**
+ * TIKTOK-COMMERCE-1 -- regression tests for the channels.tiktok.*
+ * permission matrix, following the exact same invariants and reasoning
+ * PROMOTION-OPS-1's social.* tests above already established: a
+ * market-scoped manager must never silently gain channel authority, and
+ * "can operate the channel day to day" must stay a strictly narrower grant
+ * than "can connect/disconnect the account."
+ */
+describe('staff-permissions.config -- TIKTOK-COMMERCE-1 channels.tiktok.* invariants', () => {
+  const CHANNEL_PERMISSIONS: Permission[] = [
+    'channels.tiktok.view',
+    'channels.tiktok.products',
+    'channels.tiktok.orders',
+    'channels.tiktok.fulfillment',
+    'channels.tiktok.finance',
+    'channels.tiktok.manage',
+    'channels.tiktok.connections',
+    'channels.tiktok.analytics',
+  ]
+
+  const CONNECTION_PERMISSIONS: Permission[] = ['channels.tiktok.connections']
+
+  function grantedOf(role: StaffRole, permissions: Permission[]): Permission[] {
+    const roleSet = STAFF_ROLE_PERMISSIONS[role]
+    return permissions.filter((p) => roleSet.has(p))
+  }
+
+  it('MARKET_MANAGER holds none of the channels.tiktok.* permissions -- never silently gains channel authority', () => {
+    expect(grantedOf('MARKET_MANAGER', CHANNEL_PERMISSIONS)).toEqual([])
+  })
+
+  it('MARKETING_MANAGER and SUPPORT_AGENT hold none of the channels.tiktok.* permissions -- out of remit', () => {
+    expect(grantedOf('MARKETING_MANAGER', CHANNEL_PERMISSIONS)).toEqual([])
+    expect(grantedOf('SUPPORT_AGENT', CHANNEL_PERMISSIONS)).toEqual([])
+  })
+
+  it('ADMIN may operate the channel but holds neither channels.tiktok.connections -- connecting the account stays separate from day-to-day operation', () => {
+    expect(STAFF_ROLE_PERMISSIONS.ADMIN.has('channels.tiktok.view')).toBe(true)
+    expect(STAFF_ROLE_PERMISSIONS.ADMIN.has('channels.tiktok.products')).toBe(true)
+    expect(STAFF_ROLE_PERMISSIONS.ADMIN.has('channels.tiktok.orders')).toBe(true)
+    expect(STAFF_ROLE_PERMISSIONS.ADMIN.has('channels.tiktok.finance')).toBe(true)
+    expect(STAFF_ROLE_PERMISSIONS.ADMIN.has('channels.tiktok.manage')).toBe(true)
+    expect(STAFF_ROLE_PERMISSIONS.ADMIN.has('channels.tiktok.analytics')).toBe(true)
+    expect(grantedOf('ADMIN', CONNECTION_PERMISSIONS)).toEqual([])
+  })
+
+  it('channels.tiktok.connections is held only by OWNER and SUPER_ADMIN', () => {
+    const rolesHoldingConnections = (Object.keys(STAFF_ROLE_PERMISSIONS) as StaffRole[]).filter(
+      (role) => grantedOf(role, CONNECTION_PERMISSIONS).length > 0,
+    )
+    expect(rolesHoldingConnections.sort()).toEqual(['OWNER', 'SUPER_ADMIN'])
+  })
+
+  it('OWNER and SUPER_ADMIN hold all 8 channels.tiktok.* permissions', () => {
+    expect(grantedOf('OWNER', CHANNEL_PERMISSIONS)).toEqual(CHANNEL_PERMISSIONS)
+    expect(grantedOf('SUPER_ADMIN', CHANNEL_PERMISSIONS)).toEqual(CHANNEL_PERMISSIONS)
+  })
+
+  it('CATALOG_MANAGER holds only channels.tiktok.view/products -- in-remit subset only', () => {
+    expect(grantedOf('CATALOG_MANAGER', CHANNEL_PERMISSIONS).sort()).toEqual(
+      ['channels.tiktok.products', 'channels.tiktok.view'].sort(),
+    )
+  })
+
+  it('ORDER_MANAGER holds only channels.tiktok.view/orders -- in-remit subset only', () => {
+    expect(grantedOf('ORDER_MANAGER', CHANNEL_PERMISSIONS).sort()).toEqual(
+      ['channels.tiktok.orders', 'channels.tiktok.view'].sort(),
+    )
+  })
+
+  it('channels.tiktok.orders is a market-scoped permission', () => {
+    expect(MARKET_SCOPED_PERMISSIONS.has('channels.tiktok.orders')).toBe(true)
   })
 })

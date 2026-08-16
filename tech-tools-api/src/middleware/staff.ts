@@ -217,7 +217,7 @@ export interface MarketScopeFilter {
   params: unknown[]
 }
 
-type ScopableResource = 'orders' | 'suppliers'
+type ScopableResource = 'orders' | 'suppliers' | 'channel_orders'
 
 const RESOURCE_COUNTRY_EXPRESSIONS: Record<ScopableResource, string> = {
   // Table-alias-qualified to match this codebase's actual query style:
@@ -230,6 +230,13 @@ const RESOURCE_COUNTRY_EXPRESSIONS: Record<ScopableResource, string> = {
   // docs/ADMIN-2A5-STAFF-ACCESS-INTEGRATION-REPORT.md §4.
   orders: `LOWER(o.shipping_address->>'country')`,
   suppliers: `LOWER(country_code)`,
+  // TIKTOK-COMMERCE-1: scoped by the channel ACCOUNT's own market_country
+  // (commerce_channel_accounts, aliased `ca`), not a per-order buyer
+  // country -- a TikTok Shop account's market is the meaningful scope
+  // boundary here (an Italy-scoped market manager should see all orders
+  // from the Italy shop, regardless of individual buyer addresses), unlike
+  // `orders` above where each row's own shipping country is what matters.
+  channel_orders: `LOWER(ca.market_country)`,
 }
 
 /**

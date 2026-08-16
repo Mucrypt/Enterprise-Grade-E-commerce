@@ -6,7 +6,7 @@ import { AuthRequest } from '../../../middleware/auth'
 // Get all brands
 export const getBrands = async (req: Request, res: Response) => {
   try {
-    const { page = 1, limit = 50, search, isActive } = req.query
+    const { page = 1, limit = 50, search, isActive, isFeatured } = req.query
 
     const offset = (Number(page) - 1) * Number(limit)
     const conditions: string[] = []
@@ -27,6 +27,12 @@ export const getBrands = async (req: Request, res: Response) => {
       paramIndex++
     }
 
+    if (isFeatured !== undefined) {
+      conditions.push(`is_featured = $${paramIndex}`)
+      values.push(isFeatured === 'true')
+      paramIndex++
+    }
+
     const whereClause =
       conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
 
@@ -37,10 +43,12 @@ export const getBrands = async (req: Request, res: Response) => {
     )
     const total = parseInt(countResult.rows[0].count)
 
-    // Get brands
+    // Get brands -- trending_position is the real, admin-settable manual
+    // rank (see 044_brand_trending_fields.sql); NULLS LAST so an unranked
+    // brand doesn't jump to the front of the list.
     const result = await query(
       `SELECT * FROM brands ${whereClause}
-       ORDER BY name ASC
+       ORDER BY trending_position ASC NULLS LAST, name ASC
        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
       [...values, limit, offset],
     )
@@ -229,7 +237,7 @@ export const createBrand = async (req: AuthRequest, res: Response) => {
 export const updateBrand = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params
-    const { name, slug, description, logoUrl, websiteUrl, isActive } = req.body
+    const { name, slug, description, logoUrl, websiteUrl, isActive, isFeatured, trendingPosition } = req.body
 
     // Check if brand exists
     const existingBrand = await query('SELECT * FROM brands WHERE id = $1', [
@@ -261,16 +269,18 @@ export const updateBrand = async (req: AuthRequest, res: Response) => {
     }
 
     const result = await query(
-      `UPDATE brands SET 
+      `UPDATE brands SET
         name = COALESCE($1, name),
         slug = COALESCE($2, slug),
         description = COALESCE($3, description),
         logo_url = COALESCE($4, logo_url),
         website_url = COALESCE($5, website_url),
-        is_active = COALESCE($6, is_active)
-       WHERE id = $7
+        is_active = COALESCE($6, is_active),
+        is_featured = COALESCE($7, is_featured),
+        trending_position = COALESCE($8, trending_position)
+       WHERE id = $9
        RETURNING *`,
-      [name, slug, description, logoUrl, websiteUrl, isActive, id],
+      [name, slug, description, logoUrl, websiteUrl, isActive, isFeatured, trendingPosition, id],
     )
 
     logger.info('Brand updated:', { brandId: id })

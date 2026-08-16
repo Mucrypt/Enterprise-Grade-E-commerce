@@ -29,14 +29,13 @@ const PRODUCT_WIDTH = (width - AppSpacing.base * 2 - AppSpacing.sm * 3) / 4
 interface TrendingBrandSectionProps {
   brand: Brand
   products: Product[]
+  // Real numbers only -- soldCount/newProductsCount come from actual
+  // orders/catalog data (see brandsApi.getStats). There is deliberately no
+  // followerCount here: no real follow/subscribe feature exists yet, and a
+  // fabricated number is worse than an absent one.
   stats?: {
     soldCount?: number
-    followerCount?: number
     newProductsCount?: number
-  }
-  testimonial?: {
-    author: string
-    text: string
   }
 }
 
@@ -44,7 +43,6 @@ export default function TrendingBrandSection({
   brand,
   products,
   stats,
-  testimonial,
 }: TrendingBrandSectionProps) {
   const router = useRouter()
   const [isFollowing, setIsFollowing] = useState(false)
@@ -111,13 +109,6 @@ export default function TrendingBrandSection({
                   <Ionicons name='flash' size={12} color={AppColors.primary} />
                   <Text style={styles.statText}>
                     {formatCount(stats.soldCount)}+ Sold
-                  </Text>
-                </View>
-              )}
-              {stats?.followerCount && (
-                <View style={styles.statItem}>
-                  <Text style={styles.statText}>
-                    {formatCount(stats.followerCount)} Followers
                   </Text>
                 </View>
               )}
@@ -195,23 +186,6 @@ export default function TrendingBrandSection({
           )
         })}
       </View>
-
-      {/* Testimonial */}
-      {testimonial && (
-        <View style={styles.testimonialContainer}>
-          <View style={styles.quoteIcon}>
-            <Ionicons
-              name='chatbubble-ellipses'
-              size={14}
-              color={AppColors.primary}
-            />
-          </View>
-          <View style={styles.testimonialContent}>
-            <Text style={styles.testimonialAuthor}>{testimonial.author}:</Text>
-            <Text style={styles.testimonialText}>{testimonial.text}</Text>
-          </View>
-        </View>
-      )}
 
       {/* View All */}
       <TouchableOpacity
@@ -378,32 +352,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: AppColors.gray400,
     textDecorationLine: 'line-through',
-  },
-  testimonialContainer: {
-    flexDirection: 'row',
-    backgroundColor: AppColors.gray50,
-    padding: AppSpacing.sm,
-    borderRadius: AppBorderRadius.md,
-    marginBottom: AppSpacing.md,
-  },
-  quoteIcon: {
-    marginRight: AppSpacing.sm,
-  },
-  testimonialContent: {
-    flex: 1,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  testimonialAuthor: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: AppColors.gray700,
-    marginRight: 4,
-  },
-  testimonialText: {
-    fontSize: 12,
-    color: AppColors.gray600,
-    fontStyle: 'italic',
   },
   viewAllButton: {
     flexDirection: 'row',

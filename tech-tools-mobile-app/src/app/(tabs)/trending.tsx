@@ -27,21 +27,10 @@ import { ProductCollection, Category, Brand, Product } from '@/types'
 
 const { width } = Dimensions.get('window')
 
-// Mock testimonials for brands
-const TESTIMONIALS = [
-  { author: 's***3', text: 'These items fit perfect and look amazing!' },
-  { author: 'j***k', text: 'Great quality for the price!' },
-  { author: 'm***a', text: 'Fast shipping and exactly as described.' },
-  { author: 't***y', text: 'Love this brand, always reliable!' },
-  { author: 'a***z', text: 'Exceeded my expectations!' },
-]
-
-// Generate mock stats for brands
-const generateBrandStats = (index: number) => ({
-  soldCount: Math.floor(Math.random() * 500 + 50) * 1000,
-  followerCount: Math.floor(Math.random() * 150 + 20) * 1000,
-  newProductsCount: Math.floor(Math.random() * 50 + 5),
-})
+type BrandStatsMap = Record<
+  string,
+  { productCount: number; unitsSold: number; revenueTotal: number; newProductsCount: number }
+>
 
 export default function TrendingTabScreen() {
   const [refreshing, setRefreshing] = useState(false)
@@ -53,6 +42,7 @@ export default function TrendingTabScreen() {
   const [brandsWithProducts, setBrandsWithProducts] = useState<
     Array<{ brand: Brand; products: Product[] }>
   >([])
+  const [brandStats, setBrandStats] = useState<BrandStatsMap>({})
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
 
   const fetchData = useCallback(async () => {
@@ -66,6 +56,16 @@ export default function TrendingTabScreen() {
       setCollections(collectionsRes)
       setCategories(categoriesRes.slice(0, 8))
       setBrandsWithProducts(brandsRes)
+
+      // Real units-sold/new-product numbers for the stores just loaded --
+      // fetched separately since getBrandsWithProducts doesn't return them.
+      // Never fabricated: a brand with no real sales yet just comes back
+      // at zero rather than a random placeholder.
+      const brandIds = brandsRes.map((b) => b.brand.id)
+      if (brandIds.length > 0) {
+        const stats = await brandsApi.getStats(brandIds)
+        setBrandStats(stats)
+      }
     } catch (error) {
       console.error('Error fetching trending data:', error)
     } finally {
@@ -164,15 +164,17 @@ export default function TrendingTabScreen() {
           />
 
           {filteredBrands.length > 0 ? (
-            filteredBrands.map((item, index) => (
+            filteredBrands.map((item) => (
               <TrendingBrandSection
                 key={item.brand.id}
                 brand={item.brand}
                 products={item.products}
-                stats={generateBrandStats(index)}
-                testimonial={
-                  index % 2 === 0
-                    ? TESTIMONIALS[index % TESTIMONIALS.length]
+                stats={
+                  brandStats[item.brand.id]
+                    ? {
+                        soldCount: brandStats[item.brand.id].unitsSold,
+                        newProductsCount: brandStats[item.brand.id].newProductsCount,
+                      }
                     : undefined
                 }
               />

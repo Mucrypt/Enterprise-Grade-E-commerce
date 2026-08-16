@@ -1,15 +1,20 @@
 /**
  * Real authenticated encryption (AES-256-GCM) for third-party secrets that
- * must never be stored in plaintext -- currently: social_connections'
- * access_token_encrypted / refresh_token_encrypted columns
- * (PROMOTION-OPS-1). Written from scratch: an audit of this codebase found
- * zero real encryption anywhere -- email_sender_aliases.smtp_pass_encrypted
+ * must never be stored in plaintext. Originally written for
+ * social_connections' access_token_encrypted / refresh_token_encrypted
+ * columns (PROMOTION-OPS-1) -- an audit of this codebase at the time found
+ * zero real encryption anywhere: email_sender_aliases.smtp_pass_encrypted
  * is stored and read as plain text despite its name (a literal
  * `// TODO: Decrypt` sits next to every read of it), and
  * whatsapp_settings.is_encrypted is only ever used to mask a value in API
  * responses, never to actually encrypt storage. This file exists so that
- * mistake is not repeated for OAuth tokens, which are a materially higher-
- * value secret than either of those.
+ * mistake is not repeated for other third-party OAuth tokens.
+ *
+ * TIKTOK-COMMERCE-1 reuses this exact primitive for
+ * commerce_channel_accounts' tokens via a second, independently-keyed
+ * cipher instance (createSecretCipher() below) -- never the same key
+ * namespace as the social-publishing tokens, so rotating or compromising
+ * one domain's key can never affect the other's ciphertext.
  *
  * Key resolution mirrors config/jwt.config.ts's resolveSecret() pattern
  * (fail closed in production if unset; warn + insecure dev fallback
@@ -18,16 +23,17 @@
  * configuration bug, not a "weak but present" secret, so it throws
  * regardless of NODE_ENV rather than silently truncating/padding.
  *
- * Key rotation (documented, not implemented this phase): the stored
- * ciphertext format is a versioned string ("v<N>:..."), and
- * social_connections.token_encryption_key_version records which version
- * encrypted a given row. To rotate: add a SOCIAL_TOKEN_ENCRYPTION_KEY_V2
- * env var, extend KEYS_BY_VERSION below with version 2, bump
- * CURRENT_KEY_VERSION, then run a one-off script that reads every
- * social_connections row, decrypts under its recorded
- * token_encryption_key_version, re-encrypts under the new current version,
- * and updates both the ciphertext and the version column. Only retire the
- * old env var once every row reports the new version.
+ * Key rotation (documented, not implemented): the stored ciphertext format
+ * is a versioned string ("v<N>:..."), and each consuming table records
+ * which version encrypted a given row (e.g.
+ * social_connections.token_encryption_key_version,
+ * commerce_channel_accounts.token_encryption_key_version). To rotate a
+ * given domain: add its `<ENV_VAR>_V2` env var, extend that cipher's
+ * `keysByVersion` with version 2, bump its `currentVersion`, then run a
+ * one-off script that reads every row for that domain, decrypts under its
+ * recorded key version, re-encrypts under the new current version, and
+ * updates both the ciphertext and the version column. Only retire the old
+ * env var once every row reports the new version.
  */
 import crypto from 'crypto'
 import logger from './logger'
@@ -37,8 +43,6 @@ const isProduction = process.env.NODE_ENV === 'production'
 const ALGORITHM = 'aes-256-gcm'
 const KEY_BYTES = 32
 const IV_BYTES = 12 // 96-bit IV is the AES-GCM standard/recommended size
-
-export const CURRENT_KEY_VERSION = 1
 
 export class SecretEncryptionConfigError extends Error {}
 export class SecretDecryptionError extends Error {}
@@ -59,7 +63,7 @@ function decodeAndValidateKey(envVarName: string, base64Value: string): Buffer {
   return key
 }
 
-function resolveKey(envVarName: string, versionLabel: string): Buffer {
+function resolveKey(envVarName: string, versionLabel: string, devLabel: string): Buffer {
   const value = process.env[envVarName]
 
   if (value && value.trim().length > 0) {
@@ -67,7 +71,7 @@ function resolveKey(envVarName: string, versionLabel: string): Buffer {
   }
 
   if (isProduction) {
-    // Fail closed: never let production encrypt/decrypt OAuth tokens with a
+    // Fail closed: never let production encrypt/decrypt tokens with a
     // guessable/shared literal key. Unlike jwt.config.ts's resolveSecret()
     // (called eagerly at import time), key resolution here is lazy --
     // deferred until the first actual encrypt/decrypt call -- so importing
@@ -86,78 +90,93 @@ function resolveKey(envVarName: string, versionLabel: string): Buffer {
   )
   // Fixed, clearly-labeled 32-byte dev-only key -- never used if the env
   // var is actually set, and never reachable in production (see above).
-  return crypto.createHash('sha256').update(`insecure-dev-only-social-token-key-${versionLabel}`).digest()
+  return crypto.createHash('sha256').update(`insecure-dev-only-${devLabel}-token-key-${versionLabel}`).digest()
 }
 
-const KEYS_BY_VERSION: Record<number, () => Buffer> = {
-  1: () => resolveKey('SOCIAL_TOKEN_ENCRYPTION_KEY', 'v1'),
-}
-
-function getKeyForVersion(version: number): Buffer {
-  const resolver = KEYS_BY_VERSION[version]
-  if (!resolver) {
-    throw new SecretDecryptionError(`No encryption key configured for version ${version}.`)
-  }
-  return resolver()
+export interface SecretCipher {
+  encryptSecret(plaintext: string): string
+  decryptSecret(stored: string): string
 }
 
 /**
- * Encrypts `plaintext` under the current key version. Returns an opaque,
- * versioned string safe to store directly in a TEXT column --
- * "v<version>:<iv_b64>:<authTag_b64>:<ciphertext_b64>".
+ * Builds an independently-keyed AES-256-GCM cipher reading its key from
+ * `envVarName`. Each call site gets its own key namespace -- two domains
+ * created from this factory never share a key, an env var, or a dev-mode
+ * fallback, even though the crypto primitive and stored-ciphertext format
+ * ("v<version>:<iv_b64>:<authTag_b64>:<ciphertext_b64>") are identical.
  */
-export function encryptSecret(plaintext: string): string {
-  const key = getKeyForVersion(CURRENT_KEY_VERSION)
-  const iv = crypto.randomBytes(IV_BYTES)
-  const cipher = crypto.createCipheriv(ALGORITHM, key, iv)
-  const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()])
-  const authTag = cipher.getAuthTag()
+export function createSecretCipher(envVarName: string, devLabel: string, currentVersion = 1): SecretCipher {
+  const keysByVersion: Record<number, () => Buffer> = {
+    [currentVersion]: () => resolveKey(envVarName, `v${currentVersion}`, devLabel),
+  }
 
-  return [
-    `v${CURRENT_KEY_VERSION}`,
-    iv.toString('base64'),
-    authTag.toString('base64'),
-    ciphertext.toString('base64'),
-  ].join(':')
+  function getKeyForVersion(version: number): Buffer {
+    const resolver = keysByVersion[version]
+    if (!resolver) {
+      throw new SecretDecryptionError(`No encryption key configured for version ${version}.`)
+    }
+    return resolver()
+  }
+
+  function encryptSecret(plaintext: string): string {
+    const key = getKeyForVersion(currentVersion)
+    const iv = crypto.randomBytes(IV_BYTES)
+    const cipher = crypto.createCipheriv(ALGORITHM, key, iv)
+    const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()])
+    const authTag = cipher.getAuthTag()
+
+    return [`v${currentVersion}`, iv.toString('base64'), authTag.toString('base64'), ciphertext.toString('base64')].join(':')
+  }
+
+  function decryptSecret(stored: string): string {
+    const parts = stored.split(':')
+    if (parts.length !== 4) {
+      throw new SecretDecryptionError('Malformed encrypted secret (expected 4 colon-separated parts).')
+    }
+    const [versionLabel, ivB64, authTagB64, ciphertextB64] = parts
+    const versionMatch = /^v(\d+)$/.exec(versionLabel)
+    if (!versionMatch) {
+      throw new SecretDecryptionError(`Malformed encrypted secret (bad version label "${versionLabel}").`)
+    }
+    const version = Number(versionMatch[1])
+    const key = getKeyForVersion(version)
+
+    let iv: Buffer, authTag: Buffer, ciphertext: Buffer
+    try {
+      iv = Buffer.from(ivB64, 'base64')
+      authTag = Buffer.from(authTagB64, 'base64')
+      ciphertext = Buffer.from(ciphertextB64, 'base64')
+    } catch {
+      throw new SecretDecryptionError('Malformed encrypted secret (invalid base64).')
+    }
+
+    try {
+      const decipher = crypto.createDecipheriv(ALGORITHM, key, iv)
+      decipher.setAuthTag(authTag)
+      const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()])
+      return plaintext.toString('utf8')
+    } catch {
+      // AES-GCM throws on auth-tag mismatch -- i.e. the ciphertext was
+      // tampered with or decrypted under the wrong key. Never surface the
+      // underlying crypto error (or a garbage plaintext) to the caller.
+      throw new SecretDecryptionError('Failed to decrypt secret -- tampered ciphertext or wrong key.')
+    }
+  }
+
+  return { encryptSecret, decryptSecret }
 }
 
-/**
- * Decrypts a string produced by encryptSecret(). Throws
- * SecretDecryptionError on a malformed string, an unknown key version, or
- * (via AES-GCM's authentication tag) any tampering/corruption of the
- * ciphertext -- never returns a garbage plaintext.
- */
-export function decryptSecret(stored: string): string {
-  const parts = stored.split(':')
-  if (parts.length !== 4) {
-    throw new SecretDecryptionError('Malformed encrypted secret (expected 4 colon-separated parts).')
-  }
-  const [versionLabel, ivB64, authTagB64, ciphertextB64] = parts
-  const versionMatch = /^v(\d+)$/.exec(versionLabel)
-  if (!versionMatch) {
-    throw new SecretDecryptionError(`Malformed encrypted secret (bad version label "${versionLabel}").`)
-  }
-  const version = Number(versionMatch[1])
-  const key = getKeyForVersion(version)
+export const CURRENT_KEY_VERSION = 1
 
-  let iv: Buffer, authTag: Buffer, ciphertext: Buffer
-  try {
-    iv = Buffer.from(ivB64, 'base64')
-    authTag = Buffer.from(authTagB64, 'base64')
-    ciphertext = Buffer.from(ciphertextB64, 'base64')
-  } catch {
-    throw new SecretDecryptionError('Malformed encrypted secret (invalid base64).')
-  }
+// The original, still-default cipher -- social_connections' OAuth tokens
+// (PROMOTION-OPS-1). Every existing call site (social-connection.controller.ts,
+// promotion-campaign.queue.ts) keeps working unmodified via these two
+// top-level exports.
+const socialTokenCipher = createSecretCipher('SOCIAL_TOKEN_ENCRYPTION_KEY', 'social', CURRENT_KEY_VERSION)
+export const encryptSecret = socialTokenCipher.encryptSecret
+export const decryptSecret = socialTokenCipher.decryptSecret
 
-  try {
-    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv)
-    decipher.setAuthTag(authTag)
-    const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()])
-    return plaintext.toString('utf8')
-  } catch {
-    // AES-GCM throws on auth-tag mismatch -- i.e. the ciphertext was
-    // tampered with or decrypted under the wrong key. Never surface the
-    // underlying crypto error (or a garbage plaintext) to the caller.
-    throw new SecretDecryptionError('Failed to decrypt secret -- tampered ciphertext or wrong key.')
-  }
-}
+// TIKTOK-COMMERCE-1 -- commerce_channel_accounts' tokens. Deliberately a
+// separate key namespace/env var (CHANNEL_TOKEN_ENCRYPTION_KEY) from the
+// social-publishing tokens above -- see this file's header comment.
+export const channelTokenCipher = createSecretCipher('CHANNEL_TOKEN_ENCRYPTION_KEY', 'channel', 1)

@@ -976,6 +976,20 @@ export const brandsApi = {
   }> => {
     return productsApi.getAll({ ...filters, brand: brandSlug })
   },
+
+  // Real per-brand numbers (units sold + product count) -- backs the
+  // Trending tab's "Featured Stores" section. There is deliberately no
+  // follower count here: no real follow/subscribe feature exists yet, and
+  // this endpoint never fabricates one. See tech-tools-api's
+  // brand.controller.ts getBrandStats.
+  getStats: async (
+    ids: string[],
+  ): Promise<Record<string, { productCount: number; unitsSold: number; revenueTotal: number; newProductsCount: number }>> => {
+    if (ids.length === 0) return {}
+    const response = await apiClient.get('/brands/stats', { params: { ids: ids.join(',') } })
+    const data = response.data.data || response.data
+    return data.stats || {}
+  },
 }
 
 // ============================================
