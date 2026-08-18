@@ -217,11 +217,35 @@ function SourcingDetailPageContent() {
                 <CardTitle className='text-base'>Images ({product.captured_images.length})</CardTitle>
                 <CardDescription>Hotlinked from the source -- committing the product uses these URLs directly.</CardDescription>
               </CardHeader>
-              <CardContent className='flex flex-wrap gap-3'>
+              <CardContent className='grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8'>
                 {product.captured_images.map((img, i) => (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img key={i} src={img.url} alt={img.altText || ''} className='h-20 w-20 rounded border object-cover' />
+                  <img
+                    key={i}
+                    src={img.url}
+                    alt={img.altText || ''}
+                    className='aspect-square w-full rounded border object-cover'
+                  />
                 ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {product.captured_specs && Object.keys(product.captured_specs).length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className='text-base'>Key attributes ({Object.keys(product.captured_specs).length})</CardTitle>
+                <CardDescription>Specs read directly from the source page -- these are included as-is on the committed product.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <dl className='grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2'>
+                  {Object.entries(product.captured_specs).map(([label, value]) => (
+                    <div key={label} className='flex justify-between gap-4 border-b py-1.5 text-sm last:border-0'>
+                      <dt className='text-muted-foreground capitalize'>{label}</dt>
+                      <dd className='text-right font-medium'>{value}</dd>
+                    </div>
+                  ))}
+                </dl>
               </CardContent>
             </Card>
           )}
