@@ -11,7 +11,9 @@
     "https://www.amazon.de/*",
     "https://www.amazon.it/*",
     "https://www.amazon.fr/*",
-    "https://www.amazon.es/*"
+    "https://www.amazon.es/*",
+    "https://techtoolstore.com/*",
+    "http://localhost:9000/*"
   ],
   "background": {
     "service_worker": "background.js"
