@@ -12,6 +12,7 @@ import v1Router from './api/v1'
 import errorHandler from './middleware/errorHandler'
 import { notFoundHandler } from './middleware/notFoundHandler'
 import logger from './utils/logger'
+import { corsOptionsDelegate } from './config/cors.config'
 
 const app: Application = express()
 
@@ -38,13 +39,10 @@ app.use(
   }),
 )
 
-// CORS configuration
-const corsOptions = {
-  origin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:5173'],
-  credentials: true,
-  optionsSuccessStatus: 200,
-}
-app.use(cors(corsOptions))
+// CORS configuration -- decision logic lives in config/cors.config.ts
+// (see its header comment for why SOURCING-1's two extension-facing
+// routes need a different policy than every other route).
+app.use(cors(corsOptionsDelegate))
 
 // Rate limiting
 const limiter = rateLimit({

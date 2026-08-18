@@ -19,8 +19,12 @@ const router = Router()
 // The two routes the browser extension calls -- token-authenticated,
 // never the normal dashboard JWT flow. /verify backs the extension
 // options page's "Test connection" button (a full capture payload isn't
-// a reasonable connectivity check). Mirrors ai.routes.ts's
-// aiGenerationLimiter shape for the regenerate endpoint below.
+// a reasonable connectivity check). Their chrome-extension:// CORS
+// allowance lives in app.ts's single global cors() call, not here --
+// the cors package terminates OPTIONS preflight requests itself, so a
+// second, route-level cors() layered after the global one would never
+// actually be reached. Mirrors ai.routes.ts's aiGenerationLimiter shape
+// for the regenerate endpoint below.
 router.get('/verify', authenticateSourcingToken, requirePermissionOrLegacyRole('sourcing.import', 'admin', 'super_admin'), verifySourcingToken)
 router.post(
   '/captures',
