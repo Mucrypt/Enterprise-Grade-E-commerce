@@ -39,6 +39,8 @@ import {
   CalendarDays,
   Link2,
   Store,
+  PackagePlus,
+  Key,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useStaffAccess } from '@/contexts/StaffAccessContext'
@@ -344,6 +346,31 @@ const navigation: NavItem[] = [
         // grant), never implied by channels.tiktok.view/manage.
         icon: Link2,
         permission: 'channels.tiktok.connections',
+      },
+    ],
+  },
+  {
+    // SOURCING-1: in-house Alibaba/Amazon product importer (an AutoDS
+    // replacement). Products are captured by a browser extension, never
+    // fetched server-side -- see docs/SOURCING-1-EXTENSION-INSTALL.md.
+    title: 'Sourcing',
+    href: '/dashboard/sourcing',
+    icon: PackagePlus,
+    permission: 'sourcing.view',
+    children: [
+      {
+        title: 'Drafts',
+        href: '/dashboard/sourcing',
+        icon: PackagePlus,
+        permission: 'sourcing.view',
+      },
+      {
+        title: 'Extension Tokens',
+        href: '/dashboard/sourcing/tokens',
+        // Issuing a durable credential is sensitive -- gated
+        // sourcing.manage, never implied by sourcing.view/import.
+        icon: Key,
+        permission: 'sourcing.manage',
       },
     ],
   },

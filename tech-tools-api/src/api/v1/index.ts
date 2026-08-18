@@ -38,6 +38,9 @@ import channelAccountRoutes from './channels/channel-account.routes'
 import channelProductRoutes from './channels/channel-product.routes'
 import channelOrderRoutes from './channels/channel-order.routes'
 import channelWebhookRoutes from './channels/channel-webhook.routes'
+import sourcedProductRoutes from './sourcing/sourced-product.routes'
+import sourcingPricingRuleRoutes from './sourcing/sourcing-pricing-rule.routes'
+import sourcingTokenRoutes from './sourcing/sourcing-token.routes'
 
 const router = Router()
 
@@ -97,6 +100,12 @@ router.use('/channels/accounts', channelAccountRoutes)
 router.use('/channels/products', channelProductRoutes)
 router.use('/channels/orders', channelOrderRoutes)
 router.use('/channels', channelWebhookRoutes)
+// SOURCING-1 -- in-house Alibaba/Amazon product importer. sourcedProductRoutes
+// owns POST /sourcing/captures (the browser extension's only endpoint) and
+// /sourcing/products*; pricing-rules/tokens are separate sub-resources.
+router.use('/sourcing/pricing-rules', sourcingPricingRuleRoutes)
+router.use('/sourcing/tokens', sourcingTokenRoutes)
+router.use('/sourcing', sourcedProductRoutes)
 
 // Documentation route
 router.get('/docs', (_req, res) => {

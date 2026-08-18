@@ -45,6 +45,10 @@ import {
   startChannelOrderImportWorker,
   stopChannelOrderImportWorker,
 } from './services/channels/channel-order-import.worker'
+import {
+  startSourcingRewriteWorker,
+  stopSourcingRewriteWorker,
+} from './services/sourcing/sourcing-rewrite.worker'
 import { webSocketService } from './services/websocket.service'
 import { notificationDispatcher } from './services/notification-dispatcher.service'
 import shippingService from './services/shipping'
@@ -95,6 +99,7 @@ async function startServer() {
     startChannelProductSyncWorker()
     startChannelInventoryDiffWorker()
     startChannelOrderImportWorker()
+    startSourcingRewriteWorker()
 
     // Start server
     httpServer.listen(PORT, () => {
@@ -122,6 +127,7 @@ process.on('SIGTERM', () => {
   stopChannelProductSyncWorker()
   stopChannelInventoryDiffWorker()
   stopChannelOrderImportWorker()
+  stopSourcingRewriteWorker()
   httpServer.close(() => {
     logger.info('Server closed')
     process.exit(0)
@@ -138,6 +144,7 @@ process.on('SIGINT', () => {
   stopChannelProductSyncWorker()
   stopChannelInventoryDiffWorker()
   stopChannelOrderImportWorker()
+  stopSourcingRewriteWorker()
   httpServer.close(() => {
     logger.info('Server closed')
     process.exit(0)

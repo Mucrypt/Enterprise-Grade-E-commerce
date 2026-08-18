@@ -139,3 +139,42 @@ describe('staff-permissions.config -- TIKTOK-COMMERCE-1 channels.tiktok.* invari
     expect(MARKET_SCOPED_PERMISSIONS.has('channels.tiktok.orders')).toBe(true)
   })
 })
+
+/**
+ * SOURCING-1 -- regression tests for the sourcing.* permission matrix.
+ * Unlike channels.tiktok.*, sourcing has no orders/finance sub-domain to
+ * split off -- CATALOG_MANAGER and ADMIN both get the full set including
+ * sourcing.manage, since importing/pricing/publishing a catalog listing
+ * is squarely in-remit for the role that already owns catalog.manage.
+ */
+describe('staff-permissions.config -- SOURCING-1 sourcing.* invariants', () => {
+  const SOURCING_PERMISSIONS: Permission[] = ['sourcing.view', 'sourcing.import', 'sourcing.manage']
+
+  function grantedOf(role: StaffRole, permissions: Permission[]): Permission[] {
+    const roleSet = STAFF_ROLE_PERMISSIONS[role]
+    return permissions.filter((p) => roleSet.has(p))
+  }
+
+  it('MARKET_MANAGER holds none of the sourcing.* permissions -- never silently gains catalog-authoring authority', () => {
+    expect(grantedOf('MARKET_MANAGER', SOURCING_PERMISSIONS)).toEqual([])
+  })
+
+  it('MARKETING_MANAGER, ORDER_MANAGER, and SUPPORT_AGENT hold none of the sourcing.* permissions -- out of remit', () => {
+    expect(grantedOf('MARKETING_MANAGER', SOURCING_PERMISSIONS)).toEqual([])
+    expect(grantedOf('ORDER_MANAGER', SOURCING_PERMISSIONS)).toEqual([])
+    expect(grantedOf('SUPPORT_AGENT', SOURCING_PERMISSIONS)).toEqual([])
+  })
+
+  it('OWNER, SUPER_ADMIN, ADMIN, and CATALOG_MANAGER hold all 3 sourcing.* permissions', () => {
+    expect(grantedOf('OWNER', SOURCING_PERMISSIONS).sort()).toEqual([...SOURCING_PERMISSIONS].sort())
+    expect(grantedOf('SUPER_ADMIN', SOURCING_PERMISSIONS).sort()).toEqual([...SOURCING_PERMISSIONS].sort())
+    expect(grantedOf('ADMIN', SOURCING_PERMISSIONS).sort()).toEqual([...SOURCING_PERMISSIONS].sort())
+    expect(grantedOf('CATALOG_MANAGER', SOURCING_PERMISSIONS).sort()).toEqual([...SOURCING_PERMISSIONS].sort())
+  })
+
+  it('sourcing.* is not a market-scoped permission set -- a sourced product has no market/country dimension yet', () => {
+    expect(MARKET_SCOPED_PERMISSIONS.has('sourcing.view')).toBe(false)
+    expect(MARKET_SCOPED_PERMISSIONS.has('sourcing.import')).toBe(false)
+    expect(MARKET_SCOPED_PERMISSIONS.has('sourcing.manage')).toBe(false)
+  })
+})

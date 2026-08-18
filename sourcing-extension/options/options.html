@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>TechTools Sourcing -- Settings</title>
+    <style>
+      body { font: 14px/1.5 system-ui, sans-serif; max-width: 480px; margin: 32px auto; padding: 0 16px; color: #111827; }
+      h1 { font-size: 18px; }
+      label { display: block; margin-top: 16px; font-weight: 600; }
+      input { width: 100%; padding: 8px; margin-top: 4px; border: 1px solid #d1d5db; border-radius: 6px; font: inherit; box-sizing: border-box; }
+      button { margin-top: 20px; padding: 10px 16px; background: #111827; color: #fff; border: none; border-radius: 6px; font: 600 14px/1 system-ui, sans-serif; cursor: pointer; }
+      button:hover { background: #1f2937; }
+      button.secondary { background: #fff; color: #111827; border: 1px solid #d1d5db; margin-left: 8px; }
+      #status { margin-top: 16px; padding: 10px; border-radius: 6px; display: none; }
+      #status.success { display: block; background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+      #status.error { display: block; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+      p.hint { color: #6b7280; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <h1>TechTools Sourcing -- Settings</h1>
+    <p class="hint">Generate a token from TechTools → Dashboard → Sourcing → Extension Tokens, then paste it here.</p>
+
+    <label for="apiBaseUrl">TechTools API URL</label>
+    <input id="apiBaseUrl" type="text" placeholder="https://your-domain.com/api/v1" />
+
+    <label for="apiToken">API Token</label>
+    <input id="apiToken" type="password" placeholder="Paste your token here" />
+
+    <button id="saveButton">Save</button>
+    <button id="testButton" class="secondary">Test connection</button>
+
+    <div id="status"></div>
+
+    <script src="options.js"></script>
+  </body>
+</html>

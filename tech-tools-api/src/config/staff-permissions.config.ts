@@ -65,6 +65,12 @@ export type Permission =
   | 'channels.tiktok.manage'
   | 'channels.tiktok.connections'
   | 'channels.tiktok.analytics'
+  // SOURCING-1: in-house Alibaba/Amazon product importer. Catalog-adjacent
+  // authoring work with no orders/finance sub-domain to split off (unlike
+  // channels.tiktok.* above) -- see the grant matrix below.
+  | 'sourcing.view'
+  | 'sourcing.import'
+  | 'sourcing.manage'
   | 'support.view'
   | 'support.manage'
   | 'shipping.view'
@@ -118,6 +124,9 @@ const ALL_PERMISSIONS: Permission[] = [
   'channels.tiktok.manage',
   'channels.tiktok.connections',
   'channels.tiktok.analytics',
+  'sourcing.view',
+  'sourcing.import',
+  'sourcing.manage',
   'support.view',
   'support.manage',
   'shipping.view',
@@ -192,6 +201,12 @@ export const STAFF_ROLE_PERMISSIONS: Record<StaffRole, ReadonlySet<Permission>> 
     'channels.tiktok.finance',
     'channels.tiktok.manage',
     'channels.tiktok.analytics',
+    // SOURCING-1: no orders/finance sub-domain to split off here (unlike
+    // channels.tiktok.connections) -- sourcing is catalog-adjacent
+    // authoring work, so ADMIN gets the full set including .manage.
+    'sourcing.view',
+    'sourcing.import',
+    'sourcing.manage',
     'support.view',
     'support.manage',
     'shipping.view',
@@ -243,6 +258,13 @@ export const STAFF_ROLE_PERMISSIONS: Record<StaffRole, ReadonlySet<Permission>> 
     // diffs are catalog work, not order or finance work.
     'channels.tiktok.view',
     'channels.tiktok.products',
+    // SOURCING-1: the natural owner -- importing/pricing/publishing new
+    // catalog listings is squarely what CATALOG_MANAGER exists for. Full
+    // set including .manage, since there's no separate orders/finance
+    // sub-domain here to withhold (unlike channels.tiktok.connections).
+    'sourcing.view',
+    'sourcing.import',
+    'sourcing.manage',
   ]),
 
   ORDER_MANAGER: new Set<Permission>([
