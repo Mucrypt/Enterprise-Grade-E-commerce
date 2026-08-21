@@ -41,6 +41,7 @@ import channelWebhookRoutes from './channels/channel-webhook.routes'
 import sourcedProductRoutes from './sourcing/sourced-product.routes'
 import sourcingPricingRuleRoutes from './sourcing/sourcing-pricing-rule.routes'
 import sourcingTokenRoutes from './sourcing/sourcing-token.routes'
+import sourcingExtensionRoutes from './sourcing/sourcing-extension.routes'
 
 const router = Router()
 
@@ -105,6 +106,7 @@ router.use('/channels', channelWebhookRoutes)
 // /sourcing/products*; pricing-rules/tokens are separate sub-resources.
 router.use('/sourcing/pricing-rules', sourcingPricingRuleRoutes)
 router.use('/sourcing/tokens', sourcingTokenRoutes)
+router.use('/sourcing/extension', sourcingExtensionRoutes)
 router.use('/sourcing', sourcedProductRoutes)
 
 // Documentation route

@@ -160,10 +160,26 @@ export async function getSourcedProductById(id: string): Promise<any | null> {
   return result.rows[0] ?? null
 }
 
+/**
+ * Every capture INSERTs a new row (see captureProduct's header comment) --
+ * there's no dedup by source_url. This surfaces the other drafts for the
+ * same product page so re-importing the same URL doesn't quietly leave a
+ * pile of stale, easy-to-confuse duplicates (the founder hit exactly this
+ * during live testing: kept looking at an old draft after re-capturing).
+ */
+export async function listSiblingDrafts(sourceUrl: string, excludeId: string): Promise<any[]> {
+  const result = await query(
+    `SELECT id, status, captured_at FROM sourced_products WHERE source_url = $1 AND id != $2 ORDER BY captured_at DESC`,
+    [sourceUrl, excludeId],
+  )
+  return result.rows
+}
+
 export interface ReviewFieldsUpdate {
   reviewTitle?: string
   reviewDescriptionHtml?: string
   reviewImages?: CapturedImage[]
+  reviewSpecs?: Record<string, string>
   finalCostPrice?: number
   finalSalePrice?: number
 }
@@ -180,10 +196,11 @@ export async function updateReviewFields(id: string, fields: ReviewFieldsUpdate,
      SET review_title = COALESCE($2, review_title),
          review_description_html = COALESCE($3, review_description_html),
          review_images = COALESCE($4::jsonb, review_images),
-         final_cost_price = COALESCE($5, final_cost_price),
-         final_sale_price = COALESCE($6, final_sale_price),
+         review_specs = COALESCE($5::jsonb, review_specs),
+         final_cost_price = COALESCE($6, final_cost_price),
+         final_sale_price = COALESCE($7, final_sale_price),
          status = 'review_edited',
-         reviewed_by = $7,
+         reviewed_by = $8,
          reviewed_at = now(),
          updated_at = now()
      WHERE id = $1`,
@@ -192,6 +209,7 @@ export async function updateReviewFields(id: string, fields: ReviewFieldsUpdate,
       fields.reviewTitle ?? null,
       fields.reviewDescriptionHtml ?? null,
       fields.reviewImages ? JSON.stringify(fields.reviewImages) : null,
+      fields.reviewSpecs ? JSON.stringify(fields.reviewSpecs) : null,
       fields.finalCostPrice ?? null,
       fields.finalSalePrice ?? null,
       reviewedByUserId,
@@ -269,7 +287,7 @@ export async function commitSourcedProduct(id: string, userId: string): Promise<
       )
     }
 
-    const specs: Record<string, string> = sourced.captured_specs || {}
+    const specs: Record<string, string> = sourced.review_specs || sourced.captured_specs || {}
     for (const [key, value] of Object.entries(specs)) {
       if (!key || value === undefined || value === null) continue
       await client.query(

@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'sonner'
-import { Copy, Plus, Trash2 } from 'lucide-react'
+import { Copy, Download, Plus, Trash2 } from 'lucide-react'
 
 /**
  * SOURCING-1 -- personal-access tokens for the browser extension. A raw
@@ -23,6 +23,18 @@ function SourcingTokensPageContent() {
   const [createOpen, setCreateOpen] = useState(false)
   const [tokenName, setTokenName] = useState('')
   const [issuedToken, setIssuedToken] = useState<string | null>(null)
+  const [downloading, setDownloading] = useState(false)
+
+  const handleDownload = async () => {
+    setDownloading(true)
+    try {
+      await sourcingService.downloadExtensionZip()
+    } catch {
+      toast.error('Failed to download the extension. Try again in a moment.')
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   const { data, isLoading } = useQuery({
     queryKey: ['sourcing', 'tokens'],
@@ -69,6 +81,22 @@ function SourcingTokensPageContent() {
           <Plus className='h-4 w-4' /> Generate token
         </Button>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className='text-base'>Extension package</CardTitle>
+          <CardDescription>
+            Always the current build, straight from TechTools -- log in from any computer or browser and download it again any time
+            without hunting for files. Unzip it, then load it as an unpacked extension in Chrome/Edge/Brave
+            (chrome://extensions -&gt; Developer mode -&gt; Load unpacked).
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant='outline' className='gap-1.5' onClick={handleDownload} disabled={downloading}>
+            <Download className='h-4 w-4' /> {downloading ? 'Preparing download...' : 'Download Extension (.zip)'}
+          </Button>
+        </CardContent>
+      </Card>
 
       {isLoading ? null : (
         <Card>

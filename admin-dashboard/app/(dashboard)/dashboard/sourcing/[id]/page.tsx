@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { RequirePagePermission } from '@/components/auth/RequirePagePermission'
-import sourcingService from '@/services/sourcing.service'
+import sourcingService, { CapturedImage } from '@/services/sourcing.service'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -24,14 +24,35 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { toast } from 'sonner'
-import { AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react'
+import { AlertTriangle, ExternalLink, RefreshCw, X, ChevronLeft, ChevronRight, Star, Plus } from 'lucide-react'
+
+interface SpecRow {
+  key: string
+  value: string
+}
+
+function specsToRows(specs: Record<string, string> | null | undefined): SpecRow[] {
+  return Object.entries(specs || {}).map(([key, value]) => ({ key, value }))
+}
+
+function rowsToSpecs(rows: SpecRow[]): Record<string, string> {
+  const specs: Record<string, string> = {}
+  for (const row of rows) {
+    const key = row.key.trim()
+    if (!key) continue
+    specs[key] = row.value
+  }
+  return specs
+}
 
 /**
- * SOURCING-1 -- review/edit view for one captured product. Content tab
- * shows the raw captured text side-by-side with the AI rewrite (once
- * ready) and lets the founder override either. Pricing tab shows the
- * suggested price and lets the founder confirm/edit it. Commit is the
- * one irreversible action -- confirmed via a dialog.
+ * SOURCING-1 -- review/edit view for one captured product, organized the
+ * way a founder coming from AutoDS already expects: Content, Images,
+ * Specifications and Pricing as separate tabs rather than one long
+ * scrolling page. Every editable field is pre-filled from the AI rewrite
+ * (or the raw capture if rewriting hasn't run/failed) but can always be
+ * overridden by hand. Commit is the one irreversible action -- confirmed
+ * via a dialog.
  */
 function SourcingDetailPageContent() {
   const params = useParams()
@@ -44,11 +65,15 @@ function SourcingDetailPageContent() {
     queryFn: () => sourcingService.getSourcedProduct(id),
   })
   const product = data?.product
+  const siblingDrafts = data?.siblingDrafts || []
 
   const [title, setTitle] = useState('')
   const [descriptionHtml, setDescriptionHtml] = useState('')
   const [costPrice, setCostPrice] = useState('')
   const [salePrice, setSalePrice] = useState('')
+  const [images, setImages] = useState<CapturedImage[]>([])
+  const [newImageUrl, setNewImageUrl] = useState('')
+  const [specs, setSpecs] = useState<SpecRow[]>([])
 
   useEffect(() => {
     if (!product) return
@@ -56,13 +81,46 @@ function SourcingDetailPageContent() {
     setDescriptionHtml(product.review_description_html || product.rewritten_description_html || product.captured_description_html || '')
     setCostPrice(product.final_cost_price || product.captured_cost_price_eur || '')
     setSalePrice(product.final_sale_price || product.suggested_sale_price || '')
+    setImages(product.review_images && product.review_images.length > 0 ? product.review_images : product.captured_images || [])
+    setSpecs(specsToRows(product.review_specs && Object.keys(product.review_specs).length > 0 ? product.review_specs : product.captured_specs))
   }, [product?.id])
+
+  const removeImage = (index: number) => setImages((prev) => prev.filter((_, i) => i !== index))
+  const moveImage = (index: number, direction: -1 | 1) =>
+    setImages((prev) => {
+      const next = [...prev]
+      const target = index + direction
+      if (target < 0 || target >= next.length) return prev
+      ;[next[index], next[target]] = [next[target], next[index]]
+      return next
+    })
+  const setMainImage = (index: number) =>
+    setImages((prev) => {
+      if (index === 0) return prev
+      const next = [...prev]
+      const [picked] = next.splice(index, 1)
+      next.unshift(picked)
+      return next
+    })
+  const addImageByUrl = () => {
+    const url = newImageUrl.trim()
+    if (!url) return
+    setImages((prev) => [...prev, { url, position: prev.length }])
+    setNewImageUrl('')
+  }
+
+  const updateSpecKey = (index: number, key: string) => setSpecs((prev) => prev.map((row, i) => (i === index ? { ...row, key } : row)))
+  const updateSpecValue = (index: number, value: string) => setSpecs((prev) => prev.map((row, i) => (i === index ? { ...row, value } : row)))
+  const removeSpec = (index: number) => setSpecs((prev) => prev.filter((_, i) => i !== index))
+  const addSpec = () => setSpecs((prev) => [...prev, { key: '', value: '' }])
 
   const saveMutation = useMutation({
     mutationFn: () =>
       sourcingService.updateReview(id, {
         reviewTitle: title,
         reviewDescriptionHtml: descriptionHtml,
+        reviewImages: images,
+        reviewSpecs: rowsToSpecs(specs),
         finalCostPrice: costPrice ? Number(costPrice) : undefined,
         finalSalePrice: salePrice ? Number(salePrice) : undefined,
       }),
@@ -122,6 +180,13 @@ function SourcingDetailPageContent() {
   const isCommitted = product.status === 'committed'
   const isDiscarded = product.status === 'discarded'
   const lowConfidence = product.rewrite_confidence !== null && product.rewrite_confidence < 60
+  const SaveBar = (
+    <div className='flex justify-end'>
+      <Button variant='outline' onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || isCommitted}>
+        {saveMutation.isPending ? 'Saving...' : 'Save changes'}
+      </Button>
+    </div>
+  )
 
   return (
     <div className='space-y-6'>
@@ -163,9 +228,26 @@ function SourcingDetailPageContent() {
         </Card>
       )}
 
+      {siblingDrafts.length > 0 && (
+        <Card className='border-blue-300 bg-blue-50/50 dark:bg-blue-950/20'>
+          <CardContent className='flex flex-wrap items-center gap-2 py-4 text-sm'>
+            <AlertTriangle className='h-4 w-4 shrink-0 text-blue-600' />
+            You have {siblingDrafts.length} other draft{siblingDrafts.length > 1 ? 's' : ''} captured from this same product page --
+            probably from re-importing. Make sure you're editing the right one:
+            {siblingDrafts.map((s) => (
+              <a key={s.id} href={`/dashboard/sourcing/${s.id}`} className='text-blue-600 underline hover:no-underline'>
+                {new Date(s.captured_at).toLocaleString()} ({s.status.replace(/_/g, ' ')})
+              </a>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       <Tabs defaultValue='content'>
         <TabsList>
           <TabsTrigger value='content'>Content</TabsTrigger>
+          <TabsTrigger value='images'>Images ({images.length})</TabsTrigger>
+          <TabsTrigger value='specifications'>Specifications ({specs.length})</TabsTrigger>
           <TabsTrigger value='pricing'>Pricing</TabsTrigger>
         </TabsList>
 
@@ -178,7 +260,10 @@ function SourcingDetailPageContent() {
               </CardHeader>
               <CardContent className='space-y-3 text-sm'>
                 <p className='font-medium'>{product.captured_title}</p>
-                <div className='prose prose-sm max-w-none text-muted-foreground' dangerouslySetInnerHTML={{ __html: product.captured_description_html || '<em>No description captured.</em>' }} />
+                <div
+                  className='prose prose-sm max-w-none text-muted-foreground'
+                  dangerouslySetInnerHTML={{ __html: product.captured_description_html || '<em>No description captured.</em>' }}
+                />
               </CardContent>
             </Card>
 
@@ -210,54 +295,160 @@ function SourcingDetailPageContent() {
               </CardContent>
             </Card>
           </div>
+          {SaveBar}
+        </TabsContent>
 
-          {product.captured_images?.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className='text-base'>Images ({product.captured_images.length})</CardTitle>
-                <CardDescription>Hotlinked from the source -- committing the product uses these URLs directly.</CardDescription>
-              </CardHeader>
-              <CardContent className='grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8'>
-                {product.captured_images.map((img, i) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    key={i}
-                    src={img.url}
-                    alt={img.altText || ''}
-                    className='aspect-square w-full rounded border object-cover'
-                  />
-                ))}
-              </CardContent>
-            </Card>
-          )}
-
-          {product.captured_specs && Object.keys(product.captured_specs).length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className='text-base'>Key attributes ({Object.keys(product.captured_specs).length})</CardTitle>
-                <CardDescription>Specs read directly from the source page -- these are included as-is on the committed product.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <dl className='grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2'>
-                  {Object.entries(product.captured_specs).map(([label, value]) => (
-                    <div key={label} className='flex justify-between gap-4 border-b py-1.5 text-sm last:border-0'>
-                      <dt className='text-muted-foreground capitalize'>{label}</dt>
-                      <dd className='text-right font-medium'>{value}</dd>
+        <TabsContent value='images' className='space-y-4'>
+          <Card>
+            <CardHeader>
+              <CardTitle className='text-base'>Images ({images.length})</CardTitle>
+              <CardDescription>
+                Use the arrows to reorder, star an image to make it the main product photo, or remove ones you don't want. Committing
+                the product hotlinks whatever's left here.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className='space-y-4'>
+              {images.length > 0 ? (
+                <div className='grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8'>
+                  {images.map((img, i) => (
+                    <div key={`${img.url}-${i}`} className='group relative'>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={img.url} alt={img.altText || ''} className='aspect-square w-full rounded border object-cover' />
+                      {i === 0 && (
+                        <Badge className='absolute left-1 top-1 gap-1 px-1.5 py-0 text-[10px]'>
+                          <Star className='h-2.5 w-2.5 fill-current' /> Main
+                        </Badge>
+                      )}
+                      {!isCommitted && (
+                        <div className='absolute inset-x-0 bottom-0 flex items-center justify-center gap-0.5 rounded-b bg-black/60 py-0.5 opacity-0 transition-opacity group-hover:opacity-100'>
+                          <button
+                            type='button'
+                            title='Move left'
+                            onClick={() => moveImage(i, -1)}
+                            disabled={i === 0}
+                            className='rounded p-1 text-white hover:bg-white/20 disabled:opacity-30'
+                          >
+                            <ChevronLeft className='h-3 w-3' />
+                          </button>
+                          <button
+                            type='button'
+                            title='Set as main image'
+                            onClick={() => setMainImage(i)}
+                            disabled={i === 0}
+                            className='rounded p-1 text-white hover:bg-white/20 disabled:opacity-30'
+                          >
+                            <Star className='h-3 w-3' />
+                          </button>
+                          <button type='button' title='Remove' onClick={() => removeImage(i)} className='rounded p-1 text-white hover:bg-white/20'>
+                            <X className='h-3 w-3' />
+                          </button>
+                          <button
+                            type='button'
+                            title='Move right'
+                            onClick={() => moveImage(i, 1)}
+                            disabled={i === images.length - 1}
+                            className='rounded p-1 text-white hover:bg-white/20 disabled:opacity-30'
+                          >
+                            <ChevronRight className='h-3 w-3' />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
-                </dl>
-              </CardContent>
-            </Card>
-          )}
+                </div>
+              ) : (
+                <p className='text-sm text-muted-foreground'>No images captured -- add one by URL below.</p>
+              )}
+              {!isCommitted && (
+                <div className='flex gap-2'>
+                  <Input
+                    value={newImageUrl}
+                    onChange={(e) => setNewImageUrl(e.target.value)}
+                    placeholder='Paste an image URL to add it'
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        addImageByUrl()
+                      }
+                    }}
+                  />
+                  <Button type='button' variant='outline' size='sm' className='gap-1.5 shrink-0' onClick={addImageByUrl}>
+                    <Plus className='h-3.5 w-3.5' /> Add
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          {SaveBar}
+        </TabsContent>
 
-          <div className='flex justify-end'>
-            <Button variant='outline' onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || isCommitted}>
-              {saveMutation.isPending ? 'Saving...' : 'Save changes'}
-            </Button>
-          </div>
+        <TabsContent value='specifications' className='space-y-4'>
+          <Card>
+            <CardHeader>
+              <CardTitle className='text-base'>Item specifications ({specs.length})</CardTitle>
+              <CardDescription>
+                Pre-filled from the source page's "Key attributes" -- edit, remove, or add rows. These are written onto the committed
+                product exactly as shown here.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className='space-y-2'>
+              {specs.length === 0 && <p className='text-sm text-muted-foreground'>No specifications yet -- add one below.</p>}
+              {specs.map((row, i) => (
+                <div key={i} className='flex items-center gap-2'>
+                  <Input
+                    value={row.key}
+                    onChange={(e) => updateSpecKey(i, e.target.value)}
+                    placeholder='Attribute (e.g. Material)'
+                    disabled={isCommitted}
+                    className='w-1/3'
+                  />
+                  <Input
+                    value={row.value}
+                    onChange={(e) => updateSpecValue(i, e.target.value)}
+                    placeholder='Value (e.g. Aluminum alloy)'
+                    disabled={isCommitted}
+                  />
+                  {!isCommitted && (
+                    <Button type='button' variant='ghost' size='icon' className='shrink-0' onClick={() => removeSpec(i)}>
+                      <X className='h-4 w-4' />
+                    </Button>
+                  )}
+                </div>
+              ))}
+              {!isCommitted && (
+                <Button type='button' variant='outline' size='sm' className='gap-1.5' onClick={addSpec}>
+                  <Plus className='h-3.5 w-3.5' /> Add attribute
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+          {SaveBar}
         </TabsContent>
 
         <TabsContent value='pricing' className='space-y-4'>
+          {product.captured_price_tiers?.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className='text-base'>Supplier quantity pricing</CardTitle>
+                <CardDescription>The MOQ price breaks as captured from the source page -- unit cost drops at higher order quantities.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className='grid grid-cols-2 gap-3 sm:grid-cols-4'>
+                  {product.captured_price_tiers.map((tier, i) => (
+                    <div key={i} className='rounded-lg border p-3 text-center'>
+                      <p className='text-xs text-muted-foreground'>
+                        {tier.minQty}
+                        {tier.maxQty ? `–${tier.maxQty}` : '+'} units
+                      </p>
+                      <p className='text-lg font-semibold'>
+                        {tier.price.toFixed(2)} {tier.currency}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
           <Card>
             <CardHeader>
               <CardTitle className='text-base'>Pricing</CardTitle>
@@ -285,11 +476,7 @@ function SourcingDetailPageContent() {
               </div>
             </CardContent>
           </Card>
-          <div className='flex justify-end'>
-            <Button variant='outline' onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || isCommitted}>
-              {saveMutation.isPending ? 'Saving...' : 'Save changes'}
-            </Button>
-          </div>
+          {SaveBar}
         </TabsContent>
       </Tabs>
 

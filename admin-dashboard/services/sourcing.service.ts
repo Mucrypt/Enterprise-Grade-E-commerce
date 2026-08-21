@@ -48,6 +48,7 @@ export interface SourcedProductDetail extends SourcedProductSummary {
   captured_description_html: string | null
   captured_price_tiers: Array<{ minQty: number; maxQty?: number | null; price: number; currency: string }>
   captured_specs: Record<string, string>
+  review_specs: Record<string, string> | null
   captured_currency: string
   captured_cost_price_original: string | null
   fx_rate_used: string | null
@@ -69,14 +70,21 @@ async function listSourcedProducts(status?: SourcedProductStatus) {
   })
 }
 
+export interface SiblingDraft {
+  id: string
+  status: SourcedProductStatus
+  captured_at: string
+}
+
 async function getSourcedProduct(id: string) {
-  return apiClient.get<{ success: true; product: SourcedProductDetail }>(`/sourcing/products/${id}`)
+  return apiClient.get<{ success: true; product: SourcedProductDetail; siblingDrafts: SiblingDraft[] }>(`/sourcing/products/${id}`)
 }
 
 export interface ReviewFieldsPayload {
   reviewTitle?: string
   reviewDescriptionHtml?: string
   reviewImages?: CapturedImage[]
+  reviewSpecs?: Record<string, string>
   finalCostPrice?: number
   finalSalePrice?: number
 }
@@ -159,6 +167,24 @@ async function revokeToken(id: string) {
   return apiClient.delete<{ success: true }>(`/sourcing/tokens/${id}`)
 }
 
+// ---------- Extension package download ----------
+// Always-current .zip of sourcing-extension/, served from the API itself
+// rather than a Chrome Web Store listing -- the founder can grab it from
+// any computer/browser they're logged into TechTools from, no local file
+// path or Google review to depend on.
+
+async function downloadExtensionZip(): Promise<void> {
+  const blob = await apiClient.get<Blob>('/sourcing/extension/download', { responseType: 'blob' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'techtools-sourcing-extension.zip'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
 export const sourcingService = {
   listSourcedProducts,
   getSourcedProduct,
@@ -171,6 +197,7 @@ export const sourcingService = {
   issueToken,
   listTokens,
   revokeToken,
+  downloadExtensionZip,
 }
 
 export default sourcingService

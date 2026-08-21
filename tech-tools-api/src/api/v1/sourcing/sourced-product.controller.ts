@@ -11,6 +11,7 @@ import {
   captureProduct,
   listSourcedProducts,
   getSourcedProductById,
+  listSiblingDrafts,
   updateReviewFields,
   discardSourcedProduct,
   commitSourcedProduct,
@@ -62,7 +63,8 @@ export const getSourcedProduct = async (req: AuthRequest, res: Response): Promis
       res.status(404).json({ success: false, error: 'Sourced product not found' })
       return
     }
-    res.json({ success: true, product })
+    const siblingDrafts = await listSiblingDrafts(product.source_url, product.id)
+    res.json({ success: true, product, siblingDrafts })
   } catch (error) {
     logger.error('Error fetching sourced product:', error)
     res.status(500).json({ success: false, error: 'Failed to fetch sourced product' })
@@ -71,10 +73,10 @@ export const getSourcedProduct = async (req: AuthRequest, res: Response): Promis
 
 export const reviewSourcedProduct = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { reviewTitle, reviewDescriptionHtml, reviewImages, finalCostPrice, finalSalePrice } = req.body
+    const { reviewTitle, reviewDescriptionHtml, reviewImages, reviewSpecs, finalCostPrice, finalSalePrice } = req.body
     await updateReviewFields(
       req.params.id,
-      { reviewTitle, reviewDescriptionHtml, reviewImages, finalCostPrice, finalSalePrice },
+      { reviewTitle, reviewDescriptionHtml, reviewImages, reviewSpecs, finalCostPrice, finalSalePrice },
       req.user!.userId,
     )
     res.json({ success: true })
