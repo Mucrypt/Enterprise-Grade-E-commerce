@@ -8,6 +8,8 @@ import {
   verifySourcingToken,
   listSourcedProductsHandler,
   getSourcedProduct,
+  getSourcedProductByCommittedProductIdHandler,
+  getSourcingAnalyticsHandler,
   reviewSourcedProduct,
   regenerateSourcedProductRewrite,
   commitSourcedProductHandler,
@@ -38,6 +40,12 @@ router.post(
 router.use(authenticate)
 
 router.get('/products', requirePermissionOrLegacyRole('sourcing.view', 'admin', 'super_admin'), listSourcedProductsHandler)
+router.get('/analytics', requirePermissionOrLegacyRole('sourcing.view', 'admin', 'super_admin'), getSourcingAnalyticsHandler)
+router.get(
+  '/products/by-committed/:productId',
+  requirePermissionOrLegacyRole('sourcing.view', 'admin', 'super_admin'),
+  getSourcedProductByCommittedProductIdHandler,
+)
 router.get('/products/:id', requirePermissionOrLegacyRole('sourcing.view', 'admin', 'super_admin'), getSourcedProduct)
 router.patch('/products/:id/review', requirePermissionOrLegacyRole('sourcing.manage', 'admin', 'super_admin'), reviewSourcedProduct)
 

@@ -365,6 +365,12 @@ const navigation: NavItem[] = [
         permission: 'sourcing.view',
       },
       {
+        title: 'Analytics',
+        href: '/dashboard/sourcing/analytics',
+        icon: BarChart3,
+        permission: 'sourcing.view',
+      },
+      {
         title: 'Extension Tokens',
         href: '/dashboard/sourcing/tokens',
         // Issuing a durable credential is sensitive -- gated

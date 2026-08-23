@@ -4,10 +4,12 @@ import { useParams } from 'next/navigation'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { productService } from '@/services/product.service'
 import supplierService from '@/services/supplier.service'
+import sourcingService from '@/services/sourcing.service'
 import { EnhancedProductForm } from '@/components/products/EnhancedProductForm'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Package } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Package, ExternalLink, PackageSearch } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -43,6 +45,19 @@ export default function EditProductPage() {
     enabled: Boolean(productId),
     retry: false,
   })
+
+  // SOURCING-1 -- if this product came from the Alibaba/Amazon importer,
+  // surface where it came from and a way to manually recheck the source
+  // listing. Deliberately not automatic: the backend never re-fetches
+  // Alibaba/Amazon on its own, so "recheck" just reopens the original URL
+  // for the founder to glance at and re-import if something changed.
+  const { data: sourcingOriginResponse } = useQuery({
+    queryKey: ['product-sourcing-origin', productId],
+    queryFn: () => sourcingService.getSourcedOriginForProduct(productId),
+    enabled: Boolean(productId),
+    retry: false,
+  })
+  const sourcedOrigin = sourcingOriginResponse?.sourced
 
   const recomputeMutation = useMutation({
     mutationFn: () =>
@@ -123,6 +138,31 @@ export default function EditProductPage() {
   return (
     <TooltipProvider>
       <div className='space-y-6'>
+        {sourcedOrigin && (
+          <Card className='border-orange-300 bg-orange-50/50 dark:bg-orange-950/20'>
+            <CardContent className='flex flex-wrap items-center justify-between gap-3 py-4'>
+              <div className='flex items-center gap-2 text-sm'>
+                <PackageSearch className='h-4 w-4 shrink-0 text-orange-600' />
+                <span>
+                  Sourced from <Badge variant='outline' className='mx-1 capitalize'>{sourcedOrigin.sourcePlatform}</Badge>
+                  {sourcedOrigin.capturedSupplierName ? ` -- ${sourcedOrigin.capturedSupplierName}` : ''}
+                </span>
+              </div>
+              <div className='flex gap-2'>
+                <a href={sourcedOrigin.sourceUrl} target='_blank' rel='noreferrer'>
+                  <Button variant='outline' size='sm' className='gap-1.5'>
+                    <ExternalLink className='h-3.5 w-3.5' /> Recheck price on {sourcedOrigin.sourcePlatform}
+                  </Button>
+                </a>
+                <Link href={`/dashboard/sourcing/${sourcedOrigin.id}`}>
+                  <Button variant='ghost' size='sm'>
+                    View import record
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        )}
         <Card>
           <CardHeader>
             <CardTitle className='text-base'>Product Economics</CardTitle>

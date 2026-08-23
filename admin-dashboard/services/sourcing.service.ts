@@ -49,6 +49,7 @@ export interface SourcedProductDetail extends SourcedProductSummary {
   captured_price_tiers: Array<{ minQty: number; maxQty?: number | null; price: number; currency: string }>
   captured_specs: Record<string, string>
   review_specs: Record<string, string> | null
+  captured_supplier_name: string | null
   captured_currency: string
   captured_cost_price_original: string | null
   fx_rate_used: string | null
@@ -74,6 +75,45 @@ export interface SiblingDraft {
   id: string
   status: SourcedProductStatus
   captured_at: string
+}
+
+export interface SourcingAnalytics {
+  totals: {
+    total: number
+    committed: number
+    discarded: number
+    pendingReview: number
+    rewriteFailed: number
+    conversionRate: number | null
+  }
+  avgMarginPercent: number | null
+  byPlatform: Array<{ platform: SourcePlatform; total: number; committed: number }>
+  captureTrend: Array<{ day: string; count: number }>
+  recentCommitted: Array<{
+    id: string
+    title: string
+    sourcePlatform: SourcePlatform
+    committedProductId: string | null
+    committedAt: string | null
+    finalSalePrice: string | null
+    marginPercent: number | null
+  }>
+}
+
+async function getAnalytics() {
+  return apiClient.get<{ success: true; analytics: SourcingAnalytics }>('/sourcing/analytics')
+}
+
+export interface SourcedOrigin {
+  id: string
+  sourceUrl: string
+  sourcePlatform: SourcePlatform
+  capturedSupplierName: string | null
+}
+
+/** Backs the "Recheck price" link on a committed product's edit page. */
+async function getSourcedOriginForProduct(productId: string) {
+  return apiClient.get<{ success: true; sourced: SourcedOrigin | null }>(`/sourcing/products/by-committed/${productId}`)
 }
 
 async function getSourcedProduct(id: string) {
@@ -187,6 +227,8 @@ async function downloadExtensionZip(): Promise<void> {
 
 export const sourcingService = {
   listSourcedProducts,
+  getAnalytics,
+  getSourcedOriginForProduct,
   getSourcedProduct,
   updateReview,
   regenerateRewrite,

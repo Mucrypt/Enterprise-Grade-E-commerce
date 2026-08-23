@@ -46,6 +46,21 @@
     return el ? el.textContent.trim() : ''
   }
 
+  function extractSupplierName(jsonLd) {
+    if (jsonLd && jsonLd.brand && jsonLd.brand.name) return String(jsonLd.brand.name).trim()
+    if (jsonLd && jsonLd.seller && jsonLd.seller.name) return String(jsonLd.seller.name).trim()
+
+    // Alibaba's own SEO boilerplate reliably includes this exact phrase
+    // in the page body text (confirmed on a live capture) -- more stable
+    // than guessing a company-info panel's class name.
+    const bodyText = document.body.innerText || ''
+    const boilerplateMatch = bodyText.match(/from\s+([A-Z][A-Za-z0-9.,&'\s-]{2,80}?)\.?\s+Supplier or Manufacturer on Alibaba\.com/)
+    if (boilerplateMatch) return boilerplateMatch[1].trim()
+
+    const el = firstMatch(['[class*="company-name" i]', '[class*="supplier-name" i]', 'a[href*="/company/"]'])
+    return el ? el.textContent.trim() : null
+  }
+
   function isLikelyProductImage(url) {
     if (!url || url.startsWith('data:')) return false
     // Filter out obvious non-product assets (site chrome, ads, tiny icons)
@@ -250,6 +265,7 @@
       variantOptions: [],
       specs: extractSpecs(),
       currency: 'USD',
+      supplierName: extractSupplierName(jsonLd),
     }
   }
 

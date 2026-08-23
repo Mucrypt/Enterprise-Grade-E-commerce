@@ -11,10 +11,12 @@ import {
   captureProduct,
   listSourcedProducts,
   getSourcedProductById,
+  getSourcedProductByCommittedProductId,
   listSiblingDrafts,
   updateReviewFields,
   discardSourcedProduct,
   commitSourcedProduct,
+  getSourcingAnalytics,
   CapturePayload,
 } from '../../../services/sourcing/sourced-product.service'
 import { regenerateRewrite } from '../../../services/sourcing/sourcing-rewrite.service'
@@ -53,6 +55,26 @@ export const listSourcedProductsHandler = async (req: AuthRequest, res: Response
   } catch (error) {
     logger.error('Error listing sourced products:', error)
     res.status(500).json({ success: false, error: 'Failed to list sourced products' })
+  }
+}
+
+export const getSourcingAnalyticsHandler = async (_req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const analytics = await getSourcingAnalytics()
+    res.json({ success: true, analytics })
+  } catch (error) {
+    logger.error('Error fetching sourcing analytics:', error)
+    res.status(500).json({ success: false, error: 'Failed to fetch sourcing analytics' })
+  }
+}
+
+export const getSourcedProductByCommittedProductIdHandler = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const sourced = await getSourcedProductByCommittedProductId(req.params.productId)
+    res.json({ success: true, sourced })
+  } catch (error) {
+    logger.error('Error looking up sourced product by committed product id:', error)
+    res.status(500).json({ success: false, error: 'Failed to look up sourcing origin' })
   }
 }
 

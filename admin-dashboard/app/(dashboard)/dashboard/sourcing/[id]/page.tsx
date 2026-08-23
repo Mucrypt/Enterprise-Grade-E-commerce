@@ -153,7 +153,7 @@ function SourcingDetailPageContent() {
     onSuccess: (result) => {
       if (result.success) {
         toast.success('Published as a new product (inactive by default -- activate it from the Products page when ready).')
-        router.push(`/dashboard/products/${result.data.productId}/edit`)
+        router.push(`/products/${result.data.productId}/edit`)
       } else {
         toast.error(result.error)
       }
@@ -196,6 +196,9 @@ function SourcingDetailPageContent() {
           <a href={product.source_url} target='_blank' rel='noreferrer' className='flex items-center gap-1 text-sm text-muted-foreground hover:underline'>
             View original on {product.source_platform} <ExternalLink className='h-3 w-3' />
           </a>
+          {product.captured_supplier_name && (
+            <p className='text-sm text-muted-foreground'>Supplier: {product.captured_supplier_name}</p>
+          )}
         </div>
         <Badge variant='outline' className='capitalize'>
           {product.status.replace(/_/g, ' ')}
@@ -205,7 +208,14 @@ function SourcingDetailPageContent() {
       {isCommitted && (
         <Card className='border-green-300 bg-green-50/50 dark:bg-green-950/20'>
           <CardContent className='py-4 text-sm'>
-            Already published. View/edit the live product on the Products page.
+            Already published.{' '}
+            {product.committed_product_id ? (
+              <a href={`/products/${product.committed_product_id}/edit`} className='underline hover:no-underline'>
+                View/edit the live product on the Products page
+              </a>
+            ) : (
+              'View/edit the live product on the Products page.'
+            )}
           </CardContent>
         </Card>
       )}

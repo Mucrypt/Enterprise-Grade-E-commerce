@@ -39,6 +39,7 @@ export interface CapturePayload {
   variantOptions?: unknown[]
   specs?: Record<string, string>
   currency: string
+  supplierName?: string | null
 }
 
 function slugify(input: string): string {
@@ -92,8 +93,8 @@ export async function captureProduct(
        captured_title, captured_description_html, captured_images, captured_price_tiers,
        captured_variant_options, captured_specs, captured_currency,
        captured_cost_price_original, captured_cost_price_eur, fx_rate_used, fx_rate_source,
-       captured_by_token_id, captured_by_user_id
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11, $12, $13, $14, $15, $16, $17)
+       captured_by_token_id, captured_by_user_id, captured_supplier_name
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11, $12, $13, $14, $15, $16, $17, $18)
      RETURNING id`,
     [
       'captured',
@@ -113,6 +114,7 @@ export async function captureProduct(
       fxRateSource,
       capturedByTokenId,
       capturedByUserId,
+      payload.supplierName?.trim() || null,
     ],
   )
 
@@ -160,6 +162,108 @@ export async function getSourcedProductById(id: string): Promise<any | null> {
   return result.rows[0] ?? null
 }
 
+export interface SourcingAnalytics {
+  totals: {
+    total: number
+    committed: number
+    discarded: number
+    pendingReview: number
+    rewriteFailed: number
+    conversionRate: number | null
+  }
+  avgMarginPercent: number | null
+  byPlatform: Array<{ platform: SourcePlatform; total: number; committed: number }>
+  captureTrend: Array<{ day: string; count: number }>
+  recentCommitted: Array<{
+    id: string
+    title: string
+    sourcePlatform: SourcePlatform
+    committedProductId: string | null
+    committedAt: string | null
+    finalSalePrice: string | null
+    marginPercent: number | null
+  }>
+}
+
+/**
+ * Aggregates purely from sourced_products -- everything the pipeline
+ * needs is already there (final_cost_price/final_sale_price at commit
+ * time), so this never has to join products/orders.
+ */
+export async function getSourcingAnalytics(): Promise<SourcingAnalytics> {
+  const totalsResult = await query(`
+    SELECT
+      count(*) AS total,
+      count(*) FILTER (WHERE status = 'committed') AS committed,
+      count(*) FILTER (WHERE status = 'discarded') AS discarded,
+      count(*) FILTER (WHERE status IN ('ready_for_review', 'review_edited')) AS pending_review,
+      count(*) FILTER (WHERE status = 'rewrite_failed') AS rewrite_failed,
+      avg(
+        CASE WHEN status = 'committed' AND final_sale_price > 0
+          THEN ((final_sale_price - COALESCE(final_cost_price, captured_cost_price_eur, 0)) / final_sale_price) * 100
+        END
+      ) AS avg_margin_percent
+    FROM sourced_products
+  `)
+  const t = totalsResult.rows[0]
+  const total = Number(t.total)
+  const committed = Number(t.committed)
+
+  const byPlatformResult = await query(`
+    SELECT source_platform AS platform, count(*) AS total, count(*) FILTER (WHERE status = 'committed') AS committed
+    FROM sourced_products
+    GROUP BY source_platform
+    ORDER BY source_platform
+  `)
+
+  const trendResult = await query(`
+    SELECT to_char(date_trunc('day', captured_at), 'YYYY-MM-DD') AS day, count(*) AS count
+    FROM sourced_products
+    WHERE captured_at > now() - interval '30 days'
+    GROUP BY 1
+    ORDER BY 1
+  `)
+
+  const recentResult = await query(`
+    SELECT id, COALESCE(review_title, rewritten_title, captured_title) AS title, source_platform,
+           committed_product_id, committed_at, final_sale_price,
+           CASE WHEN final_sale_price > 0
+             THEN ((final_sale_price - COALESCE(final_cost_price, captured_cost_price_eur, 0)) / final_sale_price) * 100
+           END AS margin_percent
+    FROM sourced_products
+    WHERE status = 'committed'
+    ORDER BY committed_at DESC
+    LIMIT 10
+  `)
+
+  return {
+    totals: {
+      total,
+      committed,
+      discarded: Number(t.discarded),
+      pendingReview: Number(t.pending_review),
+      rewriteFailed: Number(t.rewrite_failed),
+      conversionRate: total > 0 ? Math.round((committed / total) * 1000) / 10 : null,
+    },
+    avgMarginPercent: t.avg_margin_percent !== null ? Math.round(Number(t.avg_margin_percent) * 10) / 10 : null,
+    byPlatform: byPlatformResult.rows.map((row) => ({
+      platform: row.platform,
+      total: Number(row.total),
+      committed: Number(row.committed),
+    })),
+    captureTrend: trendResult.rows.map((row) => ({ day: row.day, count: Number(row.count) })),
+    recentCommitted: recentResult.rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      sourcePlatform: row.source_platform,
+      committedProductId: row.committed_product_id,
+      committedAt: row.committed_at,
+      finalSalePrice: row.final_sale_price,
+      marginPercent: row.margin_percent !== null ? Math.round(Number(row.margin_percent) * 10) / 10 : null,
+    })),
+  }
+}
+
 /**
  * Every capture INSERTs a new row (see captureProduct's header comment) --
  * there's no dedup by source_url. This surfaces the other drafts for the
@@ -167,6 +271,31 @@ export async function getSourcedProductById(id: string): Promise<any | null> {
  * pile of stale, easy-to-confuse duplicates (the founder hit exactly this
  * during live testing: kept looking at an old draft after re-capturing).
  */
+/**
+ * Backs the "Recheck price" link on a committed product's edit page --
+ * founder-initiated only (opens the original listing so they can compare
+ * and manually re-import if something changed). Never a background job:
+ * that would mean the server fetching Alibaba/Amazon on its own, which is
+ * the one thing this whole feature was built to avoid.
+ */
+export async function getSourcedProductByCommittedProductId(
+  productId: string,
+): Promise<{ id: string; sourceUrl: string; sourcePlatform: SourcePlatform; capturedSupplierName: string | null } | null> {
+  const result = await query(
+    `SELECT id, source_url, source_platform, captured_supplier_name
+     FROM sourced_products WHERE committed_product_id = $1 AND status = 'committed'
+     LIMIT 1`,
+    [productId],
+  )
+  if (!result.rows[0]) return null
+  return {
+    id: result.rows[0].id,
+    sourceUrl: result.rows[0].source_url,
+    sourcePlatform: result.rows[0].source_platform,
+    capturedSupplierName: result.rows[0].captured_supplier_name,
+  }
+}
+
 export async function listSiblingDrafts(sourceUrl: string, excludeId: string): Promise<any[]> {
   const result = await query(
     `SELECT id, status, captured_at FROM sourced_products WHERE source_url = $1 AND id != $2 ORDER BY captured_at DESC`,
