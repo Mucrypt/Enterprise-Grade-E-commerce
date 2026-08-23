@@ -201,9 +201,9 @@ describe('commitSourcedProduct -- the one function that writes to products', () 
     expect(calls.some((c: any[]) => c[0].includes('product_variations'))).toBe(false)
 
     const productInsert = calls.find((c: any[]) => c[0].includes('INSERT INTO products'))!
-    expect(productInsert[1]).toContain(false) // is_active = false (safety default)
+    // is_active and is_backorder_allowed are the last two positional params.
+    expect(productInsert[1].slice(-2)).toEqual([true, true]) // is_active = true, is_backorder_allowed = true
     expect(productInsert[1]).toContain(0) // stock_quantity = 0
-    expect(productInsert[1]).toContain(true) // is_backorder_allowed = true
 
     const finalUpdate = calls.find((c: any[]) => c[0].includes("UPDATE sourced_products SET status = 'committed'"))
     expect(finalUpdate![1]).toEqual(['sp-1', 'product-1', 'user-1'])

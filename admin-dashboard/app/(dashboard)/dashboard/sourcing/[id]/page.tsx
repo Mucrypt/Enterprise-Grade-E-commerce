@@ -152,7 +152,7 @@ function SourcingDetailPageContent() {
     mutationFn: () => sourcingService.commitSourcedProduct(id),
     onSuccess: (result) => {
       if (result.success) {
-        toast.success('Published as a new product (inactive by default -- activate it from the Products page when ready).')
+        toast.success('Published as a new product -- it\'s live on the storefront and mobile app now.')
         router.push(`/products/${result.data.productId}/edit`)
       } else {
         toast.error(result.error)
@@ -518,8 +518,9 @@ function SourcingDetailPageContent() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Publish this as a new TechTools product?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Creates a new product (starting inactive, with 0 stock and backorders allowed) using the reviewed title, description,
-                  images, and price above. Save your edits first if you haven't -- this uses whatever was last saved.
+                  Creates a new product using the reviewed title, description, images, and price above -- it goes live on the storefront
+                  and mobile app immediately, same as a manually-added product (0 on-hand stock, backorders allowed, since this hasn't
+                  shipped to you yet). Save your edits first if you haven't -- this uses whatever was last saved.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

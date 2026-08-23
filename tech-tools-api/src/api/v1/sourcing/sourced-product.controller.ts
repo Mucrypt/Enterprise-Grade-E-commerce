@@ -17,6 +17,7 @@ import {
   discardSourcedProduct,
   commitSourcedProduct,
   getSourcingAnalytics,
+  listSuppliers,
   CapturePayload,
 } from '../../../services/sourcing/sourced-product.service'
 import { regenerateRewrite } from '../../../services/sourcing/sourcing-rewrite.service'
@@ -75,6 +76,16 @@ export const getSourcedProductByCommittedProductIdHandler = async (req: AuthRequ
   } catch (error) {
     logger.error('Error looking up sourced product by committed product id:', error)
     res.status(500).json({ success: false, error: 'Failed to look up sourcing origin' })
+  }
+}
+
+export const listSuppliersHandler = async (_req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const suppliers = await listSuppliers()
+    res.json({ success: true, suppliers })
+  } catch (error) {
+    logger.error('Error listing sourcing suppliers:', error)
+    res.status(500).json({ success: false, error: 'Failed to list suppliers' })
   }
 }
 

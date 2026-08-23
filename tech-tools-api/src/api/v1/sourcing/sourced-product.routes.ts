@@ -10,6 +10,7 @@ import {
   getSourcedProduct,
   getSourcedProductByCommittedProductIdHandler,
   getSourcingAnalyticsHandler,
+  listSuppliersHandler,
   reviewSourcedProduct,
   regenerateSourcedProductRewrite,
   commitSourcedProductHandler,
@@ -41,6 +42,7 @@ router.use(authenticate)
 
 router.get('/products', requirePermissionOrLegacyRole('sourcing.view', 'admin', 'super_admin'), listSourcedProductsHandler)
 router.get('/analytics', requirePermissionOrLegacyRole('sourcing.view', 'admin', 'super_admin'), getSourcingAnalyticsHandler)
+router.get('/suppliers', requirePermissionOrLegacyRole('sourcing.view', 'admin', 'super_admin'), listSuppliersHandler)
 router.get(
   '/products/by-committed/:productId',
   requirePermissionOrLegacyRole('sourcing.view', 'admin', 'super_admin'),

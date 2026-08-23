@@ -116,6 +116,20 @@ async function getSourcedOriginForProduct(productId: string) {
   return apiClient.get<{ success: true; sourced: SourcedOrigin | null }>(`/sourcing/products/by-committed/${productId}`)
 }
 
+export interface SupplierSummary {
+  supplierName: string
+  sourcePlatform: SourcePlatform
+  totalSourced: number
+  totalCommitted: number
+  avgMarginPercent: number | null
+  lastCapturedAt: string
+  sampleSourceUrl: string
+}
+
+async function listSuppliers() {
+  return apiClient.get<{ success: true; suppliers: SupplierSummary[] }>('/sourcing/suppliers')
+}
+
 async function getSourcedProduct(id: string) {
   return apiClient.get<{ success: true; product: SourcedProductDetail; siblingDrafts: SiblingDraft[] }>(`/sourcing/products/${id}`)
 }
@@ -179,6 +193,19 @@ async function createPricingRule(payload: {
   return apiClient.post<{ success: true; data: { id: string } }>('/sourcing/pricing-rules', payload)
 }
 
+async function updatePricingRule(
+  id: string,
+  payload: Partial<{
+    name: string
+    marginPercent: number
+    fixedMarkup: number
+    roundingMode: 'none' | 'charm' | 'nearest_1'
+    isDefault: boolean
+  }>,
+) {
+  return apiClient.patch<{ success: true } | { success: false; error: string }>(`/sourcing/pricing-rules/${id}`, payload)
+}
+
 // ---------- Extension API tokens ----------
 
 export interface SourcingApiToken {
@@ -229,6 +256,7 @@ export const sourcingService = {
   listSourcedProducts,
   getAnalytics,
   getSourcedOriginForProduct,
+  listSuppliers,
   getSourcedProduct,
   updateReview,
   regenerateRewrite,
@@ -236,6 +264,7 @@ export const sourcingService = {
   discardSourcedProduct,
   listPricingRules,
   createPricingRule,
+  updatePricingRule,
   issueToken,
   listTokens,
   revokeToken,

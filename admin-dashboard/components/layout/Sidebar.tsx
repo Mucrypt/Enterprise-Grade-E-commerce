@@ -18,6 +18,7 @@ import {
   ChevronDown,
   Shield,
   BarChart3,
+  Percent,
   Tag,
   Truck,
   Ticket,
@@ -368,6 +369,18 @@ const navigation: NavItem[] = [
         title: 'Analytics',
         href: '/dashboard/sourcing/analytics',
         icon: BarChart3,
+        permission: 'sourcing.view',
+      },
+      {
+        title: 'Pricing Rules',
+        href: '/dashboard/sourcing/pricing-rules',
+        icon: Percent,
+        permission: 'sourcing.manage',
+      },
+      {
+        title: 'Suppliers',
+        href: '/dashboard/sourcing/suppliers',
+        icon: Building2,
         permission: 'sourcing.view',
       },
       {

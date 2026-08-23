@@ -162,6 +162,52 @@ export async function getSourcedProductById(id: string): Promise<any | null> {
   return result.rows[0] ?? null
 }
 
+export interface SupplierSummary {
+  supplierName: string
+  sourcePlatform: SourcePlatform
+  totalSourced: number
+  totalCommitted: number
+  avgMarginPercent: number | null
+  lastCapturedAt: string
+  sampleSourceUrl: string
+}
+
+/**
+ * Groups by (supplier name, platform) rather than name alone -- the same
+ * company name could theoretically appear on both Alibaba and Amazon, and
+ * conflating them would misrepresent the relationship. Only rows with a
+ * captured supplier name are counted (extraction can't always find one).
+ */
+export async function listSuppliers(): Promise<SupplierSummary[]> {
+  const result = await query(`
+    SELECT
+      captured_supplier_name AS supplier_name,
+      source_platform,
+      count(*) AS total_sourced,
+      count(*) FILTER (WHERE status = 'committed') AS total_committed,
+      avg(
+        CASE WHEN status = 'committed' AND final_sale_price > 0
+          THEN ((final_sale_price - COALESCE(final_cost_price, captured_cost_price_eur, 0)) / final_sale_price) * 100
+        END
+      ) AS avg_margin_percent,
+      max(captured_at) AS last_captured_at,
+      (array_agg(source_url ORDER BY captured_at DESC))[1] AS sample_source_url
+    FROM sourced_products
+    WHERE captured_supplier_name IS NOT NULL AND captured_supplier_name != ''
+    GROUP BY captured_supplier_name, source_platform
+    ORDER BY total_sourced DESC
+  `)
+  return result.rows.map((row) => ({
+    supplierName: row.supplier_name,
+    sourcePlatform: row.source_platform,
+    totalSourced: Number(row.total_sourced),
+    totalCommitted: Number(row.total_committed),
+    avgMarginPercent: row.avg_margin_percent !== null ? Math.round(Number(row.avg_margin_percent) * 10) / 10 : null,
+    lastCapturedAt: row.last_captured_at,
+    sampleSourceUrl: row.sample_source_url,
+  }))
+}
+
 export interface SourcingAnalytics {
   totals: {
     total: number
@@ -363,12 +409,15 @@ export async function discardSourcedProduct(id: string, reason: string | null, _
  * as they described -- adjustable afterward through the normal product
  * edit page like any other product.
  *
- * New products commit as INACTIVE (is_active = false) -- a freshly
- * reviewed sourced listing should not go live on the storefront the
- * instant it's committed; the founder flips it active from the normal
- * product edit page once satisfied. This is a deliberate safety default,
- * not something the founder explicitly specified -- easy to change if
- * they'd rather it publish live immediately.
+ * New products commit as ACTIVE (is_active = true), matching the normal
+ * "create product" flow's own default -- a committed sourced product
+ * shows up on the storefront/mobile app immediately, same as one entered
+ * by hand. (An earlier version of this function defaulted to inactive as
+ * an extra safety step, but that meant a "published" product silently
+ * never appeared anywhere the founder could see it, which read as a bug
+ * rather than a safety feature -- reverted after live testing surfaced
+ * exactly that confusion.) Deactivate it from the normal product edit
+ * page if a specific listing needs to stay hidden.
  */
 export async function commitSourcedProduct(id: string, userId: string): Promise<{ productId: string }> {
   const sourced = await getSourcedProductById(id)
@@ -402,7 +451,7 @@ export async function commitSourcedProduct(id: string, userId: string): Promise<
          stock_quantity, is_active, is_backorder_allowed
        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING id`,
-      [sku, title.trim(), slug, descriptionHtml, salePrice, salePrice, costPrice, 0, false, true],
+      [sku, title.trim(), slug, descriptionHtml, salePrice, salePrice, costPrice, 0, true, true],
     )
     const productId = productResult.rows[0].id
 
