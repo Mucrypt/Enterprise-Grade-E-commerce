@@ -901,6 +901,23 @@ export const updateProduct = async (req: AuthRequest, res: Response) => {
       values,
     )
 
+    // The Products list page's stock badge reads SUM(inventory.available_stock),
+    // not products.stock_quantity -- a genuinely separate column that this
+    // endpoint used to leave untouched, so editing "Stock Quantity" here and
+    // saving never moved the badge (confirmed via a live test, 2026-08-24).
+    // Keep them in sync: update every inventory row for this product, or
+    // seed one if none exists yet (e.g. a product committed via the
+    // sourcing importer, which always starts with a single current_stock=0 row).
+    if (stockQuantity !== undefined) {
+      const inventoryUpdate = await query(
+        `UPDATE inventory SET current_stock = $2, updated_at = NOW() WHERE product_id = $1`,
+        [productId, stockQuantity],
+      )
+      if (inventoryUpdate.rowCount === 0) {
+        await query(`INSERT INTO inventory (product_id, current_stock) VALUES ($1, $2)`, [productId, stockQuantity])
+      }
+    }
+
     // Process uploaded media files if any
     const files = req.files as
       | { [fieldname: string]: Express.Multer.File[] }
