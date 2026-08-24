@@ -105,8 +105,20 @@ export function parseResponsesText(raw: any): string {
   return combined
 }
 
+export interface CallOpenAiOptions {
+  /**
+   * Chat Completions "JSON mode" -- the API guarantees syntactically valid
+   * JSON output rather than relying purely on prompt instructions (best
+   * practice for any caller that parses the response as structured data).
+   * Opt-in only: existing callers that want freeform text are unaffected.
+   * Falls back silently to prompt-only enforcement on the /v1/responses
+   * path below, since that API doesn't support response_format.
+   */
+  jsonMode?: boolean
+}
+
 // ─── OpenAI API caller with compatibility fallback ───────────
-export async function callOpenAI(messages: OpenAiMessage[]): Promise<OpenAiResponse> {
+export async function callOpenAI(messages: OpenAiMessage[], options: CallOpenAiOptions = {}): Promise<OpenAiResponse> {
   const model = process.env.AI_MODEL || 'gpt-5.5'
 
   // First attempt: Chat Completions API
@@ -114,6 +126,7 @@ export async function callOpenAI(messages: OpenAiMessage[]): Promise<OpenAiRespo
     model,
     messages,
     max_tokens: 2000,
+    ...(options.jsonMode ? { response_format: { type: 'json_object' } } : {}),
   })
 
   if (chatResult.statusCode < 400) {

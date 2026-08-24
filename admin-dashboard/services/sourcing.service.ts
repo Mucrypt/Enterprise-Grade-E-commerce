@@ -55,12 +55,18 @@ export interface SourcedProductDetail extends SourcedProductSummary {
   fx_rate_used: string | null
   fx_rate_source: string | null
   rewritten_description_html: string | null
+  rewritten_category_id: string | null
+  rewritten_meta_title: string | null
+  rewritten_meta_description: string | null
   rewrite_model_name: string | null
   rewrite_notes: string | null
   rewrite_error: string | null
   rewrite_attempt_count: number
   review_description_html: string | null
   review_images: CapturedImage[] | null
+  review_category_id: string | null
+  review_meta_title: string | null
+  review_meta_description: string | null
   final_cost_price: string | null
   discard_reason: string | null
 }
@@ -139,6 +145,9 @@ export interface ReviewFieldsPayload {
   reviewDescriptionHtml?: string
   reviewImages?: CapturedImage[]
   reviewSpecs?: Record<string, string>
+  reviewCategoryId?: string
+  reviewMetaTitle?: string
+  reviewMetaDescription?: string
   finalCostPrice?: number
   finalSalePrice?: number
 }

@@ -355,6 +355,9 @@ export interface ReviewFieldsUpdate {
   reviewDescriptionHtml?: string
   reviewImages?: CapturedImage[]
   reviewSpecs?: Record<string, string>
+  reviewCategoryId?: string
+  reviewMetaTitle?: string
+  reviewMetaDescription?: string
   finalCostPrice?: number
   finalSalePrice?: number
 }
@@ -372,10 +375,13 @@ export async function updateReviewFields(id: string, fields: ReviewFieldsUpdate,
          review_description_html = COALESCE($3, review_description_html),
          review_images = COALESCE($4::jsonb, review_images),
          review_specs = COALESCE($5::jsonb, review_specs),
-         final_cost_price = COALESCE($6, final_cost_price),
-         final_sale_price = COALESCE($7, final_sale_price),
+         review_category_id = COALESCE($6, review_category_id),
+         review_meta_title = COALESCE($7, review_meta_title),
+         review_meta_description = COALESCE($8, review_meta_description),
+         final_cost_price = COALESCE($9, final_cost_price),
+         final_sale_price = COALESCE($10, final_sale_price),
          status = 'review_edited',
-         reviewed_by = $8,
+         reviewed_by = $11,
          reviewed_at = now(),
          updated_at = now()
      WHERE id = $1`,
@@ -385,6 +391,9 @@ export async function updateReviewFields(id: string, fields: ReviewFieldsUpdate,
       fields.reviewDescriptionHtml ?? null,
       fields.reviewImages ? JSON.stringify(fields.reviewImages) : null,
       fields.reviewSpecs ? JSON.stringify(fields.reviewSpecs) : null,
+      fields.reviewCategoryId ?? null,
+      fields.reviewMetaTitle ?? null,
+      fields.reviewMetaDescription ?? null,
       fields.finalCostPrice ?? null,
       fields.finalSalePrice ?? null,
       reviewedByUserId,
@@ -430,6 +439,13 @@ export async function commitSourcedProduct(id: string, userId: string): Promise<
   const images: CapturedImage[] = sourced.review_images || sourced.captured_images || []
   const costPrice: number | null = sourced.final_cost_price ?? sourced.captured_cost_price_eur
   const salePrice: number | null = sourced.final_sale_price ?? sourced.suggested_sale_price
+  // AI-suggested at rewrite time (see sourcing-rewrite.service.ts), overridable
+  // by the founder on review -- previously always NULL on commit since nothing
+  // upstream ever set them, which is why committed products showed a blank
+  // category and no SEO meta tags.
+  const categoryId: string | null = sourced.review_category_id || sourced.rewritten_category_id || null
+  const metaTitle: string | null = sourced.review_meta_title || sourced.rewritten_meta_title || null
+  const metaDescription: string | null = sourced.review_meta_description || sourced.rewritten_meta_description || null
 
   if (!title?.trim()) throw new Error('Cannot commit: no title available')
   if (!images.length) throw new Error('Cannot commit: at least one image is required')
@@ -448,10 +464,10 @@ export async function commitSourcedProduct(id: string, userId: string): Promise<
     const productResult = await client.query(
       `INSERT INTO products (
          sku, name, slug, description, base_price, sale_price, cost_price,
-         stock_quantity, is_active, is_backorder_allowed
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         stock_quantity, is_active, is_backorder_allowed, category_id, meta_title, meta_description
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING id`,
-      [sku, title.trim(), slug, descriptionHtml, salePrice, salePrice, costPrice, 0, true, true],
+      [sku, title.trim(), slug, descriptionHtml, salePrice, salePrice, costPrice, 0, true, true, categoryId, metaTitle, metaDescription],
     )
     const productId = productResult.rows[0].id
 

@@ -201,12 +201,44 @@ describe('commitSourcedProduct -- the one function that writes to products', () 
     expect(calls.some((c: any[]) => c[0].includes('product_variations'))).toBe(false)
 
     const productInsert = calls.find((c: any[]) => c[0].includes('INSERT INTO products'))!
-    // is_active and is_backorder_allowed are the last two positional params.
-    expect(productInsert[1].slice(-2)).toEqual([true, true]) // is_active = true, is_backorder_allowed = true
-    expect(productInsert[1]).toContain(0) // stock_quantity = 0
+    // sku, name, slug, description, base_price, sale_price, cost_price,
+    // stock_quantity, is_active, is_backorder_allowed, category_id, meta_title, meta_description
+    expect(productInsert[1].slice(7, 10)).toEqual([0, true, true]) // stock_quantity=0, is_active=true, is_backorder_allowed=true
+    // No AI category/SEO suggestion was set on this fixture's sourced row, so these fall back to null.
+    expect(productInsert[1].slice(-3)).toEqual([null, null, null]) // category_id, meta_title, meta_description
 
     const finalUpdate = calls.find((c: any[]) => c[0].includes("UPDATE sourced_products SET status = 'committed'"))
     expect(finalUpdate![1]).toEqual(['sp-1', 'product-1', 'user-1'])
+  })
+
+  it('commits the AI-suggested category/SEO fields, preferring the founder\'s review_* override over the rewritten_* suggestion', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          ...READY_SOURCED_ROW,
+          rewritten_category_id: 'cat-ai-suggested',
+          rewritten_meta_title: 'AI Meta Title',
+          rewritten_meta_description: 'AI meta description.',
+          review_category_id: 'cat-founder-picked',
+          review_meta_title: null, // founder didn't touch this one -- falls back to the AI's
+          review_meta_description: null,
+        },
+      ],
+    })
+    const mockClient = {
+      query: jest.fn(async (sql: string, _params?: any[]) => {
+        if (sql.includes('INSERT INTO products')) return { rows: [{ id: 'product-1' }] }
+        return { rows: [] }
+      }),
+      release: jest.fn(),
+    }
+    mockGetClient.mockResolvedValue(mockClient)
+
+    await commitSourcedProduct('sp-1', 'user-1')
+
+    const calls = mockClient.query.mock.calls
+    const productInsert = calls.find((c: any[]) => c[0].includes('INSERT INTO products'))!
+    expect(productInsert[1].slice(-3)).toEqual(['cat-founder-picked', 'AI Meta Title', 'AI meta description.'])
   })
 
   it('prefers review_title/review_description_html/review_images over the AI rewrite and raw capture', async () => {

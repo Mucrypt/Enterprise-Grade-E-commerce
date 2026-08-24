@@ -106,10 +106,30 @@ export const getSourcedProduct = async (req: AuthRequest, res: Response): Promis
 
 export const reviewSourcedProduct = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { reviewTitle, reviewDescriptionHtml, reviewImages, reviewSpecs, finalCostPrice, finalSalePrice } = req.body
+    const {
+      reviewTitle,
+      reviewDescriptionHtml,
+      reviewImages,
+      reviewSpecs,
+      reviewCategoryId,
+      reviewMetaTitle,
+      reviewMetaDescription,
+      finalCostPrice,
+      finalSalePrice,
+    } = req.body
     await updateReviewFields(
       req.params.id,
-      { reviewTitle, reviewDescriptionHtml, reviewImages, reviewSpecs, finalCostPrice, finalSalePrice },
+      {
+        reviewTitle,
+        reviewDescriptionHtml,
+        reviewImages,
+        reviewSpecs,
+        reviewCategoryId,
+        reviewMetaTitle,
+        reviewMetaDescription,
+        finalCostPrice,
+        finalSalePrice,
+      },
       req.user!.userId,
     )
     res.json({ success: true })

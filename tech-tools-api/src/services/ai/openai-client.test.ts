@@ -111,6 +111,57 @@ describe('parseResponsesText', () => {
   })
 })
 
+describe('callOpenAI -- jsonMode option', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    process.env = { ...REAL_ENV, OPENAI_API_KEY: 'test-key' }
+  })
+  afterAll(() => {
+    process.env = REAL_ENV
+  })
+
+  function mockHttpsRequestCapturingBody(statusCode: number, bodyText: string) {
+    const written: string[] = []
+    ;(https.request as jest.Mock).mockImplementation((_options: any, callback: any) => {
+      const res: any = {
+        statusCode,
+        on: (event: string, handler: any) => {
+          if (event === 'data') handler(Buffer.from(bodyText))
+          if (event === 'end') handler()
+        },
+      }
+      callback(res)
+      return {
+        on: jest.fn(),
+        write: (chunk: string) => written.push(chunk),
+        end: jest.fn(),
+        destroy: jest.fn(),
+      }
+    })
+    return written
+  }
+
+  it('sends response_format: json_object when jsonMode is requested (best-practice structured output, not just prompt instructions)', async () => {
+    const response = { choices: [{ message: { content: '{}' } }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }, model: 'gpt-5.5' }
+    const written = mockHttpsRequestCapturingBody(200, JSON.stringify(response))
+
+    await callOpenAI([{ role: 'user', content: 'hello' }], { jsonMode: true })
+
+    const sentPayload = JSON.parse(written[0])
+    expect(sentPayload.response_format).toEqual({ type: 'json_object' })
+  })
+
+  it('omits response_format entirely when jsonMode is not requested, leaving existing callers unaffected', async () => {
+    const response = { choices: [{ message: { content: 'plain text' } }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }, model: 'gpt-5.5' }
+    const written = mockHttpsRequestCapturingBody(200, JSON.stringify(response))
+
+    await callOpenAI([{ role: 'user', content: 'hello' }])
+
+    const sentPayload = JSON.parse(written[0])
+    expect(sentPayload.response_format).toBeUndefined()
+  })
+})
+
 describe('extractJsonObject', () => {
   it('returns already-clean JSON as-is', () => {
     expect(extractJsonObject('{"a":1}')).toBe('{"a":1}')

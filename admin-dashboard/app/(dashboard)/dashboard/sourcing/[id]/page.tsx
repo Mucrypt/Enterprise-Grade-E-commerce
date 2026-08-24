@@ -7,13 +7,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { RequirePagePermission } from '@/components/auth/RequirePagePermission'
 import sourcingService, { CapturedImage } from '@/services/sourcing.service'
 import { productService } from '@/services/product.service'
+import { categoryService } from '@/services/category.service'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -76,6 +79,16 @@ function SourcingDetailPageContent() {
   const [images, setImages] = useState<CapturedImage[]>([])
   const [newImageUrl, setNewImageUrl] = useState('')
   const [specs, setSpecs] = useState<SpecRow[]>([])
+  const [categoryId, setCategoryId] = useState('')
+  const [metaTitle, setMetaTitle] = useState('')
+  const [metaDescription, setMetaDescription] = useState('')
+
+  const { data: categoriesData } = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => categoryService.getCategories(),
+  })
+  const categories = categoriesData?.data?.categories || []
+
   // DOMPurify needs `window` (no-op/undefined in Next.js's SSR pass), so
   // sanitizing only inside this client-only effect -- never during
   // render -- keeps the server-rendered and first-client-rendered HTML
@@ -96,6 +109,9 @@ function SourcingDetailPageContent() {
     setSalePrice(product.final_sale_price || product.suggested_sale_price || '')
     setImages(product.review_images && product.review_images.length > 0 ? product.review_images : product.captured_images || [])
     setSpecs(specsToRows(product.review_specs && Object.keys(product.review_specs).length > 0 ? product.review_specs : product.captured_specs))
+    setCategoryId(product.review_category_id || product.rewritten_category_id || '')
+    setMetaTitle(product.review_meta_title || product.rewritten_meta_title || '')
+    setMetaDescription(product.review_meta_description || product.rewritten_meta_description || '')
   }, [product?.id])
 
   const removeImage = (index: number) => setImages((prev) => prev.filter((_, i) => i !== index))
@@ -134,6 +150,9 @@ function SourcingDetailPageContent() {
         reviewDescriptionHtml: descriptionHtml,
         reviewImages: images,
         reviewSpecs: rowsToSpecs(specs),
+        reviewCategoryId: categoryId || undefined,
+        reviewMetaTitle: metaTitle || undefined,
+        reviewMetaDescription: metaDescription || undefined,
         finalCostPrice: costPrice ? Number(costPrice) : undefined,
         finalSalePrice: salePrice ? Number(salePrice) : undefined,
       }),
@@ -308,6 +327,7 @@ function SourcingDetailPageContent() {
           <TabsTrigger value='content'>Content</TabsTrigger>
           <TabsTrigger value='images'>Images ({images.length})</TabsTrigger>
           <TabsTrigger value='specifications'>Specifications ({specs.length})</TabsTrigger>
+          <TabsTrigger value='seo'>SEO & Category</TabsTrigger>
           <TabsTrigger value='pricing'>Pricing</TabsTrigger>
         </TabsList>
 
@@ -484,6 +504,72 @@ function SourcingDetailPageContent() {
                   <Plus className='h-3.5 w-3.5' /> Add attribute
                 </Button>
               )}
+            </CardContent>
+          </Card>
+          {SaveBar}
+        </TabsContent>
+
+        <TabsContent value='seo' className='space-y-4'>
+          <Card>
+            <CardHeader>
+              <CardTitle className='text-base'>Category</CardTitle>
+              <CardDescription>
+                {product.rewritten_category_id
+                  ? "The AI matched this against your store's real category list when it rewrote the listing -- override it below if it picked wrong."
+                  : "The AI didn't suggest a category (or hasn't run yet) -- pick one so this product shows up in category browsing once committed."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Select value={categoryId || undefined} onValueChange={setCategoryId} disabled={isCommitted}>
+                <SelectTrigger className='w-full sm:w-80'>
+                  <SelectValue placeholder='No category selected' />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className='text-base'>Search engine preview</CardTitle>
+              <CardDescription>AI-generated from the rewritten listing -- edit freely.</CardDescription>
+            </CardHeader>
+            <CardContent className='space-y-4'>
+              <div className='space-y-1.5'>
+                <div className='flex items-center justify-between'>
+                  <Label htmlFor='seo-meta-title'>Meta title</Label>
+                  <span className={`text-xs ${metaTitle.length > 60 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                    {metaTitle.length}/60
+                  </span>
+                </div>
+                <Input id='seo-meta-title' value={metaTitle} onChange={(e) => setMetaTitle(e.target.value)} disabled={isCommitted} />
+              </div>
+              <div className='space-y-1.5'>
+                <div className='flex items-center justify-between'>
+                  <Label htmlFor='seo-meta-description'>Meta description</Label>
+                  <span className={`text-xs ${metaDescription.length > 155 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                    {metaDescription.length}/155
+                  </span>
+                </div>
+                <Textarea
+                  id='seo-meta-description'
+                  value={metaDescription}
+                  onChange={(e) => setMetaDescription(e.target.value)}
+                  rows={3}
+                  disabled={isCommitted}
+                />
+              </div>
+              <div className='rounded-lg border p-3'>
+                <p className='truncate text-sm text-blue-700'>{metaTitle || title || 'Untitled product'} | TechTools</p>
+                <p className='text-xs text-green-700'>techtoolstore.com › products › ...</p>
+                <p className='line-clamp-2 text-xs text-muted-foreground'>{metaDescription || 'No meta description set yet.'}</p>
+              </div>
             </CardContent>
           </Card>
           {SaveBar}
