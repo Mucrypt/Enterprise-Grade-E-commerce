@@ -49,6 +49,30 @@ const remotePatterns: RemotePattern[] = [
     hostname: '*.r2.dev',
     pathname: '/**',
   },
+  // SOURCING-1 -- sourced-product images are hotlinked directly from the
+  // supplier's own CDN (never rehosted), so next/image needs these
+  // allowlisted or it 400s the image and silently falls back to broken-
+  // image + alt text (confirmed via a live test, 2026-08-24).
+  {
+    protocol: 'https',
+    hostname: '*.alicdn.com',
+    pathname: '/**',
+  },
+  {
+    protocol: 'https',
+    hostname: '*.media-amazon.com',
+    pathname: '/**',
+  },
+  {
+    protocol: 'https',
+    hostname: 'images-na.ssl-images-amazon.com',
+    pathname: '/**',
+  },
+  {
+    protocol: 'https',
+    hostname: 'images-eu.ssl-images-amazon.com',
+    pathname: '/**',
+  },
 ]
 
 if (
