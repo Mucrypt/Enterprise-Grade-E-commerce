@@ -89,6 +89,12 @@ export const userSchemas = {
 }
 
 export const productSchemas = {
+  // NOTE: this schema uses stripUnknown (see validate() below), so any
+  // field updateProduct/createProduct legitimately accept but this schema
+  // doesn't declare gets silently deleted from req.body before the
+  // controller ever runs -- confirmed live (2026-08-24): stockQuantity was
+  // missing here, so editing a product's stock quantity and saving had no
+  // effect at all, even though the controller-side logic was correct.
   create: Joi.object({
     sku: Joi.string().max(100).required(),
     name: Joi.string().max(255).required(),
@@ -101,26 +107,50 @@ export const productSchemas = {
     salePrice: Joi.number().min(0),
     costPrice: Joi.number().min(0),
     taxRate: Joi.number().min(0).max(100),
+    stockQuantity: Joi.number().integer().min(0),
     weight: Joi.number().min(0),
     weightUnit: Joi.string().max(10),
+    length: Joi.number().min(0),
+    width: Joi.number().min(0),
+    height: Joi.number().min(0),
+    dimensionsUnit: Joi.string().max(10),
     isActive: Joi.boolean().default(true),
     isDigital: Joi.boolean().default(false),
     isFeatured: Joi.boolean().default(false),
+    isBackorderAllowed: Joi.boolean(),
     minOrderQuantity: Joi.number().integer().min(1).default(1),
     maxOrderQuantity: Joi.number().integer().min(1),
+    metaTitle: Joi.string().max(255),
+    metaDescription: Joi.string().max(500),
   }),
 
   update: Joi.object({
+    sku: Joi.string().max(100),
     name: Joi.string().max(255),
     slug: Joi.string().max(255),
     description: Joi.string().allow(''),
     shortDescription: Joi.string().max(500),
+    brandId: Joi.string().uuid().allow(null),
+    categoryId: Joi.string().uuid().allow(null),
     basePrice: Joi.number().min(0),
-    salePrice: Joi.number().min(0),
+    salePrice: Joi.number().min(0).allow(null),
+    costPrice: Joi.number().min(0).allow(null),
+    taxRate: Joi.number().min(0).max(100).allow(null),
+    stockQuantity: Joi.number().integer().min(0),
+    weight: Joi.number().min(0).allow(null),
+    weightUnit: Joi.string().max(10).allow(null),
+    length: Joi.number().min(0).allow(null),
+    width: Joi.number().min(0).allow(null),
+    height: Joi.number().min(0).allow(null),
+    dimensionsUnit: Joi.string().max(10).allow(null),
     isActive: Joi.boolean(),
+    isDigital: Joi.boolean(),
     isFeatured: Joi.boolean(),
+    isBackorderAllowed: Joi.boolean(),
     minOrderQuantity: Joi.number().integer().min(1),
-    maxOrderQuantity: Joi.number().integer().min(1),
+    maxOrderQuantity: Joi.number().integer().min(1).allow(null),
+    metaTitle: Joi.string().max(255).allow(null, ''),
+    metaDescription: Joi.string().max(500).allow(null, ''),
   }),
 }
 
