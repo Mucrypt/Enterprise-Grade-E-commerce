@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import DOMPurify from 'isomorphic-dompurify'
+import DOMPurify from 'dompurify'
 import { useParams, useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { RequirePagePermission } from '@/components/auth/RequirePagePermission'
@@ -76,6 +76,17 @@ function SourcingDetailPageContent() {
   const [images, setImages] = useState<CapturedImage[]>([])
   const [newImageUrl, setNewImageUrl] = useState('')
   const [specs, setSpecs] = useState<SpecRow[]>([])
+  // DOMPurify needs `window` (no-op/undefined in Next.js's SSR pass), so
+  // sanitizing only inside this client-only effect -- never during
+  // render -- keeps the server-rendered and first-client-rendered HTML
+  // identical (both empty) and avoids a hydration mismatch.
+  const [sanitizedCapturedDescription, setSanitizedCapturedDescription] = useState('')
+
+  useEffect(() => {
+    setSanitizedCapturedDescription(
+      DOMPurify.sanitize(product?.captured_description_html || '<em>No description captured.</em>'),
+    )
+  }, [product?.captured_description_html])
 
   useEffect(() => {
     if (!product) return
@@ -311,12 +322,11 @@ function SourcingDetailPageContent() {
                 <p className='font-medium'>{product.captured_title}</p>
                 <div
                   className='prose prose-sm max-w-none text-muted-foreground'
-                  dangerouslySetInnerHTML={{
-                    // Untrusted third-party HTML (scraped from the Alibaba/Amazon
-                    // page by the extension) -- always sanitize before rendering,
-                    // same as the storefront's ProductDetailPage does.
-                    __html: DOMPurify.sanitize(product.captured_description_html || '<em>No description captured.</em>'),
-                  }}
+                  // Untrusted third-party HTML (scraped from the Alibaba/Amazon page
+                  // by the extension) -- sanitized client-side before rendering, same
+                  // as the storefront's ProductDetailPage does (see the effect above
+                  // for why this isn't sanitized inline).
+                  dangerouslySetInnerHTML={{ __html: sanitizedCapturedDescription }}
                 />
               </CardContent>
             </Card>
