@@ -120,6 +120,22 @@
     return null
   }
 
+  /**
+   * Strips anything that would try to load an external resource once
+   * this captured HTML is later rendered elsewhere (TechTools' own admin
+   * dashboard, and eventually the storefront) -- a live test on Amazon's
+   * equivalent A+ content (2026-08-21) found <link rel="stylesheet">
+   * tags pointing at the source site's own CDN, captured as literal
+   * markup and then blocked by CSP with console errors downstream.
+   * TechTools' render paths also sanitize with DOMPurify as a second
+   * layer, since this list can never be exhaustive against a third-party
+   * page's markup.
+   */
+  function stripExternalResourceTags(root) {
+    root.querySelectorAll('script, style, link, meta, base, iframe, object, embed, video').forEach((node) => node.remove())
+    return root
+  }
+
   function extractDescriptionHtml(jsonLd) {
     const parts = []
 
@@ -128,7 +144,7 @@
     }
 
     const detailSection = firstMatch(['[class*="detailDesc" i]', '[class*="product-description" i]', '[id*="description" i]', '[class*="detail-desc" i]'])
-    if (detailSection) parts.push(detailSection.innerHTML)
+    if (detailSection) parts.push(stripExternalResourceTags(detailSection.cloneNode(true)).innerHTML)
 
     // "Product descriptions from the supplier" is a real, distinctly
     // labeled section on Alibaba product pages (confirmed on a live test)
@@ -136,7 +152,7 @@
     // from the shorter structured description above -- captured too so
     // nothing the supplier actually wrote is silently dropped.
     const supplierSection = findSectionByHeading(/product descriptions? from the supplier/i)
-    if (supplierSection) parts.push(supplierSection.innerHTML)
+    if (supplierSection) parts.push(stripExternalResourceTags(supplierSection.cloneNode(true)).innerHTML)
 
     return parts.length > 0 ? parts.join('\n') : null
   }

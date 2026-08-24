@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import DOMPurify from 'isomorphic-dompurify'
 import { useParams, useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { RequirePagePermission } from '@/components/auth/RequirePagePermission'
@@ -310,7 +311,12 @@ function SourcingDetailPageContent() {
                 <p className='font-medium'>{product.captured_title}</p>
                 <div
                   className='prose prose-sm max-w-none text-muted-foreground'
-                  dangerouslySetInnerHTML={{ __html: product.captured_description_html || '<em>No description captured.</em>' }}
+                  dangerouslySetInnerHTML={{
+                    // Untrusted third-party HTML (scraped from the Alibaba/Amazon
+                    // page by the extension) -- always sanitize before rendering,
+                    // same as the storefront's ProductDetailPage does.
+                    __html: DOMPurify.sanitize(product.captured_description_html || '<em>No description captured.</em>'),
+                  }}
                 />
               </CardContent>
             </Card>

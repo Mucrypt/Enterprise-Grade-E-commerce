@@ -103,13 +103,22 @@
   }
 
   /**
-   * Removes video players and their UI chrome (controls, caption-track
-   * menus, "Click to play video" hint text) from a cloned A+ content
-   * node before it's captured -- these render as ordinary text nodes in
-   * Amazon's markup even though a real shopper would never read them.
+   * Removes video players/UI chrome AND anything that would try to load
+   * an external resource once this HTML is later rendered elsewhere
+   * (link/meta/base/iframe/object/embed) -- a live test (2026-08-21)
+   * showed Amazon's A+ content includes <link rel="stylesheet"> tags
+   * pointing at Amazon's own CDN, which get captured as literal markup
+   * and then blocked by CSP with console errors when rendered in
+   * TechTools' own admin dashboard / storefront. TechTools' own render
+   * paths also sanitize with DOMPurify as a second layer, since this
+   * list can never be guaranteed exhaustive against a third-party page.
    */
   function stripVideoChrome(root) {
-    root.querySelectorAll('video, script, style, noscript, button, [role="button"], .a-button, input, select, [class*="video" i], [class*="player" i], [id*="video" i], [id*="player" i]').forEach((node) => node.remove())
+    root
+      .querySelectorAll(
+        'video, script, style, noscript, button, [role="button"], .a-button, input, select, [class*="video" i], [class*="player" i], [id*="video" i], [id*="player" i], link, meta, base, iframe, object, embed',
+      )
+      .forEach((node) => node.remove())
     return root
   }
 

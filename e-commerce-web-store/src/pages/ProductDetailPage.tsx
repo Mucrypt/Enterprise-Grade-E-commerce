@@ -24,6 +24,7 @@ import {
   ThumbsUp,
   Play,
 } from 'lucide-react'
+import DOMPurify from 'dompurify'
 import type { Product, ProductMedia } from '../types'
 import { productsApi } from '../api'
 import { useCartStore, useWishlistStore } from '../stores'
@@ -538,10 +539,13 @@ export default function ProductDetailPage() {
                   {/* Sourced-product descriptions are stored as HTML (AI-rewritten with
                       <p>/<ul>/<li> markup); manually-entered ones are plain text with no
                       tags, which renders identically through innerHTML as it would as a
-                      plain string -- so this is safe for both, not sourcing-specific. */}
+                      plain string -- so this is safe for both, not sourcing-specific.
+                      DOMPurify is required here, not optional: this HTML can originate
+                      from a scraped third-party page (Alibaba/Amazon) via the sourcing
+                      extension, so it's untrusted input reaching every visitor's browser. */}
                   <div
                     className='text-gray-700 leading-relaxed whitespace-pre-line [&_ul]:list-disc [&_ul]:pl-5 [&_li]:mb-1 [&_p]:mb-3'
-                    dangerouslySetInnerHTML={{ __html: product.description || '' }}
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description || '') }}
                   />
                 </div>
               </div>
