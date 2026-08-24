@@ -535,9 +535,14 @@ export default function ProductDetailPage() {
             {activeTab === 'description' && (
               <div className='prose max-w-none'>
                 <div className='bg-white rounded-xl p-6 shadow-sm'>
-                  <p className='text-gray-700 leading-relaxed whitespace-pre-line'>
-                    {product.description}
-                  </p>
+                  {/* Sourced-product descriptions are stored as HTML (AI-rewritten with
+                      <p>/<ul>/<li> markup); manually-entered ones are plain text with no
+                      tags, which renders identically through innerHTML as it would as a
+                      plain string -- so this is safe for both, not sourcing-specific. */}
+                  <div
+                    className='text-gray-700 leading-relaxed whitespace-pre-line [&_ul]:list-disc [&_ul]:pl-5 [&_li]:mb-1 [&_p]:mb-3'
+                    dangerouslySetInnerHTML={{ __html: product.description || '' }}
+                  />
                 </div>
               </div>
             )}

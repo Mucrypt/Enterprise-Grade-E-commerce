@@ -194,7 +194,7 @@ describe('commitSourcedProduct -- the one function that writes to products', () 
     const calls = mockClient.query.mock.calls
     expect(calls.filter((c: any[]) => c[0].includes('INSERT INTO products')).length).toBe(1)
     expect(calls.filter((c: any[]) => c[0].includes('INSERT INTO inventory')).length).toBe(1)
-    expect(calls.filter((c: any[]) => c[0].includes('INSERT INTO product_images')).length).toBe(1)
+    expect(calls.filter((c: any[]) => c[0].includes('INSERT INTO product_media')).length).toBe(1)
     expect(calls.filter((c: any[]) => c[0].includes('INSERT INTO product_specifications')).length).toBe(1)
     expect(calls.filter((c: any[]) => c[0].includes('INSERT INTO product_unit_economics')).length).toBe(1)
     // Never touches product_variations -- confirmed stub-only elsewhere in this codebase.
@@ -231,7 +231,7 @@ describe('commitSourcedProduct -- the one function that writes to products', () 
     const productInsert = mockClient.query.mock.calls.find((c: any[]) => c[0].includes('INSERT INTO products'))!
     expect(productInsert[1]).toContain('Founder-edited title')
     expect(productInsert[1]).toContain('<p>Founder-edited description.</p>')
-    const imageInsert = mockClient.query.mock.calls.find((c: any[]) => c[0].includes('INSERT INTO product_images'))!
+    const imageInsert = mockClient.query.mock.calls.find((c: any[]) => c[0].includes('INSERT INTO product_media'))!
     expect(imageInsert[1]).toContain('https://cdn.alibaba.com/founder-choice.jpg')
   })
 

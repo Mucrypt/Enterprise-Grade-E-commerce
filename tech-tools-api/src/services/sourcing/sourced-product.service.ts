@@ -457,11 +457,17 @@ export async function commitSourcedProduct(id: string, userId: string): Promise<
 
     await client.query(`INSERT INTO inventory (product_id, current_stock, reserved_stock) VALUES ($1, 0, 0)`, [productId])
 
+    // product_media, not product_images -- the public storefront/mobile
+    // API (GET /api/v1/products) reads images from product_media, exactly
+    // like the normal admin product-image-upload path does. product_images
+    // is a legacy table nothing in the normal create-product flow writes
+    // to either; a live test (2026-08-21) confirmed writing there left
+    // every committed product showing a placeholder image on the storefront.
     for (const [index, image] of images.entries()) {
       if (!image?.url) continue
       await client.query(
-        `INSERT INTO product_images (product_id, image_url, alt_text, is_primary, display_order) VALUES ($1, $2, $3, $4, $5)`,
-        [productId, image.url, image.altText ?? null, index === 0, image.position ?? index],
+        `INSERT INTO product_media (product_id, type, url, alt_text, position, is_primary) VALUES ($1, 'image', $2, $3, $4, $5)`,
+        [productId, image.url, image.altText ?? null, image.position ?? index, index === 0],
       )
     }
 
