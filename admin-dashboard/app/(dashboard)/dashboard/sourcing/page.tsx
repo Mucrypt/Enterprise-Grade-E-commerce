@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { RequirePagePermission } from '@/components/auth/RequirePagePermission'
 import sourcingService, { SourcedProductStatus } from '@/services/sourcing.service'
+import { productService } from '@/services/product.service'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -117,7 +118,7 @@ function SourcingDraftsPageContent() {
     return sorted
   }, [data?.products, search, sortBy])
 
-  const selectableIds = visibleProducts.filter((p) => p.status !== 'committed').map((p) => p.id)
+  const selectableIds = visibleProducts.map((p) => p.id)
   const allVisibleSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id))
 
   const toggleSelected = (id: string) =>
@@ -134,19 +135,44 @@ function SourcingDraftsPageContent() {
       return new Set(selectableIds)
     })
 
-  const bulkDiscardMutation = useMutation({
+  // A selection can mix still-in-review drafts with already-published
+  // ones -- those need two entirely different API calls (discard a
+  // sourced_products row vs. delete the live products row it became), so
+  // this splits the selection by status and fires both, reporting one
+  // combined result. Product deletion defaults to soft-delete (the same
+  // default the main Products page uses) so it's recoverable.
+  const bulkRemoveMutation = useMutation({
     mutationFn: async (ids: string[]) => {
-      const results = await Promise.allSettled(ids.map((id) => sourcingService.discardSourcedProduct(id, 'Bulk discarded by founder')))
-      return results.filter((r) => r.status === 'fulfilled' && r.value.success).length
+      const selected = visibleProducts.filter((p) => ids.includes(p.id))
+      const drafts = selected.filter((p) => p.status !== 'committed')
+      const published = selected.filter((p) => p.status === 'committed' && p.committed_product_id)
+
+      const [draftResults, productResults] = await Promise.all([
+        Promise.allSettled(drafts.map((p) => sourcingService.discardSourcedProduct(p.id, 'Bulk removed by founder'))),
+        Promise.allSettled(published.map((p) => productService.deleteProduct(p.committed_product_id!))),
+      ])
+
+      const discardedCount = draftResults.filter((r) => r.status === 'fulfilled' && r.value.success).length
+      const deletedCount = productResults.filter((r) => r.status === 'fulfilled').length
+      return { discardedCount, deletedCount, total: selected.length }
     },
-    onSuccess: (successCount, ids) => {
-      if (successCount === ids.length) toast.success(`Discarded ${successCount} draft${successCount === 1 ? '' : 's'}.`)
-      else toast.warning(`Discarded ${successCount} of ${ids.length} -- some failed (maybe already committed).`)
+    onSuccess: ({ discardedCount, deletedCount, total }) => {
+      const succeeded = discardedCount + deletedCount
+      const parts = []
+      if (discardedCount > 0) parts.push(`${discardedCount} draft${discardedCount === 1 ? '' : 's'} discarded`)
+      if (deletedCount > 0) parts.push(`${deletedCount} product${deletedCount === 1 ? '' : 's'} removed from the store`)
+      const message = parts.join(', ') || 'Nothing removed.'
+      if (succeeded === total) toast.success(message + '.')
+      else toast.warning(`${message} -- ${total - succeeded} failed.`)
       setSelectedIds(new Set())
       queryClient.invalidateQueries({ queryKey: ['sourcing', 'products'] })
+      queryClient.invalidateQueries({ queryKey: ['products'] })
     },
-    onError: () => toast.error('Bulk discard failed.'),
+    onError: () => toast.error('Failed to remove selected items.'),
   })
+
+  const selectedHasPublished = Array.from(selectedIds).some((id) => visibleProducts.find((p) => p.id === id)?.status === 'committed')
+  const selectedHasDrafts = Array.from(selectedIds).some((id) => visibleProducts.find((p) => p.id === id)?.status !== 'committed')
 
   const all = allData?.products || []
   const needsReview = all.filter((p) => p.status === 'ready_for_review' || p.status === 'review_edited').length
@@ -231,21 +257,24 @@ function SourcingDraftsPageContent() {
             </Button>
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant='outline' size='sm' className='gap-1.5 text-destructive'>
-                  <Trash2 className='h-3.5 w-3.5' /> Discard selected
+                <Button variant='outline' size='sm' className='gap-1.5 text-destructive' disabled={bulkRemoveMutation.isPending}>
+                  <Trash2 className='h-3.5 w-3.5' /> Remove selected
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Discard {selectedIds.size} draft{selectedIds.size > 1 ? 's' : ''}?</AlertDialogTitle>
+                  <AlertDialogTitle>Remove {selectedIds.size} item{selectedIds.size > 1 ? 's' : ''}?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This removes them from your review queue. They never become products. Already-published drafts are skipped
-                    automatically.
+                    {selectedHasDrafts && selectedHasPublished
+                      ? 'Drafts still under review are discarded; already-published products are removed from the store (soft-deleted, recoverable from the main Products page).'
+                      : selectedHasPublished
+                        ? 'These are live products -- they\'ll be removed from the storefront and mobile app (soft-deleted, recoverable from the main Products page).'
+                        : 'This removes them from your review queue. They never become products.'}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => bulkDiscardMutation.mutate(Array.from(selectedIds))}>Discard</AlertDialogAction>
+                  <AlertDialogAction onClick={() => bulkRemoveMutation.mutate(Array.from(selectedIds))}>Remove</AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
@@ -274,21 +303,17 @@ function SourcingDraftsPageContent() {
                 : p.suggested_margin_percent
                   ? Number(p.suggested_margin_percent).toFixed(0)
                   : null
-            const canSelect = p.status !== 'committed'
-
             return (
               <div key={p.id} className='relative'>
-                {canSelect && (
-                  <div
-                    className='absolute left-2 top-2 z-10 rounded bg-background/90 p-0.5'
-                    onClick={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                    }}
-                  >
-                    <Checkbox checked={selectedIds.has(p.id)} onCheckedChange={() => toggleSelected(p.id)} />
-                  </div>
-                )}
+                <div
+                  className='absolute left-2 top-2 z-10 rounded bg-background/90 p-0.5'
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                  }}
+                >
+                  <Checkbox checked={selectedIds.has(p.id)} onCheckedChange={() => toggleSelected(p.id)} />
+                </div>
                 <Link href={`/dashboard/sourcing/${p.id}`}>
                   <Card className='h-full overflow-hidden transition-shadow hover:shadow-md'>
                     <div className='relative aspect-square w-full bg-muted'>

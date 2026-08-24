@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { RequirePagePermission } from '@/components/auth/RequirePagePermission'
 import sourcingService, { CapturedImage } from '@/services/sourcing.service'
+import { productService } from '@/services/product.service'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -173,6 +174,19 @@ function SourcingDetailPageContent() {
     },
   })
 
+  const deleteProductMutation = useMutation({
+    mutationFn: () => productService.deleteProduct(product!.committed_product_id!),
+    onSuccess: (result) => {
+      if (result.success) {
+        toast.success('Removed from the store (soft-deleted -- recoverable from the main Products page).')
+        router.push('/dashboard/sourcing')
+      } else {
+        toast.error(result.error || 'Failed to remove the product.')
+      }
+    },
+    onError: () => toast.error('Failed to remove the product.'),
+  })
+
   if (isLoading || !product) {
     return <Skeleton className='h-96 rounded-lg' />
   }
@@ -207,14 +221,38 @@ function SourcingDetailPageContent() {
 
       {isCommitted && (
         <Card className='border-green-300 bg-green-50/50 dark:bg-green-950/20'>
-          <CardContent className='py-4 text-sm'>
-            Already published.{' '}
-            {product.committed_product_id ? (
-              <a href={`/products/${product.committed_product_id}/edit`} className='underline hover:no-underline'>
-                View/edit the live product on the Products page
-              </a>
-            ) : (
-              'View/edit the live product on the Products page.'
+          <CardContent className='flex flex-wrap items-center justify-between gap-3 py-4 text-sm'>
+            <span>
+              Already published.{' '}
+              {product.committed_product_id ? (
+                <a href={`/products/${product.committed_product_id}/edit`} className='underline hover:no-underline'>
+                  View/edit the live product on the Products page
+                </a>
+              ) : (
+                'View/edit the live product on the Products page.'
+              )}
+            </span>
+            {product.committed_product_id && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant='outline' size='sm' className='gap-1.5 text-destructive' disabled={deleteProductMutation.isPending}>
+                    <X className='h-3.5 w-3.5' /> Remove from store
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Remove this product from the store?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      It disappears from the storefront and mobile app immediately. This is a soft delete -- recoverable from the main
+                      Products page if you change your mind.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => deleteProductMutation.mutate()}>Remove</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             )}
           </CardContent>
         </Card>
