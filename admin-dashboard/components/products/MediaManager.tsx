@@ -265,10 +265,10 @@ export function MediaManager({
                 onDragOver={(e) => handleDragOver(e, image.id)}
                 onDragEnd={handleDragEnd}
                 className={cn(
-                  'relative group aspect-square rounded-lg overflow-hidden border-2 transition-all',
+                  'relative group aspect-square rounded-xl overflow-hidden border-2 shadow-sm transition-all',
                   image.isPrimary
                     ? 'border-primary ring-2 ring-primary/20'
-                    : 'border-border hover:border-primary/50',
+                    : 'border-border hover:border-primary/50 hover:shadow-md',
                   draggedItem === image.id && 'opacity-50',
                   image.error && 'border-destructive',
                 )}
@@ -380,16 +380,18 @@ export function MediaManager({
           <div
             {...getImageRootProps()}
             className={cn(
-              'border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors',
+              'border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors',
               isImageDragActive
                 ? 'border-primary bg-primary/5'
-                : 'border-muted-foreground/25 hover:border-primary/50',
+                : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/40',
               disabled && 'opacity-50 cursor-not-allowed',
             )}
           >
             <input {...getImageInputProps()} />
-            <Upload className='h-8 w-8 mx-auto text-muted-foreground mb-3' />
-            <p className='text-sm text-muted-foreground mb-1'>
+            <div className='mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary'>
+              <Upload className='h-5 w-5' />
+            </div>
+            <p className='text-sm font-medium mb-1'>
               {isImageDragActive
                 ? 'Drop images here...'
                 : 'Drag & drop images here, or click to select'}

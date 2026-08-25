@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ComponentType } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -10,6 +10,7 @@ import { productService, CreateProductDTO } from '@/services/product.service'
 import { categoryService } from '@/services/category.service'
 import { brandService } from '@/services/brand.service'
 import { mediaService } from '@/services/media.service'
+import { getAbsoluteMediaUrl } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -17,6 +18,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Separator } from '@/components/ui/separator'
+import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
 import {
   Card,
   CardContent,
@@ -51,6 +54,12 @@ import {
   HelpCircle,
   Sparkles,
   Plus,
+  Layers,
+  Truck,
+  Eye,
+  ListChecks,
+  CheckCircle2,
+  Circle,
 } from 'lucide-react'
 import { MediaManager, type MediaFile } from './MediaManager'
 import { BrandForm } from '@/components/brands/BrandForm'
@@ -178,6 +187,37 @@ function parseNumber(
   }
   const parsed = typeof value === 'number' ? value : parseFloat(String(value))
   return isNaN(parsed) ? defaultValue : parsed
+}
+
+// Small, reusable colored-icon section header -- used across every card in
+// this form so each section reads at a glance instead of looking like an
+// undifferentiated stack of plain white cards.
+function SectionCardHeader({
+  icon: Icon,
+  iconClassName,
+  title,
+  description,
+}: {
+  icon: ComponentType<{ className?: string }>
+  iconClassName: string
+  title: string
+  description: string
+}) {
+  return (
+    <CardHeader>
+      <div className='flex items-start gap-3'>
+        <div
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${iconClassName}`}
+        >
+          <Icon className='h-4.5 w-4.5' />
+        </div>
+        <div>
+          <CardTitle>{title}</CardTitle>
+          <CardDescription>{description}</CardDescription>
+        </div>
+      </div>
+    </CardHeader>
+  )
 }
 
 export function EnhancedProductForm({
@@ -560,60 +600,110 @@ export function EnhancedProductForm({
     return tabFields[tab]?.some((field) => errors[field]) || false
   }
 
+  // ---- Live preview + completion score (purely presentational, derived
+  // from state that already exists above -- no new data model) ----
+  const watchedDescription = watch('description')
+  const watchedCategoryId = watch('categoryId')
+  const watchedSku = watch('sku')
+  const watchedMetaTitle = watch('metaTitle')
+  const watchedIsActive = watch('isActive')
+  const watchedSalePrice = watch('salePrice')
+
+  const selectedCategory = categories.find(
+    (category: any) => category.id === watchedCategoryId,
+  )
+  const primaryPreviewImage = images.find((img) => img.isPrimary) || images[0]
+  const previewImageSrc = primaryPreviewImage?.url
+    ? primaryPreviewImage.url.startsWith('blob:')
+      ? primaryPreviewImage.url
+      : getAbsoluteMediaUrl(primaryPreviewImage.url) || primaryPreviewImage.url
+    : null
+
+  const completenessChecks = [
+    { label: 'Product name', done: !!watchedName && watchedName.trim().length >= 3 },
+    { label: 'At least one image', done: images.length > 0 },
+    { label: 'Category selected', done: !!watchedCategoryId },
+    {
+      label: 'Full description',
+      done: !!watchedDescription && watchedDescription.trim().length >= 10,
+    },
+    { label: 'Base price set', done: !!basePrice && basePrice > 0 },
+    { label: 'SKU set', done: !!watchedSku },
+    { label: 'SEO meta title', done: !!watchedMetaTitle },
+  ]
+  const completenessDone = completenessChecks.filter((check) => check.done).length
+  const completenessPercent = Math.round(
+    (completenessDone / completenessChecks.length) * 100,
+  )
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className='space-y-6'>
-      {/* Header */}
-      <div className='flex items-center justify-between'>
-        <div className='flex items-center gap-4'>
-          <Button
-            type='button'
-            variant='ghost'
-            size='icon'
-            onClick={() => router.push('/products')}
-          >
-            <ArrowLeft className='h-5 w-5' />
-          </Button>
-          <div>
-            <h1 className='text-2xl font-bold'>
-              {mode === 'create' ? 'Create Product' : 'Edit Product'}
-            </h1>
-            <p className='text-muted-foreground'>
-              {mode === 'create'
-                ? 'Add a new product to your catalog'
-                : `Editing: ${product?.name}`}
-            </p>
+    <form onSubmit={handleSubmit(onSubmit)} className='space-y-6 pb-10'>
+      {/* Sticky action bar -- stays visible while scrolling a long form */}
+      <div className='sticky top-0 z-10 -mx-6 -mt-6 border-b bg-gray-50/95 px-6 pb-4 pt-6 backdrop-blur-sm dark:bg-gray-900/95'>
+        <div className='flex flex-wrap items-center justify-between gap-4'>
+          <div className='flex items-center gap-4'>
+            <Button
+              type='button'
+              variant='ghost'
+              size='icon'
+              onClick={() => router.push('/products')}
+            >
+              <ArrowLeft className='h-5 w-5' />
+            </Button>
+            <div>
+              <div className='flex items-center gap-2'>
+                <h1 className='text-2xl font-bold tracking-tight'>
+                  {mode === 'create' ? 'Create Product' : 'Edit Product'}
+                </h1>
+                <Badge
+                  variant='outline'
+                  className={
+                    completenessPercent === 100
+                      ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-900 dark:bg-green-950 dark:text-green-400'
+                      : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-400'
+                  }
+                >
+                  {completenessPercent}% complete
+                </Badge>
+              </div>
+              <p className='text-muted-foreground'>
+                {mode === 'create'
+                  ? 'Add a new product to your catalog'
+                  : `Editing: ${product?.name}`}
+              </p>
+            </div>
           </div>
-        </div>
-        <div className='flex items-center gap-3'>
-          <Button
-            type='button'
-            variant='outline'
-            onClick={() => router.push('/products')}
-            disabled={isPending}
-          >
-            Cancel
-          </Button>
-          <Button type='submit' disabled={isPending}>
-            {isPending ? (
-              <>
-                <Loader2 className='h-4 w-4 mr-2 animate-spin' />
-                {mode === 'create' ? 'Creating...' : 'Saving...'}
-              </>
-            ) : (
-              <>
-                <Save className='h-4 w-4 mr-2' />
-                {mode === 'create' ? 'Create Product' : 'Save Changes'}
-              </>
-            )}
-          </Button>
+          <div className='flex items-center gap-3'>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={() => router.push('/products')}
+              disabled={isPending}
+            >
+              Cancel
+            </Button>
+            <Button type='submit' disabled={isPending}>
+              {isPending ? (
+                <>
+                  <Loader2 className='h-4 w-4 mr-2 animate-spin' />
+                  {mode === 'create' ? 'Creating...' : 'Saving...'}
+                </>
+              ) : (
+                <>
+                  <Save className='h-4 w-4 mr-2' />
+                  {mode === 'create' ? 'Create Product' : 'Save Changes'}
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </div>
 
-      <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
+      <div className='grid grid-cols-1 gap-6 lg:grid-cols-3'>
         {/* Main Content */}
         <div className='lg:col-span-2 space-y-6'>
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className='grid grid-cols-5 w-full'>
+            <TabsList className='grid h-11 grid-cols-5 w-full'>
               <TabsTrigger
                 value='basic'
                 className='flex items-center gap-2'
@@ -623,6 +713,15 @@ export function EnhancedProductForm({
                 <span className='hidden sm:inline'>Basic</span>
                 {getTabErrors('basic') && (
                   <span className='h-2 w-2 rounded-full bg-destructive' />
+                )}
+              </TabsTrigger>
+              <TabsTrigger value='media' className='flex items-center gap-2'>
+                <ImageIcon className='h-4 w-4' />
+                <span className='hidden sm:inline'>Media</span>
+                {images.length > 0 && (
+                  <Badge variant='secondary' className='h-4 px-1 text-[10px]'>
+                    {images.length}
+                  </Badge>
                 )}
               </TabsTrigger>
               <TabsTrigger
@@ -647,10 +746,6 @@ export function EnhancedProductForm({
                   <span className='h-2 w-2 rounded-full bg-destructive' />
                 )}
               </TabsTrigger>
-              <TabsTrigger value='media' className='flex items-center gap-2'>
-                <ImageIcon className='h-4 w-4' />
-                <span className='hidden sm:inline'>Media</span>
-              </TabsTrigger>
               <TabsTrigger
                 value='seo'
                 className='flex items-center gap-2'
@@ -667,12 +762,12 @@ export function EnhancedProductForm({
             {/* Basic Information Tab */}
             <TabsContent value='basic' className='space-y-6 mt-6'>
               <Card>
-                <CardHeader>
-                  <CardTitle>Product Information</CardTitle>
-                  <CardDescription>
-                    Basic details about your product
-                  </CardDescription>
-                </CardHeader>
+                <SectionCardHeader
+                  icon={Package}
+                  iconClassName='bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400'
+                  title='Product Information'
+                  description='Basic details about your product'
+                />
                 <CardContent className='space-y-4'>
                   {/* Product Name */}
                   <div className='space-y-2'>
@@ -777,12 +872,12 @@ export function EnhancedProductForm({
 
               {/* Category & Brand */}
               <Card>
-                <CardHeader>
-                  <CardTitle>Organization</CardTitle>
-                  <CardDescription>
-                    Categorize your product for better discovery
-                  </CardDescription>
-                </CardHeader>
+                <SectionCardHeader
+                  icon={Layers}
+                  iconClassName='bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-400'
+                  title='Organization'
+                  description='Categorize your product for better discovery'
+                />
                 <CardContent className='space-y-4'>
                   <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
                     {/* Category */}
@@ -869,15 +964,41 @@ export function EnhancedProductForm({
               </Card>
             </TabsContent>
 
+            {/* Media Tab -- moved up next to Basic since images are the
+                highest-leverage field on the page (matches the "images
+                first" pattern from every serious marketplace listing flow) */}
+            <TabsContent value='media' className='mt-6'>
+              <Card>
+                <SectionCardHeader
+                  icon={ImageIcon}
+                  iconClassName='bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400'
+                  title='Product Media'
+                  description='Add images and videos -- listings with 5+ photos convert noticeably better'
+                />
+                <CardContent>
+                  <MediaManager
+                    images={images}
+                    videos={videos}
+                    onImagesChange={setImages}
+                    onVideosChange={setVideos}
+                    onImageRemove={handleImageRemove}
+                    maxImages={10}
+                    maxVideos={3}
+                    disabled={isPending}
+                  />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
             {/* Pricing Tab */}
             <TabsContent value='pricing' className='space-y-6 mt-6'>
               <Card>
-                <CardHeader>
-                  <CardTitle>Pricing</CardTitle>
-                  <CardDescription>
-                    Set your product pricing and cost information
-                  </CardDescription>
-                </CardHeader>
+                <SectionCardHeader
+                  icon={DollarSign}
+                  iconClassName='bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400'
+                  title='Pricing'
+                  description='Set your product pricing and cost information'
+                />
                 <CardContent className='space-y-6'>
                   <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
                     {/* Base Price */}
@@ -1012,12 +1133,12 @@ export function EnhancedProductForm({
             {/* Inventory Tab */}
             <TabsContent value='inventory' className='space-y-6 mt-6'>
               <Card>
-                <CardHeader>
-                  <CardTitle>Inventory</CardTitle>
-                  <CardDescription>
-                    Manage stock and product identifiers
-                  </CardDescription>
-                </CardHeader>
+                <SectionCardHeader
+                  icon={Warehouse}
+                  iconClassName='bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400'
+                  title='Inventory'
+                  description='Manage stock and product identifiers'
+                />
                 <CardContent className='space-y-4'>
                   {/* SKU */}
                   <div className='space-y-2'>
@@ -1131,12 +1252,12 @@ export function EnhancedProductForm({
 
               {/* Shipping Section */}
               <Card>
-                <CardHeader>
-                  <CardTitle>Shipping</CardTitle>
-                  <CardDescription>
-                    Product dimensions and weight for shipping calculations
-                  </CardDescription>
-                </CardHeader>
+                <SectionCardHeader
+                  icon={Truck}
+                  iconClassName='bg-sky-50 text-sky-600 dark:bg-sky-500/10 dark:text-sky-400'
+                  title='Shipping'
+                  description='Product dimensions and weight for shipping calculations'
+                />
                 <CardContent className='space-y-4'>
                   {/* Digital Product */}
                   <div className='flex items-center space-x-3 p-4 rounded-lg border'>
@@ -1262,39 +1383,15 @@ export function EnhancedProductForm({
               </Card>
             </TabsContent>
 
-            {/* Media Tab */}
-            <TabsContent value='media' className='mt-6'>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Product Media</CardTitle>
-                  <CardDescription>
-                    Add images and videos to showcase your product
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <MediaManager
-                    images={images}
-                    videos={videos}
-                    onImagesChange={setImages}
-                    onVideosChange={setVideos}
-                    onImageRemove={handleImageRemove}
-                    maxImages={10}
-                    maxVideos={3}
-                    disabled={isPending}
-                  />
-                </CardContent>
-              </Card>
-            </TabsContent>
-
             {/* SEO Tab */}
             <TabsContent value='seo' className='space-y-6 mt-6'>
               <Card>
-                <CardHeader>
-                  <CardTitle>Search Engine Optimization</CardTitle>
-                  <CardDescription>
-                    Optimize how your product appears in search results
-                  </CardDescription>
-                </CardHeader>
+                <SectionCardHeader
+                  icon={Search}
+                  iconClassName='bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400'
+                  title='Search Engine Optimization'
+                  description='Optimize how your product appears in search results'
+                />
                 <CardContent className='space-y-4'>
                   {/* Meta Title */}
                   <div className='space-y-2'>
@@ -1367,14 +1464,118 @@ export function EnhancedProductForm({
 
         {/* Sidebar */}
         <div className='space-y-6'>
+          {/* Live Preview -- the direct equivalent of a storefront listing
+              card, so the founder can see what a shopper would see without
+              leaving the form */}
+          <Card className='overflow-hidden'>
+            <SectionCardHeader
+              icon={Eye}
+              iconClassName='bg-slate-100 text-slate-600 dark:bg-slate-500/10 dark:text-slate-400'
+              title='Live Preview'
+              description='How this looks to customers'
+            />
+            <CardContent>
+              <div className='overflow-hidden rounded-lg border bg-card'>
+                <div className='relative aspect-square w-full bg-muted'>
+                  {previewImageSrc ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={previewImageSrc}
+                      alt=''
+                      className='h-full w-full object-cover'
+                    />
+                  ) : (
+                    <div className='flex h-full w-full flex-col items-center justify-center gap-2 text-muted-foreground'>
+                      <ImageIcon className='h-8 w-8' />
+                      <span className='text-xs'>No image yet</span>
+                    </div>
+                  )}
+                  {!watchedIsActive && (
+                    <Badge variant='secondary' className='absolute left-2 top-2'>
+                      Draft
+                    </Badge>
+                  )}
+                  {images.length > 1 && (
+                    <Badge
+                      variant='secondary'
+                      className='absolute right-2 top-2'
+                    >
+                      +{images.length - 1} more
+                    </Badge>
+                  )}
+                </div>
+                <div className='space-y-1.5 p-3'>
+                  {selectedCategory && (
+                    <p className='text-xs font-medium uppercase tracking-wide text-muted-foreground'>
+                      {selectedCategory.name}
+                    </p>
+                  )}
+                  <p className='line-clamp-2 text-sm font-medium leading-snug'>
+                    {watchedName || 'Your product name will appear here'}
+                  </p>
+                  <div className='flex items-center gap-2 pt-0.5'>
+                    {watchedSalePrice ? (
+                      <>
+                        <span className='text-base font-semibold text-green-600'>
+                          ${Number(watchedSalePrice).toFixed(2)}
+                        </span>
+                        <span className='text-xs text-muted-foreground line-through'>
+                          ${Number(basePrice || 0).toFixed(2)}
+                        </span>
+                      </>
+                    ) : (
+                      <span className='text-base font-semibold'>
+                        ${Number(basePrice || 0).toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Suggestions / completeness checklist */}
+          <Card>
+            <SectionCardHeader
+              icon={ListChecks}
+              iconClassName='bg-teal-50 text-teal-600 dark:bg-teal-500/10 dark:text-teal-400'
+              title='Suggestions'
+              description='Complete these to improve visibility'
+            />
+            <CardContent className='space-y-3'>
+              <Progress value={completenessPercent} className='h-1.5' />
+              <ul className='space-y-2'>
+                {completenessChecks.map((check) => (
+                  <li
+                    key={check.label}
+                    className='flex items-center gap-2 text-sm'
+                  >
+                    {check.done ? (
+                      <CheckCircle2 className='h-4 w-4 shrink-0 text-green-600' />
+                    ) : (
+                      <Circle className='h-4 w-4 shrink-0 text-muted-foreground' />
+                    )}
+                    <span
+                      className={
+                        check.done ? 'text-muted-foreground line-through' : ''
+                      }
+                    >
+                      {check.label}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+
           {/* Status Card */}
           <Card>
-            <CardHeader>
-              <CardTitle className='flex items-center gap-2'>
-                <Settings className='h-4 w-4' />
-                Status
-              </CardTitle>
-            </CardHeader>
+            <SectionCardHeader
+              icon={Settings}
+              iconClassName='bg-zinc-100 text-zinc-600 dark:bg-zinc-500/10 dark:text-zinc-400'
+              title='Status'
+              description='Control visibility and placement'
+            />
             <CardContent className='space-y-4'>
               {/* Active Status */}
               <div className='flex items-center justify-between p-3 rounded-lg border'>
