@@ -129,7 +129,16 @@ const nextConfig: NextConfig = {
   },
 
   // Enable Turbopack (Next.js 16+ default)
-  turbopack: {},
+  // `root` pinned explicitly: this monorepo has TWO lockfiles (the root
+  // npm-workspaces one, and a standalone admin-dashboard/package-lock.json
+  // kept purely so this service's Docker build can `npm ci` without pulling
+  // in the whole monorepo). Without this, Turbopack's dev-mode root
+  // inference picks the wrong one and resolves every module from the
+  // monorepo root instead of this package -- confirmed live (2026-08-25):
+  // `next dev` failed outright on any dependency that wasn't hoisted to the
+  // root node_modules (tw-animate-css), even though it resolves fine from
+  // admin-dashboard's own node_modules. `next build` was unaffected, only dev.
+  turbopack: { root: __dirname },
 }
 
 export default nextConfig

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { RequirePagePermission } from '@/components/auth/RequirePagePermission'
 import sourcingService, { SourcedProductStatus } from '@/services/sourcing.service'
@@ -26,7 +27,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { toast } from 'sonner'
-import { Key, ImageOff, PackageSearch, Clock3, AlertTriangle, CheckCircle2, Search, Trash2, X } from 'lucide-react'
+import { Key, ImageOff, PackageSearch, Clock3, AlertTriangle, CheckCircle2, Search, Trash2, X, Scale } from 'lucide-react'
 
 type SortOption = 'newest' | 'oldest' | 'margin_high' | 'margin_low' | 'cost_high' | 'cost_low'
 
@@ -65,6 +66,7 @@ const STATUS_VARIANT: Record<SourcedProductStatus, 'default' | 'secondary' | 'de
  * until a human explicitly commits it (see [id]/page.tsx).
  */
 function SourcingDraftsPageContent() {
+  const router = useRouter()
   const queryClient = useQueryClient()
   const [statusFilter, setStatusFilter] = useState<SourcedProductStatus | 'all'>('all')
   const [search, setSearch] = useState('')
@@ -254,6 +256,16 @@ function SourcingDraftsPageContent() {
             <span className='text-sm text-muted-foreground'>{selectedIds.size} selected</span>
             <Button variant='ghost' size='sm' className='gap-1.5' onClick={() => setSelectedIds(new Set())}>
               <X className='h-3.5 w-3.5' /> Clear
+            </Button>
+            <Button
+              variant='outline'
+              size='sm'
+              className='gap-1.5'
+              disabled={selectedIds.size < 2}
+              title={selectedIds.size < 2 ? 'Select at least 2 to compare' : undefined}
+              onClick={() => router.push(`/dashboard/sourcing/compare?ids=${Array.from(selectedIds).join(',')}`)}
+            >
+              <Scale className='h-3.5 w-3.5' /> Compare
             </Button>
             <AlertDialog>
               <AlertDialogTrigger asChild>
