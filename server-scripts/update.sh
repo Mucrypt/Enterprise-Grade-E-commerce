@@ -91,6 +91,15 @@ case "$SERVICE" in
         ;;
 esac
 
+# nginx's upstream blocks resolve the api/admin-dashboard/web-store
+# container hostnames to an IP once, at nginx startup, and never
+# re-resolve on their own -- recreating one of those containers above
+# gives it a new internal Docker IP, and nginx keeps sending traffic to
+# the old, now-dead one until it's reloaded. Graceful reload (workers
+# restart cleanly, no dropped connections), not a container restart.
+log_info "Reloading nginx so it picks up the new container..."
+./server-scripts/nginx-reload.sh
+
 # Wait for containers to be healthy
 log_info "Waiting for services to be healthy..."
 sleep 10
