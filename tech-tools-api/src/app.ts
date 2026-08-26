@@ -44,16 +44,35 @@ app.use(
 // routes need a different policy than every other route).
 app.use(cors(corsOptionsDelegate))
 
-// Rate limiting
+// Rate limiting -- applies to every /api/ route, including plain browsing
+// (product listing, product detail, categories, search). The previous
+// 100-requests-per-15-minutes budget (~6.7/min) was tight enough that a
+// single real shopper's session -- a product page plus its follow-up XHRs,
+// a few searches, some pagination -- could exhaust it and start seeing
+// "Too many requests" during completely normal use, not abuse. Raised to a
+// per-minute window so it resets quickly for real visitors while still
+// capping sustained bot/scraper behavior.
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  windowMs: 60 * 1000, // 1 minute
+  max: 300, // Limit each IP to 300 requests per minute
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
   validate: false, // Disable validation warnings in production
 })
-app.use('/api/', limiter)
+// DISABLE_RATE_LIMIT is only ever meant to be set for the duration of a
+// deliberate load test (see tech-tools-api/load-tests/) -- a real load-test
+// tool simulates many concurrent "virtual users" from one real source IP,
+// which this limiter would otherwise throttle almost immediately, testing
+// the rate limiter instead of the server. Must default to enabled and never
+// be left set outside a planned test window.
+if (process.env.DISABLE_RATE_LIMIT === 'true') {
+  logger.warn(
+    '⚠️  DISABLE_RATE_LIMIT=true -- API rate limiting is OFF. This must only be set during a deliberate load test.',
+  )
+} else {
+  app.use('/api/', limiter)
+}
 
 // Compression
 app.use(compression())
