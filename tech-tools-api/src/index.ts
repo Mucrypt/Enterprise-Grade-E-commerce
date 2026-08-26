@@ -9,10 +9,12 @@ dotenv.config()
 // Round 1 §6. Must run before any other module constructs a Date.
 process.env.TZ = process.env.TZ || 'UTC'
 
+import cluster from 'cluster'
 import http from 'http'
 import app from './app'
 import { connectDatabase } from './database/connection'
 import { connectRedis } from './config/redis'
+import { resolveWorkerCount } from './utils/cluster-config'
 import {
   startNewsletterQueueWorker,
   stopNewsletterQueueWorker,
@@ -55,98 +57,134 @@ import shippingService from './services/shipping'
 import logger from './utils/logger'
 
 const PORT = process.env.PORT || 9000
+const numWorkers = resolveWorkerCount()
 
-// Create HTTP server for Socket.io
-const httpServer = http.createServer(app)
+if (cluster.isPrimary && numWorkers > 1) {
+  // ---------------------------------------------------------------------
+  // Primary process: forks one worker per CPU core and exits nothing on
+  // its own -- every request is handled by a worker below. Node's cluster
+  // module load-balances incoming connections across them automatically
+  // (all workers listen on the same PORT). If a worker dies, it's
+  // restarted rather than silently shrinking capacity.
+  // ---------------------------------------------------------------------
+  logger.info(
+    `🧵 Primary ${process.pid} starting ${numWorkers} worker processes (one per CPU core) -- set WEB_CONCURRENCY to override`,
+  )
+  for (let i = 0; i < numWorkers; i++) cluster.fork()
 
-async function startServer() {
-  try {
-    // Connect to database
-    await connectDatabase()
-    logger.info('✅ Database connected successfully')
-
-    // Connect to Redis
-    await connectRedis()
-    logger.info('✅ Redis connected successfully')
-
-    // Load shipping carrier credentials from the database. Previously this
-    // only ran when an admin edited a carrier via the dashboard, so a fresh
-    // deploy (or a restart before any admin touched carrier settings) had
-    // zero enabled carriers until someone happened to open that screen.
-    // Non-fatal on failure -- ShippingService.initialize() already logs and
-    // leaves carriers disabled rather than throwing, which now correctly
-    // surfaces as "carrier unavailable" (see shipping.config.ts) instead of
-    // silently falling back to mock data outside development.
-    await shippingService.initialize()
-    logger.info(
-      `✅ Shipping carriers initialized: ${
-        shippingService.getEnabledCarriers().join(', ') || 'none enabled'
-      }`,
+  cluster.on('exit', (worker, code, signal) => {
+    logger.error(
+      `Worker ${worker.process.pid} exited (code=${code}, signal=${signal}) -- restarting it`,
     )
+    cluster.fork()
+  })
 
-    // Initialize Socket.io
-    webSocketService.initialize(httpServer)
-
-    // Initialize notification services (email, Slack, SMS)
-    notificationDispatcher.initializeAll()
-
-    // Start background workers
-    startNewsletterQueueWorker()
-    startSupplierGuardrailsWorker()
-    startAnomalyDetectionWorker()
-    startMetricsBroadcaster()
-    startPromotionQueueWorker()
-    startChannelProductSyncWorker()
-    startChannelInventoryDiffWorker()
-    startChannelOrderImportWorker()
-    startSourcingRewriteWorker()
-
-    // Start server
-    httpServer.listen(PORT, () => {
-      logger.info(`🚀 Server running on port ${PORT}`)
-      logger.info(`📚 API Documentation: http://localhost:${PORT}/api/v1/docs`)
-      logger.info(`🔍 Health check: http://localhost:${PORT}/health`)
-      logger.info(`🔌 WebSocket: ws://localhost:${PORT}`)
-    })
-  } catch (error) {
-    logger.error('Failed to start server:', error)
-    process.exit(1)
+  const shutdownPrimary = (signal: NodeJS.Signals) => {
+    logger.info(`Primary received ${signal}. Signaling all workers to shut down...`)
+    for (const id in cluster.workers) {
+      cluster.workers[id]?.process.kill(signal)
+    }
   }
+  process.on('SIGTERM', () => shutdownPrimary('SIGTERM'))
+  process.on('SIGINT', () => shutdownPrimary('SIGINT'))
+} else {
+  // ---------------------------------------------------------------------
+  // Worker process (or the single process when clustering is off, e.g.
+  // `npm run dev`, or NODE_ENV != production). This is the original
+  // single-process startup logic, unchanged, except for one addition:
+  // singleton work (queue pollers, channel sync, the WebSocket
+  // broadcaster) only runs in ONE worker. Running it in every clustered
+  // worker would multiply emails sent and external API calls made, and
+  // Socket.io's real-time push only reaches clients connected to
+  // whichever worker holds the broadcasting instance anyway -- no
+  // benefit to starting it more than once.
+  // ---------------------------------------------------------------------
+  const isSingletonWorker = !cluster.isWorker || cluster.worker?.id === 1
+
+  const httpServer = http.createServer(app)
+
+  async function startServer() {
+    try {
+      // Connect to database
+      await connectDatabase()
+      logger.info('✅ Database connected successfully')
+
+      // Connect to Redis
+      await connectRedis()
+      logger.info('✅ Redis connected successfully')
+
+      // Load shipping carrier credentials from the database. Previously this
+      // only ran when an admin edited a carrier via the dashboard, so a fresh
+      // deploy (or a restart before any admin touched carrier settings) had
+      // zero enabled carriers until someone happened to open that screen.
+      // Non-fatal on failure -- ShippingService.initialize() already logs and
+      // leaves carriers disabled rather than throwing, which now correctly
+      // surfaces as "carrier unavailable" (see shipping.config.ts) instead of
+      // silently falling back to mock data outside development.
+      await shippingService.initialize()
+      logger.info(
+        `✅ Shipping carriers initialized: ${
+          shippingService.getEnabledCarriers().join(', ') || 'none enabled'
+        }`,
+      )
+
+      if (isSingletonWorker) {
+        // Initialize Socket.io
+        webSocketService.initialize(httpServer)
+
+        // Initialize notification services (email, Slack, SMS)
+        notificationDispatcher.initializeAll()
+
+        // Start background workers
+        startNewsletterQueueWorker()
+        startSupplierGuardrailsWorker()
+        startAnomalyDetectionWorker()
+        startMetricsBroadcaster()
+        startPromotionQueueWorker()
+        startChannelProductSyncWorker()
+        startChannelInventoryDiffWorker()
+        startChannelOrderImportWorker()
+        startSourcingRewriteWorker()
+      }
+
+      // Start server
+      httpServer.listen(PORT, () => {
+        const workerLabel = cluster.isWorker ? ` (worker ${cluster.worker?.id}, pid ${process.pid})` : ''
+        logger.info(`🚀 Server running on port ${PORT}${workerLabel}`)
+        logger.info(`📚 API Documentation: http://localhost:${PORT}/api/v1/docs`)
+        logger.info(`🔍 Health check: http://localhost:${PORT}/health`)
+        if (isSingletonWorker) {
+          logger.info(`🔌 WebSocket: ws://localhost:${PORT}`)
+        }
+      })
+    } catch (error) {
+      logger.error('Failed to start server:', error)
+      process.exit(1)
+    }
+  }
+
+  startServer()
+
+  // Graceful shutdown
+  const shutdownWorker = (signal: string) => {
+    logger.info(`${signal} received. Shutting down gracefully...`)
+    if (isSingletonWorker) {
+      stopNewsletterQueueWorker()
+      stopSupplierGuardrailsWorker()
+      stopAnomalyDetectionWorker()
+      stopMetricsBroadcaster()
+      stopPromotionQueueWorker()
+      stopChannelProductSyncWorker()
+      stopChannelInventoryDiffWorker()
+      stopChannelOrderImportWorker()
+      stopSourcingRewriteWorker()
+    }
+    httpServer.close(() => {
+      logger.info('Server closed')
+      process.exit(0)
+    })
+  }
+
+  process.on('SIGTERM', () => shutdownWorker('SIGTERM'))
+  process.on('SIGINT', () => shutdownWorker('SIGINT'))
 }
-
-startServer()
-
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM received. Shutting down gracefully...')
-  stopNewsletterQueueWorker()
-  stopSupplierGuardrailsWorker()
-  stopAnomalyDetectionWorker()
-  stopMetricsBroadcaster()
-  stopPromotionQueueWorker()
-  stopChannelProductSyncWorker()
-  stopChannelInventoryDiffWorker()
-  stopChannelOrderImportWorker()
-  stopSourcingRewriteWorker()
-  httpServer.close(() => {
-    logger.info('Server closed')
-    process.exit(0)
-  })
-})
-
-process.on('SIGINT', () => {
-  logger.info('SIGINT received. Shutting down gracefully...')
-  stopNewsletterQueueWorker()
-  stopSupplierGuardrailsWorker()
-  stopAnomalyDetectionWorker()
-  stopMetricsBroadcaster()
-  stopPromotionQueueWorker()
-  stopChannelProductSyncWorker()
-  stopChannelInventoryDiffWorker()
-  stopChannelOrderImportWorker()
-  stopSourcingRewriteWorker()
-  httpServer.close(() => {
-    logger.info('Server closed')
-    process.exit(0)
-  })
-})
