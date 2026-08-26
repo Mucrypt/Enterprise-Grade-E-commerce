@@ -6,6 +6,38 @@ services:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
+    # Stock postgres:15-alpine defaults (128MB shared_buffers, tuned for a
+    # laptop) were never overridden -- these flags size Postgres for this
+    # server's real 8GB RAM (CPX32), shared with 7 other containers.
+    #   shared_buffers        : 25% of RAM, the standard starting point --
+    #                            a real allocation held for Postgres's whole
+    #                            lifetime, deliberately conservative given
+    #                            everything else running alongside it.
+    #   effective_cache_size  : ~75% of RAM -- NOT an allocation, just a
+    #                            query-planner hint about how much OS disk
+    #                            cache is realistically available.
+    #   work_mem              : per sort/hash operation, PER CONNECTION --
+    #                            kept modest since it multiplies under
+    #                            concurrent load (see max_connections below).
+    #   maintenance_work_mem  : VACUUM/CREATE INDEX only, not concurrent.
+    #   random_page_cost      : lowered from the disk-drive-era default of
+    #                            4.0 -- Hetzner Cloud volumes are SSD-backed,
+    #                            so the planner should stop assuming random
+    #                            reads are expensive.
+    #   max_connections       : the API's own pool now targets ~80 combined
+    #                            connections across its 4 clustered workers
+    #                            (see tech-tools-api/src/config/database.ts)
+    #                            -- raised from the default 100 to keep
+    #                            comfortable headroom for pgAdmin/migrations
+    #                            on top of that, instead of right up against it.
+    command: >
+      postgres
+      -c shared_buffers=2GB
+      -c effective_cache_size=6GB
+      -c work_mem=16MB
+      -c maintenance_work_mem=512MB
+      -c random_page_cost=1.1
+      -c max_connections=150
     volumes:
       - postgres_prod_data:/var/lib/postgresql/data
       - ../tech-tools-api/backups:/backups
