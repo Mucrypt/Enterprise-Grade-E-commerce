@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CheckCircle2, AlertTriangle, XCircle } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface StepProps {
   campaign: CampaignDetail
@@ -21,6 +22,10 @@ export function ReviewValidateStep({ campaign, onValidated }: StepProps) {
     onSuccess: (data) => {
       setResults(data.results)
       onValidated()
+      toast.success('Validation complete.')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to validate campaign.')
     },
   })
 

@@ -44,6 +44,7 @@ function ChannelConnectionPageContent() {
       toast.success('Disconnected.')
       queryClient.invalidateQueries({ queryKey: ['channels', 'accounts'] })
     },
+    onError: () => toast.error('Failed to disconnect.'),
   })
 
   if (isLoading || !data) {

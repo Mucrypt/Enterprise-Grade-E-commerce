@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
+import { toast } from 'sonner'
 
 interface AlertThreshold {
   id: string
@@ -64,6 +65,10 @@ export default function AlertThresholdsPage() {
       queryClient.invalidateQueries({ queryKey: ['alert-thresholds'] })
       setEditingId(null)
       setFormData({})
+      toast.success('Alert threshold updated.')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to update alert threshold.')
     },
   })
 
@@ -74,6 +79,10 @@ export default function AlertThresholdsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['alert-thresholds'] })
+      toast.success('Alert threshold reset to default.')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to reset alert threshold.')
     },
   })
 

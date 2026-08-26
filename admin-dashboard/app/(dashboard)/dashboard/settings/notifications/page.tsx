@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { AlertCircle, Mail, MessageSquare, Phone, Save } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
+import { toast } from 'sonner'
 
 interface NotificationPreference {
   adminId: string
@@ -43,6 +44,12 @@ export default function NotificationSettingsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notification-preferences'] })
+      toast.success('Notification preferences saved.')
+    },
+    onError: (error: any) => {
+      toast.error(
+        error.response?.data?.message || 'Failed to save notification preferences.',
+      )
     },
   })
 

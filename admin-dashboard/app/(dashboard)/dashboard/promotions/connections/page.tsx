@@ -44,6 +44,7 @@ function ConnectionsPageContent() {
       toast.success('Disconnected.')
       queryClient.invalidateQueries({ queryKey: ['promotions', 'connections'] })
     },
+    onError: () => toast.error('Failed to disconnect.'),
   })
 
   if (isLoading || !data) {

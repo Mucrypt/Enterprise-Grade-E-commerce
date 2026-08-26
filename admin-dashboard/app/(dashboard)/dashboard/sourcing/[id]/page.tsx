@@ -203,6 +203,7 @@ function SourcingDetailPageContent() {
         toast.error(result.error)
       }
     },
+    onError: () => toast.error('Failed to discard draft.'),
   })
 
   const deleteProductMutation = useMutation({
