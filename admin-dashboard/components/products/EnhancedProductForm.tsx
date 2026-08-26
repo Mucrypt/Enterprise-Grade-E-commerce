@@ -10,6 +10,7 @@ import { productService, CreateProductDTO } from '@/services/product.service'
 import { categoryService } from '@/services/category.service'
 import { brandService } from '@/services/brand.service'
 import { mediaService } from '@/services/media.service'
+import deliveryTemplateService from '@/services/delivery-template.service'
 import { getAbsoluteMediaUrl } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -140,6 +141,7 @@ const productSchema = z.object({
   height: z.number().min(0, 'Height must be positive').optional().nullable(),
   dimensionsUnit: z.enum(['cm', 'in', 'm']).default('cm'),
   isDigital: z.boolean().default(false),
+  deliveryTemplateId: z.string().optional().nullable(),
 
   // SEO
   metaTitle: z
@@ -309,8 +311,15 @@ export function EnhancedProductForm({
     },
   })
 
+  // Fetch delivery estimate templates (for the optional per-product override)
+  const { data: deliveryTemplatesData } = useQuery({
+    queryKey: ['delivery-templates'],
+    queryFn: () => deliveryTemplateService.listTemplates(),
+  })
+
   const categories = categoriesData || []
   const brands = brandsData || []
+  const deliveryTemplates = deliveryTemplatesData?.templates || []
 
   // Create brand mutation
   const createBrandMutation = useMutation({
@@ -362,6 +371,7 @@ export function EnhancedProductForm({
       height: parseNumber(product?.height, null),
       dimensionsUnit: (product?.dimensionsUnit as 'cm' | 'in' | 'm') || 'cm',
       isDigital: product?.isDigital || false,
+      deliveryTemplateId: product?.deliveryTemplateId || null,
       metaTitle: product?.metaTitle || '',
       metaDescription: product?.metaDescription || '',
       isActive: product?.isActive ?? true,
@@ -411,6 +421,7 @@ export function EnhancedProductForm({
         maxOrderQuantity: data.maxOrderQuantity || undefined,
         metaTitle: data.metaTitle || undefined,
         metaDescription: data.metaDescription || undefined,
+        deliveryTemplateId: data.deliveryTemplateId || null,
       }
 
       // Get files from media state
@@ -469,6 +480,7 @@ export function EnhancedProductForm({
         maxOrderQuantity: data.maxOrderQuantity || undefined,
         metaTitle: data.metaTitle || undefined,
         metaDescription: data.metaDescription || undefined,
+        deliveryTemplateId: data.deliveryTemplateId || null,
       }
 
       // Delete removed images (ones that were in initial set but not in current set)
@@ -1379,6 +1391,37 @@ export function EnhancedProductForm({
                       </div>
                     </>
                   )}
+
+                  {/* Delivery estimate override */}
+                  <div className='space-y-2'>
+                    <Label>Delivery Estimate Override</Label>
+                    <Controller
+                      name='deliveryTemplateId'
+                      control={control}
+                      render={({ field }) => (
+                        <Select
+                          value={field.value || 'default'}
+                          onValueChange={(val: string) => field.onChange(val === 'default' ? null : val)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value='default'>Use category/location default</SelectItem>
+                            {deliveryTemplates.map((template) => (
+                              <SelectItem key={template.id} value={template.id}>
+                                {template.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                    <p className='text-xs text-muted-foreground'>
+                      Controls the "FREE Delivery ..." estimate shown on this product&apos;s page. Leave as default to fall back to its
+                      category or the shopper&apos;s location.
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>

@@ -30,6 +30,7 @@ import { productsApi } from '../api'
 import { useCartStore, useWishlistStore } from '../stores'
 import { cn, formatPrice, calculateDiscount, getProductImage } from '../utils'
 import ProductCard from '../components/common/ProductCard'
+import DeliveryEstimate from '../components/product/DeliveryEstimate'
 import { useEventTracking } from '../hooks/useEventTracking'
 
 export default function ProductDetailPage() {
@@ -466,6 +467,9 @@ export default function ProductDetailPage() {
                 Buy Now
               </button>
             </div>
+
+            {/* Delivery estimate */}
+            <DeliveryEstimate productId={product.id} />
 
             {/* Features */}
             <div className='grid grid-cols-2 gap-4 pt-4'>

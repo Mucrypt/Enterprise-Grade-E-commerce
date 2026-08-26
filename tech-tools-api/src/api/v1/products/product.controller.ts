@@ -326,6 +326,7 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
       maxOrderQuantity,
       metaTitle,
       metaDescription,
+      deliveryTemplateId = null,
       // Media-related fields
       imageDescriptions, // JSON string array of descriptions for each image
       videoPurpose, // purpose for video (demo, tutorial, unboxing, etc.)
@@ -377,9 +378,9 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
           tax_rate, stock_quantity, weight, weight_unit, length, width, height,
           dimensions_unit, is_active, is_digital, is_featured,
           is_backorder_allowed, min_order_quantity, max_order_quantity,
-          meta_title, meta_description
+          meta_title, meta_description, delivery_template_id
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-                 $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+                 $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
         RETURNING *`,
         [
           sku,
@@ -408,6 +409,7 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
           maxOrderQuantity,
           metaTitle,
           metaDescription,
+          deliveryTemplateId,
         ],
       )
 
@@ -810,6 +812,7 @@ export const updateProduct = async (req: AuthRequest, res: Response) => {
       maxOrderQuantity,
       metaTitle,
       metaDescription,
+      deliveryTemplateId,
     } = req.body
 
     // Check if SKU is being changed and if new SKU exists
@@ -872,6 +875,7 @@ export const updateProduct = async (req: AuthRequest, res: Response) => {
       max_order_quantity: maxOrderQuantity,
       meta_title: metaTitle,
       meta_description: metaDescription,
+      delivery_template_id: deliveryTemplateId,
     }
 
     for (const [field, value] of Object.entries(fieldsToUpdate)) {

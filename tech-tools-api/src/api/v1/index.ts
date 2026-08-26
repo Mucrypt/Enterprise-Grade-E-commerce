@@ -14,6 +14,8 @@ import orderRoutes from './orders/order.routes'
 import paymentRoutes from './payments/payment.routes'
 import supplierRoutes from './suppliers/supplier.routes'
 import shippingRoutes from './shipping/shipping.routes'
+import deliveryEstimateRoutes from './shipping/delivery-estimate.routes'
+import deliveryTemplateRoutes from './shipping/delivery-template.routes'
 import couponRoutes from './coupons/coupon.routes'
 import reviewRoutes from './reviews/review.routes'
 import notificationRoutes from './notifications/notification.routes'
@@ -73,6 +75,8 @@ router.use('/collections/categories', categoryCollectionsRoutes) // Category col
 router.use('/orders', orderRoutes)
 router.use('/payments', paymentRoutes)
 router.use('/suppliers', supplierRoutes)
+router.use('/shipping/delivery-estimate', deliveryEstimateRoutes)
+router.use('/shipping/delivery-templates', deliveryTemplateRoutes)
 router.use('/shipping', shippingRoutes)
 router.use('/coupons', couponRoutes)
 router.use('/reviews', reviewRoutes)

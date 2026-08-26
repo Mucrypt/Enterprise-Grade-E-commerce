@@ -581,6 +581,7 @@ export interface Products {
   maxOrderQuantity?: number
   metaTitle?: string
   metaDescription?: string
+  deliveryTemplateId?: string
   // Default: CURRENT_TIMESTAMP
   createdAt?: string
   // Default: CURRENT_TIMESTAMP

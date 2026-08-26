@@ -124,6 +124,30 @@ export const productsApi = {
     }>(`/products/${productId}/related?limit=${limit}`)
     return response.data.data
   },
+
+  // Get the admin-configured delivery date-range estimate for one product,
+  // optionally narrowed by an explicit ISO country code (defaults to the
+  // server's own IP-based guess when omitted).
+  async getDeliveryEstimate(productId: string, countryCode?: string) {
+    const params = new URLSearchParams({ productId })
+    if (countryCode) params.append('country', countryCode)
+    const response = await api.get<{
+      success: boolean
+      data: {
+        scopeMatched: 'product_override' | 'category' | 'location' | 'global'
+        templateName: string
+        standardLabel: string
+        standardDateFrom: string
+        standardDateTo: string
+        expressLabel: string | null
+        expressDate: string | null
+        resolvedCountry: string | null
+        resolvedCountryName: string | null
+        resolvedVia: 'query' | 'geoip' | 'none'
+      }
+    }>(`/shipping/delivery-estimate?${params.toString()}`)
+    return response.data.data
+  },
 }
 
 // ============================================

@@ -28,6 +28,7 @@ export interface CreateProductDTO {
   maxOrderQuantity?: number
   metaTitle?: string
   metaDescription?: string
+  deliveryTemplateId?: string | null
 }
 
 export interface UpdateProductDTO extends Partial<CreateProductDTO> {}

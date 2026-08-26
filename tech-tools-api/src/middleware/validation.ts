@@ -122,6 +122,7 @@ export const productSchemas = {
     maxOrderQuantity: Joi.number().integer().min(1),
     metaTitle: Joi.string().max(255),
     metaDescription: Joi.string().max(500),
+    deliveryTemplateId: Joi.string().uuid().allow(null),
   }),
 
   update: Joi.object({
@@ -151,6 +152,7 @@ export const productSchemas = {
     maxOrderQuantity: Joi.number().integer().min(1).allow(null),
     metaTitle: Joi.string().max(255).allow(null, ''),
     metaDescription: Joi.string().max(500).allow(null, ''),
+    deliveryTemplateId: Joi.string().uuid().allow(null),
   }),
 }
 

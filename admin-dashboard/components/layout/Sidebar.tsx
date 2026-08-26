@@ -223,6 +223,12 @@ const navigation: NavItem[] = [
         icon: Truck,
         permission: 'shipping.view',
       },
+      {
+        title: 'Delivery Estimates',
+        href: '/dashboard/shipping/delivery-templates',
+        icon: CalendarDays,
+        permission: 'shipping.view',
+      },
     ],
   },
   {
