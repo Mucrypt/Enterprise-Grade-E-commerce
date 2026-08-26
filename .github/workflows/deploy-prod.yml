@@ -1,0 +1,174 @@
+name: Deploy to production
+
+# Builds only the service(s) that actually changed, pushes them to GitHub
+# Container Registry, then has the server pull + swap over a Tailscale SSH
+# connection (the server's SSH is Tailscale-only, never exposed publicly --
+# this workflow joins the same tailnet for just the deploy step rather than
+# opening that up). The server itself never builds anything anymore -- see
+# server-scripts/deploy-from-registry.sh.
+'on':
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: deploy-prod
+  # Never cancel a deploy that's already mid-flight (pushing an image, or
+  # mid-SSH on the server) -- a later push just queues behind it instead.
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: mucrypt/enterprise-grade-e-commerce
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      admin: ${{ steps.filter.outputs.admin }}
+      web: ${{ steps.filter.outputs.web }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            api:
+              - 'tech-tools-api/**'
+            admin:
+              - 'admin-dashboard/**'
+            web:
+              - 'e-commerce-web-store/**'
+
+  build-api:
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./tech-tools-api
+          file: ./tech-tools-api/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}-api:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}-api:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-admin:
+    needs: changes
+    if: needs.changes.outputs.admin == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./admin-dashboard
+          file: ./admin-dashboard/Dockerfile
+          push: true
+          # NEXT_PUBLIC_* is inlined into the client bundle at build time --
+          # these are public URLs/IDs anyway (they end up in the shipped
+          # browser JS regardless), so plain repo variables, not secrets.
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || 'https://techtoolstore.com/api/v1' }}
+            NEXT_PUBLIC_MEDIA_URL=${{ vars.NEXT_PUBLIC_MEDIA_URL || 'https://techtoolstore.com/media' }}
+            NEXT_PUBLIC_BASE_PATH=${{ vars.NEXT_PUBLIC_BASE_PATH || '/admin' }}
+            NEXT_PUBLIC_TAWK_SITE_ID=${{ vars.NEXT_PUBLIC_TAWK_SITE_ID }}
+            NEXT_PUBLIC_TAWK_WIDGET_ID=${{ vars.NEXT_PUBLIC_TAWK_WIDGET_ID || '1jm6uk6rp' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}-admin-dashboard:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}-admin-dashboard:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./e-commerce-web-store
+          file: ./e-commerce-web-store/Dockerfile
+          push: true
+          # VITE_* is inlined into the client bundle at build time -- same
+          # reasoning as NEXT_PUBLIC_* above, plain repo variables.
+          build-args: |
+            VITE_API_URL=${{ vars.VITE_API_URL || 'https://techtoolstore.com/api/v1' }}
+            VITE_MEDIA_URL=${{ vars.VITE_MEDIA_URL || 'https://techtoolstore.com/media' }}
+            VITE_TAWK_SITE_ID=${{ vars.VITE_TAWK_SITE_ID }}
+            VITE_TAWK_WIDGET_ID=${{ vars.VITE_TAWK_WIDGET_ID || '1jm6uk6rp' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}-web-store:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}-web-store:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: [changes, build-api, build-admin, build-web]
+    # Runs as long as none of the build jobs that actually ran failed --
+    # `needs.changes` always ran, and a build job that was skipped (nothing
+    # changed for it) reports 'skipped', not 'failure', so this only blocks
+    # on a genuine build failure.
+    if: |
+      always() && !cancelled() &&
+      needs.changes.result == 'success' &&
+      needs.build-api.result != 'failure' &&
+      needs.build-admin.result != 'failure' &&
+      needs.build-web.result != 'failure' &&
+      (needs.build-api.result == 'success' || needs.build-admin.result == 'success' || needs.build-web.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Join Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci
+
+      - name: Determine which services to deploy
+        id: which
+        run: |
+          SERVICES=""
+          [[ "${{ needs.build-api.result }}" == "success" ]] && SERVICES="$SERVICES api"
+          [[ "${{ needs.build-admin.result }}" == "success" ]] && SERVICES="$SERVICES admin"
+          [[ "${{ needs.build-web.result }}" == "success" ]] && SERVICES="$SERVICES web"
+          echo "services=$SERVICES" >> "$GITHUB_OUTPUT"
+          # Every service that actually built successfully gets deployed --
+          # e.g. a single push touching both tech-tools-api and
+          # admin-dashboard deploys both, not just one.
+
+      - name: Deploy over Tailscale SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.HETZNER_TAILSCALE_HOST }}
+          username: ${{ secrets.HETZNER_SSH_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: |
+            cd /root/Enterprise-Grade-E-commerce
+            ./server-scripts/deploy-from-registry.sh ${{ steps.which.outputs.services }}

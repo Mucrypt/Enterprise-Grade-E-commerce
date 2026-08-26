@@ -77,9 +77,9 @@ services:
         max-file: '3'
 
   api:
-    build:
-      context: ../tech-tools-api
-      dockerfile: Dockerfile
+    # Built by .github/workflows/deploy-prod.yml and pushed to GHCR -- the
+    # server only ever pulls, never builds (see server-scripts/deploy-from-registry.sh).
+    image: ghcr.io/mucrypt/enterprise-grade-e-commerce-api:latest
     container_name: techtools-api-prod
     environment:
       NODE_ENV: production
@@ -147,15 +147,13 @@ services:
         max-file: '3'
 
   admin-dashboard:
-    build:
-      context: ../admin-dashboard
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-        NEXT_PUBLIC_MEDIA_URL: ${NEXT_PUBLIC_MEDIA_URL}
-        NEXT_PUBLIC_BASE_PATH: ${NEXT_PUBLIC_BASE_PATH:-/admin}
-        NEXT_PUBLIC_TAWK_SITE_ID: ${NEXT_PUBLIC_TAWK_SITE_ID}
-        NEXT_PUBLIC_TAWK_WIDGET_ID: ${NEXT_PUBLIC_TAWK_WIDGET_ID:-1jm6uk6rp}
+    # Built by .github/workflows/deploy-prod.yml and pushed to GHCR -- the
+    # server only ever pulls, never builds (see server-scripts/deploy-from-registry.sh).
+    # NEXT_PUBLIC_* values are inlined into the client bundle at BUILD time
+    # (see admin-dashboard/Dockerfile) -- the workflow's build-args set them,
+    # not these runtime environment values below (which only affect the
+    # container's own server-side process).
+    image: ghcr.io/mucrypt/enterprise-grade-e-commerce-admin-dashboard:latest
     container_name: techtools-admin-dashboard-prod
     environment:
       NODE_ENV: production
@@ -191,14 +189,12 @@ services:
       start_period: 40s
 
   web-store:
-    build:
-      context: ../e-commerce-web-store
-      dockerfile: Dockerfile
-      args:
-        VITE_API_URL: ${VITE_API_URL}
-        VITE_MEDIA_URL: ${VITE_MEDIA_URL}
-        VITE_TAWK_SITE_ID: ${VITE_TAWK_SITE_ID}
-        VITE_TAWK_WIDGET_ID: ${VITE_TAWK_WIDGET_ID:-1jm6uk6rp}
+    # Built by .github/workflows/deploy-prod.yml and pushed to GHCR -- the
+    # server only ever pulls, never builds (see server-scripts/deploy-from-registry.sh).
+    # VITE_* values are inlined into the client bundle at BUILD time (see
+    # e-commerce-web-store/Dockerfile) -- the workflow's build-args set
+    # them, not these runtime environment values below.
+    image: ghcr.io/mucrypt/enterprise-grade-e-commerce-web-store:latest
     container_name: techtools-web-store-prod
     environment:
       NODE_ENV: production
