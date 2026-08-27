@@ -38,3 +38,8 @@ tech-tools-api/uploads/
 **/*.pem
 **/*.key
 **/*.crt
+
+# SSH deploy keys (see .github/DEPLOY-SETUP.md) -- generated directly in the
+# repo working directory by the setup steps there; must never be committed.
+techtools-deploy-key
+techtools-deploy-key.pub
