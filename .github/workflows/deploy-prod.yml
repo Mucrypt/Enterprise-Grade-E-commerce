@@ -162,6 +162,28 @@ jobs:
           oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
           tags: tag:ci
 
+      - name: Wait for Tailscale connectivity to the server
+        # `tailscale up` returning success only means this ephemeral node
+        # authenticated with the coordination server -- the actual data
+        # path to a specific peer (direct WireGuard NAT traversal, or DERP
+        # relay fallback) negotiates lazily on first packet and can take a
+        # few seconds longer. Without this, the SSH step's own connection
+        # timeout can fire before that negotiation finishes (confirmed
+        # live: "dial tcp ...:22: i/o timeout" on the very first run).
+        # `tailscale ping` forces and waits for that negotiation instead of
+        # guessing at a longer SSH timeout.
+        run: |
+          for i in $(seq 1 12); do
+            if tailscale ping --timeout=5s --c=1 "${{ secrets.HETZNER_TAILSCALE_HOST }}"; then
+              echo "Tailscale path to the server is up."
+              exit 0
+            fi
+            echo "Attempt $i: no path yet, retrying..."
+            sleep 5
+          done
+          echo "::error::Never established a Tailscale path to the server after 60s"
+          exit 1
+
       - name: Determine which services to deploy
         id: which
         run: |
@@ -180,6 +202,10 @@ jobs:
           host: ${{ secrets.HETZNER_TAILSCALE_HOST }}
           username: ${{ secrets.HETZNER_SSH_USER }}
           key: ${{ secrets.HETZNER_SSH_KEY }}
+          # A successful `tailscale ping` above confirms the tunnel path
+          # works, but the SSH handshake itself is a separate negotiation --
+          # this is just extra headroom on top of that, not the primary fix.
+          timeout: 60s
           script: |
             cd /root/Enterprise-Grade-E-commerce
             ./server-scripts/deploy-from-registry.sh ${{ steps.which.outputs.services }}
