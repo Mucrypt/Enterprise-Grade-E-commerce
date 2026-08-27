@@ -43,7 +43,7 @@ case "$SERVICE" in
             --build-arg NEXT_PUBLIC_API_URL=https://techtoolstore.com/api/v1 \
             --build-arg NEXT_PUBLIC_MEDIA_URL=https://techtoolstore.com/media \
             --build-arg NEXT_PUBLIC_BASE_PATH=/admin \
-            -t infrastructure-admin-dashboard:latest \
+            -t ghcr.io/mucrypt/enterprise-grade-e-commerce-admin-dashboard:latest \
             -f admin-dashboard/Dockerfile admin-dashboard/
 
         log_info "Restarting admin dashboard..."
@@ -72,7 +72,7 @@ case "$SERVICE" in
             --build-arg NEXT_PUBLIC_API_URL=https://techtoolstore.com/api/v1 \
             --build-arg NEXT_PUBLIC_MEDIA_URL=https://techtoolstore.com/media \
             --build-arg NEXT_PUBLIC_BASE_PATH=/admin \
-            -t infrastructure-admin-dashboard:latest \
+            -t ghcr.io/mucrypt/enterprise-grade-e-commerce-admin-dashboard:latest \
             -f admin-dashboard/Dockerfile admin-dashboard/
 
         docker compose -f $COMPOSE_FILE build api web-store

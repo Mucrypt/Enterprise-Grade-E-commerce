@@ -77,9 +77,16 @@ services:
         max-file: '3'
 
   api:
-    # Built by .github/workflows/deploy-prod.yml and pushed to GHCR -- the
-    # server only ever pulls, never builds (see server-scripts/deploy-from-registry.sh).
+    # `image:` is what deploy-from-registry.sh pulls (built by
+    # .github/workflows/deploy-prod.yml and pushed to GHCR). `build:` stays
+    # here too, deliberately -- it's what lets rebuild.sh/update.sh's manual
+    # local-build fallback keep working: `docker compose build api` builds
+    # from this same context and tags the result AS the image name below,
+    # so the subsequent `up -d` finds it locally instead of trying to pull.
     image: ghcr.io/mucrypt/enterprise-grade-e-commerce-api:latest
+    build:
+      context: ../tech-tools-api
+      dockerfile: Dockerfile
     container_name: techtools-api-prod
     environment:
       NODE_ENV: production
@@ -147,13 +154,23 @@ services:
         max-file: '3'
 
   admin-dashboard:
-    # Built by .github/workflows/deploy-prod.yml and pushed to GHCR -- the
-    # server only ever pulls, never builds (see server-scripts/deploy-from-registry.sh).
-    # NEXT_PUBLIC_* values are inlined into the client bundle at BUILD time
-    # (see admin-dashboard/Dockerfile) -- the workflow's build-args set them,
-    # not these runtime environment values below (which only affect the
-    # container's own server-side process).
+    # `image:` is what deploy-from-registry.sh pulls (built by
+    # .github/workflows/deploy-prod.yml and pushed to GHCR). `build:` stays
+    # here too, deliberately -- it's what lets rebuild.sh/update.sh's manual
+    # local-build fallback keep working: `docker compose build` tags the
+    # result AS the image name below, so `up -d` finds it locally instead
+    # of trying to pull. NEXT_PUBLIC_* is inlined into the client bundle at
+    # BUILD time -- these args, not the runtime environment values below.
     image: ghcr.io/mucrypt/enterprise-grade-e-commerce-admin-dashboard:latest
+    build:
+      context: ../admin-dashboard
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_MEDIA_URL: ${NEXT_PUBLIC_MEDIA_URL}
+        NEXT_PUBLIC_BASE_PATH: ${NEXT_PUBLIC_BASE_PATH:-/admin}
+        NEXT_PUBLIC_TAWK_SITE_ID: ${NEXT_PUBLIC_TAWK_SITE_ID}
+        NEXT_PUBLIC_TAWK_WIDGET_ID: ${NEXT_PUBLIC_TAWK_WIDGET_ID:-1jm6uk6rp}
     container_name: techtools-admin-dashboard-prod
     environment:
       NODE_ENV: production
@@ -189,12 +206,22 @@ services:
       start_period: 40s
 
   web-store:
-    # Built by .github/workflows/deploy-prod.yml and pushed to GHCR -- the
-    # server only ever pulls, never builds (see server-scripts/deploy-from-registry.sh).
-    # VITE_* values are inlined into the client bundle at BUILD time (see
-    # e-commerce-web-store/Dockerfile) -- the workflow's build-args set
-    # them, not these runtime environment values below.
+    # `image:` is what deploy-from-registry.sh pulls (built by
+    # .github/workflows/deploy-prod.yml and pushed to GHCR). `build:` stays
+    # here too, deliberately -- it's what lets rebuild.sh/update.sh's manual
+    # local-build fallback keep working: `docker compose build` tags the
+    # result AS the image name below, so `up -d` finds it locally instead
+    # of trying to pull. VITE_* is inlined into the client bundle at BUILD
+    # time -- these args, not the runtime environment values below.
     image: ghcr.io/mucrypt/enterprise-grade-e-commerce-web-store:latest
+    build:
+      context: ../e-commerce-web-store
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+        VITE_MEDIA_URL: ${VITE_MEDIA_URL}
+        VITE_TAWK_SITE_ID: ${VITE_TAWK_SITE_ID}
+        VITE_TAWK_WIDGET_ID: ${VITE_TAWK_WIDGET_ID:-1jm6uk6rp}
     container_name: techtools-web-store-prod
     environment:
       NODE_ENV: production
