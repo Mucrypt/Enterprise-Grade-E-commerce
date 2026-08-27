@@ -20,14 +20,22 @@ Add the **public** key to the server:
 ssh -i ~/.ssh/hetzner_nexusai root@100.92.116.9 "cat >> ~/.ssh/authorized_keys" < ./techtools-deploy-key.pub
 ```
 
-## 2. Create a Tailscale OAuth client
+## 2. Declare the `tag:ci` tag, then generate a reusable auth key
 
 GitHub's runners aren't on your tailnet — this lets the workflow join it for just the deploy step, without ever exposing SSH publicly.
 
-1. Go to https://login.tailscale.com/admin/settings/oauth
-2. Generate an OAuth client, scoped to write access for **Devices**.
-3. In the tailnet's **Access Controls**, make sure a `tag:ci` tag exists and is allowed to reach the server's tag/host over SSH (the default ACL usually allows this already — if you've customized ACLs, add a rule permitting `tag:ci` → your server).
-4. Copy the generated **Client ID** and **Client Secret** — you'll paste them into GitHub secrets next.
+An earlier version of this doc used an OAuth client to mint ephemeral keys on the fly. Live testing hit a persistent `403 calling actor does not have enough permissions` on every `tailscale up` attempt — confirmed via the API that it wasn't the ACL (wide open) or a missing `tagOwners` entry (added, still failed), so it's most likely a restriction on OAuth-client-based device provisioning itself. A key generated through your own logged-in session sidesteps that entirely.
+
+1. Go to **Access controls → Policies → JSON editor** (`https://login.tailscale.com/admin/acls/file`) and make sure this block is active (not commented out) — add it if it's still the commented-out example:
+   ```
+   "tagOwners": {
+       "tag:ci": ["autogroup:admin"],
+   },
+   ```
+   Save. (Not strictly required for this auth-key approach to work, but keeps the tag properly declared for clarity in the device list.)
+2. Go to **Settings → Keys** (`https://login.tailscale.com/admin/settings/keys`) → **Generate auth key**.
+3. Check **Reusable** (so it isn't consumed after one run), **Ephemeral** (the CI node deregisters itself when it disconnects), and set **Tags** to `tag:ci`. Leave expiry at its default (90 days) — you'll need to regenerate and update the secret when it expires.
+4. Copy the generated key (starts with `tskey-auth-...`) — shown only once.
 
 ## 3. Add GitHub repository secrets
 
@@ -35,8 +43,7 @@ Repo → Settings → Secrets and variables → Actions → **Secrets** tab → 
 
 | Secret | Value |
 |---|---|
-| `TS_OAUTH_CLIENT_ID` | From step 2 |
-| `TS_OAUTH_CLIENT_SECRET` | From step 2 |
+| `TS_AUTHKEY` | The `tskey-auth-...` key from step 2 |
 | `HETZNER_TAILSCALE_HOST` | `100.92.116.9` (the server's Tailscale address you already SSH to) |
 | `HETZNER_SSH_USER` | `root` |
 | `HETZNER_SSH_KEY` | The full contents of `techtools-deploy-key` (the **private** key from step 1) |

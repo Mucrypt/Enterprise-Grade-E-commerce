@@ -158,9 +158,16 @@ jobs:
       - name: Join Tailscale
         uses: tailscale/github-action@v3
         with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
-          tags: tag:ci
+          # Switched from OAuth-client-derived ephemeral keys (oauth-client-id
+          # + oauth-secret) after live testing hit a persistent, unresolved
+          # 403 "calling actor does not have enough permissions" on every
+          # `tailscale up` attempt -- confirmed not an ACL or tagOwners issue
+          # (both were verified correct via the API), so most likely a
+          # restriction on OAuth-client-based device provisioning itself. A
+          # pre-generated auth key (minted via a fully-privileged human
+          # session under Settings > Keys, not the OAuth client's API actor)
+          # sidesteps that entirely and is the more battle-tested mechanism.
+          authkey: ${{ secrets.TS_AUTHKEY }}
 
       - name: Wait for Tailscale connectivity to the server
         # `tailscale up` returning success only means this ephemeral node
