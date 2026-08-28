@@ -22,6 +22,8 @@ import {
   Loader2,
 } from 'lucide-react'
 import { newsletterApi } from '../../api'
+import { formatPrice } from '../../utils'
+import { useFreeShippingThreshold } from '../../hooks/useFreeShippingThreshold'
 
 const footerLinks = {
   shop: {
@@ -66,31 +68,33 @@ const footerLinks = {
   },
 }
 
-const features = [
-  {
-    icon: Truck,
-    title: 'Free Shipping',
-    description: 'On orders over €50',
-  },
-  {
-    icon: RotateCcw,
-    title: '30-Day Returns',
-    description: 'Hassle-free returns',
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Secure Payment',
-    description: '100% secure checkout',
-  },
-  {
-    icon: Phone,
-    title: '24/7 Support',
-    description: 'Dedicated support',
-  },
-]
-
 export default function Footer() {
   const currentYear = new Date().getFullYear()
+  // Real, admin-configured threshold -- was previously a hand-typed "€50"
+  // here, independent of shipping_settings.free_shipping_threshold.
+  const freeShippingThreshold = useFreeShippingThreshold() ?? 50
+  const features = [
+    {
+      icon: Truck,
+      title: 'Free Shipping',
+      description: `On orders over ${formatPrice(freeShippingThreshold)}`,
+    },
+    {
+      icon: RotateCcw,
+      title: '30-Day Returns',
+      description: 'Hassle-free returns',
+    },
+    {
+      icon: ShieldCheck,
+      title: 'Secure Payment',
+      description: '100% secure checkout',
+    },
+    {
+      icon: Phone,
+      title: '24/7 Support',
+      description: 'Dedicated support',
+    },
+  ]
   const openCookiePreferences = useConsentStore(
     (state) => state.openPreferences,
   )

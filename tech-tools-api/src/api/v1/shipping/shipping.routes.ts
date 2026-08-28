@@ -17,6 +17,7 @@ import {
   updateShippingCarrier,
   getShippingSettings,
   updateShippingSettings,
+  getPublicShippingSettings,
   getOrderLabels,
   calculateShipping,
 } from './shipping.controller'
@@ -42,6 +43,11 @@ router.get('/services/:carrier', authenticate, getCarrierServices)
 
 // Validate address
 router.post('/validate-address', authenticate, validateAddress)
+
+// Free-shipping threshold only -- no auth, backs the storefront PDP's
+// delivery panel. Deliberately not the full /admin/settings row (which
+// includes origin_address and other operational detail).
+router.get('/settings/public', getPublicShippingSettings)
 
 // =====================================================
 // Admin Routes

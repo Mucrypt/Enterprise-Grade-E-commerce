@@ -16,6 +16,7 @@ import type {
   Order,
   Address,
   Review,
+  ReviewSummary,
   ApiResponse,
   Pagination,
   SupportProfile,
@@ -144,8 +145,25 @@ export const productsApi = {
         resolvedCountry: string | null
         resolvedCountryName: string | null
         resolvedVia: 'query' | 'geoip' | 'none'
+        freeShippingThreshold: number | null
       }
     }>(`/shipping/delivery-estimate?${params.toString()}`)
+    return response.data.data
+  },
+}
+
+// ============================================
+// Shipping API
+// ============================================
+export const shippingApi = {
+  // The one public subset of shipping_settings -- just the free-shipping
+  // threshold, no auth required. See tech-tools-api's
+  // getPublicShippingSettings.
+  async getPublicSettings() {
+    const response = await api.get<{
+      success: boolean
+      data: { freeShippingThreshold: number | null }
+    }>('/shipping/settings/public')
     return response.data.data
   },
 }
@@ -1000,13 +1018,17 @@ export const wishlistApi = {
 // Reviews API
 // ============================================
 export const reviewsApi = {
-  // Get product reviews
+  // Get product reviews -- public, no auth. Was previously pointed at
+  // /products/:id/reviews, a route that doesn't exist anywhere in
+  // product.routes.ts (a dead 404 endpoint); the real one lives under
+  // review.routes.ts, mounted at /reviews.
   async getByProduct(productId: string, page = 1, limit = 10) {
     const response = await api.get<{
       success: boolean
-      data: { reviews: Review[]; pagination: Pagination; averageRating: number }
-    }>(`/products/${productId}/reviews?page=${page}&limit=${limit}`)
-    return response.data.data
+      data: { reviews: Review[]; summary: ReviewSummary | null }
+      pagination: Pagination
+    }>(`/reviews/product/${productId}?page=${page}&limit=${limit}`)
+    return { ...response.data.data, pagination: response.data.pagination }
   },
 
   // Add review
@@ -1019,10 +1041,10 @@ export const reviewsApi = {
       images?: string[]
     },
   ) {
-    const response = await api.post<ApiResponse<Review>>(
-      `/products/${productId}/reviews`,
-      data,
-    )
+    const response = await api.post<ApiResponse<Review>>('/reviews', {
+      productId,
+      ...data,
+    })
     return response.data.data
   },
 

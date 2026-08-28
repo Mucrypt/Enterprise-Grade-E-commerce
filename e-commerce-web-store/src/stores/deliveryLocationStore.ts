@@ -32,6 +32,13 @@ export const useDeliveryLocationStore = create<DeliveryLocationStore>()(
     }),
     {
       name: DELIVERY_LOCATION_STORAGE_KEY,
+      // A geoip guess (explicit=false) is used for the current render but
+      // never written to disk -- previously ANY guess, right or wrong, was
+      // cached in localStorage forever with no expiry or re-check, which is
+      // how a stale/wrong country (e.g. "United States") could survive
+      // indefinitely for a shopper who never touched "Update location".
+      // Only a real, explicit pick should outlive the session.
+      partialize: (state) => (state.isExplicit ? state : { countryCode: null, isExplicit: false }),
     },
   ),
 )

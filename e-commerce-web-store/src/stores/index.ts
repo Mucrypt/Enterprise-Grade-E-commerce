@@ -6,3 +6,4 @@ export { useUIStore } from './uiStore';
 export { useConsentStore } from './consentStore';
 export { useLocaleStore } from './localeStore';
 export { useDeliveryLocationStore } from './deliveryLocationStore';
+export { useShippingSettingsStore } from './shippingSettingsStore';

@@ -7,13 +7,15 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Eye, EyeOff, Mail, Lock, AlertCircle, ArrowRight } from 'lucide-react'
 import { useAuthStore } from '../stores'
-import { cn } from '../utils'
+import { cn, formatPrice } from '../utils'
+import { useFreeShippingThreshold } from '../hooks/useFreeShippingThreshold'
 
 export default function LoginPage() {
   const { t } = useTranslation('auth')
   const navigate = useNavigate()
   const location = useLocation()
   const { login, isLoading } = useAuthStore()
+  const freeShippingThreshold = useFreeShippingThreshold() ?? 50
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -277,7 +279,7 @@ export default function LoginPage() {
 
         {/* Benefits */}
         <div className='mt-8 text-center text-sm text-gray-500'>
-          <p className='mb-2'>✓ Free shipping on orders over €50</p>
+          <p className='mb-2'>✓ Free shipping on orders over {formatPrice(freeShippingThreshold)}</p>
           <p className='mb-2'>✓ Exclusive member discounts</p>
           <p>✓ 30-day hassle-free returns</p>
         </div>

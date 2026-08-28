@@ -14,11 +14,14 @@ import {
   AlertTriangle,
   HelpCircle,
 } from 'lucide-react'
+import { formatPrice } from '../utils'
+import { useFreeShippingThreshold } from '../hooks/useFreeShippingThreshold'
 
-const shippingMethods = [
+function buildShippingMethods(freeShippingThreshold: number) {
+  return [
   {
     name: 'Standard Shipping',
-    price: 'FREE over €50 / €4.99',
+    price: `FREE over ${formatPrice(freeShippingThreshold)} / €4.99`,
     time: '5-7 business days',
     description: 'Our most economical option for non-urgent orders',
     features: ['Tracking included', 'Delivery to door', 'Carbon neutral'],
@@ -42,6 +45,7 @@ const shippingMethods = [
     icon: '⚡',
   },
 ]
+}
 
 const internationalZones = [
   {
@@ -78,11 +82,12 @@ const internationalZones = [
   },
 ]
 
-const shippingFeatures = [
+function buildShippingFeatures(freeShippingThreshold: number) {
+  return [
   {
     icon: Truck,
     title: 'Free Shipping',
-    description: 'On all domestic orders over €50',
+    description: `On all domestic orders over ${formatPrice(freeShippingThreshold)}`,
   },
   {
     icon: Globe,
@@ -100,8 +105,13 @@ const shippingFeatures = [
     description: 'Orders processed within 1-2 business days',
   },
 ]
+}
 
 export default function ShippingInfoPage() {
+  const freeShippingThreshold = useFreeShippingThreshold() ?? 50
+  const shippingMethods = buildShippingMethods(freeShippingThreshold)
+  const shippingFeatures = buildShippingFeatures(freeShippingThreshold)
+
   return (
     <div className='min-h-screen bg-gray-50'>
       {/* Hero Section */}

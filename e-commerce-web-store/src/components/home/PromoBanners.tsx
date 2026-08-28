@@ -4,7 +4,8 @@
 
 import { Link } from 'react-router-dom'
 import { Zap, Gift, Truck, Shield, ArrowRight } from 'lucide-react'
-import { cn } from '../../utils'
+import { cn, formatPrice } from '../../utils'
+import { useFreeShippingThreshold } from '../../hooks/useFreeShippingThreshold'
 
 interface PromoBanner {
   id: string
@@ -17,50 +18,52 @@ interface PromoBanner {
   size: 'large' | 'medium' | 'small'
 }
 
-const promos: PromoBanner[] = [
-  {
-    id: '1',
-    title: 'Free Shipping',
-    subtitle: 'On orders over €50. Fast delivery across Europe.',
-    cta: 'Shop Now',
-    link: '/products',
-    icon: Truck,
-    gradient: 'from-emerald-500 to-teal-600',
-    size: 'large',
-  },
-  {
-    id: '2',
-    title: 'New Arrivals',
-    subtitle: 'Check out the latest tech gear',
-    cta: 'Explore',
-    link: '/new-arrivals',
-    icon: Zap,
-    gradient: 'from-orange-500 to-red-500',
-    size: 'medium',
-  },
-  {
-    id: '3',
-    title: '2-Year Warranty',
-    subtitle: 'On all products',
-    cta: 'Learn More',
-    link: '/warranty',
-    icon: Shield,
-    gradient: 'from-blue-500 to-indigo-600',
-    size: 'medium',
-  },
-  {
-    id: '4',
-    title: 'Bundle & Save',
-    subtitle: 'Get 20% off when you buy 3+ items',
-    cta: 'View Bundles',
-    link: '/bundles',
-    icon: Gift,
-    gradient: 'from-purple-500 to-pink-500',
-    size: 'small',
-  },
-]
-
 export default function PromoBanners() {
+  // Real, admin-configured threshold -- replaces the hand-typed "€50".
+  const freeShippingThreshold = useFreeShippingThreshold() ?? 50
+  const promos: PromoBanner[] = [
+    {
+      id: '1',
+      title: 'Free Shipping',
+      subtitle: `On orders over ${formatPrice(freeShippingThreshold)}. Fast delivery across Europe.`,
+      cta: 'Shop Now',
+      link: '/products',
+      icon: Truck,
+      gradient: 'from-emerald-500 to-teal-600',
+      size: 'large',
+    },
+    {
+      id: '2',
+      title: 'New Arrivals',
+      subtitle: 'Check out the latest tech gear',
+      cta: 'Explore',
+      link: '/new-arrivals',
+      icon: Zap,
+      gradient: 'from-orange-500 to-red-500',
+      size: 'medium',
+    },
+    {
+      id: '3',
+      title: '2-Year Warranty',
+      subtitle: 'On all products',
+      cta: 'Learn More',
+      link: '/warranty',
+      icon: Shield,
+      gradient: 'from-blue-500 to-indigo-600',
+      size: 'medium',
+    },
+    {
+      id: '4',
+      title: 'Bundle & Save',
+      subtitle: 'Get 20% off when you buy 3+ items',
+      cta: 'View Bundles',
+      link: '/bundles',
+      icon: Gift,
+      gradient: 'from-purple-500 to-pink-500',
+      size: 'small',
+    },
+  ]
+
   return (
     <section className='py-12 bg-gray-100'>
       <div className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'>

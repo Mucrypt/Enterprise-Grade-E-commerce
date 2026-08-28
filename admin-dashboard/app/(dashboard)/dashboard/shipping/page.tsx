@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Truck,
@@ -139,6 +139,12 @@ function ShippingPageContent() {
     dimensionUnit: 'in',
   })
 
+  // Origin address (ship-from) -- feeds real FedEx/UPS/DHL rate quotes via
+  // calculateShipping on the backend. Was previously a decorative form with
+  // no state/save handler at all; a real rate call silently fell back to a
+  // hardcoded LA warehouse whenever this was never actually saved.
+  const [originAddress, setOriginAddress] = useState<Partial<ShippingAddress>>({})
+
   // Queries
   const { data: carriers = [], isLoading: carriersLoading } = useQuery({
     queryKey: ['shipping-carriers'],
@@ -188,6 +194,24 @@ function ShippingPageContent() {
       toast.error('Failed to update shipping settings')
     },
   })
+
+  // Re-seeds from the canonical saved value whenever settings loads or
+  // refetches (including right after a successful save) -- address fields
+  // are interdependent, so this is a single explicit Save, not
+  // save-on-every-keystroke like the other settings fields.
+  useEffect(() => {
+    if (settings?.origin_address) {
+      setOriginAddress(settings.origin_address)
+    }
+  }, [settings])
+
+  const handleSaveOriginAddress = () => {
+    if (!originAddress.name || !originAddress.street1 || !originAddress.city || !originAddress.state || !originAddress.postalCode) {
+      toast.error('Business name, street address, city, state, and postal code are required')
+      return
+    }
+    updateSettingsMutation.mutate({ originAddress: originAddress as ShippingAddress })
+  }
 
   // Handlers
   const handleToggleCarrier = (carrier: CarrierConfig) => {
@@ -780,31 +804,58 @@ function ShippingPageContent() {
                   <div className='grid gap-4 md:grid-cols-3'>
                     <div className='md:col-span-3'>
                       <Label>Business Name</Label>
-                      <Input placeholder='Company or warehouse name' />
+                      <Input
+                        placeholder='Company or warehouse name'
+                        value={originAddress.name || ''}
+                        onChange={(e) => setOriginAddress((prev) => ({ ...prev, name: e.target.value }))}
+                      />
                     </div>
                     <div className='md:col-span-2'>
                       <Label>Street Address</Label>
-                      <Input placeholder='123 Commerce St' />
+                      <Input
+                        placeholder='123 Commerce St'
+                        value={originAddress.street1 || ''}
+                        onChange={(e) => setOriginAddress((prev) => ({ ...prev, street1: e.target.value }))}
+                      />
                     </div>
                     <div>
                       <Label>Suite/Unit</Label>
-                      <Input placeholder='Suite 100' />
+                      <Input
+                        placeholder='Suite 100'
+                        value={originAddress.street2 || ''}
+                        onChange={(e) => setOriginAddress((prev) => ({ ...prev, street2: e.target.value }))}
+                      />
                     </div>
                     <div>
                       <Label>City</Label>
-                      <Input placeholder='Los Angeles' />
+                      <Input
+                        placeholder='Los Angeles'
+                        value={originAddress.city || ''}
+                        onChange={(e) => setOriginAddress((prev) => ({ ...prev, city: e.target.value }))}
+                      />
                     </div>
                     <div>
                       <Label>State/Province</Label>
-                      <Input placeholder='CA' />
+                      <Input
+                        placeholder='CA'
+                        value={originAddress.state || ''}
+                        onChange={(e) => setOriginAddress((prev) => ({ ...prev, state: e.target.value }))}
+                      />
                     </div>
                     <div>
                       <Label>Postal Code</Label>
-                      <Input placeholder='90001' />
+                      <Input
+                        placeholder='90001'
+                        value={originAddress.postalCode || ''}
+                        onChange={(e) => setOriginAddress((prev) => ({ ...prev, postalCode: e.target.value }))}
+                      />
                     </div>
                     <div>
                       <Label>Country</Label>
-                      <Select defaultValue='US'>
+                      <Select
+                        value={originAddress.country || 'US'}
+                        onValueChange={(value: string) => setOriginAddress((prev) => ({ ...prev, country: value }))}
+                      >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
@@ -812,20 +863,32 @@ function ShippingPageContent() {
                           <SelectItem value='US'>United States</SelectItem>
                           <SelectItem value='CA'>Canada</SelectItem>
                           <SelectItem value='GB'>United Kingdom</SelectItem>
+                          <SelectItem value='DE'>Germany</SelectItem>
+                          <SelectItem value='FR'>France</SelectItem>
+                          <SelectItem value='AU'>Australia</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     <div>
                       <Label>Phone</Label>
-                      <Input placeholder='+1 (555) 000-0000' />
+                      <Input
+                        placeholder='+1 (555) 000-0000'
+                        value={originAddress.phone || ''}
+                        onChange={(e) => setOriginAddress((prev) => ({ ...prev, phone: e.target.value }))}
+                      />
                     </div>
                     <div>
                       <Label>Email</Label>
-                      <Input type='email' placeholder='shipping@company.com' />
+                      <Input
+                        type='email'
+                        placeholder='shipping@company.com'
+                        value={originAddress.email || ''}
+                        onChange={(e) => setOriginAddress((prev) => ({ ...prev, email: e.target.value }))}
+                      />
                     </div>
                   </div>
                   <div className='mt-4'>
-                    <Button>
+                    <Button onClick={handleSaveOriginAddress} disabled={updateSettingsMutation.isPending}>
                       <Save className='h-4 w-4 mr-2' />
                       Save Origin Address
                     </Button>

@@ -35,8 +35,10 @@ export interface Product extends BaseEntity {
   media?: ProductMedia[] | null
   specifications?: ProductSpecification[] | null
   inventory?: ProductInventory[]
+  variations?: ProductVariant[]
   average_rating?: number | string
   review_count?: number | string
+  units_sold?: number | string
   meta_title: string | null
   meta_description: string | null
 }
@@ -495,17 +497,43 @@ export interface WishlistItem {
   added_at: string
 }
 
-// Review Types
+// Review Types -- matches tech-tools-api's review.service.ts Review shape
+// (GET /reviews/product/:productId), not a guessed/simplified one.
+export interface ReviewImage {
+  id: string
+  review_id: string
+  image_url: string
+  sort_order: number
+}
+
 export interface Review extends BaseEntity {
   product_id: string
   user_id: string
-  user_name: string
+  user_name: string | null
+  order_item_id?: string | null
   rating: number
-  title: string
-  comment: string
+  title?: string | null
+  comment?: string | null
   is_verified_purchase: boolean
+  status: 'pending' | 'approved' | 'rejected' | 'flagged'
   helpful_count: number
-  images: string[]
+  is_featured: boolean
+  admin_response?: string | null
+  response_at?: string | null
+  images: ReviewImage[]
+}
+
+export interface ReviewSummary {
+  product_id: string
+  total_reviews: number
+  average_rating: number
+  rating_1_count: number
+  rating_2_count: number
+  rating_3_count: number
+  rating_4_count: number
+  rating_5_count: number
+  verified_purchase_count: number
+  with_images_count: number
 }
 
 // API Response Types

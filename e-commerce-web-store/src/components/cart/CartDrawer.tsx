@@ -16,16 +16,20 @@ import {
 } from 'lucide-react';
 import { useCartStore } from '../../stores';
 import { formatPrice, getProductImage } from '../../utils';
-
-const FREE_SHIPPING_THRESHOLD = 50;
+import { useFreeShippingThreshold } from '../../hooks/useFreeShippingThreshold';
 
 export default function CartDrawer() {
   const { t } = useTranslation(['cart', 'common']);
   const { items, isOpen, closeCart, removeItem, updateQuantity, getSubtotal } = useCartStore();
 
+  // Real, admin-configured threshold (shipping_settings.free_shipping_threshold)
+  // -- this used to be a hand-typed constant, disconnected from the actual
+  // rule the backend applies at checkout. Falls back to the same figure
+  // while the fetch is in flight.
+  const freeShippingThreshold = useFreeShippingThreshold() ?? 50;
   const subtotal = getSubtotal();
-  const shippingProgress = Math.min((subtotal / FREE_SHIPPING_THRESHOLD) * 100, 100);
-  const amountToFreeShipping = Math.max(FREE_SHIPPING_THRESHOLD - subtotal, 0);
+  const shippingProgress = Math.min((subtotal / freeShippingThreshold) * 100, 100);
+  const amountToFreeShipping = Math.max(freeShippingThreshold - subtotal, 0);
 
   if (!isOpen) return null;
 
@@ -220,7 +224,7 @@ export default function CartDrawer() {
               <div className="flex justify-between">
                 <span className="text-gray-500">{t('shipping')}</span>
                 <span className="font-medium text-green-600">
-                  {subtotal >= FREE_SHIPPING_THRESHOLD ? t('shippingFree') : t('shippingCalculated')}
+                  {subtotal >= freeShippingThreshold ? t('shippingFree') : t('shippingCalculated')}
                 </span>
               </div>
             </div>

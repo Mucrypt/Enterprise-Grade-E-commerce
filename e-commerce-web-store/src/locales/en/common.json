@@ -10,7 +10,7 @@
   "wishlist": "Wishlist",
   "cart": "Cart",
   "topBar": {
-    "freeShipping": "Free Shipping €50+",
+    "freeShipping": "Free Shipping {{threshold}}+",
     "trackOrder": "Track Order",
     "dailyDeals": "Daily Deals",
     "support247": "24/7 Support"

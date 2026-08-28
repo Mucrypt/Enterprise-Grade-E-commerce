@@ -5,6 +5,7 @@
 import { Request, Response } from 'express'
 import geoip from 'geoip-lite'
 import { getClientIp } from '../../../utils/helpers'
+import { query } from '../../../database/connection'
 import logger from '../../../utils/logger'
 import {
   addBusinessDays,
@@ -51,6 +52,17 @@ export const getDeliveryEstimate = async (req: Request, res: Response): Promise<
 
     const { template, scopeMatched } = await resolveDeliveryTemplate(productId, countryCode)
 
+    // The template's standard_label defaults to the literal string 'FREE
+    // Delivery' regardless of any actual threshold -- pass the real,
+    // admin-configurable threshold through so the frontend can render an
+    // honest "free over €X" instead of trusting that label unconditionally.
+    const settingsResult = await query(
+      `SELECT free_shipping_threshold FROM shipping_settings LIMIT 1`,
+    )
+    const freeShippingThreshold = settingsResult.rows[0]?.free_shipping_threshold
+    const freeShippingThresholdNumber =
+      freeShippingThreshold != null ? Number(freeShippingThreshold) : null
+
     const now = new Date()
     const standardDateFrom = addBusinessDays(
       now,
@@ -83,6 +95,7 @@ export const getDeliveryEstimate = async (req: Request, res: Response): Promise<
         resolvedCountry: countryCode,
         resolvedCountryName: resolveCountryName(countryCode),
         resolvedVia,
+        freeShippingThreshold: freeShippingThresholdNumber,
       },
     })
   } catch (error) {

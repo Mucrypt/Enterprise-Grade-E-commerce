@@ -13,6 +13,7 @@ import {
   revokeStaffMembership,
   getStaffAuditLog,
 } from './staff.controller'
+import { getGlobalActivityFeed } from '../admin/admin.controller'
 
 const router = Router()
 
@@ -22,6 +23,16 @@ router.use(authenticate)
 // their own staff status. No permission gate: this is how the
 // admin-dashboard frontend decides what nav/pages to even attempt to show.
 router.get('/me', getMyStaffContext)
+
+// Must be registered before the /:id routes below -- a bare :id param
+// would otherwise swallow the literal 'activity-feed' segment first.
+// Reuses staff.view, the same permission that already gates the
+// per-staff audit log just below.
+router.get(
+  '/activity-feed',
+  requirePermissionOrLegacyRole('staff.view', 'super_admin'),
+  getGlobalActivityFeed,
+)
 
 // Everything below requires either the legacy 'super_admin' user_type
 // (bootstrap + ongoing, see requirePermissionOrLegacyRole's doc comment)

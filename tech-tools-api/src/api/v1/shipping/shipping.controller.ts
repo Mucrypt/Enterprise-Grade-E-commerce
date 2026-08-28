@@ -3,7 +3,7 @@
  * API endpoints for shipping rates, tracking, and label generation
  */
 
-import { Response } from 'express'
+import { Request, Response } from 'express'
 import { AuthRequest } from '../../../middleware/auth'
 import { query } from '../../../database/connection'
 import shippingService, {
@@ -550,6 +550,35 @@ export const getShippingSettings = async (req: AuthRequest, res: Response) => {
     })
   } catch (error) {
     logger.error('Get shipping settings error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get shipping settings',
+    })
+  }
+}
+
+/**
+ * Public subset of shipping settings, safe for an anonymous storefront
+ * visitor -- just the free-shipping threshold, not the full settings row
+ * (which includes origin_address and other operational details that
+ * shouldn't be public). Backs the PDP's delivery panel; every other route
+ * in this file is authenticate-gated.
+ */
+export const getPublicShippingSettings = async (_req: Request, res: Response) => {
+  try {
+    const result = await query(
+      `SELECT free_shipping_threshold FROM shipping_settings LIMIT 1`,
+    )
+    const threshold = result.rows[0]?.free_shipping_threshold
+
+    res.json({
+      success: true,
+      data: {
+        freeShippingThreshold: threshold != null ? Number(threshold) : null,
+      },
+    })
+  } catch (error) {
+    logger.error('Get public shipping settings error:', error)
     res.status(500).json({
       success: false,
       error: 'Failed to get shipping settings',

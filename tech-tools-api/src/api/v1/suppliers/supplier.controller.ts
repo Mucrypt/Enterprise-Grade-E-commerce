@@ -8,6 +8,7 @@ import {
   isCountryInScope,
 } from '../../../middleware/staff'
 import { recordStaffAuditEvent } from '../../../services/staff-audit.service'
+import { recordAdminActivity } from '../../../services/admin-activity.service'
 
 // Resource-scope check for a single already-fetched supplier row -- the
 // IDOR guard, mirroring assertOrderInScope in order.controller.ts. A
@@ -318,15 +319,22 @@ export const updateSupplier = async (req: AuthRequest, res: Response) => {
 
     const updatedSupplier = result.rows[0]
 
-    if (status && String(status) !== String(previousStatus || '')) {
-      await logAdminActivity({
-        req,
-        action: 'update_supplier_status',
+    // Unconditional -- covers the whole edit (rating, contact info, terms,
+    // etc.), not just a status change, so the activity feed shows real
+    // supplier edits rather than only status transitions.
+    const actorUserId = (req as StaffAuthRequest).user?.userId
+    if (actorUserId) {
+      recordAdminActivity({
+        actorUserId,
+        action: 'supplier_updated',
         resourceType: 'suppliers',
         resourceId: id,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
         details: {
-          from: previousStatus,
-          to: updatedSupplier.status,
+          statusChanged: !!status && String(status) !== String(previousStatus || ''),
+          from: { status: previousStatus },
+          to: { status: updatedSupplier.status },
           supplierEmail: updatedSupplier.email,
         },
       })

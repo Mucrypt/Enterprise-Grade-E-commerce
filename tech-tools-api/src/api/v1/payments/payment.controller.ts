@@ -8,6 +8,7 @@ import { AuthRequest } from '../../../middleware/auth'
 import { query } from '../../../database/connection'
 import stripeService from '../../../services/stripe.service'
 import logger from '../../../utils/logger'
+import { recordAdminActivity } from '../../../services/admin-activity.service'
 
 // ============================================
 // Configuration
@@ -704,6 +705,23 @@ export const createRefund = async (req: AuthRequest, res: Response) => {
         orderId,
       ],
     )
+
+    const actorUserId = req.user?.userId
+    if (actorUserId) {
+      recordAdminActivity({
+        actorUserId,
+        action: 'order_refunded',
+        resourceType: 'orders',
+        resourceId: orderId,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        details: {
+          amount: refund.amount / 100,
+          currency: payment.currency,
+          fullyRefunded: isFullyRefunded,
+        },
+      })
+    }
 
     res.json({
       success: true,

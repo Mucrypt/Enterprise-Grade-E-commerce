@@ -9,6 +9,7 @@ import {
   validateVideoFile,
 } from '../../../utils/media'
 import fs from 'fs/promises'
+import { recordAdminActivity } from '../../../services/admin-activity.service'
 
 export const getProducts = async (req: Request, res: Response) => {
   try {
@@ -255,7 +256,13 @@ export const getProductById = async (req: Request, res: Response) => {
           SELECT COUNT(*)
           FROM reviews r
           WHERE r.product_id = p.id AND r.is_approved = true
-        ) as review_count
+        ) as review_count,
+        (
+          SELECT COALESCE(SUM(oi.quantity), 0)
+          FROM order_items oi
+          JOIN orders o ON oi.order_id = o.id
+          WHERE oi.product_id = p.id AND o.order_status NOT IN ('cancelled', 'refunded')
+        ) as units_sold
        FROM products p
        LEFT JOIN categories c ON p.category_id = c.id
        LEFT JOIN brands b ON p.brand_id = b.id
@@ -1068,6 +1075,33 @@ export const updateProduct = async (req: AuthRequest, res: Response) => {
       updatedBy: req.user?.userId,
       mediaAdded: uploadedMedia.length,
     })
+
+    if (req.user?.userId) {
+      const before = existingProduct.rows[0]
+      const after = completeProduct.rows[0]
+      recordAdminActivity({
+        actorUserId: req.user.userId,
+        action: 'product_updated',
+        resourceType: 'products',
+        resourceId: productId,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        details: {
+          priceChanged: basePrice !== undefined || salePrice !== undefined,
+          stockChanged: stockQuantity !== undefined,
+          before: {
+            basePrice: before.base_price,
+            salePrice: before.sale_price,
+            stockQuantity: before.stock_quantity,
+          },
+          after: {
+            basePrice: after.base_price,
+            salePrice: after.sale_price,
+            stockQuantity: after.stock_quantity,
+          },
+        },
+      })
+    }
 
     res.json({
       success: true,

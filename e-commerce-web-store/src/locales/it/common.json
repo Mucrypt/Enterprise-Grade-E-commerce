@@ -10,7 +10,7 @@
   "wishlist": "Lista dei desideri",
   "cart": "Carrello",
   "topBar": {
-    "freeShipping": "Spedizione gratuita oltre 50 €",
+    "freeShipping": "Spedizione gratuita oltre {{threshold}}",
     "trackOrder": "Traccia ordine",
     "dailyDeals": "Offerte del giorno",
     "support247": "Assistenza 24/7"

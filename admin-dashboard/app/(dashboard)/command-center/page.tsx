@@ -2,9 +2,11 @@
 
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
+import { formatDistanceToNow } from 'date-fns'
 import { useRealtimeMetrics } from '@/hooks/useRealtimeMetrics'
 import { useStaffAccess } from '@/contexts/StaffAccessContext'
 import analyticsV2Service from '@/services/analytics-v2.service'
+import activityFeedService from '@/services/activity-feed.service'
 import { MetricCard } from '@/components/dashboard/MetricCard'
 import { TrendMetric } from '@/components/analytics/TrendMetric'
 import { DataQualityNotice } from '@/components/analytics/DataQualityNotice'
@@ -40,6 +42,22 @@ import {
  * instantaneous signal, a fundamentally different concept from the 7-day
  * aggregate Overview/Operations answer, not duplicate logic.
  */
+// Human labels for the newer, structured actions this phase started
+// writing (order/product/supplier mutations). Older free-form actions
+// from the pre-existing admin/book/customer moderation call sites (e.g.
+// 'invite_admin', 'update_supplier_status') fall back to their raw
+// string -- still readable, just not prettified.
+const ACTIVITY_ACTION_LABELS: Record<string, string> = {
+  order_status_changed: 'Order status changed',
+  order_refunded: 'Order refunded',
+  product_updated: 'Product updated',
+  supplier_updated: 'Supplier updated',
+}
+
+function formatActivityAction(action: string): string {
+  return ACTIVITY_ACTION_LABELS[action] || action.replace(/_/g, ' ')
+}
+
 export default function CommandCenterPage() {
   const { legacyUserType, memberships, isLegacyAdmin } = useStaffAccess()
   const { metrics, isConnected, access: realtimeAccess } = useRealtimeMetrics()
@@ -59,6 +77,13 @@ export default function CommandCenterPage() {
     queryFn: () => analyticsV2Service.getOperations({ comparisonMode: 'none' }),
     refetchInterval: 60_000,
   })
+
+  const activityFeed = useQuery({
+    queryKey: ['command-center', 'activity-feed'],
+    queryFn: () => activityFeedService.getActivityFeed(20),
+    refetchInterval: 60_000,
+  })
+  const activityEntries = activityFeed.data?.data?.entries || []
 
   const scopeLabel = overview.data?.scoped ? `Scoped: ${overview.data.markets.join(', ') || 'none'}` : 'Global'
 
@@ -256,17 +281,57 @@ export default function CommandCenterPage() {
         />
       )}
 
-      {/* RECENT ACTIVITY -- a global cross-membership feed needs a new
-          endpoint (today's staff_audit_log is queried per-membership from
-          the Staff detail view); not built this phase. Not scope-sensitive
-          -- same honest placeholder for every role. */}
+      {/* RECENT ACTIVITY -- global cross-organization feed, reading
+          admin_activity_logs via GET /staff/activity-feed. Global-only,
+          same honest-notice convention as "Right now"/"Live business"
+          above -- admin_activity_logs has no market/country column to
+          scope a market-manager's view by. */}
       <section>
         <h2 className='mb-3 text-sm font-semibold text-muted-foreground'>Recent activity</h2>
-        <EmptyState
-          icon={History}
-          title='Global activity feed not built yet'
-          description='Per-staff-member audit history is already available from Organization -> Staff -> (select a person). A combined cross-organization feed is proposed for ADMIN-2C.'
-        />
+        <Card>
+          <CardContent className='pt-6'>
+            {activityFeed.data?.data?.scoped ? (
+              <EmptyState
+                icon={History}
+                title='Not available for your role'
+                description={
+                  activityFeed.data.data.message ||
+                  'The activity feed is only available for global staff today.'
+                }
+              />
+            ) : activityEntries.length > 0 ? (
+              <ul className='space-y-3 text-sm'>
+                {activityEntries.map((entry) => (
+                  <li key={entry.id} className='flex items-start justify-between gap-4'>
+                    <div>
+                      <span className='font-medium'>{formatActivityAction(entry.action)}</span>
+                      <span className='text-muted-foreground'>
+                        {' '}
+                        by{' '}
+                        {entry.actor.firstName
+                          ? `${entry.actor.firstName} ${entry.actor.lastName || ''}`.trim()
+                          : entry.actor.email}
+                      </span>
+                      {entry.resourceId && (
+                        <span className='text-muted-foreground'>
+                          {' '}
+                          &middot; {entry.resourceType} {entry.resourceId.slice(0, 8)}
+                        </span>
+                      )}
+                    </div>
+                    <span className='whitespace-nowrap text-xs text-muted-foreground'>
+                      {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true })}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : activityFeed.data ? (
+              <EmptyState icon={History} title='No recent activity' />
+            ) : (
+              <div className='h-24 animate-pulse rounded bg-muted/30' />
+            )}
+          </CardContent>
+        </Card>
       </section>
     </div>
   )

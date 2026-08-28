@@ -25,7 +25,8 @@ import {
   useAuthStore,
   useUIStore,
 } from '../../stores'
-import { cn } from '../../utils'
+import { cn, formatPrice } from '../../utils'
+import { useFreeShippingThreshold } from '../../hooks/useFreeShippingThreshold'
 import SearchOverlay from './SearchOverlay'
 import MegaMenu from './MegaMenu'
 import MobileMenu from './MobileMenu'
@@ -135,6 +136,12 @@ export default function Header() {
   const { isAuthenticated, user } = useAuthStore()
   const { isSearchOpen, openSearch, isMobileMenuOpen, toggleMobileMenu } =
     useUIStore()
+  // Real, admin-configured value (shipping_settings.free_shipping_threshold)
+  // -- was previously an independently hand-typed "€50" here and in ~8
+  // other files, unconnected to the actual applied threshold. Falls back
+  // to the same figure while the fetch is in flight so the promo bar isn't
+  // ever blank on first paint.
+  const freeShippingThreshold = useFreeShippingThreshold() ?? 50
 
   // Handle scroll effect
   useEffect(() => {
@@ -171,7 +178,7 @@ export default function Header() {
           <div className='flex items-center justify-center gap-2'>
             <Gift className='w-4 h-4' />
             <span className='font-medium'>
-              FREE SHIPPING on orders over €50 | Use code{' '}
+              FREE SHIPPING on orders over {formatPrice(freeShippingThreshold)} | Use code{' '}
               <span className='font-bold'>TECH20</span> for 20% OFF
             </span>
             <Truck className='w-4 h-4' />
@@ -194,7 +201,7 @@ export default function Header() {
               className='flex items-center gap-1 hover:text-white transition-colors'
             >
               <Truck className='w-3.5 h-3.5' />
-              {t('common:topBar.freeShipping')}
+              {t('common:topBar.freeShipping', { threshold: formatPrice(freeShippingThreshold) })}
             </Link>
             <Link
               to='/track-order'

@@ -12,7 +12,8 @@ import {
   Shield,
   Clock,
 } from 'lucide-react'
-import { cn } from '../../utils'
+import { cn, formatPrice } from '../../utils'
+import { useFreeShippingThreshold } from '../../hooks/useFreeShippingThreshold'
 
 interface HeroSlide {
   id: number
@@ -76,16 +77,17 @@ const heroSlides: HeroSlide[] = [
   },
 ]
 
-const features = [
-  { icon: Truck, label: 'Free Shipping', desc: 'On orders over €50' },
-  { icon: Shield, label: '2-Year Warranty', desc: 'On all products' },
-  { icon: Clock, label: '24/7 Support', desc: 'Expert assistance' },
-  { icon: Zap, label: 'Fast Delivery', desc: '1-3 business days' },
-]
-
 export default function HeroSection() {
   const [currentSlide, setCurrentSlide] = useState(0)
   const [isAutoPlaying, setIsAutoPlaying] = useState(true)
+  // Real, admin-configured threshold -- replaces the hand-typed "€50".
+  const freeShippingThreshold = useFreeShippingThreshold() ?? 50
+  const features = [
+    { icon: Truck, label: 'Free Shipping', desc: `On orders over ${formatPrice(freeShippingThreshold)}` },
+    { icon: Shield, label: '2-Year Warranty', desc: 'On all products' },
+    { icon: Clock, label: '24/7 Support', desc: 'Expert assistance' },
+    { icon: Zap, label: 'Fast Delivery', desc: '1-3 business days' },
+  ]
 
   const nextSlide = useCallback(() => {
     setCurrentSlide((prev) => (prev + 1) % heroSlides.length)

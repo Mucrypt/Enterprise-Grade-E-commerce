@@ -4,6 +4,7 @@ import crypto from 'crypto'
 import { query } from '../../../database/connection'
 import logger from '../../../utils/logger'
 import { sendAdminInvitationEmail } from '../../../utils/email'
+import { StaffAuthRequest } from '../../../middleware/staff'
 
 // =====================================================
 // Admin Invitation System
@@ -605,6 +606,78 @@ export const getAdminActivityLogs = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch activity logs',
+    })
+  }
+}
+
+/**
+ * Global cross-organization activity feed for the Command Center. Reads
+ * the same admin_activity_logs table as getAdminActivityLogs above (same
+ * query shape, no action/resourceType filter for v1 -- shows everything,
+ * including the pre-existing supplier/admin/book/customer events), but
+ * exposed via a separate route (staff.routes.ts) so the existing
+ * super-admin-only internal tool at GET /admin/logs/activity isn't
+ * touched.
+ *
+ * admin_activity_logs has no market/country column, so unlike
+ * applyMarketScope()'s row-level filtering elsewhere, a scoped (non-
+ * global) caller gets an honest empty feed rather than a partial or fake
+ * one -- same fail-honest convention as getMarketOverview in
+ * analytics.controller.ts.
+ */
+export const getGlobalActivityFeed = async (req: StaffAuthRequest, res: Response) => {
+  try {
+    const { limit = 20 } = req.query
+
+    const staff = req.staff
+    const hasGlobalMembership =
+      !staff || staff.memberships.length === 0 || staff.memberships.some((m) => m.marketScope === null)
+
+    if (!hasGlobalMembership) {
+      return res.json({
+        success: true,
+        data: {
+          scoped: true,
+          entries: [],
+          message: 'The activity feed is only available for global staff today.',
+        },
+      })
+    }
+
+    const result = await query(
+      `SELECT al.*, u.email, u.first_name, u.last_name
+       FROM admin_activity_logs al
+       JOIN users u ON al.admin_id = u.id
+       ORDER BY al.created_at DESC
+       LIMIT $1`,
+      [Number(limit)],
+    )
+
+    res.json({
+      success: true,
+      data: {
+        scoped: false,
+        entries: result.rows.map((row: any) => ({
+          id: row.id,
+          action: row.action,
+          resourceType: row.resource_type,
+          resourceId: row.resource_id,
+          details: row.details,
+          createdAt: row.created_at,
+          actor: {
+            id: row.admin_id,
+            email: row.email,
+            firstName: row.first_name,
+            lastName: row.last_name,
+          },
+        })),
+      },
+    })
+  } catch (error) {
+    logger.error('Get global activity feed error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch activity feed',
     })
   }
 }

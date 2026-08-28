@@ -22,7 +22,10 @@
     "types:generate": "cd tech-tools-api && npm run generate:types && cd ../admin-dashboard && npm run sync:types",
     "health:check": "curl -f http://localhost:8080/health && curl -f http://localhost:9000/health",
     "clean": "npm run infra:dev:stop && docker system prune -f",
-    "clean:all": "npm run infra:dev:stop && docker system prune -af --volumes"
+    "clean:all": "npm run infra:dev:stop && docker system prune -af --volumes",
+    "ship": "./scripts/ship.sh",
+    "deploy:force": "./scripts/force-deploy.sh",
+    "deploy:status": "./scripts/deploy-status.sh"
   },
   "workspaces": [
     "tech-tools-api",

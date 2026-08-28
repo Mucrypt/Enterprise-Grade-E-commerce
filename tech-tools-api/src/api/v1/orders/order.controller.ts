@@ -16,6 +16,7 @@ import {
   isCountryInScope,
 } from '../../../middleware/staff'
 import { recordStaffAuditEvent } from '../../../services/staff-audit.service'
+import { recordAdminActivity } from '../../../services/admin-activity.service'
 
 // =====================================================
 // Admin Order Management
@@ -480,6 +481,15 @@ export const adminUpdateOrderStatus = async (
       }
     }
 
+    // Fetched separately (not folded into assertOrderInScope's own SELECT
+    // above) so that shared helper's query shape -- and the tests pinned
+    // to its exact SQL text -- stay untouched for its other caller.
+    const previousStatusResult = await query(
+      'SELECT order_status FROM orders WHERE id = $1',
+      [id],
+    )
+    const previousStatus = previousStatusResult.rows[0]?.order_status
+
     // Build update query
     let updateQuery = 'UPDATE orders SET order_status = $1, updated_at = NOW()'
     const params: any[] = [status]
@@ -510,6 +520,19 @@ export const adminUpdateOrderStatus = async (
       return res.status(404).json({
         success: false,
         error: 'Order not found',
+      })
+    }
+
+    const actorUserId = (req as StaffAuthRequest).user?.userId
+    if (actorUserId) {
+      recordAdminActivity({
+        actorUserId,
+        action: 'order_status_changed',
+        resourceType: 'orders',
+        resourceId: id,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        details: { from: previousStatus, to: status },
       })
     }
 

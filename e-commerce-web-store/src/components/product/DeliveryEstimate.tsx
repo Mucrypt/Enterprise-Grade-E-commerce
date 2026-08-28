@@ -7,10 +7,11 @@
 // ============================================
 
 import { useEffect, useState } from 'react'
-import { Truck, MapPin, Zap } from 'lucide-react'
+import { Truck, MapPin, Zap, PackageCheck } from 'lucide-react'
 import { productsApi } from '../../api'
 import { useDeliveryLocationStore } from '../../stores'
 import { COUNTRIES, countryNameFor } from '../../data/countries'
+import { formatPrice } from '../../utils'
 
 interface DeliveryEstimateData {
   standardLabel: string
@@ -19,6 +20,7 @@ interface DeliveryEstimateData {
   expressLabel: string | null
   expressDate: string | null
   resolvedCountry: string | null
+  freeShippingThreshold: number | null
 }
 
 function formatDate(iso: string): string {
@@ -99,6 +101,19 @@ export default function DeliveryEstimate({ productId }: DeliveryEstimateProps) {
           <Zap className='mt-0.5 h-4 w-4 shrink-0 text-orange-500' />
           <p className='text-sm text-gray-700'>
             {estimate.expressLabel} <span className='font-medium text-gray-900'>{formatDate(estimate.expressDate)}</span>
+          </p>
+        </div>
+      )}
+
+      {/* Real, admin-configured threshold -- not an unconditional "free"
+          claim. Omitted entirely (rather than a fabricated "€50") when no
+          threshold is configured. */}
+      {estimate.freeShippingThreshold != null && (
+        <div className='flex items-start gap-2'>
+          <PackageCheck className='mt-0.5 h-4 w-4 shrink-0 text-green-600' />
+          <p className='text-sm text-gray-700'>
+            Free shipping on orders over{' '}
+            <span className='font-medium text-gray-900'>{formatPrice(estimate.freeShippingThreshold)}</span>
           </p>
         </div>
       )}

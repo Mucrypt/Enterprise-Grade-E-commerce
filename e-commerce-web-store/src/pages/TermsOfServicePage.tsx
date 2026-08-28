@@ -4,6 +4,8 @@
 
 import { Link } from 'react-router-dom';
 import { FileText, ShoppingCart, CreditCard, Truck, RotateCcw, AlertTriangle, Scale, Mail } from 'lucide-react';
+import { formatPrice } from '../utils';
+import { useFreeShippingThreshold } from '../hooks/useFreeShippingThreshold';
 
 const sections = [
   { id: 'acceptance', title: 'Acceptance of Terms', icon: FileText },
@@ -19,6 +21,7 @@ const sections = [
 export default function TermsOfServicePage() {
   const lastUpdated = 'August 1, 2026';
   const effectiveDate = 'August 1, 2026';
+  const freeShippingThreshold = useFreeShippingThreshold() ?? 50;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -234,7 +237,7 @@ export default function TermsOfServicePage() {
                       <tr>
                         <td className="p-3 font-medium">Standard Shipping</td>
                         <td className="p-3 text-gray-600">5-7 business days</td>
-                        <td className="p-3 text-gray-600">Free over €50 / €4.99</td>
+                        <td className="p-3 text-gray-600">Free over {formatPrice(freeShippingThreshold)} / €4.99</td>
                       </tr>
                       <tr>
                         <td className="p-3 font-medium">Express Shipping</td>

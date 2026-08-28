@@ -10,7 +10,7 @@
   "wishlist": "Wunschliste",
   "cart": "Warenkorb",
   "topBar": {
-    "freeShipping": "Kostenloser Versand ab 50 €",
+    "freeShipping": "Kostenloser Versand ab {{threshold}}",
     "trackOrder": "Bestellung verfolgen",
     "dailyDeals": "Tagesangebote",
     "support247": "24/7 Support"
