@@ -35,8 +35,7 @@
         "simulator": true
       },
       "env": {
-        "EXPO_PUBLIC_APP_ENV": "staging",
-        "EXPO_PUBLIC_API_URL": ""
+        "EXPO_PUBLIC_APP_ENV": "staging"
       }
     },
     "preview": {
