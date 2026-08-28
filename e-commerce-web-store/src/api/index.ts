@@ -7,6 +7,7 @@ import type { AxiosInstance } from 'axios'
 import type {
   Product,
   Category,
+  CategoryAttribute,
   Brand,
   ProductCollection,
   Book,
@@ -101,6 +102,11 @@ export const productsApi = {
       params.append('sortOrder', mapped.sortOrder)
     }
     if (filters?.search) params.append('search', filters.search)
+    if (filters?.attributes) {
+      for (const [name, value] of Object.entries(filters.attributes)) {
+        if (value) params.append(`attributes[${name}]`, value)
+      }
+    }
 
     const response = await api.get<{
       success: boolean
@@ -214,6 +220,17 @@ export const categoriesApi = {
       data: { categories: Category[] }
     }>('/categories?tree=true')
     return response.data.data.categories
+  },
+
+  // Structured attribute definitions for this category -- only
+  // 'select'-type ones carry real filter value, but text/number are
+  // returned too (for display elsewhere).
+  async getAttributes(categoryId: string) {
+    const response = await api.get<{
+      success: boolean
+      data: { attributes: CategoryAttribute[] }
+    }>(`/categories/${categoryId}/attributes`)
+    return response.data.data.attributes
   },
 }
 

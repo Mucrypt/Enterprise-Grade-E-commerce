@@ -10,6 +10,7 @@ export interface CreateCategoryDTO {
   metaDescription?: string
   displayOrder?: number
   isActive?: boolean
+  showInNavigation?: boolean
 }
 
 export interface UpdateCategoryDTO extends Partial<CreateCategoryDTO> {}
@@ -112,6 +113,8 @@ export const categoryService = {
       formData.append('displayOrder', String(data.displayOrder))
     if (data.isActive !== undefined)
       formData.append('isActive', String(data.isActive))
+    if (data.showInNavigation !== undefined)
+      formData.append('showInNavigation', String(data.showInNavigation))
 
     // Add media files
     if (thumbnail) formData.append('thumbnail', thumbnail)
@@ -167,6 +170,8 @@ export const categoryService = {
       formData.append('displayOrder', String(data.displayOrder))
     if (data.isActive !== undefined)
       formData.append('isActive', String(data.isActive))
+    if (data.showInNavigation !== undefined)
+      formData.append('showInNavigation', String(data.showInNavigation))
 
     // Add media files
     if (files.thumbnail) formData.append('thumbnail', files.thumbnail)

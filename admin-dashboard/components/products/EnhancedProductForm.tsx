@@ -11,6 +11,9 @@ import { categoryService } from '@/services/category.service'
 import { brandService } from '@/services/brand.service'
 import { mediaService } from '@/services/media.service'
 import deliveryTemplateService from '@/services/delivery-template.service'
+import categoryAttributeService, {
+  CategoryAttribute,
+} from '@/services/category-attribute.service'
 import { getAbsoluteMediaUrl } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -61,6 +64,7 @@ import {
   ListChecks,
   CheckCircle2,
   Circle,
+  ListFilter,
 } from 'lucide-react'
 import { MediaManager, type MediaFile } from './MediaManager'
 import { BrandForm } from '@/components/brands/BrandForm'
@@ -231,6 +235,11 @@ export function EnhancedProductForm({
   const [activeTab, setActiveTab] = useState('basic')
   const [images, setImages] = useState<MediaFile[]>([])
   const [videos, setVideos] = useState<MediaFile[]>([])
+  // { [attributeId]: value } -- kept as a sibling state, same pattern as
+  // images/videos, not folded into the zod form schema (the set of
+  // fields is dynamic, driven by whichever category is selected).
+  const [attributeValues, setAttributeValues] = useState<Record<string, string>>({})
+  const [attributeValuesInitialized, setAttributeValuesInitialized] = useState(false)
   const [autoSlug, setAutoSlug] = useState(mode === 'create')
   const [isBrandFormOpen, setIsBrandFormOpen] = useState(false)
   const [mediaInitialized, setMediaInitialized] = useState(false)
@@ -284,6 +293,23 @@ export function EnhancedProductForm({
       setMediaInitialized(true)
     }
   }, [mode, product, mediaInitialized])
+
+  // Initialize existing attribute values when editing -- (product as any)
+  // matches the same untyped-field convention already used above for
+  // `.media` (attribute_values isn't in the generated Product type yet).
+  useEffect(() => {
+    if (mode === 'edit' && product && !attributeValuesInitialized) {
+      const existing = (product as any).attribute_values as
+        | { attribute_id: string; value: string }[]
+        | undefined
+      if (Array.isArray(existing)) {
+        const values: Record<string, string> = {}
+        for (const row of existing) values[row.attribute_id] = row.value
+        setAttributeValues(values)
+      }
+      setAttributeValuesInitialized(true)
+    }
+  }, [mode, product, attributeValuesInitialized])
 
   // Callback to handle image removal - tracks which images need to be deleted on save
   const handleImageRemove = (imageId: string) => {
@@ -422,6 +448,8 @@ export function EnhancedProductForm({
         metaTitle: data.metaTitle || undefined,
         metaDescription: data.metaDescription || undefined,
         deliveryTemplateId: data.deliveryTemplateId || null,
+        attributeValues:
+          Object.keys(attributeValues).length > 0 ? attributeValues : undefined,
       }
 
       // Get files from media state
@@ -481,6 +509,8 @@ export function EnhancedProductForm({
         metaTitle: data.metaTitle || undefined,
         metaDescription: data.metaDescription || undefined,
         deliveryTemplateId: data.deliveryTemplateId || null,
+        attributeValues:
+          Object.keys(attributeValues).length > 0 ? attributeValues : undefined,
       }
 
       // Delete removed images (ones that were in initial set but not in current set)
@@ -621,6 +651,17 @@ export function EnhancedProductForm({
   const watchedIsActive = watch('isActive')
   const watchedSalePrice = watch('salePrice')
 
+  // Fetch the selected category's structured attribute definitions --
+  // same idiom as the deliveryTemplates query above, re-queried whenever
+  // the category selection changes.
+  const { data: categoryAttributesData } = useQuery({
+    queryKey: ['category-attributes', watchedCategoryId],
+    queryFn: () => categoryAttributeService.listForCategory(watchedCategoryId),
+    enabled: !!watchedCategoryId,
+  })
+  const categoryAttributes: CategoryAttribute[] =
+    categoryAttributesData?.data?.attributes || []
+
   const selectedCategory = categories.find(
     (category: any) => category.id === watchedCategoryId,
   )
@@ -715,7 +756,7 @@ export function EnhancedProductForm({
         {/* Main Content */}
         <div className='lg:col-span-2 space-y-6'>
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className='grid h-11 grid-cols-5 w-full'>
+            <TabsList className='grid h-11 grid-cols-6 w-full'>
               <TabsTrigger
                 value='basic'
                 className='flex items-center gap-2'
@@ -756,6 +797,15 @@ export function EnhancedProductForm({
                 <span className='hidden sm:inline'>Inventory</span>
                 {getTabErrors('inventory') && (
                   <span className='h-2 w-2 rounded-full bg-destructive' />
+                )}
+              </TabsTrigger>
+              <TabsTrigger value='attributes' className='flex items-center gap-2'>
+                <ListFilter className='h-4 w-4' />
+                <span className='hidden sm:inline'>Attributes</span>
+                {Object.keys(attributeValues).length > 0 && (
+                  <Badge variant='secondary' className='h-4 px-1 text-[10px]'>
+                    {Object.keys(attributeValues).length}
+                  </Badge>
                 )}
               </TabsTrigger>
               <TabsTrigger
@@ -1422,6 +1472,77 @@ export function EnhancedProductForm({
                       category or the shopper&apos;s location.
                     </p>
                   </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Attributes Tab -- structured, per-category values (Voltage,
+                Material...), deliberately separate from the free-text
+                description/specs. Only appears once a category is
+                selected, since the field set comes from that category's
+                admin-defined attribute definitions. */}
+            <TabsContent value='attributes' className='space-y-6 mt-6'>
+              <Card>
+                <SectionCardHeader
+                  icon={ListFilter}
+                  iconClassName='bg-teal-50 text-teal-600 dark:bg-teal-500/10 dark:text-teal-400'
+                  title='Attributes'
+                  description="Structured values for this product's category, used by the storefront's filter sidebar"
+                />
+                <CardContent>
+                  {!watchedCategoryId ? (
+                    <p className='text-sm text-muted-foreground'>
+                      Select a category on the Basic tab first.
+                    </p>
+                  ) : categoryAttributes.length === 0 ? (
+                    <p className='text-sm text-muted-foreground'>
+                      This category has no attributes defined yet. Manage them under
+                      Catalog &rarr; Category Attributes.
+                    </p>
+                  ) : (
+                    <div className='space-y-4'>
+                      {categoryAttributes.map((attr: CategoryAttribute) => (
+                        <div key={attr.id} className='space-y-1.5'>
+                          <Label>
+                            {attr.name}
+                            {attr.unit && (
+                              <span className='text-muted-foreground'> ({attr.unit})</span>
+                            )}
+                          </Label>
+                          {attr.input_type === 'select' ? (
+                            <Select
+                              value={attributeValues[attr.id] || ''}
+                              onValueChange={(v: string) =>
+                                setAttributeValues((prev) => ({ ...prev, [attr.id]: v }))
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder='Not set' />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(attr.options || []).map((opt: string) => (
+                                  <SelectItem key={opt} value={opt}>
+                                    {opt}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Input
+                              type={attr.input_type === 'number' ? 'number' : 'text'}
+                              value={attributeValues[attr.id] || ''}
+                              onChange={(e) =>
+                                setAttributeValues((prev) => ({
+                                  ...prev,
+                                  [attr.id]: e.target.value,
+                                }))
+                              }
+                            />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

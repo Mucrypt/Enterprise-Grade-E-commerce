@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react'
 import { Check, Star, X } from 'lucide-react'
-import type { Category, Brand } from '../../types'
+import type { Category, Brand, CategoryAttribute } from '../../types'
+import { categoriesApi } from '../../api'
 import { cn } from '../../utils'
 import { AccordionItem } from '../ui/Accordion'
 
@@ -33,6 +35,10 @@ interface FilterSidebarProps {
   /** Route-based category/brand (e.g. /category/:slug) shouldn't be re-selectable in the sidebar -- they ARE the page. */
   hideCategorySection?: boolean
   hideBrandSection?: boolean
+  /** The single category currently scoping the grid, if any -- drives which structured attribute filters (Voltage, Material...) are shown. */
+  activeCategoryId?: string
+  selectedAttributes?: Record<string, string>
+  onUpdateAttributeFilter?: (name: string, value: string | undefined) => void
 }
 
 export function FilterSidebar({
@@ -45,10 +51,41 @@ export function FilterSidebar({
   onCloseMobile,
   hideCategorySection,
   hideBrandSection,
+  activeCategoryId,
+  selectedAttributes = {},
+  onUpdateAttributeFilter,
 }: FilterSidebarProps) {
   const toggleRating = (rating: number) => {
     onUpdateFilter('minRating', filters.minRating === rating ? undefined : rating)
   }
+
+  // Structured, category-specific attribute definitions -- only fetched
+  // when a single category is actually scoping the grid, and only
+  // 'select'-type ones get filter checkboxes (their `options` array is
+  // the real, admin-defined controlled vocabulary).
+  const [categoryAttributes, setCategoryAttributes] = useState<CategoryAttribute[]>([])
+  useEffect(() => {
+    if (!activeCategoryId) return
+    let cancelled = false
+    categoriesApi
+      .getAttributes(activeCategoryId)
+      .then((attrs) => {
+        if (!cancelled) setCategoryAttributes(attrs)
+      })
+      .catch(() => {
+        if (!cancelled) setCategoryAttributes([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [activeCategoryId])
+  // Gated on activeCategoryId so a stale previous category's attributes
+  // never leak into view while the next fetch is in flight or absent.
+  const filterableAttributes = activeCategoryId
+    ? categoryAttributes.filter(
+        (attr) => attr.is_filterable && attr.input_type === 'select' && (attr.options?.length || 0) > 0,
+      )
+    : []
 
   return (
     <aside
@@ -148,6 +185,34 @@ export function FilterSidebar({
                 </div>
               </AccordionItem>
             </div>
+
+            {filterableAttributes.map((attr) => (
+              <div className="px-4" key={attr.id}>
+                <AccordionItem title={attr.unit ? `${attr.name} (${attr.unit})` : attr.name}>
+                  <div className="space-y-1">
+                    {(attr.options || []).map((option) => {
+                      const selected = selectedAttributes[attr.name] === option
+                      return (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() =>
+                            onUpdateAttributeFilter?.(attr.name, selected ? undefined : option)
+                          }
+                          className={cn(
+                            'flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors',
+                            selected ? 'bg-orange-100 text-orange-700' : 'hover:bg-gray-100',
+                          )}
+                        >
+                          <span>{option}</span>
+                          {selected && <Check className="h-4 w-4 shrink-0" />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </AccordionItem>
+              </div>
+            ))}
 
             <div className="px-4">
               <AccordionItem title="Rating">

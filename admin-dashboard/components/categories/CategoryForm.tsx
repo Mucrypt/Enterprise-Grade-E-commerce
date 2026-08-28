@@ -46,6 +46,7 @@ const categorySchema = z.object({
   metaDescription: z.string().optional(),
   displayOrder: z.coerce.number().min(0).default(0),
   isActive: z.boolean().default(true),
+  showInNavigation: z.boolean().default(false),
 })
 
 type CategoryFormData = z.infer<typeof categorySchema>
@@ -104,6 +105,7 @@ export function CategoryForm({
       metaDescription: '',
       displayOrder: 0,
       isActive: true,
+      showInNavigation: false,
     },
   })
 
@@ -133,6 +135,8 @@ export function CategoryForm({
           category.meta_description || category.metaDescription || '',
         displayOrder: category.display_order ?? category.displayOrder ?? 0,
         isActive: category.is_active ?? category.isActive ?? true,
+        showInNavigation:
+          category.show_in_nav ?? category.showInNavigation ?? false,
       })
       // Clear file previews for existing images
       setThumbnailPreview(null)
@@ -148,6 +152,7 @@ export function CategoryForm({
         metaDescription: '',
         displayOrder: 0,
         isActive: true,
+        showInNavigation: false,
       })
       setThumbnailPreview(null)
       setBannerPreview(null)
@@ -326,6 +331,27 @@ export function CategoryForm({
                   )}
                 />
                 <Label htmlFor='isActive'>Active</Label>
+              </div>
+
+              <div className='flex items-center space-x-2'>
+                <Controller
+                  name='showInNavigation'
+                  control={control}
+                  render={({ field }) => (
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      id='showInNavigation'
+                    />
+                  )}
+                />
+                <div>
+                  <Label htmlFor='showInNavigation'>Show in Navigation</Label>
+                  <p className='text-xs text-muted-foreground'>
+                    Appears as a top-level item in the storefront header's
+                    mega-menu, with its subcategories as sections.
+                  </p>
+                </div>
               </div>
             </TabsContent>
 

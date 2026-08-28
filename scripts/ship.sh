@@ -105,12 +105,16 @@ if [ -n "$(git status --porcelain)" ]; then
         # pasted multi-line message -- the rest used to spill into the
         # shell and get executed as commands (confirmed live: pasting a
         # bulleted commit message produced a string of "command not
-        # found" errors). Reads lines until a blank one instead, so a
-        # multi-line paste is captured whole; press Enter once more after
-        # pasting to finish.
-        echo "Commit message (multi-line OK -- finish with an empty line):"
+        # found" errors). A first fix used "stop at the first blank
+        # line" -- but a well-formed commit message conventionally HAS a
+        # blank line (subject, blank, body), so that terminator fired
+        # immediately on the subject line and reproduced the exact same
+        # spillage (confirmed live again). Uses an explicit sentinel line
+        # instead, so any number of real blank lines inside the message
+        # are captured as-is.
+        echo "Commit message (multi-line OK, blank lines allowed -- finish with a line containing only END):"
         while IFS= read -r line; do
-            [ -z "$line" ] && break
+            [ "$line" = "END" ] && break
             if [ -z "$COMMIT_MSG" ]; then
                 COMMIT_MSG="$line"
             else

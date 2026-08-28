@@ -38,6 +38,7 @@ import {
   Building2,
   Activity,
   CalendarDays,
+  ListFilter,
   Link2,
   Store,
   PackagePlus,
@@ -132,6 +133,12 @@ const navigation: NavItem[] = [
         title: 'Brands',
         href: '/brands',
         icon: Tag,
+        permission: 'catalog.view',
+      },
+      {
+        title: 'Category Attributes',
+        href: '/catalog/attributes',
+        icon: ListFilter,
         permission: 'catalog.view',
       },
       {

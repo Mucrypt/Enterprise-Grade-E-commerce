@@ -67,6 +67,8 @@ export interface Category {
   meta_description?: string | null
   is_active: boolean
   isActive?: boolean // camelCase alias for compatibility
+  show_in_nav?: boolean
+  showInNavigation?: boolean // camelCase alias for compatibility
   display_order: number
   displayOrder?: number // camelCase alias for compatibility
   created_at?: string

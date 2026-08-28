@@ -43,6 +43,19 @@ export default function ProductsPage() {
   const isCategoryRoute = location.pathname.startsWith('/category/')
   const isBrandRoute = location.pathname.startsWith('/brand/')
 
+  // Category-specific structured attribute filters, e.g. attributes[Voltage]=18V
+  // -- parsed out of whatever bracket-style query params are present,
+  // rather than a fixed list of keys (the set of attributes is dynamic,
+  // driven by the active category's own admin-defined definitions).
+  const attributeFilters = useMemo(() => {
+    const result: Record<string, string> = {}
+    for (const [key, value] of searchParams.entries()) {
+      const match = key.match(/^attributes\[(.+)\]$/)
+      if (match) result[match[1]] = value
+    }
+    return result
+  }, [searchParams])
+
   const filters = useMemo(
     () => ({
       category: isCategoryRoute && slug ? slug : searchParams.get('category') || '',
@@ -54,9 +67,12 @@ export default function ProductsPage() {
       search: searchParams.get('search') || '',
       inStock: searchParams.get('inStock') === 'true',
       collection: searchParams.get('collection') || '',
+      attributes: attributeFilters,
     }),
-    [searchParams, slug, isCategoryRoute, isBrandRoute],
+    [searchParams, slug, isCategoryRoute, isBrandRoute, attributeFilters],
   )
+
+  const activeCategoryId = categories.find((c) => c.slug === filters.category)?.id
 
   useEffect(() => {
     loadData()
@@ -137,6 +153,18 @@ export default function ProductsPage() {
       newParams.delete(key)
     } else {
       newParams.set(key, String(value))
+    }
+    setSearchParams(newParams)
+    setCurrentPage(1)
+  }
+
+  const updateAttributeFilter = (name: string, value: string | undefined) => {
+    const newParams = new URLSearchParams(searchParams)
+    const key = `attributes[${name}]`
+    if (value === undefined || value === '') {
+      newParams.delete(key)
+    } else {
+      newParams.set(key, value)
     }
     setSearchParams(newParams)
     setCurrentPage(1)
@@ -266,6 +294,9 @@ export default function ProductsPage() {
             onCloseMobile={() => setShowFilters(false)}
             hideCategorySection={isCategoryRoute}
             hideBrandSection={isBrandRoute}
+            activeCategoryId={activeCategoryId}
+            selectedAttributes={attributeFilters}
+            onUpdateAttributeFilter={updateAttributeFilter}
           />
 
           <main className="min-w-0 flex-1">

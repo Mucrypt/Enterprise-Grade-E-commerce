@@ -7,6 +7,7 @@ import productRoutes from './products/product.routes'
 import productMediaRoutes from './products/product-media.routes'
 import categoryRoutes from './categories/category.routes'
 import categoryMediaRoutes from './categories/category-media.routes'
+import categoryAttributeRoutes from './categories/category-attribute.routes'
 import brandRoutes from './brands/brand.routes'
 import productCollectionsRoutes from './collections/product-collections.routes'
 import categoryCollectionsRoutes from './collections/category-collections.routes'
@@ -69,6 +70,7 @@ router.use('/products', productRoutes)
 router.use('/products', productMediaRoutes) // Product media endpoints
 router.use('/categories', categoryRoutes)
 router.use('/categories', categoryMediaRoutes) // Category media endpoints
+router.use('/category-attributes', categoryAttributeRoutes) // Attribute definitions (admin CRUD)
 router.use('/brands', brandRoutes)
 router.use('/collections/products', productCollectionsRoutes) // Product collections
 router.use('/collections/categories', categoryCollectionsRoutes) // Category collections

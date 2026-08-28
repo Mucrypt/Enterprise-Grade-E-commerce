@@ -146,8 +146,19 @@ function buildCategoryTree(rows: CategoryTreeNode[]): CategoryTreeNode[] {
 
 export const getCategories = async (req: Request, res: Response) => {
   try {
+    // Joins category_media (thumbnail/banner/icon) the same way
+    // getAllCategories (admin) already does -- previously this public
+    // endpoint only ever returned the legacy categories.image_url column,
+    // so anything an admin uploaded via CategoryForm's Media tab was
+    // invisible to the storefront.
     const result = await query(
-      'SELECT * FROM categories WHERE is_active = true ORDER BY display_order ASC, name ASC',
+      `SELECT c.*,
+        (SELECT json_agg(cm ORDER BY cm.position)
+         FROM category_media cm
+         WHERE cm.category_id = c.id) as media
+       FROM categories c
+       WHERE c.is_active = true
+       ORDER BY c.display_order ASC, c.name ASC`,
       [],
     )
 
@@ -211,6 +222,7 @@ export const createCategory = async (req: AuthRequest, res: Response) => {
       metaDescription,
       displayOrder = 0,
       isActive = true,
+      showInNavigation = false,
       // Media-related fields
       thumbnailTitle,
       thumbnailAlt,
@@ -236,8 +248,8 @@ export const createCategory = async (req: AuthRequest, res: Response) => {
 
     // Create the category first
     const result = await query(
-      `INSERT INTO categories (name, slug, description, parent_id, meta_title, meta_description, display_order, is_active) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      `INSERT INTO categories (name, slug, description, parent_id, meta_title, meta_description, display_order, is_active, show_in_nav)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
       [
         name,
         slug,
@@ -247,6 +259,7 @@ export const createCategory = async (req: AuthRequest, res: Response) => {
         metaDescription || description,
         displayOrder,
         isActive,
+        showInNavigation,
       ],
     )
 
@@ -484,6 +497,7 @@ export const updateCategory = async (req: AuthRequest, res: Response) => {
       metaDescription,
       displayOrder,
       isActive,
+      showInNavigation,
       // Media-related fields
       thumbnailTitle,
       thumbnailAlt,
@@ -559,8 +573,9 @@ export const updateCategory = async (req: AuthRequest, res: Response) => {
         meta_description = COALESCE($6, meta_description),
         display_order = COALESCE($7, display_order),
         is_active = COALESCE($8, is_active),
-        updated_at = NOW() 
-       WHERE id = $9 RETURNING *`,
+        show_in_nav = COALESCE($9, show_in_nav),
+        updated_at = NOW()
+       WHERE id = $10 RETURNING *`,
       [
         name,
         slug,
@@ -572,6 +587,7 @@ export const updateCategory = async (req: AuthRequest, res: Response) => {
         metaDescription,
         displayOrder,
         isActive,
+        showInNavigation,
         id,
       ],
     )

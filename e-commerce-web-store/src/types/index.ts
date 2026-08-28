@@ -41,6 +41,17 @@ export interface Product extends BaseEntity {
   units_sold?: number | string
   meta_title: string | null
   meta_description: string | null
+  // Real merchandising signals -- list-endpoint only, each either real or
+  // absent, never fabricated. Frontend applies the actual badge
+  // thresholds against these raw numbers.
+  is_new?: boolean
+  units_sold_90d?: number | string
+  units_sold_7d?: number | string
+  views_7d?: number | string
+  is_eu_warehouse?: boolean
+  // Structured, admin-defined attribute values (Voltage, Material...) --
+  // separate from the free-text `specifications` above.
+  attribute_values?: ProductAttributeValue[] | null
 }
 
 export interface ProductSpecification {
@@ -104,6 +115,17 @@ export interface ProductVariant {
 }
 
 // Category Types
+export interface CategoryMedia {
+  id: string
+  category_id: string
+  media_type?: 'image' | 'video'
+  media_purpose: 'thumbnail' | 'banner' | 'icon' | 'video'
+  file_path?: string
+  url?: string
+  cdn_urls?: Record<string, string>
+  position?: number
+}
+
 export interface Category extends BaseEntity {
   name: string
   slug: string
@@ -112,8 +134,30 @@ export interface Category extends BaseEntity {
   image_url: string | null
   display_order: number
   is_active: boolean
+  show_in_nav?: boolean
   product_count?: number
   children?: Category[]
+  media?: CategoryMedia[] | null
+}
+
+// Category-specific structured attributes (Voltage, Material...) --
+// deliberately separate from the free-text product_specifications system.
+export interface CategoryAttribute {
+  id: string
+  category_id: string
+  name: string
+  input_type: 'text' | 'number' | 'select'
+  options: string[] | null
+  unit: string | null
+  display_order: number
+  is_filterable: boolean
+}
+
+export interface ProductAttributeValue {
+  attribute_id: string
+  name: string
+  value: string
+  unit: string | null
 }
 
 // Brand Types
@@ -576,6 +620,8 @@ export interface ProductFilters {
   // don't offer a sort that silently does nothing.
   sortBy?: 'newest' | 'price_asc' | 'price_desc' | 'rating'
   search?: string
+  // { [attributeName]: value } -- serialized as attributes[name]=value.
+  attributes?: Record<string, string>
 }
 
 // UI Types

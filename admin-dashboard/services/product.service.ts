@@ -29,6 +29,8 @@ export interface CreateProductDTO {
   metaTitle?: string
   metaDescription?: string
   deliveryTemplateId?: string | null
+  // { [attributeId]: value } -- category_attributes/product_attribute_values.
+  attributeValues?: Record<string, string>
 }
 
 export interface UpdateProductDTO extends Partial<CreateProductDTO> {}
@@ -103,12 +105,21 @@ export const productService = {
   ): Promise<ApiResponse<{ product: Product }>> {
     const formData = new FormData()
 
-    // Add product data as form fields
+    // Add product data as form fields. attributeValues is the one nested
+    // object in this DTO -- the generic String(value) below would mangle
+    // it into the literal string "[object Object]", so it's JSON-encoded
+    // separately and excluded from the generic loop; the backend parses
+    // it back out (multipart fields always arrive as strings, unlike a
+    // plain JSON request body where the object survives natively).
     Object.entries(data).forEach(([key, value]) => {
+      if (key === 'attributeValues') return
       if (value !== undefined && value !== null) {
         formData.append(key, String(value))
       }
     })
+    if (data.attributeValues && Object.keys(data.attributeValues).length > 0) {
+      formData.append('attributeValues', JSON.stringify(data.attributeValues))
+    }
 
     // Add images
     if (images) {
@@ -154,12 +165,18 @@ export const productService = {
   ): Promise<ApiResponse<{ product: Product }>> {
     const formData = new FormData()
 
-    // Add product data as form fields
+    // Add product data as form fields -- see createProductWithMedia's
+    // comment for why attributeValues is JSON-encoded and excluded from
+    // the generic loop.
     Object.entries(data).forEach(([key, value]) => {
+      if (key === 'attributeValues') return
       if (value !== undefined && value !== null) {
         formData.append(key, String(value))
       }
     })
+    if (data.attributeValues && Object.keys(data.attributeValues).length > 0) {
+      formData.append('attributeValues', JSON.stringify(data.attributeValues))
+    }
 
     // Add images
     if (images) {

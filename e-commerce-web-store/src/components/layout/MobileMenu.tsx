@@ -2,10 +2,12 @@
 // Mobile Menu Component (SHEIN Style Drawer)
 // ============================================
 
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   X,
   ChevronRight,
+  ChevronLeft,
   User,
   Heart,
   Package,
@@ -20,6 +22,7 @@ import {
 } from 'lucide-react'
 import { useUIStore, useAuthStore } from '../../stores'
 import { cn } from '../../utils'
+import type { Category } from '../../types'
 
 interface MobileMenuProps {
   categories: {
@@ -29,11 +32,16 @@ interface MobileMenuProps {
     featured?: boolean
     color?: string
   }[]
+  /** Real, DB-driven category tree (nav-eligible top level + their real
+   * children) -- rendered as its own drill-down section below the static
+   * pills above, since a real tree has nesting the flat list never had. */
+  dynamicCategories?: Category[]
 }
 
-export default function MobileMenu({ categories }: MobileMenuProps) {
+export default function MobileMenu({ categories, dynamicCategories = [] }: MobileMenuProps) {
   const { closeMobileMenu } = useUIStore()
   const { isAuthenticated, user, logout } = useAuthStore()
+  const [drilledInto, setDrilledInto] = useState<Category | null>(null)
 
   const handleLogout = async () => {
     await logout()
@@ -162,6 +170,74 @@ export default function MobileMenu({ categories }: MobileMenuProps) {
               ))}
             </nav>
           </div>
+
+          {/* Dynamic, DB-driven catalog categories -- one level of
+              drill-down since a real tree has nesting the static pills
+              above never handled. */}
+          {dynamicCategories.length > 0 && (
+            <div className='p-4 border-t'>
+              {drilledInto ? (
+                <>
+                  <button
+                    onClick={() => setDrilledInto(null)}
+                    className='flex items-center gap-2 mb-3 text-xs font-semibold text-gray-500 uppercase tracking-wide'
+                  >
+                    <ChevronLeft className='w-4 h-4' /> Back
+                  </button>
+                  <Link
+                    to={`/category/${drilledInto.slug}`}
+                    onClick={closeMobileMenu}
+                    className='block p-3 mb-1 font-semibold text-orange-600 rounded-lg hover:bg-orange-50'
+                  >
+                    All {drilledInto.name}
+                  </Link>
+                  <nav className='space-y-1'>
+                    {(drilledInto.children || []).map((child) => (
+                      <Link
+                        key={child.id}
+                        to={`/category/${child.slug}`}
+                        onClick={closeMobileMenu}
+                        className='flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors'
+                      >
+                        <span className='font-medium'>{child.name}</span>
+                        <ChevronRight className='w-5 h-5 text-gray-400' />
+                      </Link>
+                    ))}
+                  </nav>
+                </>
+              ) : (
+                <>
+                  <h3 className='text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3'>
+                    More Categories
+                  </h3>
+                  <nav className='space-y-1'>
+                    {dynamicCategories.map((category) =>
+                      category.children && category.children.length > 0 ? (
+                        <button
+                          key={category.id}
+                          onClick={() => setDrilledInto(category)}
+                          className='flex w-full items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors'
+                        >
+                          <span className='font-medium'>{category.name}</span>
+                          <ChevronRight className='w-5 h-5 text-gray-400' />
+                        </button>
+                      ) : (
+                        <Link
+                          key={category.id}
+                          to={`/category/${category.slug}`}
+                          onClick={closeMobileMenu}
+                          className='flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors'
+                        >
+                          <span className='font-medium'>{category.name}</span>
+                          <ChevronRight className='w-5 h-5 text-gray-400' />
+                        </Link>
+                      ),
+                    )}
+                  </nav>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Account Links */}
           <div className='p-4 border-t'>

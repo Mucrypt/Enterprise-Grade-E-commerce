@@ -11,6 +11,34 @@ import {
 import fs from 'fs/promises'
 import { recordAdminActivity } from '../../../services/admin-activity.service'
 
+// Real ISO-3166 alpha-2 codes for EU member states -- backs the EU
+// WAREHOUSE badge. Checked against a product's primary supplier's
+// suppliers.country_code (the exact join fulfillment.service.ts already
+// uses for real order routing) -- never guessed, absent when there's no
+// supplier link or the code isn't one of these.
+// { [attributeId]: value } arrives as a real object on a plain JSON
+// request, but multipart/form-data (product image/video uploads) can only
+// carry strings -- the admin-dashboard JSON-encodes it in that case (see
+// product.service.ts's createProductWithMedia), so this accepts either.
+function parseAttributeValues(raw: unknown): Record<string, string> | null {
+  if (!raw) return null
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw)
+      return parsed && typeof parsed === 'object' ? parsed : null
+    } catch {
+      return null
+    }
+  }
+  return typeof raw === 'object' ? (raw as Record<string, string>) : null
+}
+
+const EU_COUNTRY_CODES = [
+  'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR',
+  'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK',
+  'SI', 'ES', 'SE',
+]
+
 export const getProducts = async (req: Request, res: Response) => {
   try {
     const {
@@ -28,6 +56,7 @@ export const getProducts = async (req: Request, res: Response) => {
       featured,
       inStock,
       search,
+      attributes,
     } = req.query
 
     const offset = (Number(page) - 1) * Number(limit)
@@ -60,11 +89,16 @@ export const getProducts = async (req: Request, res: Response) => {
       paramCount++
     }
 
-    // Search filter
+    // Search filter -- ILIKE substring match plus a pg_trgm similarity
+    // fallback so a close-but-not-exact query ("flashlite") still
+    // surfaces "flashlight" instead of returning nothing. $paramCount is
+    // the %wrapped% term for ILIKE, $paramCount+1 is the raw term for
+    // similarity().
     if (search) {
-      whereClause += ` AND (p.name ILIKE $${paramCount} OR p.description ILIKE $${paramCount} OR p.sku ILIKE $${paramCount})`
-      queryParams.push(`%${search}%`)
-      paramCount++
+      const rawTerm = String(search)
+      whereClause += ` AND (p.name ILIKE $${paramCount} OR p.description ILIKE $${paramCount} OR p.sku ILIKE $${paramCount} OR similarity(p.name, $${paramCount + 1}) > 0.3)`
+      queryParams.push(`%${rawTerm}%`, rawTerm)
+      paramCount += 2
     }
 
     if (minPrice) {
@@ -98,6 +132,24 @@ export const getProducts = async (req: Request, res: Response) => {
       whereClause += ` AND prs.average_rating >= $${paramCount}`
       queryParams.push(minRating)
       paramCount++
+    }
+
+    // ?attributes[name]=value -- e.g. ?attributes[Voltage]=18V. Self-
+    // contained EXISTS per pair, so no extra join is needed just for
+    // filtering (the count query stays lean).
+    if (attributes && typeof attributes === 'object') {
+      for (const [attrName, attrValue] of Object.entries(
+        attributes as Record<string, string>,
+      )) {
+        if (!attrValue) continue
+        whereClause += ` AND EXISTS (
+          SELECT 1 FROM product_attribute_values pav
+          JOIN category_attributes ca ON ca.id = pav.attribute_id
+          WHERE pav.product_id = p.id AND ca.name = $${paramCount} AND pav.value = $${paramCount + 1}
+        )`
+        queryParams.push(attrName, attrValue)
+        paramCount += 2
+      }
     }
 
     // Validate sort column
@@ -173,15 +225,65 @@ export const getProducts = async (req: Request, res: Response) => {
           SELECT COALESCE(SUM(i.available_stock), 0)
           FROM inventory i
           WHERE i.product_id = p.id
-        ) as total_stock
+        ) as total_stock,
+        (
+          SELECT json_agg(json_build_object(
+            'attribute_id', pav.attribute_id,
+            'name', ca.name,
+            'value', pav.value,
+            'unit', ca.unit
+          ) ORDER BY ca.display_order, ca.name)
+          FROM product_attribute_values pav
+          JOIN category_attributes ca ON ca.id = pav.attribute_id
+          WHERE pav.product_id = p.id
+        ) as attribute_values,
+        -- Real merchandising signals, all real data or absent -- never
+        -- fabricated/guessed. Frontend applies the actual badge
+        -- thresholds against these raw numbers so they're tunable
+        -- without a migration.
+        (p.created_at >= NOW() - INTERVAL '30 days') as is_new,
+        COALESCE(sales90.units_sold, 0) as units_sold_90d,
+        COALESCE(sales7.units_sold, 0) as units_sold_7d,
+        COALESCE(views7.views, 0) as views_7d,
+        (supplier_country.country_code = ANY($${paramCount})) as is_eu_warehouse
        FROM products p
        LEFT JOIN categories c ON p.category_id = c.id
        LEFT JOIN brands b ON p.brand_id = b.id
        LEFT JOIN product_review_summary prs ON prs.product_id = p.id
+       LEFT JOIN (
+         SELECT oi.product_id, SUM(oi.quantity) as units_sold
+         FROM order_items oi
+         JOIN orders o ON o.id = oi.order_id
+         WHERE o.order_status NOT IN ('cancelled', 'refunded')
+           AND o.created_at >= NOW() - INTERVAL '90 days'
+         GROUP BY oi.product_id
+       ) sales90 ON sales90.product_id = p.id
+       LEFT JOIN (
+         SELECT oi.product_id, SUM(oi.quantity) as units_sold
+         FROM order_items oi
+         JOIN orders o ON o.id = oi.order_id
+         WHERE o.order_status NOT IN ('cancelled', 'refunded')
+           AND o.created_at >= NOW() - INTERVAL '7 days'
+         GROUP BY oi.product_id
+       ) sales7 ON sales7.product_id = p.id
+       LEFT JOIN (
+         SELECT product_id, COUNT(*) as views
+         FROM events_core
+         WHERE event_type = 'product_view' AND event_time >= NOW() - INTERVAL '7 days'
+         GROUP BY product_id
+       ) views7 ON views7.product_id = p.id
+       LEFT JOIN LATERAL (
+         SELECT s.country_code
+         FROM supplier_products sp
+         JOIN suppliers s ON s.id = sp.supplier_id
+         WHERE sp.product_id = p.id AND sp.is_available = true
+         ORDER BY sp.is_primary DESC, sp.cost_price ASC
+         LIMIT 1
+       ) supplier_country ON true
        ${whereClause}
        ORDER BY ${orderByExpression} ${safeSortOrder}
-       LIMIT $${paramCount} OFFSET $${paramCount + 1}`,
-      [...queryParams, limit, offset],
+       LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`,
+      [...queryParams, EU_COUNTRY_CODES, limit, offset],
     )
 
     res.json({
@@ -259,6 +361,17 @@ export const getProductById = async (req: Request, res: Response) => {
           FROM product_specifications ps
           WHERE ps.product_id = p.id
         ) as specifications,
+        (
+          SELECT json_agg(json_build_object(
+            'attribute_id', pav.attribute_id,
+            'name', ca.name,
+            'value', pav.value,
+            'unit', ca.unit
+          ) ORDER BY ca.display_order, ca.name)
+          FROM product_attribute_values pav
+          JOIN category_attributes ca ON ca.id = pav.attribute_id
+          WHERE pav.product_id = p.id
+        ) as attribute_values,
         (
           SELECT json_agg(json_build_object(
             'id', i.id,
@@ -363,6 +476,9 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
       metaTitle,
       metaDescription,
       deliveryTemplateId = null,
+      // { [attributeId]: value } -- category_attributes/product_attribute_values,
+      // deliberately separate from the free-text product_specifications table.
+      attributeValues,
       // Media-related fields
       imageDescriptions, // JSON string array of descriptions for each image
       videoPurpose, // purpose for video (demo, tutorial, unboxing, etc.)
@@ -456,6 +572,19 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
          VALUES ($1, $2, 0)`,
         [product.id, stockQuantity],
       )
+
+      const parsedAttributeValues = parseAttributeValues(attributeValues)
+      if (parsedAttributeValues) {
+        for (const [attributeId, value] of Object.entries(parsedAttributeValues)) {
+          if (value === undefined || value === null || value === '') continue
+          await client.query(
+            `INSERT INTO product_attribute_values (product_id, attribute_id, value)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (product_id, attribute_id) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP`,
+            [product.id, attributeId, String(value)],
+          )
+        }
+      }
 
       await client.query('COMMIT')
     } catch (error) {
@@ -635,15 +764,17 @@ export const searchProducts = async (req: Request, res: Response) => {
     }
 
     const offset = (Number(page) - 1) * Number(limit)
-    const searchTerm = `%${q.trim()}%`
+    const rawTerm = q.trim()
+    const searchTerm = `%${rawTerm}%`
 
-    // Get total count
+    // Get total count -- $2 is the raw (unwrapped) term for the pg_trgm
+    // similarity() fallback, same typo-tolerance fix as getProducts.
     const countResult = await query(
       `SELECT COUNT(*) FROM products p
-       WHERE p.is_active = true 
+       WHERE p.is_active = true
          AND p.deleted_at IS NULL
-         AND (p.name ILIKE $1 OR p.description ILIKE $1 OR p.sku ILIKE $1)`,
-      [searchTerm],
+         AND (p.name ILIKE $1 OR p.description ILIKE $1 OR p.sku ILIKE $1 OR similarity(p.name, $2) > 0.3)`,
+      [searchTerm, rawTerm],
     )
     const total = parseInt(countResult.rows[0].count)
 
@@ -684,18 +815,20 @@ export const searchProducts = async (req: Request, res: Response) => {
        FROM products p
        LEFT JOIN categories c ON p.category_id = c.id
        LEFT JOIN brands b ON p.brand_id = b.id
-       WHERE p.is_active = true 
+       WHERE p.is_active = true
          AND p.deleted_at IS NULL
-         AND (p.name ILIKE $1 OR p.description ILIKE $1 OR p.sku ILIKE $1)
-       ORDER BY 
-         CASE 
+         AND (p.name ILIKE $1 OR p.description ILIKE $1 OR p.sku ILIKE $1 OR similarity(p.name, $2) > 0.3)
+       ORDER BY
+         CASE
            WHEN p.name ILIKE $1 THEN 1
            WHEN p.sku ILIKE $1 THEN 2
-           ELSE 3
+           WHEN similarity(p.name, $2) > 0.3 THEN 3
+           ELSE 4
          END,
+         similarity(p.name, $2) DESC,
          p.created_at DESC
-       LIMIT $2 OFFSET $3`,
-      [searchTerm, limit, offset],
+       LIMIT $3 OFFSET $4`,
+      [searchTerm, rawTerm, limit, offset],
     )
 
     res.json({
@@ -849,6 +982,7 @@ export const updateProduct = async (req: AuthRequest, res: Response) => {
       metaTitle,
       metaDescription,
       deliveryTemplateId,
+      attributeValues,
     } = req.body
 
     // Check if SKU is being changed and if new SKU exists
@@ -955,6 +1089,25 @@ export const updateProduct = async (req: AuthRequest, res: Response) => {
       )
       if (inventoryUpdate.rowCount === 0) {
         await query(`INSERT INTO inventory (product_id, current_stock) VALUES ($1, $2)`, [productId, stockQuantity])
+      }
+    }
+
+    const parsedAttributeValues = parseAttributeValues(attributeValues)
+    if (parsedAttributeValues) {
+      for (const [attributeId, value] of Object.entries(parsedAttributeValues)) {
+        if (value === undefined || value === null || value === '') {
+          await query(
+            'DELETE FROM product_attribute_values WHERE product_id = $1 AND attribute_id = $2',
+            [productId, attributeId],
+          )
+          continue
+        }
+        await query(
+          `INSERT INTO product_attribute_values (product_id, attribute_id, value)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (product_id, attribute_id) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP`,
+          [productId, attributeId, String(value)],
+        )
       }
     }
 

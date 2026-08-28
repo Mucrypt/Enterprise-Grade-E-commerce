@@ -27,6 +27,8 @@ import {
 } from '../../stores'
 import { cn, formatPrice } from '../../utils'
 import { useFreeShippingThreshold } from '../../hooks/useFreeShippingThreshold'
+import { categoriesApi } from '../../api'
+import type { Category } from '../../types'
 import SearchOverlay from './SearchOverlay'
 import MegaMenu from './MegaMenu'
 import MobileMenu from './MobileMenu'
@@ -34,8 +36,26 @@ import CartDrawer from '../cart/CartDrawer'
 import { NotificationBell } from '../notifications/NotificationBell'
 import LanguageSelector from './LanguageSelector'
 
-// Navigation Categories Data
-const navigationCategories = [
+// Marketing pills only -- New In / Sale / Trending / Brands aren't real
+// catalog categories, so they stay static. Every actual product category
+// (Lighting, Audio & Entertainment, ...) now comes from
+// categoriesApi.getTree(), filtered to whichever ones an admin has
+// flagged show_in_nav -- see the categoryTree state below. This used to
+// be a hardcoded list of 6 fixed categories (2 of which, Interior and
+// Performance, weren't even wired into MegaMenu's old data and silently
+// fell back to a generic panel) completely disconnected from the real
+// categories table.
+interface NavItem {
+  id: string
+  label: string
+  href: string
+  featured?: boolean
+  color?: string
+  megaMenu?: boolean
+  isDynamic?: true
+}
+
+const navigationCategories: NavItem[] = [
   {
     id: 'new-in',
     label: 'New In',
@@ -58,46 +78,10 @@ const navigationCategories = [
     color: 'text-orange-500 font-semibold',
   },
   {
-    id: 'lighting',
-    label: 'Lighting',
-    href: '/category/lighting',
-    megaMenu: true,
-  },
-  {
-    id: 'audio',
-    label: 'Audio & Entertainment',
-    href: '/category/audio-entertainment',
-    megaMenu: true,
-  },
-  {
-    id: 'safety',
-    label: 'Safety & Security',
-    href: '/category/safety-security',
-    megaMenu: true,
-  },
-  {
-    id: 'tools',
-    label: 'Tools & Emergency',
-    href: '/category/tools-emergency',
-    megaMenu: true,
-  },
-  {
-    id: 'interior',
-    label: 'Interior',
-    href: '/category/interior-comfort',
-    megaMenu: true,
-  },
-  {
-    id: 'performance',
-    label: 'Performance',
-    href: '/category/performance-parts',
-    megaMenu: true,
-  },
-  {
     id: 'brands',
     label: 'Brands',
     href: '/brands',
-    megaMenu: true,
+    megaMenu: false,
   },
 ]
 
@@ -111,7 +95,6 @@ const TRANSLATED_NAV_IDS: Record<string, string> = {
   'new-in': 'navigation:newIn',
   sale: 'navigation:sale',
   trending: 'navigation:trending',
-  books: 'navigation:books',
   brands: 'navigation:brands',
 }
 
@@ -120,6 +103,11 @@ export default function Header() {
   const [isScrolled, setIsScrolled] = useState(false)
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [showPromoBar, setShowPromoBar] = useState(true)
+  // Real category tree, fetched once -- powers both the nav pills below
+  // (only the ones an admin flagged show_in_nav get their own top-level
+  // entry) and the "All Categories" generic mega-menu (the full tree, for
+  // broader discovery than just the curated nav set).
+  const [categoryTree, setCategoryTree] = useState<Category[]>([])
 
   const megaMenuRef = useRef<HTMLDivElement>(null)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -146,6 +134,15 @@ export default function Header() {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
+  useEffect(() => {
+    categoriesApi
+      .getTree()
+      .then(setCategoryTree)
+      .catch(() => setCategoryTree([]))
+  }, [])
+
+  const navEligibleCategories = categoryTree.filter((c) => c.show_in_nav)
+
   // Handle mega menu hover
   const handleCategoryHover = (categoryId: string) => {
     if (timeoutRef.current) {
@@ -162,6 +159,19 @@ export default function Header() {
 
   const cartItemCount = cartItems.reduce((sum, item) => sum + item.quantity, 0)
   const wishlistCount = wishlistItems.length
+
+  // Marketing pills (New In/Sale/Trending) first, then the real,
+  // nav-flagged categories, then Brands last.
+  const marketingPills = navigationCategories.filter((c) => c.id !== 'brands')
+  const brandsPill = navigationCategories.find((c) => c.id === 'brands')
+  const dynamicNavItems: NavItem[] = navEligibleCategories.map((category) => ({
+    id: category.id,
+    label: category.name,
+    href: `/category/${category.slug}`,
+    megaMenu: true,
+    isDynamic: true as const,
+  }))
+  const displayNavItems = [...marketingPills, ...dynamicNavItems, ...(brandsPill ? [brandsPill] : [])]
 
   return (
     <>
@@ -364,7 +374,7 @@ export default function Header() {
               </li>
 
               {/* Navigation Links */}
-              {navigationCategories.map((category) => (
+              {displayNavItems.map((category) => (
                 <li
                   key={category.id}
                   className='relative'
@@ -399,7 +409,10 @@ export default function Header() {
           </div>
         </nav>
 
-        {/* Mega Menu */}
+        {/* Mega Menu -- a specific hovered category shows just its own
+            children as one section; the generic "Categories" button
+            (id 'all-categories') shows the full real tree for broader
+            discovery than just the curated nav set. */}
         {activeCategory && (
           <div
             ref={megaMenuRef}
@@ -407,7 +420,13 @@ export default function Header() {
             onMouseLeave={handleCategoryLeave}
             className='absolute left-0 right-0 bg-white border-t border-gray-100 shadow-2xl animate-fade-in z-40'
           >
-            <MegaMenu categoryId={activeCategory} />
+            <MegaMenu
+              categories={
+                activeCategory === 'all-categories'
+                  ? categoryTree
+                  : categoryTree.filter((c) => c.id === activeCategory)
+              }
+            />
           </div>
         )}
       </header>
@@ -416,7 +435,9 @@ export default function Header() {
       {isSearchOpen && <SearchOverlay />}
 
       {/* Mobile Menu */}
-      {isMobileMenuOpen && <MobileMenu categories={navigationCategories} />}
+      {isMobileMenuOpen && (
+        <MobileMenu categories={navigationCategories} dynamicCategories={navEligibleCategories} />
+      )}
 
       {/* Cart Drawer */}
       {isCartOpen && <CartDrawer />}

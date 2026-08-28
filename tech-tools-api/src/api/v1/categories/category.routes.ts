@@ -12,6 +12,7 @@ import {
   bulkDeleteCategories,
   bulkUpdateCategories,
 } from './category.controller'
+import { getCategoryAttributes } from './category-attribute.controller'
 import { authenticate, authorize } from '../../../middleware/auth'
 import { upload } from '../../../utils/media'
 
@@ -37,6 +38,7 @@ router.put(
 
 router.get('/:id', getCategoryById)
 router.get('/:id/products', getCategoryProducts)
+router.get('/:id/attributes', getCategoryAttributes)
 
 // Protected routes (admin only)
 router.get(

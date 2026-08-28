@@ -5,8 +5,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Heart, ShoppingCart, Eye, Star, Truck, Award } from 'lucide-react';
-import { useCartStore, useWishlistStore } from '../../stores';
+import { Heart, ShoppingCart, Eye, Star, Truck, Award, Flame, TrendingUp, Sparkles, Globe2, Scale } from 'lucide-react';
+import { useCartStore, useWishlistStore, useCompareStore } from '../../stores';
 import { formatPrice, getProductImage, cn } from '../../utils';
 import { getDisplayPricing } from '../../utils/pricing';
 import { useFreeShippingThreshold } from '../../hooks/useFreeShippingThreshold';
@@ -25,6 +25,16 @@ interface ProductCardProps {
 const TOP_RATED_MIN_RATING = 4.5;
 const TOP_RATED_MIN_REVIEWS = 5;
 const LOW_STOCK_THRESHOLD = 10;
+// Real backend numbers (units_sold_90d/7d, views_7d), thresholds applied
+// here so they're tunable without a migration -- see product.controller.ts's
+// getProducts for where these raw figures come from.
+const BEST_SELLER_MIN_UNITS_90D = 5;
+const TRENDING_MIN_VIEWS_7D = 20;
+const TRENDING_MIN_UNITS_7D = 3;
+// Badges are capped so a card never turns into a badge wall -- priority
+// order, most important first, only the top 2 actually render (Out of
+// Stock overrides everything and shows alone).
+const MAX_BADGES_SHOWN = 2;
 
 export default function ProductCard({
   product,
@@ -55,6 +65,101 @@ export default function ProductCard({
 
   const qualifiesForFreeShipping = freeShippingThreshold != null && pricing.sellingPrice >= freeShippingThreshold
 
+  const { toggleItem: toggleCompare, isInCompare, isFull: isCompareFull } = useCompareStore();
+  const inCompare = isInCompare(product.id);
+
+  const unitsSold90d = Number(product.units_sold_90d || 0);
+  const unitsSold7d = Number(product.units_sold_7d || 0);
+  const views7d = Number(product.views_7d || 0);
+  const isBestSeller = unitsSold90d >= BEST_SELLER_MIN_UNITS_90D;
+  const isTrending = views7d >= TRENDING_MIN_VIEWS_7D || unitsSold7d >= TRENDING_MIN_UNITS_7D;
+
+  // Priority order, most important first -- only MAX_BADGES_SHOWN render.
+  const badges: { key: string; node: React.ReactNode }[] = [];
+  if (pricing.discountPercent !== null && pricing.discountPercent > 0) {
+    badges.push({
+      key: 'discount',
+      node: (
+        <span className="px-2 py-1 bg-red-500 text-white text-xs font-bold rounded-lg">
+          -{pricing.discountPercent}%
+        </span>
+      ),
+    });
+  }
+  if (product.is_featured) {
+    badges.push({
+      key: 'featured',
+      node: (
+        <span className="px-2 py-1 bg-orange-500 text-white text-xs font-bold rounded-lg">HOT</span>
+      ),
+    });
+  }
+  if (isTopRated) {
+    badges.push({
+      key: 'top-rated',
+      node: (
+        <span className="flex items-center gap-1 px-2 py-1 bg-gray-900 text-white text-xs font-bold rounded-lg">
+          <Award className="w-3 h-3" /> TOP RATED
+        </span>
+      ),
+    });
+  }
+  if (product.is_new) {
+    badges.push({
+      key: 'new',
+      node: (
+        <span className="flex items-center gap-1 px-2 py-1 bg-blue-500 text-white text-xs font-bold rounded-lg">
+          <Sparkles className="w-3 h-3" /> NEW
+        </span>
+      ),
+    });
+  }
+  if (isBestSeller) {
+    badges.push({
+      key: 'best-seller',
+      node: (
+        <span className="flex items-center gap-1 px-2 py-1 bg-purple-600 text-white text-xs font-bold rounded-lg">
+          <Flame className="w-3 h-3" /> BEST SELLER
+        </span>
+      ),
+    });
+  }
+  if (isTrending) {
+    badges.push({
+      key: 'trending',
+      node: (
+        <span className="flex items-center gap-1 px-2 py-1 bg-pink-500 text-white text-xs font-bold rounded-lg">
+          <TrendingUp className="w-3 h-3" /> TRENDING
+        </span>
+      ),
+    });
+  }
+  if (isLowStock) {
+    badges.push({
+      key: 'low-stock',
+      node: (
+        <span className="px-2 py-1 bg-yellow-500 text-white text-xs font-bold rounded-lg">
+          Only {product.total_stock} left
+        </span>
+      ),
+    });
+  }
+  if (product.is_eu_warehouse) {
+    badges.push({
+      key: 'eu-warehouse',
+      node: (
+        <span className="flex items-center gap-1 px-2 py-1 bg-teal-600 text-white text-xs font-bold rounded-lg">
+          <Globe2 className="w-3 h-3" /> EU WAREHOUSE
+        </span>
+      ),
+    });
+  }
+  const visibleBadges = badges.slice(0, MAX_BADGES_SHOWN);
+
+  // Up to 2 real technical-spec chips, from the clean, admin-typed
+  // attribute system -- not the free-text product_specifications table.
+  const attributeChips = (product.attribute_values || []).slice(0, 2);
+
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -65,6 +170,12 @@ export default function ProductCard({
     e.preventDefault();
     e.stopPropagation();
     toggleItem(product);
+  };
+
+  const handleToggleCompare = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleCompare(product);
   };
 
   const handleQuickView = (e: React.MouseEvent) => {
@@ -129,33 +240,16 @@ export default function ProductCard({
           onLoad={() => setImageLoaded(true)}
         />
 
-        {/* Badges */}
+        {/* Badges -- capped to MAX_BADGES_SHOWN by priority so the card
+            never turns into a badge wall; Out of Stock overrides
+            everything else and shows alone. */}
         <div className="absolute top-3 left-3 flex flex-col gap-2">
-          {pricing.discountPercent !== null && pricing.discountPercent > 0 && (
-            <span className="px-2 py-1 bg-red-500 text-white text-xs font-bold rounded-lg">
-              -{pricing.discountPercent}%
-            </span>
-          )}
-          {product.is_featured && (
-            <span className="px-2 py-1 bg-orange-500 text-white text-xs font-bold rounded-lg">
-              HOT
-            </span>
-          )}
-          {isTopRated && (
-            <span className="flex items-center gap-1 px-2 py-1 bg-gray-900 text-white text-xs font-bold rounded-lg">
-              <Award className="w-3 h-3" />
-              TOP RATED
-            </span>
-          )}
-          {isLowStock && (
-            <span className="px-2 py-1 bg-yellow-500 text-white text-xs font-bold rounded-lg">
-              Only {product.total_stock} left
-            </span>
-          )}
-          {isOutOfStock && (
+          {isOutOfStock ? (
             <span className="px-2 py-1 bg-gray-500 text-white text-xs font-bold rounded-lg">
               Out of Stock
             </span>
+          ) : (
+            visibleBadges.map((badge) => <span key={badge.key}>{badge.node}</span>)
           )}
         </div>
 
@@ -187,6 +281,21 @@ export default function ProductCard({
               <Eye className="w-4 h-4 text-gray-600" />
             </button>
           )}
+
+          <button
+            onClick={handleToggleCompare}
+            disabled={!inCompare && isCompareFull()}
+            aria-label={inCompare ? `Remove ${product.name} from comparison` : `Add ${product.name} to comparison`}
+            aria-pressed={inCompare}
+            className={cn(
+              'w-9 h-9 rounded-full flex items-center justify-center transition-all shadow-md disabled:cursor-not-allowed disabled:opacity-40',
+              inCompare
+                ? 'bg-orange-500 text-white'
+                : 'bg-white text-gray-600 hover:bg-orange-50 hover:text-orange-500'
+            )}
+          >
+            <Scale className="w-4 h-4" />
+          </button>
         </div>
 
         {/* Add to Cart Button */}
@@ -257,6 +366,23 @@ export default function ProductCard({
             </span>
           )}
         </div>
+
+        {/* Technical-spec chips -- real, admin-typed attribute values
+            (Voltage, Material...), never the messy free-text specs table.
+            Capped at 2 so the card stays scannable. */}
+        {attributeChips.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {attributeChips.map((chip) => (
+              <span
+                key={chip.attribute_id}
+                className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-[10px] font-medium rounded"
+              >
+                {chip.value}
+                {chip.unit ? ` ${chip.unit}` : ''}
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* Free Shipping Badge -- driven by the real, admin-configured
             threshold, not a hardcoded number. */}
