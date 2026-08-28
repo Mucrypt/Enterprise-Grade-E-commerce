@@ -2,10 +2,10 @@
 // Product Card Component (SHEIN/Amazon Style)
 // ============================================
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Heart, ShoppingCart, Eye, Star, Truck, Award, Flame, TrendingUp, Sparkles, Globe2, Scale } from 'lucide-react';
+import { Heart, ShoppingCart, Eye, Star, Truck, Award, Flame, TrendingUp, Sparkles, Globe2, Scale, Plus, Check } from 'lucide-react';
 import { useCartStore, useWishlistStore, useCompareStore } from '../../stores';
 import { formatPrice, getProductImage, cn } from '../../utils';
 import { getDisplayPricing } from '../../utils/pricing';
@@ -45,6 +45,14 @@ export default function ProductCard({
   const { t } = useTranslation('products');
   const [isHovered, setIsHovered] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [justAdded, setJustAdded] = useState(false);
+  const justAddedTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (justAddedTimeout.current) clearTimeout(justAddedTimeout.current);
+    };
+  }, []);
 
   const { addItem } = useCartStore();
   const { toggleItem, isInWishlist } = useWishlistStore();
@@ -164,6 +172,9 @@ export default function ProductCard({
     e.preventDefault();
     e.stopPropagation();
     addItem(product, 1);
+    setJustAdded(true);
+    if (justAddedTimeout.current) clearTimeout(justAddedTimeout.current);
+    justAddedTimeout.current = setTimeout(() => setJustAdded(false), 1200);
   };
 
   const handleToggleWishlist = (e: React.MouseEvent) => {
@@ -298,22 +309,30 @@ export default function ProductCard({
           </button>
         </div>
 
-        {/* Add to Cart Button */}
+        {/* Quick Add to Cart -- SHEIN-style icon button. Always visible
+            (not hover-gated like the actions above) so it works on touch
+            devices with no hover state at all, and reads as "add this"
+            purely from the cart+plus glyph -- no label required to
+            understand it. Swaps to a checkmark for a moment after a tap
+            as non-text confirmation that the add actually happened. */}
         {!isOutOfStock && (
-          <div
-            className={cn(
-              'absolute bottom-0 left-0 right-0 p-3 transition-all duration-300',
-              isHovered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-full'
-            )}
+          <button
+            onClick={handleAddToCart}
+            aria-label={`${t('addToCart')}: ${product.name}`}
+            title={t('addToCart')}
+            className="absolute bottom-3 right-3 z-10 w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center text-gray-900 hover:bg-orange-500 hover:text-white active:scale-90 transition-all"
           >
-            <button
-              onClick={handleAddToCart}
-              className="w-full py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg flex items-center justify-center gap-2 transition-colors shadow-lg"
-            >
-              <ShoppingCart className="w-4 h-4" />
-              {t('addToCart')}
-            </button>
-          </div>
+            {justAdded ? (
+              <Check className="w-5 h-5" />
+            ) : (
+              <span className="relative flex items-center justify-center">
+                <ShoppingCart className="w-5 h-5" />
+                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-orange-500 ring-2 ring-white flex items-center justify-center">
+                  <Plus className="w-2.5 h-2.5 text-white" strokeWidth={3} />
+                </span>
+              </span>
+            )}
+          </button>
         )}
       </Link>
 
