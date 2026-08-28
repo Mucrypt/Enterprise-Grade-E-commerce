@@ -14,7 +14,8 @@ import {
   List,
 } from 'lucide-react'
 import { useWishlistStore, useCartStore } from '../stores'
-import { cn, formatPrice, calculateDiscount, getProductImage } from '../utils'
+import { cn, formatPrice, getProductImage } from '../utils'
+import { getDisplayPricing } from '../utils/pricing'
 import { useState } from 'react'
 
 export default function WishlistPage() {
@@ -127,10 +128,7 @@ export default function WishlistPage() {
         {viewMode === 'grid' ? (
           <div className='grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4'>
             {items.map((product) => {
-              const discount = calculateDiscount(
-                product.base_price,
-                product.sale_price || 0,
-              )
+              const pricing = getDisplayPricing(product.base_price, product.sale_price)
 
               return (
                 <div
@@ -145,9 +143,9 @@ export default function WishlistPage() {
                         className='w-full h-full object-cover group-hover:scale-105 transition-transform duration-300'
                       />
                     </Link>
-                    {discount > 0 && (
+                    {pricing.discountPercent !== null && pricing.discountPercent > 0 && (
                       <span className='absolute top-3 left-3 px-2 py-1 bg-red-500 text-white text-xs font-bold rounded'>
-                        -{discount}%
+                        -{pricing.discountPercent}%
                       </span>
                     )}
                     <button
@@ -173,11 +171,11 @@ export default function WishlistPage() {
                     </Link>
                     <div className='flex items-baseline gap-2 mb-3'>
                       <span className='text-lg font-bold text-orange-600'>
-                        {formatPrice(product.sale_price || product.base_price)}
+                        {formatPrice(pricing.sellingPrice)}
                       </span>
-                      {product.sale_price && (
+                      {pricing.compareAtPrice !== null && (
                         <span className='text-sm text-gray-400 line-through'>
-                          {formatPrice(product.base_price)}
+                          {formatPrice(pricing.compareAtPrice)}
                         </span>
                       )}
                     </div>
@@ -197,10 +195,7 @@ export default function WishlistPage() {
         ) : (
           <div className='space-y-4'>
             {items.map((product) => {
-              const discount = calculateDiscount(
-                product.base_price,
-                product.sale_price || 0,
-              )
+              const pricing = getDisplayPricing(product.base_price, product.sale_price)
 
               return (
                 <div
@@ -215,9 +210,9 @@ export default function WishlistPage() {
                         className='w-full h-full object-cover rounded-lg'
                       />
                     </Link>
-                    {discount > 0 && (
+                    {pricing.discountPercent !== null && pricing.discountPercent > 0 && (
                       <span className='absolute -top-2 -left-2 px-1.5 py-0.5 bg-red-500 text-white text-xs font-bold rounded'>
-                        -{discount}%
+                        -{pricing.discountPercent}%
                       </span>
                     )}
                   </div>
@@ -249,11 +244,11 @@ export default function WishlistPage() {
                   <div className='text-right'>
                     <div className='flex items-baseline gap-2 justify-end'>
                       <span className='text-lg font-bold text-orange-600'>
-                        {formatPrice(product.sale_price || product.base_price)}
+                        {formatPrice(pricing.sellingPrice)}
                       </span>
-                      {product.sale_price && (
+                      {pricing.compareAtPrice !== null && (
                         <span className='text-sm text-gray-400 line-through'>
-                          {formatPrice(product.base_price)}
+                          {formatPrice(pricing.compareAtPrice)}
                         </span>
                       )}
                     </div>
@@ -289,21 +284,17 @@ export default function WishlistPage() {
               <p className='text-2xl font-bold text-gray-900'>
                 {formatPrice(
                   items.reduce(
-                    (sum, item) => sum + Number(item.sale_price || item.base_price),
+                    (sum, item) => sum + getDisplayPricing(item.base_price, item.sale_price).sellingPrice,
                     0,
                   ),
                 )}
               </p>
-              {items.some((item) => item.sale_price) && (
+              {items.some((item) => getDisplayPricing(item.base_price, item.sale_price).discountAmount) && (
                 <p className='text-sm text-green-600'>
                   You save{' '}
                   {formatPrice(
                     items.reduce(
-                      (sum, item) =>
-                        sum +
-                        (item.sale_price
-                          ? Number(item.base_price) - Number(item.sale_price)
-                          : 0),
+                      (sum, item) => sum + (getDisplayPricing(item.base_price, item.sale_price).discountAmount || 0),
                       0,
                     ),
                   )}{' '}

@@ -566,9 +566,15 @@ export interface ProductFilters {
   brand?: string
   minPrice?: number
   maxPrice?: number
+  minRating?: number
   inStock?: boolean
   featured?: boolean
-  sortBy?: 'price_asc' | 'price_desc' | 'newest' | 'popular' | 'rating'
+  // UI-facing sort option -- mapped to the backend's real {sortBy,
+  // sortOrder} pair inside productsApi.getAll, not sent as-is. There is
+  // no 'popular'/best-selling option: the backend has no sales-ranking
+  // data to sort by (see e-commerce-web-store's products page audit) --
+  // don't offer a sort that silently does nothing.
+  sortBy?: 'newest' | 'price_asc' | 'price_desc' | 'rating'
   search?: string
 }
 

@@ -22,6 +22,7 @@ export const getProducts = async (req: Request, res: Response) => {
       brand, // Support slug-based filtering
       minPrice,
       maxPrice,
+      minRating,
       sortBy = 'created_at',
       sortOrder = 'desc',
       featured,
@@ -84,9 +85,19 @@ export const getProducts = async (req: Request, res: Response) => {
 
     if (inStock === 'true') {
       whereClause += ` AND EXISTS (
-        SELECT 1 FROM inventory i 
+        SELECT 1 FROM inventory i
         WHERE i.product_id = p.id AND i.available_stock > 0
       )`
+    }
+
+    // Requires the product_review_summary join present in both queries
+    // below (a real, review-backed rating -- prs.average_rating is 0/NULL
+    // for products with no reviews, so this correctly excludes them
+    // rather than treating "no rating" as "0 stars").
+    if (minRating) {
+      whereClause += ` AND prs.average_rating >= $${paramCount}`
+      queryParams.push(minRating)
+      paramCount++
     }
 
     // Validate sort column
@@ -96,28 +107,45 @@ export const getProducts = async (req: Request, res: Response) => {
       'base_price',
       'sale_price',
       'name',
+      'average_rating',
     ]
     const safeSortBy = validSortColumns.includes(sortBy as string)
-      ? sortBy
+      ? (sortBy as string)
       : 'created_at'
 
     const safeSortOrder = sortOrder === 'asc' ? 'ASC' : 'DESC'
 
+    // sale_price is NULL for most non-sale products -- sorting by the raw
+    // column would push them all to one end regardless of their real,
+    // effective price. Mirrors the price *filter* above, which already
+    // gets this right via COALESCE. average_rating lives on the joined
+    // product_review_summary row (prs), not on products (p) itself.
+    const orderByExpression =
+      safeSortBy === 'sale_price' || safeSortBy === 'base_price'
+        ? `COALESCE(p.sale_price, p.base_price)`
+        : safeSortBy === 'average_rating'
+          ? `COALESCE(prs.average_rating, 0)`
+          : `p.${safeSortBy}`
+
     // Get total count
     const countResult = await query(
-      `SELECT COUNT(*) FROM products p ${whereClause}`,
+      `SELECT COUNT(*) FROM products p
+       LEFT JOIN product_review_summary prs ON prs.product_id = p.id
+       ${whereClause}`,
       queryParams,
     )
     const total = parseInt(countResult.rows[0].count)
 
     // Get products with joins for category and brand
     const productsResult = await query(
-      `SELECT 
+      `SELECT
         p.*,
         c.name as category_name,
         c.slug as category_slug,
         b.name as brand_name,
         b.slug as brand_slug,
+        COALESCE(prs.average_rating, 0) as average_rating,
+        COALESCE(prs.total_reviews, 0) as review_count,
         (
           SELECT COALESCE(
             json_agg(
@@ -149,8 +177,9 @@ export const getProducts = async (req: Request, res: Response) => {
        FROM products p
        LEFT JOIN categories c ON p.category_id = c.id
        LEFT JOIN brands b ON p.brand_id = b.id
+       LEFT JOIN product_review_summary prs ON prs.product_id = p.id
        ${whereClause}
-       ORDER BY p.${safeSortBy} ${safeSortOrder}
+       ORDER BY ${orderByExpression} ${safeSortOrder}
        LIMIT $${paramCount} OFFSET $${paramCount + 1}`,
       [...queryParams, limit, offset],
     )

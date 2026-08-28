@@ -58,13 +58,6 @@ const navigationCategories = [
     color: 'text-orange-500 font-semibold',
   },
   {
-    id: 'books',
-    label: 'Books',
-    href: '/books',
-    featured: true,
-    color: 'text-slate-900 font-semibold',
-  },
-  {
     id: 'lighting',
     label: 'Lighting',
     href: '/category/lighting',

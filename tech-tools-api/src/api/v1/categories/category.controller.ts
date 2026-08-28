@@ -117,17 +117,47 @@ export const getAllCategories = async (req: AuthRequest, res: Response) => {
   }
 }
 
+interface CategoryTreeNode {
+  id: string
+  parent_id: string | null
+  [key: string]: unknown
+  children?: CategoryTreeNode[]
+}
+
+// Builds a nested tree from the flat parent_id rows in memory -- the
+// catalog is small enough (dozens, not millions, of categories) that a
+// recursive SQL query would be overkill for what's really just a couple
+// levels of grouping.
+function buildCategoryTree(rows: CategoryTreeNode[]): CategoryTreeNode[] {
+  const byId = new Map<string, CategoryTreeNode>()
+  for (const row of rows) byId.set(row.id, { ...row, children: [] })
+
+  const roots: CategoryTreeNode[] = []
+  for (const row of rows) {
+    const node = byId.get(row.id)!
+    if (row.parent_id && byId.has(row.parent_id)) {
+      byId.get(row.parent_id)!.children!.push(node)
+    } else {
+      roots.push(node)
+    }
+  }
+  return roots
+}
+
 export const getCategories = async (req: Request, res: Response) => {
   try {
     const result = await query(
-      'SELECT * FROM categories WHERE is_active = true ORDER BY name ASC',
+      'SELECT * FROM categories WHERE is_active = true ORDER BY display_order ASC, name ASC',
       [],
     )
+
+    const categories =
+      req.query.tree === 'true' ? buildCategoryTree(result.rows) : result.rows
 
     res.json({
       success: true,
       data: {
-        categories: result.rows,
+        categories,
       },
     })
   } catch (error) {

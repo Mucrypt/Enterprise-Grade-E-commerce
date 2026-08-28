@@ -71,13 +71,16 @@ export default function SearchOverlay() {
     e.preventDefault();
     if (searchQuery.trim()) {
       closeSearch();
-      navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+      // ProductsPage reads the `search` query param, not `q` -- this
+      // previously sent shoppers to /search?q=... where ProductsPage
+      // silently ignored it and showed the unfiltered catalog instead.
+      navigate(`/search?search=${encodeURIComponent(searchQuery.trim())}`);
     }
   };
 
   const handleQuickSearch = (query: string) => {
     closeSearch();
-    navigate(`/search?q=${encodeURIComponent(query)}`);
+    navigate(`/search?search=${encodeURIComponent(query)}`);
   };
 
   return (

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5173",
     "build": "tsc -b && vite build",
-    "build:analyze": "ANALYZE_BUNDLE=true tsc -b && vite build",
+    "build:analyze": "tsc -b && ANALYZE_BUNDLE=true vite build",
     "perf:budget": "node scripts/check-bundle-budgets.mjs",
     "lint": "eslint .",
     "test": "vitest run",

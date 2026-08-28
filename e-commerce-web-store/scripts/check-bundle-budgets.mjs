@@ -72,6 +72,20 @@ const budgets = [
     required: true,
   },
   {
+    label: 'Vendor i18n',
+    prefix: 'chunk-vendor-i18n-',
+    maxRawKb: 75,
+    maxGzipKb: 26,
+    required: true,
+  },
+  {
+    label: 'Vendor UI',
+    prefix: 'chunk-vendor-ui-',
+    maxRawKb: 85,
+    maxGzipKb: 28,
+    required: true,
+  },
+  {
     label: 'Checkout route',
     prefix: 'chunk-CheckoutPage-',
     maxRawKb: 35,

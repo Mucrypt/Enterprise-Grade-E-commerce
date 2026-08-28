@@ -34,6 +34,7 @@ const footerLinks = {
       { label: 'Sale', href: '/sale' },
       { label: 'All Products', href: '/shop' },
       { label: 'Brands', href: '/brands' },
+      { label: 'Books', href: '/books' },
     ],
   },
   categories: {

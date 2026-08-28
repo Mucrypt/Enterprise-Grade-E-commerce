@@ -60,10 +60,33 @@ export default defineConfig({
             return 'vendor-query'
           }
 
+          // i18next + react-i18next + its HTML-parsing dep for <Trans> --
+          // ~115KB unminified, previously falling into the entry chunk by
+          // default (i18n.ts is imported eagerly in main.tsx, not lazy)
+          // since nothing bucketed it. The single largest fixable
+          // contributor to the entry chunk blowing its CI budget.
+          if (
+            inPkg('i18next') ||
+            inPkg('react-i18next') ||
+            inPkg('html-parse-stringify') ||
+            inPkg('void-elements')
+          ) {
+            return 'vendor-i18n'
+          }
+
           if (
             inPkg('lucide-react') ||
             inPkg('@radix-ui') ||
-            inPkg('framer-motion')
+            inPkg('framer-motion') ||
+            // Small, style-only utilities used by cn() everywhere --
+            // tailwind-merge alone is ~97KB unminified (embeds the full
+            // default Tailwind class-group config), the other single
+            // largest contributor to the entry chunk before this bucket
+            // existed. date-fns folded in here too rather than a
+            // dedicated chunk for one importer's sake.
+            inPkg('tailwind-merge') ||
+            inPkg('clsx') ||
+            inPkg('date-fns')
           ) {
             return 'vendor-ui'
           }

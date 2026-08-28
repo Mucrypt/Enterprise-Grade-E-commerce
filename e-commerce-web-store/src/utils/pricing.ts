@@ -24,10 +24,20 @@ export function getDisplayPricing(
   const base = Number(basePrice)
   const sale = salePrice != null ? Number(salePrice) : null
 
-  const hasLegitimateDiscount =
-    sale != null && !isNaN(sale) && sale > 0 && !isNaN(base) && base > sale
+  const saleIsValid = sale != null && !isNaN(sale) && sale > 0
+  const baseIsValid = !isNaN(base) && base > 0
 
-  const sellingPrice = hasLegitimateDiscount ? (sale as number) : base
+  // What the customer actually pays: prefer a valid sale price, since
+  // that's the real price on plenty of real products whose base_price is
+  // unset/0 (import/sourcing scripts often only populate sale_price).
+  // This is independent of whether it's a legitimate "discount" -- a
+  // previous version of this function conflated the two, requiring
+  // base > sale before it would show ANY price at all, which made the
+  // selling price silently fall back to an invalid 0 base_price instead
+  // of the real €33.99 sale_price. That was a live, shipped regression.
+  const sellingPrice = saleIsValid ? (sale as number) : baseIsValid ? base : 0
+
+  const hasLegitimateDiscount = saleIsValid && baseIsValid && base > (sale as number)
 
   return {
     sellingPrice,

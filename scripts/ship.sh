@@ -101,10 +101,29 @@ if [ -n "$(git status --porcelain)" ]; then
     git status -s
     echo ""
     if [ -z "$COMMIT_MSG" ]; then
-        read -r -p "Commit message: " COMMIT_MSG
+        # A single-line `read` only ever captures the FIRST line of a
+        # pasted multi-line message -- the rest used to spill into the
+        # shell and get executed as commands (confirmed live: pasting a
+        # bulleted commit message produced a string of "command not
+        # found" errors). Reads lines until a blank one instead, so a
+        # multi-line paste is captured whole; press Enter once more after
+        # pasting to finish.
+        echo "Commit message (multi-line OK -- finish with an empty line):"
+        while IFS= read -r line; do
+            [ -z "$line" ] && break
+            if [ -z "$COMMIT_MSG" ]; then
+                COMMIT_MSG="$line"
+            else
+                COMMIT_MSG="$COMMIT_MSG
+$line"
+            fi
+        done
         [ -n "$COMMIT_MSG" ] || { log_error "A commit message is required."; exit 1; }
     fi
-    confirm "Commit and push the changes above as \"$COMMIT_MSG\"?" || exit 1
+    echo ""
+    echo "Commit message:"
+    echo "$COMMIT_MSG"
+    confirm "Commit and push the changes above?" || exit 1
     git add -A
     git commit -m "$COMMIT_MSG"
 else

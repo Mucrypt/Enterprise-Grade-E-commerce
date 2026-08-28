@@ -66,6 +66,21 @@ api.interceptors.response.use(
 // ============================================
 // Products API
 // ============================================
+// Maps the UI-facing sort option to the real {sortBy, sortOrder} pair the
+// backend's validSortColumns allowlist actually understands. This used to
+// not exist at all -- the raw UI value (e.g. 'price_asc') was sent
+// straight through, never matched the allowlist, and every sort option
+// silently fell back to newest-first.
+const SORT_MAP: Record<
+  NonNullable<ProductFilters['sortBy']>,
+  { sortBy: string; sortOrder: 'asc' | 'desc' }
+> = {
+  newest: { sortBy: 'created_at', sortOrder: 'desc' },
+  price_asc: { sortBy: 'sale_price', sortOrder: 'asc' },
+  price_desc: { sortBy: 'sale_price', sortOrder: 'desc' },
+  rating: { sortBy: 'average_rating', sortOrder: 'desc' },
+}
+
 export const productsApi = {
   // Get all products with filters
   async getAll(filters?: ProductFilters & { page?: number; limit?: number }) {
@@ -77,9 +92,14 @@ export const productsApi = {
     if (filters?.brand) params.append('brand', filters.brand)
     if (filters?.minPrice) params.append('minPrice', String(filters.minPrice))
     if (filters?.maxPrice) params.append('maxPrice', String(filters.maxPrice))
+    if (filters?.minRating) params.append('minRating', String(filters.minRating))
     if (filters?.inStock) params.append('inStock', String(filters.inStock))
     if (filters?.featured) params.append('featured', String(filters.featured))
-    if (filters?.sortBy) params.append('sortBy', filters.sortBy)
+    if (filters?.sortBy) {
+      const mapped = SORT_MAP[filters.sortBy]
+      params.append('sortBy', mapped.sortBy)
+      params.append('sortOrder', mapped.sortOrder)
+    }
     if (filters?.search) params.append('search', filters.search)
 
     const response = await api.get<{
