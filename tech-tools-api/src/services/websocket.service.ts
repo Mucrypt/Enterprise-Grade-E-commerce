@@ -9,6 +9,7 @@ import jwt from 'jsonwebtoken'
 import logger from '../utils/logger'
 import { JWT_SECRET } from '../config/jwt.config'
 import { loadStaffContext } from '../middleware/staff'
+import { DASHBOARD_ORIGINS } from '../config/cors.config'
 
 /**
  * Who may join the 'dashboard' room and therefore receive
@@ -92,12 +93,14 @@ class WebSocketService {
    */
   initialize(httpServer: HTTPServer): SocketIOServer {
     this.io = new SocketIOServer(httpServer, {
+      // Reuse the same allowlist as the REST API's CORS policy (CORS_ORIGIN)
+      // rather than the ADMIN_DASHBOARD_URL/WEB_STORE_URL/MOBILE_APP_URL email-
+      // link vars: those are full page URLs (e.g. ".../admin/dashboard"), not
+      // bare origins, so they never match a browser's Origin header, and they
+      // weren't even being forwarded into the api container's env in prod --
+      // both independently broke the dashboard's websocket handshake.
       cors: {
-        origin: [
-          process.env.ADMIN_DASHBOARD_URL || 'http://localhost:3000',
-          process.env.WEB_STORE_URL || 'http://localhost:5173',
-          process.env.MOBILE_APP_URL || 'exp://localhost:8081',
-        ],
+        origin: DASHBOARD_ORIGINS,
         credentials: true,
       },
       transports: ['websocket', 'polling'],
