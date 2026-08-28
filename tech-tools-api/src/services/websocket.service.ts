@@ -5,11 +5,13 @@
 
 import { Server as SocketIOServer, Socket } from 'socket.io'
 import { Server as HTTPServer } from 'http'
+import { createAdapter } from '@socket.io/redis-adapter'
 import jwt from 'jsonwebtoken'
 import logger from '../utils/logger'
 import { JWT_SECRET } from '../config/jwt.config'
 import { loadStaffContext } from '../middleware/staff'
 import { DASHBOARD_ORIGINS } from '../config/cors.config'
+import { getRedisClient } from '../config/redis'
 
 /**
  * Who may join the 'dashboard' room and therefore receive
@@ -89,9 +91,26 @@ class WebSocketService {
   private connectedClients: Map<string, ConnectedClient> = new Map()
 
   /**
-   * Initialize Socket.io server
+   * Initialize Socket.io server.
+   *
+   * Must run in EVERY clustered worker, not just a singleton one: Node's
+   * `cluster` module round-robins each new TCP connection (including a
+   * WebSocket upgrade, which is one long-lived connection) across all
+   * workers sharing the port, and nginx has no visibility into which
+   * internal worker a request lands on to route around this. Previously
+   * only worker 1 called this, so ~3-in-4 handshakes landed on a worker
+   * with no Socket.io listener at all and got a plain 404 from Express's
+   * catch-all -- confirmed live via nginx access logs, and the direct
+   * cause of the admin dashboard's persistent "Offline" badge.
+   *
+   * The Redis adapter is what makes running it on every worker correct
+   * rather than just non-crashing: `io.to('dashboard').emit(...)` (called
+   * from whichever worker runs the metrics broadcaster) is fanned out over
+   * Redis pub/sub to the sockets connected to every OTHER worker too, so a
+   * client still gets live updates no matter which worker its connection
+   * happens to land on.
    */
-  initialize(httpServer: HTTPServer): SocketIOServer {
+  async initialize(httpServer: HTTPServer): Promise<SocketIOServer> {
     this.io = new SocketIOServer(httpServer, {
       // Reuse the same allowlist as the REST API's CORS policy (CORS_ORIGIN)
       // rather than the ADMIN_DASHBOARD_URL/WEB_STORE_URL/MOBILE_APP_URL email-
@@ -106,8 +125,15 @@ class WebSocketService {
       transports: ['websocket', 'polling'],
     })
 
+    // Pub/sub clients can't run other Redis commands while subscribed, so
+    // this duplicates the app's shared connection rather than reusing it.
+    const pubClient = getRedisClient().duplicate()
+    const subClient = pubClient.duplicate()
+    await Promise.all([pubClient.connect(), subClient.connect()])
+    this.io.adapter(createAdapter(pubClient, subClient))
+
     this.setupConnectionHandlers()
-    logger.info('✅ Socket.io server initialized')
+    logger.info('✅ Socket.io server initialized (Redis adapter attached)')
 
     return this.io
   }

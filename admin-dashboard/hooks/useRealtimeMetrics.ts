@@ -69,7 +69,13 @@ export function useRealtimeMetrics(): UseRealtimeMetricsReturn {
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
         reconnectionAttempts: 5,
-        auth: { token: typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null },
+        // Callback form, not a plain object: socket.io-client invokes this
+        // fresh on every (re)connect attempt, so a token axios refreshed in
+        // the background (lib/api-client.ts's 401 interceptor) gets picked
+        // up on the next reconnect instead of resending the stale value
+        // captured at mount forever -- previously a real JWT expiry left
+        // the badge stuck on "Offline" until a full page reload.
+        auth: (cb) => cb({ token: typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null }),
       })
 
       // Handle connection
@@ -176,7 +182,9 @@ export function useRealtimeAlerts(): UseRealtimeAlertsReturn {
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
         reconnectionAttempts: 5,
-        auth: { token: typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null },
+        // See useRealtimeMetrics above for why this is a callback, not a
+        // plain object -- re-reads the token fresh on every reconnect.
+        auth: (cb) => cb({ token: typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null }),
       })
 
       // Handle connection

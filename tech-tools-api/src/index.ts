@@ -92,12 +92,14 @@ if (cluster.isPrimary && numWorkers > 1) {
   // Worker process (or the single process when clustering is off, e.g.
   // `npm run dev`, or NODE_ENV != production). This is the original
   // single-process startup logic, unchanged, except for one addition:
-  // singleton work (queue pollers, channel sync, the WebSocket
-  // broadcaster) only runs in ONE worker. Running it in every clustered
-  // worker would multiply emails sent and external API calls made, and
-  // Socket.io's real-time push only reaches clients connected to
-  // whichever worker holds the broadcasting instance anyway -- no
-  // benefit to starting it more than once.
+  // singleton work (queue pollers, channel sync, the metrics broadcaster)
+  // only runs in ONE worker -- running it in every clustered worker would
+  // multiply emails sent and external API calls made. Socket.io itself is
+  // NOT singleton-gated (see websocket.service.ts's initialize() doc
+  // comment): every worker must host it, with a Redis adapter fanning
+  // broadcasts out across all of them, since nginx/cluster round-robins
+  // WebSocket connections across every worker with no way to pin them to
+  // just one.
   // ---------------------------------------------------------------------
   const isSingletonWorker = !cluster.isWorker || cluster.worker?.id === 1
 
@@ -128,10 +130,12 @@ if (cluster.isPrimary && numWorkers > 1) {
         }`,
       )
 
-      if (isSingletonWorker) {
-        // Initialize Socket.io
-        webSocketService.initialize(httpServer)
+      // Every worker hosts Socket.io (see the isSingletonWorker comment
+      // above) -- must come after connectRedis() since it duplicates the
+      // shared Redis client for its pub/sub adapter.
+      await webSocketService.initialize(httpServer)
 
+      if (isSingletonWorker) {
         // Initialize notification services (email, Slack, SMS)
         notificationDispatcher.initializeAll()
 
@@ -153,9 +157,7 @@ if (cluster.isPrimary && numWorkers > 1) {
         logger.info(`🚀 Server running on port ${PORT}${workerLabel}`)
         logger.info(`📚 API Documentation: http://localhost:${PORT}/api/v1/docs`)
         logger.info(`🔍 Health check: http://localhost:${PORT}/health`)
-        if (isSingletonWorker) {
-          logger.info(`🔌 WebSocket: ws://localhost:${PORT}`)
-        }
+        logger.info(`🔌 WebSocket: ws://localhost:${PORT}`)
       })
     } catch (error) {
       logger.error('Failed to start server:', error)
