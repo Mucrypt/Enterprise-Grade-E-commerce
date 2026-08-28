@@ -301,6 +301,31 @@ apiClient.interceptors.request.use(
   (error: AxiosError) => Promise.reject(error),
 )
 
+// Shared in-flight refresh call. Without this, every request that was racing
+// in flight when the access token expired gets its own 401 and would each
+// independently POST /auth/refresh with the same refresh token -- the first
+// response rotates it, so every refresh call after the first is rejected by
+// the server and logs the user out even though the token was actually valid.
+// Concurrent 401s now all await this single promise instead.
+let refreshPromise: Promise<string> | null = null
+
+const performTokenRefresh = async (): Promise<string> => {
+  const refreshToken = await getRefreshToken()
+  if (!refreshToken) {
+    throw new Error('No refresh token available')
+  }
+
+  const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
+    refreshToken,
+  })
+
+  const { accessToken: newAccessToken, refreshToken: newRefreshToken } =
+    response.data.data?.tokens || response.data.tokens || response.data
+
+  await setTokens(newAccessToken, newRefreshToken)
+  return newAccessToken
+}
+
 // Response interceptor - Handle token refresh
 apiClient.interceptors.response.use(
   (response) => response,
@@ -313,19 +338,15 @@ apiClient.interceptors.response.use(
       originalRequest._retry = true
 
       try {
-        const refreshToken = await getRefreshToken()
-        if (refreshToken) {
-          const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
-            refreshToken,
+        if (!refreshPromise) {
+          refreshPromise = performTokenRefresh().finally(() => {
+            refreshPromise = null
           })
-
-          const { accessToken: newAccessToken, refreshToken: newRefreshToken } =
-            response.data.data?.tokens || response.data.tokens || response.data
-
-          await setTokens(newAccessToken, newRefreshToken)
-          originalRequest.headers.Authorization = `Bearer ${newAccessToken}`
-          return apiClient(originalRequest)
         }
+
+        const newAccessToken = await refreshPromise
+        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`
+        return apiClient(originalRequest)
       } catch (refreshError) {
         await clearTokens()
       }

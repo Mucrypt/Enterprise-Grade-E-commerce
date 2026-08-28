@@ -15,6 +15,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import ScreenViewTracker from '@/components/ScreenViewTracker'
 import MobileNotificationService from '@/services/notification.service'
 import { useAuthStore } from '@/stores'
@@ -64,151 +65,153 @@ export default function RootLayout() {
           />
           <AnimatedSplashOverlay />
           <ScreenViewTracker />
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name='(tabs)' options={{ headerShown: false }} />
-            <Stack.Screen name='(auth)' options={{ headerShown: false }} />
-            <Stack.Screen
-              name='product/[slug]'
-              options={{
-                headerShown: false,
-                animation: 'slide_from_right',
-              }}
-            />
-            <Stack.Screen
-              name='products/index'
-              options={{
-                headerShown: false,
-                animation: 'slide_from_right',
-              }}
-            />
-            <Stack.Screen
-              name='blog/index'
-              options={{
-                headerShown: false,
-                animation: 'slide_from_right',
-              }}
-            />
-            <Stack.Screen
-              name='blog/[slug]'
-              options={{
-                headerShown: false,
-                animation: 'slide_from_right',
-              }}
-            />
-            <Stack.Screen
-              name='book/[id]'
-              options={{
-                headerShown: false,
-                animation: 'slide_from_right',
-              }}
-            />
-            <Stack.Screen
-              name='checkout'
-              options={{
-                headerShown: false,
-                animation: 'slide_from_bottom',
-                presentation: 'modal',
-              }}
-            />
-            <Stack.Screen
-              name='support'
-              options={{
-                headerShown: false,
-                animation: 'slide_from_right',
-              }}
-            />
-            <Stack.Screen
-              name='help-center'
-              options={{
-                headerShown: false,
-                animation: 'slide_from_right',
-              }}
-            />
-            <Stack.Screen
-              name='contact-us'
-              options={{
-                headerShown: false,
-                animation: 'slide_from_right',
-              }}
-            />
-            <Stack.Screen
-              name='rate-app'
-              options={{
-                headerShown: false,
-                animation: 'slide_from_right',
-              }}
-            />
-            <Stack.Screen
-              name='returns'
-              options={{
-                headerShown: false,
-                animation: 'slide_from_right',
-              }}
-            />
-            <Stack.Screen
-              name='profile/edit'
-              options={{
-                headerShown: false,
-                animation: 'slide_from_right',
-              }}
-            />
-            <Stack.Screen
-              name='profile/addresses'
-              options={{
-                headerShown: false,
-                animation: 'slide_from_right',
-              }}
-            />
-            <Stack.Screen
-              name='profile/payment-methods'
-              options={{
-                headerShown: false,
-                animation: 'slide_from_right',
-              }}
-            />
-            <Stack.Screen
-              name='profile/notifications'
-              options={{
-                headerShown: false,
-                animation: 'slide_from_right',
-              }}
-            />
-            <Stack.Screen
-              name='profile/settings'
-              options={{
-                headerShown: false,
-                animation: 'slide_from_right',
-              }}
-            />
-            <Stack.Screen
-              name='profile/seller'
-              options={{
-                headerShown: false,
-                animation: 'slide_from_right',
-              }}
-            />
-            <Stack.Screen
-              name='orders/index'
-              options={{
-                headerShown: false,
-                animation: 'slide_from_right',
-              }}
-            />
-            <Stack.Screen
-              name='orders/[id]'
-              options={{
-                headerShown: false,
-                animation: 'slide_from_right',
-              }}
-            />
-            <Stack.Screen
-              name='track-order'
-              options={{
-                headerShown: false,
-                animation: 'slide_from_right',
-              }}
-            />
-          </Stack>
+          <ErrorBoundary>
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name='(tabs)' options={{ headerShown: false }} />
+              <Stack.Screen name='(auth)' options={{ headerShown: false }} />
+              <Stack.Screen
+                name='product/[slug]'
+                options={{
+                  headerShown: false,
+                  animation: 'slide_from_right',
+                }}
+              />
+              <Stack.Screen
+                name='products/index'
+                options={{
+                  headerShown: false,
+                  animation: 'slide_from_right',
+                }}
+              />
+              <Stack.Screen
+                name='blog/index'
+                options={{
+                  headerShown: false,
+                  animation: 'slide_from_right',
+                }}
+              />
+              <Stack.Screen
+                name='blog/[slug]'
+                options={{
+                  headerShown: false,
+                  animation: 'slide_from_right',
+                }}
+              />
+              <Stack.Screen
+                name='book/[id]'
+                options={{
+                  headerShown: false,
+                  animation: 'slide_from_right',
+                }}
+              />
+              <Stack.Screen
+                name='checkout'
+                options={{
+                  headerShown: false,
+                  animation: 'slide_from_bottom',
+                  presentation: 'modal',
+                }}
+              />
+              <Stack.Screen
+                name='support'
+                options={{
+                  headerShown: false,
+                  animation: 'slide_from_right',
+                }}
+              />
+              <Stack.Screen
+                name='help-center'
+                options={{
+                  headerShown: false,
+                  animation: 'slide_from_right',
+                }}
+              />
+              <Stack.Screen
+                name='contact-us'
+                options={{
+                  headerShown: false,
+                  animation: 'slide_from_right',
+                }}
+              />
+              <Stack.Screen
+                name='rate-app'
+                options={{
+                  headerShown: false,
+                  animation: 'slide_from_right',
+                }}
+              />
+              <Stack.Screen
+                name='returns'
+                options={{
+                  headerShown: false,
+                  animation: 'slide_from_right',
+                }}
+              />
+              <Stack.Screen
+                name='profile/edit'
+                options={{
+                  headerShown: false,
+                  animation: 'slide_from_right',
+                }}
+              />
+              <Stack.Screen
+                name='profile/addresses'
+                options={{
+                  headerShown: false,
+                  animation: 'slide_from_right',
+                }}
+              />
+              <Stack.Screen
+                name='profile/payment-methods'
+                options={{
+                  headerShown: false,
+                  animation: 'slide_from_right',
+                }}
+              />
+              <Stack.Screen
+                name='profile/notifications'
+                options={{
+                  headerShown: false,
+                  animation: 'slide_from_right',
+                }}
+              />
+              <Stack.Screen
+                name='profile/settings'
+                options={{
+                  headerShown: false,
+                  animation: 'slide_from_right',
+                }}
+              />
+              <Stack.Screen
+                name='profile/seller'
+                options={{
+                  headerShown: false,
+                  animation: 'slide_from_right',
+                }}
+              />
+              <Stack.Screen
+                name='orders/index'
+                options={{
+                  headerShown: false,
+                  animation: 'slide_from_right',
+                }}
+              />
+              <Stack.Screen
+                name='orders/[id]'
+                options={{
+                  headerShown: false,
+                  animation: 'slide_from_right',
+                }}
+              />
+              <Stack.Screen
+                name='track-order'
+                options={{
+                  headerShown: false,
+                  animation: 'slide_from_right',
+                }}
+              />
+            </Stack>
+          </ErrorBoundary>
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
