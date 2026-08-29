@@ -76,7 +76,7 @@ export default function ProfessionalBrands() {
               <li key={brand.id}>
                 <Link
                   to={`/brand/${brand.slug}`}
-                  className='flex h-20 items-center justify-center rounded-md border border-slate-200 bg-white px-3 grayscale transition-all hover:grayscale-0 hover:border-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900'
+                  className='flex h-20 items-center justify-center rounded-md border border-slate-200 bg-white px-3 grayscale transition-all hover:grayscale-0 hover:border-slate-900 focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-slate-900'
                 >
                   {brand.logo_url ? (
                     <img
