@@ -70,6 +70,7 @@ import { collectionService } from '@/services/collection.service'
 import {
   CollectionForm,
   CollectionFormData,
+  CollectionMediaFiles,
 } from '@/components/collections/CollectionForm'
 import { CollectionItemsManager } from '@/components/collections/CollectionItemsManager'
 import { toast } from 'sonner'
@@ -153,8 +154,16 @@ export default function CollectionsPage() {
 
   // Create product collection
   const createProductMutation = useMutation({
-    mutationFn: (data: CollectionFormData) =>
-      collectionService.createProductCollection(data),
+    mutationFn: ({
+      data,
+      files,
+    }: {
+      data: CollectionFormData
+      files: CollectionMediaFiles
+    }) =>
+      files.image || files.banner
+        ? collectionService.createProductCollectionWithMedia(data, files)
+        : collectionService.createProductCollection(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['product-collections'] })
       setIsFormOpen(false)
@@ -169,8 +178,16 @@ export default function CollectionsPage() {
 
   // Create category collection
   const createCategoryMutation = useMutation({
-    mutationFn: (data: CollectionFormData) =>
-      collectionService.createCategoryCollection(data),
+    mutationFn: ({
+      data,
+      files,
+    }: {
+      data: CollectionFormData
+      files: CollectionMediaFiles
+    }) =>
+      files.image || files.banner
+        ? collectionService.createCategoryCollectionWithMedia(data, files)
+        : collectionService.createCategoryCollection(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['category-collections'] })
       setIsFormOpen(false)
@@ -188,10 +205,15 @@ export default function CollectionsPage() {
     mutationFn: ({
       id,
       data,
+      files,
     }: {
       id: string
       data: Partial<CollectionFormData>
-    }) => collectionService.updateProductCollection(id, data),
+      files: CollectionMediaFiles
+    }) =>
+      files.image || files.banner
+        ? collectionService.updateProductCollectionWithMedia(id, data, files)
+        : collectionService.updateProductCollection(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['product-collections'] })
       setIsFormOpen(false)
@@ -210,10 +232,15 @@ export default function CollectionsPage() {
     mutationFn: ({
       id,
       data,
+      files,
     }: {
       id: string
       data: Partial<CollectionFormData>
-    }) => collectionService.updateCategoryCollection(id, data),
+      files: CollectionMediaFiles
+    }) =>
+      files.image || files.banner
+        ? collectionService.updateCategoryCollectionWithMedia(id, data, files)
+        : collectionService.updateCategoryCollection(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['category-collections'] })
       setIsFormOpen(false)
@@ -257,24 +284,29 @@ export default function CollectionsPage() {
     },
   })
 
-  const handleFormSubmit = async (formData: CollectionFormData) => {
+  const handleFormSubmit = async (
+    formData: CollectionFormData,
+    files: CollectionMediaFiles,
+  ) => {
     if (editingCollection) {
       if (activeTab === 'products') {
         await updateProductMutation.mutateAsync({
           id: editingCollection.id,
           data: formData,
+          files,
         })
       } else {
         await updateCategoryMutation.mutateAsync({
           id: editingCollection.id,
           data: formData,
+          files,
         })
       }
     } else {
       if (activeTab === 'products') {
-        await createProductMutation.mutateAsync(formData)
+        await createProductMutation.mutateAsync({ data: formData, files })
       } else {
-        await createCategoryMutation.mutateAsync(formData)
+        await createCategoryMutation.mutateAsync({ data: formData, files })
       }
     }
   }
@@ -317,9 +349,9 @@ export default function CollectionsPage() {
 
     try {
       if (activeTab === 'products') {
-        await createProductMutation.mutateAsync(duplicatedData)
+        await createProductMutation.mutateAsync({ data: duplicatedData, files: {} })
       } else {
-        await createCategoryMutation.mutateAsync(duplicatedData)
+        await createCategoryMutation.mutateAsync({ data: duplicatedData, files: {} })
       }
       toast.success('Collection duplicated successfully')
     } catch (error) {

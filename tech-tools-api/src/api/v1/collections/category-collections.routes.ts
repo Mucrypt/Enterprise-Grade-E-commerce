@@ -15,6 +15,7 @@ import {
   authenticateIfPresent,
   authorize,
 } from '../../../middleware/auth'
+import { upload } from '../../../utils/media'
 
 const router = Router()
 
@@ -24,11 +25,18 @@ const router = Router()
 // Protected routes: POST, PUT, DELETE (admin only)
 // =====================================================
 
-// Create a new category collection
+// Create a new category collection -- multer runs before the controller so
+// req.files.image/req.files.banner (if provided) are ready for
+// processCollectionImage; a plain JSON body (no files) still works exactly
+// as before.
 router.post(
   '/',
   authenticate,
   authorize('admin', 'super_admin'),
+  upload.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'banner', maxCount: 1 },
+  ]),
   createCategoryCollection,
 )
 
@@ -49,6 +57,10 @@ router.put(
   '/:collectionId',
   authenticate,
   authorize('admin', 'super_admin'),
+  upload.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'banner', maxCount: 1 },
+  ]),
   updateCategoryCollection,
 )
 

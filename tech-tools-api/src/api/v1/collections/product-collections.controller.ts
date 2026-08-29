@@ -1,6 +1,43 @@
 import { Request, Response } from 'express'
 import { query as dbQuery, getClient } from '../../../database/connection'
 import { AuthRequest } from '../../../middleware/auth'
+import { processCollectionImage, validateImageFile } from '../../../utils/media'
+
+// Real image/banner upload -- multer (product-collections.routes.ts) has
+// already parsed any multipart request into req.files by the time this
+// runs; a plain JSON request (no files) leaves req.files undefined and
+// this resolves to whatever imageUrl/bannerUrl came in the body, same as
+// before. An uploaded file always wins over a same-request body URL.
+async function resolveCollectionImages(
+  req: Request,
+  bodyImageUrl?: string,
+  bodyBannerUrl?: string,
+): Promise<{ imageUrl?: string; bannerUrl?: string }> {
+  const files = req.files as
+    | { [fieldname: string]: Express.Multer.File[] }
+    | undefined
+
+  let imageUrl = bodyImageUrl
+  let bannerUrl = bodyBannerUrl
+
+  if (files?.image?.[0]) {
+    const file = files.image[0]
+    const validation = validateImageFile(file)
+    if (!validation.valid) throw new Error(`Image: ${validation.error}`)
+    const processed = await processCollectionImage(file)
+    imageUrl = processed.optimized.large?.url || processed.original.url
+  }
+
+  if (files?.banner?.[0]) {
+    const file = files.banner[0]
+    const validation = validateImageFile(file)
+    if (!validation.valid) throw new Error(`Banner: ${validation.error}`)
+    const processed = await processCollectionImage(file)
+    bannerUrl = processed.optimized.large?.url || processed.original.url
+  }
+
+  return { imageUrl, bannerUrl }
+}
 
 const COLLECTION_UPDATE_FIELD_MAP: Record<string, string> = {
   name: 'name',
@@ -85,9 +122,11 @@ export const createProductCollection = async (req: Request, res: Response) => {
       })
     }
 
+    const resolvedImages = await resolveCollectionImages(req, imageUrl, bannerUrl)
+
     // Insert collection
     const result = await dbQuery(
-      `INSERT INTO product_collections 
+      `INSERT INTO product_collections
        (name, slug, description, short_description, image_url, banner_url, is_active, is_featured,
         visibility, position, display_order, meta_title, meta_description, meta_keywords,
         starts_at, ends_at, created_by)
@@ -98,8 +137,8 @@ export const createProductCollection = async (req: Request, res: Response) => {
         slug,
         description || null,
         shortDescription || null,
-        imageUrl || null,
-        bannerUrl || null,
+        resolvedImages.imageUrl || null,
+        resolvedImages.bannerUrl || null,
         isActive,
         isFeatured,
         visibility,
@@ -323,6 +362,18 @@ export const updateProductCollection = async (req: Request, res: Response) => {
         message: 'Collection not found',
       })
     }
+
+    // An uploaded file (multipart) always wins over a same-request body
+    // URL -- overwrite updates.imageUrl/bannerUrl in place before the
+    // dynamic field map below reads them, so a real upload here needs no
+    // separate code path.
+    const resolvedImages = await resolveCollectionImages(
+      req,
+      updates.imageUrl ?? updates.image_url,
+      updates.bannerUrl ?? updates.banner_url,
+    )
+    if (resolvedImages.imageUrl !== undefined) updates.imageUrl = resolvedImages.imageUrl
+    if (resolvedImages.bannerUrl !== undefined) updates.bannerUrl = resolvedImages.bannerUrl
 
     // Build update query dynamically
     const fields: string[] = []

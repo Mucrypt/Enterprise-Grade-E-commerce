@@ -14,6 +14,7 @@ import {
   authenticateIfPresent,
   authorize,
 } from '../../../middleware/auth'
+import { upload } from '../../../utils/media'
 
 const router = Router()
 
@@ -23,11 +24,18 @@ const router = Router()
 // Protected routes: POST, PUT, DELETE (admin only)
 // =====================================================
 
-// Create a new product collection
+// Create a new product collection -- multer runs before the controller so
+// req.files.image/req.files.banner (if provided) are ready for
+// processCollectionImage; a plain JSON body (no files) still works exactly
+// as before, upload.fields() is a no-op when the request isn't multipart.
 router.post(
   '/',
   authenticate,
   authorize('admin', 'super_admin'),
+  upload.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'banner', maxCount: 1 },
+  ]),
   createProductCollection,
 )
 
@@ -42,6 +50,10 @@ router.put(
   '/:collectionId',
   authenticate,
   authorize('admin', 'super_admin'),
+  upload.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'banner', maxCount: 1 },
+  ]),
   updateProductCollection,
 )
 

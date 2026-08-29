@@ -1,6 +1,8 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { useDropzone } from 'react-dropzone'
+import Image from 'next/image'
 import {
   Dialog,
   DialogContent,
@@ -21,7 +23,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Loader2 } from 'lucide-react'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { X, Image as ImageIcon, Loader2 } from 'lucide-react'
+
+interface ImagePreview {
+  file: File
+  preview: string
+}
 
 export interface CollectionFormData {
   name: string
@@ -42,10 +50,15 @@ export interface CollectionFormData {
   bannerUrl?: string
 }
 
+export interface CollectionMediaFiles {
+  image?: File
+  banner?: File
+}
+
 export interface CollectionFormProps {
   open: boolean
   onClose: () => void
-  onSubmit: (data: CollectionFormData) => Promise<void>
+  onSubmit: (data: CollectionFormData, files: CollectionMediaFiles) => Promise<void>
   collection?: any | null
   isLoading?: boolean
   type: 'product' | 'category'
@@ -101,7 +114,33 @@ export function CollectionForm({
   })
 
   const [autoSlug, setAutoSlug] = useState(true)
+  const [imagePreview, setImagePreview] = useState<ImagePreview | null>(null)
+  const [bannerPreview, setBannerPreview] = useState<ImagePreview | null>(null)
   const isEditing = !!collection
+
+  const imageDropzone = useDropzone({
+    accept: { 'image/*': ['.jpeg', '.jpg', '.png', '.webp', '.gif'] },
+    maxFiles: 1,
+    maxSize: 5 * 1024 * 1024,
+    onDrop: (acceptedFiles) => {
+      if (acceptedFiles.length > 0) {
+        const file = acceptedFiles[0]
+        setImagePreview({ file, preview: URL.createObjectURL(file) })
+      }
+    },
+  })
+
+  const bannerDropzone = useDropzone({
+    accept: { 'image/*': ['.jpeg', '.jpg', '.png', '.webp', '.gif'] },
+    maxFiles: 1,
+    maxSize: 5 * 1024 * 1024,
+    onDrop: (acceptedFiles) => {
+      if (acceptedFiles.length > 0) {
+        const file = acceptedFiles[0]
+        setBannerPreview({ file, preview: URL.createObjectURL(file) })
+      }
+    },
+  })
 
   useEffect(() => {
     if (collection) {
@@ -148,6 +187,10 @@ export function CollectionForm({
       })
       setAutoSlug(true)
     }
+    // A previous edit's dropped-but-not-yet-saved file must never leak
+    // into the next collection this dialog opens for.
+    setImagePreview(null)
+    setBannerPreview(null)
   }, [collection, open])
 
   const handleNameChange = (name: string) => {
@@ -160,8 +203,14 @@ export function CollectionForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    await onSubmit(formData)
+    const files: CollectionMediaFiles = {}
+    if (imagePreview?.file) files.image = imagePreview.file
+    if (bannerPreview?.file) files.banner = bannerPreview.file
+    await onSubmit(formData, files)
   }
+
+  const getExistingImageUrl = () => formData.imageUrl || null
+  const getExistingBannerUrl = () => formData.bannerUrl || null
 
   const displayOrders =
     type === 'product' ? productDisplayOrders : categoryDisplayOrders
@@ -266,36 +315,170 @@ export function CollectionForm({
                 />
               </div>
 
-              {/* Image URLs */}
-              <div className='grid grid-cols-2 gap-4'>
-                <div className='space-y-2'>
-                  <Label htmlFor='imageUrl'>Image URL</Label>
-                  <Input
-                    id='imageUrl'
-                    value={formData.imageUrl}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        imageUrl: e.target.value,
-                      }))
-                    }
-                    placeholder='https://...'
-                  />
-                </div>
-                <div className='space-y-2'>
-                  <Label htmlFor='bannerUrl'>Banner URL</Label>
-                  <Input
-                    id='bannerUrl'
-                    value={formData.bannerUrl}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        bannerUrl: e.target.value,
-                      }))
-                    }
-                    placeholder='https://...'
-                  />
-                </div>
+              {/* Image / Banner uploads -- real drag-and-drop, same
+                  upload -> optimize -> store pipeline as Category media,
+                  not a manually-pasted URL. A real URL still works too
+                  (e.g. an already-hosted image) via the fields below the
+                  dropzones -- a dropped file always wins over whatever's
+                  typed there when both are present. */}
+              <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+                <Card>
+                  <CardHeader className='pb-2'>
+                    <CardTitle className='text-sm'>Image</CardTitle>
+                    <CardDescription className='text-xs'>
+                      Card/tile image shown for this collection
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div
+                      {...imageDropzone.getRootProps()}
+                      className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors
+                        ${
+                          imageDropzone.isDragActive
+                            ? 'border-primary bg-primary/5'
+                            : 'border-muted-foreground/25 hover:border-primary/50'
+                        }`}
+                    >
+                      <input {...imageDropzone.getInputProps()} />
+                      {imagePreview ? (
+                        <div className='relative'>
+                          <Image
+                            src={imagePreview.preview}
+                            alt='Image preview'
+                            width={200}
+                            height={120}
+                            className='mx-auto rounded object-cover'
+                          />
+                          <Button
+                            type='button'
+                            variant='destructive'
+                            size='icon'
+                            className='absolute top-0 right-0 h-6 w-6'
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setImagePreview(null)
+                            }}
+                          >
+                            <X className='h-3 w-3' />
+                          </Button>
+                        </div>
+                      ) : getExistingImageUrl() ? (
+                        <div className='relative'>
+                          <Image
+                            src={getExistingImageUrl()!}
+                            alt='Existing image'
+                            width={200}
+                            height={120}
+                            className='mx-auto rounded object-cover'
+                          />
+                          <p className='text-xs text-muted-foreground mt-2'>
+                            Drop new image to replace
+                          </p>
+                        </div>
+                      ) : (
+                        <div className='py-4'>
+                          <ImageIcon className='mx-auto h-8 w-8 text-muted-foreground mb-2' />
+                          <p className='text-xs text-muted-foreground'>
+                            Drop image or click to upload
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    <div className='mt-2 space-y-1'>
+                      <Label htmlFor='imageUrl' className='text-xs text-muted-foreground'>
+                        Or paste an existing image URL
+                      </Label>
+                      <Input
+                        id='imageUrl'
+                        value={formData.imageUrl}
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, imageUrl: e.target.value }))
+                        }
+                        placeholder='https://...'
+                        className='text-xs'
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className='pb-2'>
+                    <CardTitle className='text-sm'>Banner</CardTitle>
+                    <CardDescription className='text-xs'>
+                      Wide hero image (e.g. 1200x400) for the collection&apos;s page
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div
+                      {...bannerDropzone.getRootProps()}
+                      className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors
+                        ${
+                          bannerDropzone.isDragActive
+                            ? 'border-primary bg-primary/5'
+                            : 'border-muted-foreground/25 hover:border-primary/50'
+                        }`}
+                    >
+                      <input {...bannerDropzone.getInputProps()} />
+                      {bannerPreview ? (
+                        <div className='relative'>
+                          <Image
+                            src={bannerPreview.preview}
+                            alt='Banner preview'
+                            width={200}
+                            height={120}
+                            className='mx-auto rounded object-cover'
+                          />
+                          <Button
+                            type='button'
+                            variant='destructive'
+                            size='icon'
+                            className='absolute top-0 right-0 h-6 w-6'
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setBannerPreview(null)
+                            }}
+                          >
+                            <X className='h-3 w-3' />
+                          </Button>
+                        </div>
+                      ) : getExistingBannerUrl() ? (
+                        <div className='relative'>
+                          <Image
+                            src={getExistingBannerUrl()!}
+                            alt='Existing banner'
+                            width={200}
+                            height={120}
+                            className='mx-auto rounded object-cover'
+                          />
+                          <p className='text-xs text-muted-foreground mt-2'>
+                            Drop new image to replace
+                          </p>
+                        </div>
+                      ) : (
+                        <div className='py-4'>
+                          <ImageIcon className='mx-auto h-8 w-8 text-muted-foreground mb-2' />
+                          <p className='text-xs text-muted-foreground'>
+                            Drop image or click to upload
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    <div className='mt-2 space-y-1'>
+                      <Label htmlFor='bannerUrl' className='text-xs text-muted-foreground'>
+                        Or paste an existing image URL
+                      </Label>
+                      <Input
+                        id='bannerUrl'
+                        value={formData.bannerUrl}
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, bannerUrl: e.target.value }))
+                        }
+                        placeholder='https://...'
+                        className='text-xs'
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             </TabsContent>
 

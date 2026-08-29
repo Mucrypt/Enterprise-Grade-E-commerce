@@ -299,6 +299,27 @@ export async function processProductImage(file: Express.Multer.File) {
 }
 
 /**
+ * Process a collection (product_collections / category_collections) image
+ * or banner upload -- same shape as processCategoryImage/processProductImage,
+ * just its own destination folder. Both collection types share this: a
+ * collection only ever stores a single URL per field (image_url/banner_url
+ * columns), not a category_media-style multi-row/multi-purpose table, so
+ * the caller picks whichever optimized variant it wants (typically
+ * `optimized.large` for a banner) rather than this function choosing one.
+ */
+export async function processCollectionImage(file: Express.Multer.File) {
+  const filename = `${uuidv4()}.webp`
+  const destinationFolder = `${UPLOAD_DIR}/collections/images`
+
+  const result = await optimizeImage(file.path, destinationFolder, filename)
+
+  // Delete temp file
+  await fs.unlink(file.path)
+
+  return result
+}
+
+/**
  * Process category image upload
  */
 export async function processCategoryImage(file: Express.Multer.File) {

@@ -40,13 +40,43 @@ export interface CreateCollectionData {
   name: string
   slug: string
   description?: string
+  shortDescription?: string
   visibility?: 'public' | 'private' | 'hidden'
   displayOrder?: string
+  position?: number
   startsAt?: string
   endsAt?: string
   metaTitle?: string
   metaDescription?: string
+  metaKeywords?: string
   isActive?: boolean
+  isFeatured?: boolean
+  imageUrl?: string
+  bannerUrl?: string
+}
+
+/**
+ * Real image/banner file upload -- same shape as category.service.ts's
+ * createCategoryWithMedia/updateCategoryWithMedia. Every non-undefined
+ * field is appended as a plain string (multer parses the rest of the
+ * multipart body the same way it parses categories' -- see
+ * resolveCollectionImages in the backend controllers), and the two files
+ * are appended last under the field names the backend's upload.fields()
+ * middleware expects: `image`, `banner`.
+ */
+function buildCollectionFormData(
+  data: Partial<CreateCollectionData>,
+  files: { image?: File; banner?: File },
+): FormData {
+  const formData = new FormData()
+  Object.entries(data).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      formData.append(key, String(value))
+    }
+  })
+  if (files.image) formData.append('image', files.image)
+  if (files.banner) formData.append('banner', files.banner)
+  return formData
 }
 
 export const collectionService = {
@@ -81,6 +111,15 @@ export const collectionService = {
     return data
   },
 
+  // Create product collection with a real uploaded image/banner
+  async createProductCollectionWithMedia(
+    collectionData: CreateCollectionData,
+    files: { image?: File; banner?: File },
+  ) {
+    const formData = buildCollectionFormData(collectionData, files)
+    return apiClient.postFormData('/collections/products', formData)
+  },
+
   // Update product collection
   async updateProductCollection(
     id: string,
@@ -91,6 +130,16 @@ export const collectionService = {
       collectionData,
     )
     return data
+  },
+
+  // Update product collection with a real uploaded image/banner
+  async updateProductCollectionWithMedia(
+    id: string,
+    collectionData: Partial<CreateCollectionData>,
+    files: { image?: File; banner?: File },
+  ) {
+    const formData = buildCollectionFormData(collectionData, files)
+    return apiClient.putFormData(`/collections/products/${id}`, formData)
   },
 
   // Delete product collection
@@ -161,6 +210,15 @@ export const collectionService = {
     return data
   },
 
+  // Create category collection with a real uploaded image/banner
+  async createCategoryCollectionWithMedia(
+    collectionData: CreateCollectionData,
+    files: { image?: File; banner?: File },
+  ) {
+    const formData = buildCollectionFormData(collectionData, files)
+    return apiClient.postFormData('/collections/categories', formData)
+  },
+
   // Update category collection
   async updateCategoryCollection(
     id: string,
@@ -171,6 +229,16 @@ export const collectionService = {
       collectionData,
     )
     return data
+  },
+
+  // Update category collection with a real uploaded image/banner
+  async updateCategoryCollectionWithMedia(
+    id: string,
+    collectionData: Partial<CreateCollectionData>,
+    files: { image?: File; banner?: File },
+  ) {
+    const formData = buildCollectionFormData(collectionData, files)
+    return apiClient.putFormData(`/collections/categories/${id}`, formData)
   },
 
   // Delete category collection
