@@ -17,6 +17,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { AnimatedSplashOverlay } from '@/components/animated-icon'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import ScreenViewTracker from '@/components/ScreenViewTracker'
+import ReferralCapture from '@/components/ReferralCapture'
 import MobileNotificationService from '@/services/notification.service'
 import { useAuthStore } from '@/stores'
 import { initializeEventTracking } from '@/services/event-tracking'
@@ -65,6 +66,7 @@ export default function RootLayout() {
           />
           <AnimatedSplashOverlay />
           <ScreenViewTracker />
+          <ReferralCapture />
           <ErrorBoundary>
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name='(tabs)' options={{ headerShown: false }} />
@@ -184,6 +186,13 @@ export default function RootLayout() {
               />
               <Stack.Screen
                 name='profile/seller'
+                options={{
+                  headerShown: false,
+                  animation: 'slide_from_right',
+                }}
+              />
+              <Stack.Screen
+                name='refer-earn'
                 options={{
                   headerShown: false,
                   animation: 'slide_from_right',

@@ -48,6 +48,16 @@ export const AppColors = {
   badgeDeal: '#8B5CF6',
   badgeNew: '#10B981',
   badgeSale: '#FF6B35',
+
+  // Industrial / professional-tools tone (dark hero, workshop and
+  // newsletter sections on the home screen) -- mirrors the web
+  // storefront's slate/orange B2B palette.
+  industrialDark: '#0F1420',
+  slate900: '#0F172A',
+  slate200: '#E2E8F0',
+  slate400: '#94A3B8',
+  slate500: '#64748B',
+  orangeAccent: '#FB923C',
 }
 
 // Gradients (as arrays for LinearGradient)
@@ -58,6 +68,11 @@ export const AppGradients = {
   dark: ['#1F2937', '#374151'] as [string, string],
   flashDeal: ['#FF6B35', '#FF8A5B', '#FFA07A'] as [string, string, string],
   hero: ['#FF6B35', '#E55A2B'] as [string, string],
+
+  // Dark industrial gradient used by the professional-tools home
+  // sections (ToolsHero, WorkshopMachinerySection, HomepageNewsletter).
+  industrial: ['#0F1420', '#1B2436'] as [string, string],
+  workshop: ['#0F172A', '#1E293B'] as [string, string],
 }
 
 export const AppSpacing = {

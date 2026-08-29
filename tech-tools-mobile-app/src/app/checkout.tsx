@@ -41,7 +41,8 @@ import {
 } from '@/constants/appTheme'
 import { useCartStore, useAuthStore } from '@/stores'
 import { formatPrice } from '@/utils'
-import { paymentsApi, ordersApiNew } from '@/api'
+import { paymentsApi, ordersApiNew, affiliatesApi } from '@/api'
+import { getReferralCode } from '@/utils/referral-storage'
 
 type CheckoutStep = 'shipping' | 'payment' | 'review'
 
@@ -77,10 +78,25 @@ export default function CheckoutScreen() {
     taxAmount: number
     shippingAmount: number
     grandTotal: number
+    storeCreditApplied: number
   } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [cardComplete, setCardComplete] = useState(false)
   const cardValidatedRef = useRef(false) // Track if card was validated before moving to review
+
+  // Store credit -- fetched once on mount; the actual redemption amount is
+  // computed and clamped server-side against the real, up-to-date balance
+  // when the order draft is created, so this is just what's shown as the
+  // toggle's available amount.
+  const [storeCreditBalance, setStoreCreditBalance] = useState(0)
+  const [useStoreCredit, setUseStoreCredit] = useState(false)
+  useEffect(() => {
+    if (!isAuthenticated) return
+    affiliatesApi
+      .getMyStoreCredit()
+      .then((res) => setStoreCreditBalance(res.balance))
+      .catch(() => setStoreCreditBalance(0))
+  }, [isAuthenticated])
 
   // Shipping form
   const [shippingForm, setShippingForm] = useState<ShippingForm>({
@@ -182,6 +198,8 @@ export default function CheckoutScreen() {
         quantity: item.quantity,
       }))
 
+      const referralCode = (await getReferralCode()) || undefined
+
       const result = await ordersApiNew.checkoutSession({
         items: orderItems,
         shippingAddress: {
@@ -196,6 +214,8 @@ export default function CheckoutScreen() {
           postalCode: shippingForm.postalCode,
           country: shippingForm.country,
         },
+        referralCode,
+        useStoreCredit: useStoreCredit && storeCreditBalance > 0,
       })
 
       setClientSecret(result.clientSecret)
@@ -206,6 +226,7 @@ export default function CheckoutScreen() {
         taxAmount: result.taxAmount,
         shippingAmount: result.shippingAmount,
         grandTotal: result.grandTotal,
+        storeCreditApplied: result.storeCreditApplied,
       })
       return true
     } catch (err: any) {
@@ -228,7 +249,7 @@ export default function CheckoutScreen() {
     } finally {
       setLoading(false)
     }
-  }, [items, shippingForm, isAuthenticated, router])
+  }, [items, shippingForm, isAuthenticated, router, useStoreCredit, storeCreditBalance])
 
   const validateShipping = (): boolean => {
     if (
@@ -304,6 +325,10 @@ export default function CheckoutScreen() {
         handleContinue={handleContinue}
         clearCart={clearCart}
         router={router}
+        useStoreCredit={useStoreCredit}
+        setUseStoreCredit={setUseStoreCredit}
+        storeCreditBalance={storeCreditBalance}
+        isAuthenticated={isAuthenticated}
       />
     </StripeProvider>
   )
@@ -335,6 +360,10 @@ function CheckoutContent({
   handleContinue,
   clearCart,
   router,
+  useStoreCredit,
+  setUseStoreCredit,
+  storeCreditBalance,
+  isAuthenticated,
 }: any) {
   const { confirmPayment } = useStripe()
   const [countryPickerVisible, setCountryPickerVisible] = useState(false)
@@ -343,10 +372,14 @@ function CheckoutContent({
   // Once the order draft exists, the server-computed totals are
   // authoritative -- the amount actually charged and the amount displayed
   // should never be able to diverge. Before that, show the client-side
-  // estimate.
+  // estimate. grandTotal itself always stays the real, undiscounted order
+  // value (kept that way for refund/commission math) -- storeCreditApplied
+  // is subtracted only for what's actually shown as due/charged.
   const displayShipping = orderDraft?.shippingAmount ?? shipping
   const displayTax = orderDraft?.taxAmount ?? tax
   const displayGrandTotal = orderDraft?.grandTotal ?? grandTotal
+  const storeCreditApplied = orderDraft?.storeCreditApplied || 0
+  const displayPayable = displayGrandTotal - storeCreditApplied
 
   // Filter countries based on search
   const filteredCountries = countrySearch
@@ -769,6 +802,25 @@ function CheckoutContent({
           <Text style={styles.priceLabel}>Subtotal</Text>
           <Text style={styles.priceValue}>{formatPrice(total)}</Text>
         </View>
+        {isAuthenticated && storeCreditBalance > 0 && (
+          <TouchableOpacity
+            style={styles.storeCreditRow}
+            onPress={() => setUseStoreCredit(!useStoreCredit)}
+            disabled={!!orderDraft}
+            activeOpacity={0.8}
+          >
+            <View style={styles.storeCreditLeft}>
+              <Ionicons
+                name={useStoreCredit ? 'checkbox' : 'square-outline'}
+                size={18}
+                color={AppColors.primary}
+              />
+              <Text style={styles.storeCreditLabel}>
+                Use store credit ({formatPrice(storeCreditBalance)} available)
+              </Text>
+            </View>
+          </TouchableOpacity>
+        )}
         <View style={styles.priceRow}>
           <Text style={styles.priceLabel}>Shipping</Text>
           <Text
@@ -784,9 +836,19 @@ function CheckoutContent({
           <Text style={styles.priceLabel}>Tax (8%)</Text>
           <Text style={styles.priceValue}>{formatPrice(displayTax)}</Text>
         </View>
+        {storeCreditApplied > 0 && (
+          <View style={styles.priceRow}>
+            <Text style={[styles.priceLabel, styles.storeCreditAppliedText]}>
+              Store credit applied
+            </Text>
+            <Text style={[styles.priceValue, styles.storeCreditAppliedText]}>
+              -{formatPrice(storeCreditApplied)}
+            </Text>
+          </View>
+        )}
         <View style={[styles.priceRow, styles.totalRowInner]}>
           <Text style={styles.totalLabelInner}>Total</Text>
-          <Text style={styles.totalValueInner}>{formatPrice(displayGrandTotal)}</Text>
+          <Text style={styles.totalValueInner}>{formatPrice(displayPayable)}</Text>
         </View>
       </View>
     </View>
@@ -828,7 +890,7 @@ function CheckoutContent({
       <View style={styles.footer}>
         <View style={styles.footerTotal}>
           <Text style={styles.footerTotalLabel}>Total</Text>
-          <Text style={styles.footerTotalValue}>{formatPrice(displayGrandTotal)}</Text>
+          <Text style={styles.footerTotalValue}>{formatPrice(displayPayable)}</Text>
         </View>
 
         {step === 'shipping' && (
@@ -914,7 +976,7 @@ function CheckoutContent({
                     color={AppColors.white}
                   />
                   <Text style={styles.continueButtonText}>
-                    Pay {formatPrice(displayGrandTotal)}
+                    Pay {formatPrice(displayPayable)}
                   </Text>
                 </>
               )}
@@ -1331,6 +1393,29 @@ const styles = StyleSheet.create({
   freeShipping: {
     color: AppColors.accent,
     fontWeight: '500',
+  },
+  storeCreditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    borderRadius: AppBorderRadius.md,
+    paddingVertical: AppSpacing.sm,
+    paddingHorizontal: AppSpacing.sm,
+    marginBottom: AppSpacing.sm,
+  },
+  storeCreditLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: AppSpacing.xs,
+    flex: 1,
+  },
+  storeCreditLabel: {
+    fontSize: 13,
+    color: '#065F46',
+    flexShrink: 1,
+  },
+  storeCreditAppliedText: {
+    color: '#047857',
   },
   totalRowInner: {
     marginTop: AppSpacing.sm,

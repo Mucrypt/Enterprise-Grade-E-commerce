@@ -2,7 +2,7 @@
 // TechTools Mobile App - Product Card Component
 // ============================================
 
-import React from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -45,6 +45,14 @@ export default function ProductCard({
   const router = useRouter()
   const addToCart = useCartStore((state) => state.addItem)
   const { isInWishlist, toggleItem } = useWishlistStore()
+  const [justAdded, setJustAdded] = useState(false)
+  const justAddedTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (justAddedTimeout.current) clearTimeout(justAddedTimeout.current)
+    }
+  }, [])
 
   const basePrice = Number(product.base_price)
   const salePrice = product.sale_price ? Number(product.sale_price) : null
@@ -62,6 +70,9 @@ export default function ProductCard({
   const handleAddToCart = (e: any) => {
     e.stopPropagation()
     addToCart(product)
+    setJustAdded(true)
+    if (justAddedTimeout.current) clearTimeout(justAddedTimeout.current)
+    justAddedTimeout.current = setTimeout(() => setJustAdded(false), 1200)
   }
 
   const handleToggleWishlist = (e: any) => {
@@ -133,6 +144,31 @@ export default function ProductCard({
             <Text style={styles.badgeText}>-{discountPercent}%</Text>
           </View>
         )}
+
+        {/* Quick add to cart -- SHEIN-style icon button, mirrors the web
+            storefront's ProductCard exactly: a white circle overlaid on
+            the image (same treatment as the wishlist button, just
+            bottom-right), a cart glyph with a small orange plus badge so
+            "add this" reads without any label, and a brief checkmark swap
+            as non-text confirmation that the tap registered. */}
+        {showAddToCart && (
+          <TouchableOpacity
+            style={styles.quickAddButton}
+            onPress={handleAddToCart}
+            activeOpacity={0.7}
+          >
+            {justAdded ? (
+              <Ionicons name='checkmark' size={20} color={AppColors.gray800} />
+            ) : (
+              <View>
+                <Ionicons name='cart-outline' size={20} color={AppColors.gray800} />
+                <View style={styles.quickAddBadge}>
+                  <Ionicons name='add' size={10} color={AppColors.white} />
+                </View>
+              </View>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.content}>
@@ -178,14 +214,6 @@ export default function ProductCard({
             <Text style={styles.originalPrice}>{formatPrice(basePrice)}</Text>
           )}
         </View>
-
-        {/* Add to cart button */}
-        {showAddToCart && (
-          <TouchableOpacity style={styles.addButton} onPress={handleAddToCart}>
-            <Ionicons name='cart-outline' size={16} color={AppColors.white} />
-            <Text style={styles.addButtonText}>Add</Text>
-          </TouchableOpacity>
-        )}
       </View>
     </TouchableOpacity>
   )
@@ -283,18 +311,29 @@ const styles = StyleSheet.create({
     color: AppColors.gray400,
     textDecorationLine: 'line-through',
   },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  quickAddButton: {
+    position: 'absolute',
+    bottom: AppSpacing.sm,
+    right: AppSpacing.sm,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: AppColors.white,
     justifyContent: 'center',
-    backgroundColor: AppColors.primary,
-    paddingVertical: AppSpacing.sm,
-    borderRadius: AppBorderRadius.md,
-    gap: 4,
+    alignItems: 'center',
+    ...AppShadows.sm,
   },
-  addButtonText: {
-    color: AppColors.white,
-    fontSize: 12,
-    fontWeight: '600',
+  quickAddBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: AppColors.primary,
+    borderWidth: 2,
+    borderColor: AppColors.white,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 })

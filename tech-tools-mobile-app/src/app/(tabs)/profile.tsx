@@ -365,6 +365,12 @@ export default function ProfileTabScreen() {
             onPress={() => router.push('/profile/seller' as Href)}
           />
           <MenuItem
+            icon='gift-outline'
+            title='Refer & Earn'
+            subtitle='Share your link, earn store credit'
+            onPress={() => router.push('/refer-earn' as Href)}
+          />
+          <MenuItem
             icon='person-outline'
             title='Edit Profile'
             onPress={() => router.push('/profile/edit' as Href)}

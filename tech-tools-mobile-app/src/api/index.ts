@@ -1312,6 +1312,96 @@ export const blogApi = {
 }
 
 // ============================================
+// Newsletter API
+// ============================================
+export interface NewsletterSubscribeResponse {
+  success: boolean
+  message: string
+  alreadySubscribed?: boolean
+  resubscribed?: boolean
+}
+
+export const newsletterApi = {
+  // Subscribe an email to the newsletter (same endpoint/payload shape as
+  // the web storefront's newsletterApi.subscribe, against the same
+  // tech-tools-api backend).
+  subscribe: async (data: {
+    email: string
+    name?: string
+    source?: string
+  }): Promise<NewsletterSubscribeResponse> => {
+    const response = await apiClient.post('/newsletter/subscribe', data)
+    return response.data
+  },
+}
+
+// ============================================
+// Affiliates API (Refer & Earn) -- same endpoints/shapes as the web
+// storefront's affiliatesApi, against the same tech-tools-api backend.
+// ============================================
+export interface AffiliateProfile {
+  referralCode: string
+  status: 'active' | 'suspended'
+}
+
+export interface AffiliateStats extends AffiliateProfile {
+  totalClicks: number
+  pendingEarnings: number
+  confirmedEarnings: number
+  pendingCount: number
+  confirmedCount: number
+  storeCreditBalance: number
+  recentReferrals: {
+    id: string
+    orderValue: number
+    commissionAmount: number
+    status: 'pending' | 'confirmed' | 'cancelled' | 'paid'
+    createdAt: string
+    confirmedAt: string | null
+  }[]
+}
+
+export const affiliatesApi = {
+  // Public -- the real, admin-configured flat rate, never hardcoded in UI copy.
+  getPublicSettings: async (): Promise<{
+    commissionRatePercent: number
+    programEnabled: boolean
+  }> => {
+    const response = await apiClient.get('/affiliates/settings/public')
+    return response.data.data
+  },
+
+  // Public, fire-and-forget -- never throws in a way callers need to handle.
+  trackClick: async (payload: {
+    code: string
+    path: string
+    visitorId: string
+  }): Promise<void> => {
+    try {
+      await apiClient.post('/affiliates/click', payload)
+    } catch {
+      // best-effort -- a failed click ping must never break navigation
+    }
+  },
+
+  // Get-or-create -- returns the caller's own referral code, creating it on first call.
+  getMyProfile: async (): Promise<AffiliateProfile> => {
+    const response = await apiClient.get('/affiliates/me')
+    return response.data.data
+  },
+
+  getMyStats: async (): Promise<AffiliateStats> => {
+    const response = await apiClient.get('/affiliates/me/stats')
+    return response.data.data
+  },
+
+  getMyStoreCredit: async (): Promise<{ balance: number }> => {
+    const response = await apiClient.get('/affiliates/me/store-credit')
+    return response.data.data
+  },
+}
+
+// ============================================
 // Collections API
 // ============================================
 export const collectionsApi = {
@@ -1949,6 +2039,8 @@ export const ordersApiNew = {
       country: string
     }
     customerNotes?: string
+    referralCode?: string
+    useStoreCredit?: boolean
   }): Promise<{
     clientSecret: string
     paymentIntentId: string
@@ -1958,6 +2050,7 @@ export const ordersApiNew = {
     taxAmount: number
     shippingAmount: number
     grandTotal: number
+    storeCreditApplied: number
   }> => {
     const response = await apiClient.post('/orders/checkout-session', data)
     const requestId = getRequestIdFromResponse(response)
@@ -1982,6 +2075,7 @@ export const ordersApiNew = {
       taxAmount: toSafeNumber(result.taxAmount),
       shippingAmount: toSafeNumber(result.shippingAmount),
       grandTotal: toSafeNumber(result.grandTotal),
+      storeCreditApplied: toSafeNumber(result.storeCreditApplied),
     }
   },
 }
@@ -2004,4 +2098,6 @@ export const api = {
   collections: collectionsApi,
   trending: trendingApi,
   payments: paymentsApi,
+  newsletter: newsletterApi,
+  affiliates: affiliatesApi,
 }
