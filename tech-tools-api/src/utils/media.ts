@@ -1,4 +1,5 @@
 import multer from 'multer'
+import type { Request, Response, NextFunction, RequestHandler } from 'express'
 import sharp from 'sharp'
 import path from 'path'
 import fs from 'fs/promises'
@@ -147,6 +148,42 @@ export const upload = multer({
     fileSize: MAX_VIDEO_SIZE, // Use max video size as the upper limit
   },
 })
+
+/**
+ * Wraps an `upload.fields(...)`/`upload.single(...)` middleware so a
+ * rejected file (wrong type from fileFilter, over the size limit, an
+ * unexpected field name) returns a clean 400 with the real reason --
+ * instead of the multer/fileFilter error falling through to next(err) and
+ * hitting the global error handler, which in production replies with the
+ * generic, undiagnosable "Internal server error" (no detail at all,
+ * confirmed live: this is exactly what a rejected collection-image upload
+ * looked like from the browser before this fix -- a bare 500 with nothing
+ * else to go on). Multer errors are always a client mistake (bad file),
+ * never a server fault, so 400 is the correct status regardless of what
+ * NODE_ENV hides elsewhere.
+ */
+export function handleUploadErrors(uploadMiddleware: RequestHandler): RequestHandler {
+  return (req: Request, res: Response, next: NextFunction) => {
+    uploadMiddleware(req, res, (err: unknown) => {
+      if (!err) return next()
+
+      if (err instanceof multer.MulterError) {
+        const message =
+          err.code === 'LIMIT_FILE_SIZE'
+            ? 'File is too large.'
+            : `Upload error: ${err.message}`
+        return res.status(400).json({ success: false, error: message })
+      }
+
+      // fileFilter's rejection is a plain Error, not a MulterError.
+      if (err instanceof Error) {
+        return res.status(400).json({ success: false, error: err.message })
+      }
+
+      next(err)
+    })
+  }
+}
 
 const bookAssetFileFilter = (
   _req: any,

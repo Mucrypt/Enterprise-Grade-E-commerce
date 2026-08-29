@@ -14,7 +14,7 @@ import {
   authenticateIfPresent,
   authorize,
 } from '../../../middleware/auth'
-import { upload } from '../../../utils/media'
+import { upload, handleUploadErrors } from '../../../utils/media'
 
 const router = Router()
 
@@ -32,10 +32,12 @@ router.post(
   '/',
   authenticate,
   authorize('admin', 'super_admin'),
-  upload.fields([
-    { name: 'image', maxCount: 1 },
-    { name: 'banner', maxCount: 1 },
-  ]),
+  handleUploadErrors(
+    upload.fields([
+      { name: 'image', maxCount: 1 },
+      { name: 'banner', maxCount: 1 },
+    ]),
+  ),
   createProductCollection,
 )
 
@@ -50,10 +52,12 @@ router.put(
   '/:collectionId',
   authenticate,
   authorize('admin', 'super_admin'),
-  upload.fields([
-    { name: 'image', maxCount: 1 },
-    { name: 'banner', maxCount: 1 },
-  ]),
+  handleUploadErrors(
+    upload.fields([
+      { name: 'image', maxCount: 1 },
+      { name: 'banner', maxCount: 1 },
+    ]),
+  ),
   updateProductCollection,
 )
 
