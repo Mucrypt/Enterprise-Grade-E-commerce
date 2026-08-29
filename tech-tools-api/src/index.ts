@@ -36,6 +36,10 @@ import {
   stopPromotionQueueWorker,
 } from './services/promotion-campaign.queue'
 import {
+  startAffiliateCommissionWorker,
+  stopAffiliateCommissionWorker,
+} from './services/affiliate-commission.queue'
+import {
   startChannelProductSyncWorker,
   stopChannelProductSyncWorker,
 } from './services/channels/channel-product-sync.worker'
@@ -145,6 +149,7 @@ if (cluster.isPrimary && numWorkers > 1) {
         startAnomalyDetectionWorker()
         startMetricsBroadcaster()
         startPromotionQueueWorker()
+        startAffiliateCommissionWorker()
         startChannelProductSyncWorker()
         startChannelInventoryDiffWorker()
         startChannelOrderImportWorker()
@@ -176,6 +181,7 @@ if (cluster.isPrimary && numWorkers > 1) {
       stopAnomalyDetectionWorker()
       stopMetricsBroadcaster()
       stopPromotionQueueWorker()
+      stopAffiliateCommissionWorker()
       stopChannelProductSyncWorker()
       stopChannelInventoryDiffWorker()
       stopChannelOrderImportWorker()

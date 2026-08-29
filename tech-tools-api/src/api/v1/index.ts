@@ -18,6 +18,7 @@ import shippingRoutes from './shipping/shipping.routes'
 import deliveryEstimateRoutes from './shipping/delivery-estimate.routes'
 import deliveryTemplateRoutes from './shipping/delivery-template.routes'
 import couponRoutes from './coupons/coupon.routes'
+import affiliateRoutes from './affiliates/affiliate.routes'
 import reviewRoutes from './reviews/review.routes'
 import notificationRoutes from './notifications/notification.routes'
 import whatsappRoutes from './whatsapp/whatsapp.routes'
@@ -81,6 +82,7 @@ router.use('/shipping/delivery-estimate', deliveryEstimateRoutes)
 router.use('/shipping/delivery-templates', deliveryTemplateRoutes)
 router.use('/shipping', shippingRoutes)
 router.use('/coupons', couponRoutes)
+router.use('/affiliates', affiliateRoutes)
 router.use('/reviews', reviewRoutes)
 router.use('/notifications', notificationRoutes)
 router.use('/whatsapp', whatsappRoutes)

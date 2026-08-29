@@ -9,6 +9,7 @@ import { StripeProvider } from './contexts/StripeContext'
 import Layout from './components/layout/Layout'
 import ScrollToTop from './components/common/ScrollToTop'
 import PageViewTracker from './components/common/PageViewTracker'
+import ReferralCapture from './components/common/ReferralCapture'
 import CookieConsentBanner from './components/common/CookieConsentBanner'
 import { initializeEventTracking } from './services/event-tracking'
 
@@ -31,6 +32,7 @@ const CreatorDashboardPage = lazy(() => import('./pages/CreatorDashboardPage'))
 const OrdersPage = lazy(() => import('./pages/OrdersPage'))
 const WishlistPage = lazy(() => import('./pages/WishlistPage'))
 const ComparePage = lazy(() => import('./pages/ComparePage'))
+const ReferAndEarnPage = lazy(() => import('./pages/ReferAndEarnPage'))
 const PaymentMethodsPage = lazy(() => import('./pages/PaymentMethodsPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const SupportPage = lazy(() => import('./pages/SupportPage'))
@@ -78,6 +80,7 @@ function App() {
         <BrowserRouter>
           <ScrollToTop />
           <PageViewTracker />
+          <ReferralCapture />
           <CookieConsentBanner />
           <Suspense fallback={routeFallback}>
             <Routes>
@@ -123,6 +126,7 @@ function App() {
                 <Route path='orders' element={<OrdersPage />} />
                 <Route path='wishlist' element={<WishlistPage />} />
                 <Route path='compare' element={<ComparePage />} />
+                <Route path='refer' element={<ReferAndEarnPage />} />
                 <Route
                   path='payment-methods'
                   element={<PaymentMethodsPage />}

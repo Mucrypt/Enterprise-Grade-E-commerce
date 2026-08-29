@@ -195,6 +195,71 @@ export const shippingApi = {
 }
 
 // ============================================
+// Affiliates API (Refer & Earn)
+// ============================================
+export const affiliatesApi = {
+  // Public -- the real, admin-configured flat rate, never hardcoded in UI copy.
+  async getPublicSettings() {
+    const response = await api.get<{
+      success: boolean
+      data: { commissionRatePercent: number; programEnabled: boolean }
+    }>('/affiliates/settings/public')
+    return response.data.data
+  },
+
+  // Public, fire-and-forget -- never throws in a way callers need to handle.
+  async trackClick(payload: { code: string; path: string; visitorId: string }) {
+    try {
+      await api.post('/affiliates/click', payload)
+    } catch {
+      // best-effort -- a failed click ping must never break navigation
+    }
+  },
+
+  // Get-or-create -- returns the caller's own referral code, creating it on first call.
+  async getMyProfile() {
+    const response = await api.get<{
+      success: boolean
+      data: { referralCode: string; status: 'active' | 'suspended' }
+    }>('/affiliates/me')
+    return response.data.data
+  },
+
+  async getMyStats() {
+    const response = await api.get<{
+      success: boolean
+      data: {
+        referralCode: string
+        status: 'active' | 'suspended'
+        totalClicks: number
+        pendingEarnings: number
+        confirmedEarnings: number
+        pendingCount: number
+        confirmedCount: number
+        storeCreditBalance: number
+        recentReferrals: {
+          id: string
+          orderValue: number
+          commissionAmount: number
+          status: 'pending' | 'confirmed' | 'cancelled' | 'paid'
+          createdAt: string
+          confirmedAt: string | null
+        }[]
+      }
+    }>('/affiliates/me/stats')
+    return response.data.data
+  },
+
+  async getMyStoreCredit() {
+    const response = await api.get<{
+      success: boolean
+      data: { balance: number }
+    }>('/affiliates/me/store-credit')
+    return response.data.data
+  },
+}
+
+// ============================================
 // Categories API
 // ============================================
 export const categoriesApi = {
@@ -1314,6 +1379,10 @@ export const ordersApiNew = {
       country: string
     }
     customerNotes?: string
+    /** Read from the ttref attribution cookie (see utils/referral-cookie.ts), if present. */
+    referralCode?: string
+    /** Redeem the caller's store-credit balance against this order -- authenticated checkout only. */
+    useStoreCredit?: boolean
   }) {
     const response = await api.post<{
       success: boolean
@@ -1326,6 +1395,7 @@ export const ordersApiNew = {
         taxAmount: number
         shippingAmount: number
         grandTotal: number
+        storeCreditApplied: number
       }
     }>('/orders/checkout-session', data)
     return response.data.data
@@ -1338,6 +1408,8 @@ export const ordersApiNew = {
     guestEmail: string
     guestPhone?: string
     customerNotes?: string
+    /** Read from the ttref attribution cookie, if present. No store-credit option for guests -- no account to hold a balance. */
+    referralCode?: string
   }) {
     const guestApi = axios.create({
       baseURL: API_URL,

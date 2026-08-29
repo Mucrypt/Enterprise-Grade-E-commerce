@@ -43,6 +43,8 @@ import {
   Store,
   PackagePlus,
   Key,
+  Users2,
+  Wallet,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useStaffAccess } from '@/contexts/StaffAccessContext'
@@ -403,6 +405,42 @@ const navigation: NavItem[] = [
         // sourcing.manage, never implied by sourcing.view/import.
         icon: Key,
         permission: 'sourcing.manage',
+      },
+    ],
+  },
+  {
+    // AFFILIATE-1: the referral/affiliate program's admin surface. Its own
+    // top-level group, not nested under Marketing -- like Channels above,
+    // it has its own distinct permission namespace (affiliates.*) and three
+    // real pages, matching that precedent rather than overloading Marketing
+    // with a feature whose permissions don't compose with campaigns.*/
+    // social.accounts.*.
+    title: 'Affiliates',
+    href: '/dashboard/affiliates',
+    icon: Users2,
+    permission: 'affiliates.view',
+    children: [
+      {
+        title: 'Affiliates',
+        href: '/dashboard/affiliates',
+        icon: Users2,
+        permission: 'affiliates.view',
+      },
+      {
+        title: 'Payouts',
+        href: '/dashboard/affiliates/payouts',
+        // Store-credit ledger visibility is gated tighter than the rest of
+        // this section -- affiliates.payouts, held by ADMIN but not
+        // MARKETING_MANAGER (see staff-permissions.config.ts), never
+        // implied by affiliates.view/manage.
+        icon: Wallet,
+        permission: 'affiliates.payouts',
+      },
+      {
+        title: 'Settings',
+        href: '/dashboard/affiliates/settings',
+        icon: Settings,
+        permission: 'affiliates.manage',
       },
     ],
   },

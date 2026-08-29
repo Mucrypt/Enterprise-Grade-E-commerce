@@ -19,11 +19,12 @@ import {
 } from 'lucide-react'
 import { useCartStore, useAuthStore } from '../stores'
 import { formatPrice, getProductImage, cn } from '../utils'
-import { ordersApiNew } from '../api'
+import { ordersApiNew, affiliatesApi } from '../api'
 import { StripeElementsWrapper } from '../contexts/StripeContext'
 import StripePaymentForm from '../components/checkout/StripePaymentForm'
 import { countriesSortedByName } from '../data/countries'
 import { useEventTracking } from '../hooks/useEventTracking'
+import { getReferralCode } from '../utils/referral-cookie'
 
 // Step types
 type CheckoutStep = 'shipping' | 'payment' | 'review'
@@ -93,7 +94,23 @@ export default function CheckoutPage() {
     taxAmount: number
     shippingAmount: number
     grandTotal: number
+    storeCreditApplied: number
   } | null>(null)
+
+  // Store credit -- authenticated shoppers only (a guest has no account to
+  // hold a balance). Fetched once on mount; the actual redemption amount
+  // is computed and clamped server-side against the real, up-to-date
+  // balance when the order draft is created, so this is just what's shown
+  // as the toggle's available amount.
+  const [storeCreditBalance, setStoreCreditBalance] = useState(0)
+  const [useStoreCredit, setUseStoreCredit] = useState(false)
+  useEffect(() => {
+    if (!isAuthenticated) return
+    affiliatesApi
+      .getMyStoreCredit()
+      .then((res) => setStoreCreditBalance(res.balance))
+      .catch(() => setStoreCreditBalance(0))
+  }, [isAuthenticated])
 
   const subtotal = getSubtotal()
   // Client-side estimate shown before the order draft exists; once it does,
@@ -104,7 +121,12 @@ export default function CheckoutPage() {
 
   const displayShippingCost = orderDraft?.shippingAmount ?? shippingCost
   const displayTax = orderDraft?.taxAmount ?? tax
-  const displayTotal = orderDraft?.grandTotal ?? total
+  // grandTotal itself is always the real, undiscounted order value (kept
+  // that way for refund/commission math) -- storeCreditApplied is
+  // subtracted here only for what's actually shown as due/charged.
+  const displayTotal = orderDraft
+    ? orderDraft.grandTotal - orderDraft.storeCreditApplied
+    : total
 
   // Redirect if cart is empty
   useEffect(() => {
@@ -151,6 +173,8 @@ export default function CheckoutPage() {
         country: shipping.country,
       }
 
+      const referralCode = getReferralCode() || undefined
+
       let checkoutToken: string | undefined
       let result: {
         clientSecret: string
@@ -160,6 +184,7 @@ export default function CheckoutPage() {
         taxAmount: number
         shippingAmount: number
         grandTotal: number
+        storeCreditApplied?: number
       }
 
       if (isGuestCheckout) {
@@ -168,6 +193,7 @@ export default function CheckoutPage() {
           shippingAddress: shippingAddressPayload,
           guestEmail: guestEmail || shipping.email,
           guestPhone: shipping.phone,
+          referralCode,
         })
         result = guestResult
         checkoutToken = guestResult.checkoutToken
@@ -175,6 +201,8 @@ export default function CheckoutPage() {
         result = await ordersApiNew.checkoutSession({
           items: orderItems,
           shippingAddress: shippingAddressPayload,
+          referralCode,
+          useStoreCredit: useStoreCredit && storeCreditBalance > 0,
         })
       }
 
@@ -187,12 +215,13 @@ export default function CheckoutPage() {
         taxAmount: result.taxAmount,
         shippingAmount: result.shippingAmount,
         grandTotal: result.grandTotal,
+        storeCreditApplied: result.storeCreditApplied || 0,
       })
     } catch (err) {
       console.error('Failed to start checkout:', err)
       setError('Failed to initialize payment. Please try again.')
     }
-  }, [items, shipping, isGuestCheckout, guestEmail])
+  }, [items, shipping, isGuestCheckout, guestEmail, useStoreCredit, storeCreditBalance])
 
   const currentStepIndex = steps.findIndex((s) => s.id === currentStep)
 
@@ -764,6 +793,26 @@ export default function CheckoutPage() {
                   <span className='text-gray-600'>Subtotal</span>
                   <span className='font-medium'>{formatPrice(subtotal)}</span>
                 </div>
+                {isAuthenticated && storeCreditBalance > 0 && (
+                  <div className='flex items-center justify-between rounded-lg bg-emerald-50 px-3 py-2'>
+                    <label className='flex items-center gap-2 text-sm text-emerald-800'>
+                      <input
+                        type='checkbox'
+                        checked={useStoreCredit}
+                        disabled={!!orderDraft}
+                        onChange={(e) => setUseStoreCredit(e.target.checked)}
+                        className='h-4 w-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500'
+                      />
+                      Use store credit ({formatPrice(storeCreditBalance)} available)
+                    </label>
+                  </div>
+                )}
+                {orderDraft && orderDraft.storeCreditApplied > 0 && (
+                  <div className='flex justify-between text-emerald-600'>
+                    <span>Store credit applied</span>
+                    <span className='font-medium'>-{formatPrice(orderDraft.storeCreditApplied)}</span>
+                  </div>
+                )}
                 <div className='flex justify-between'>
                   <span className='text-gray-600'>Shipping</span>
                   <span

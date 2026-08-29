@@ -1330,7 +1330,7 @@ export const createOrderCheckoutSession = async (
   res: Response,
 ) => {
   const userId = req.user?.userId
-  const { items, shippingAddress, billingAddress, customerNotes } = req.body
+  const { items, shippingAddress, billingAddress, customerNotes, referralCode, useStoreCredit } = req.body
 
   if (!items || !Array.isArray(items) || items.length === 0) {
     return res
@@ -1351,6 +1351,11 @@ export const createOrderCheckoutSession = async (
     userEmail = userResult.rows[0]?.email
   }
 
+  const { resolveAffiliateForCheckout } = await import(
+    '../../../services/affiliate.service'
+  )
+  const affiliateId = await resolveAffiliateForCheckout(referralCode, userEmail, userId)
+
   const client = await getClient()
   let committed = false
   try {
@@ -1363,19 +1368,37 @@ export const createOrderCheckoutSession = async (
     const { taxAmount, shippingAmount, grandTotal } = calculateOrderTotals(totalAmount)
     const orderNumber = generateOrderNumber()
 
+    // Store credit -- authenticated checkout only (a guest has no account
+    // to hold a balance). Clamped so at least a €0.50 charge always
+    // reaches Stripe (its practical processing minimum) -- a true €0,
+    // store-credit-only checkout is out of scope for v1. Applied against
+    // grandTotal (what's actually charged), never against
+    // total_amount/tax_amount/grand_total on the order row itself, which
+    // stay the real, undiscounted values for refund math and commission
+    // calculations.
+    let storeCreditApplied = 0
+    if (userId && useStoreCredit) {
+      const { getStoreCreditBalance } = await import(
+        '../../../services/affiliate.service'
+      )
+      const balance = await getStoreCreditBalance(userId)
+      storeCreditApplied = Math.max(0, Math.min(balance, grandTotal - 0.5))
+      storeCreditApplied = Math.round(storeCreditApplied * 100) / 100
+    }
+
     const orderResult = await client.query(
       `INSERT INTO orders (
         order_number, user_id, order_status, payment_status,
         total_amount, tax_amount, shipping_amount, grand_total, currency,
         shipping_address, billing_address, customer_notes,
         payment_method, payment_gateway,
-        estimated_delivery_date
+        estimated_delivery_date, store_credit_applied
       ) VALUES (
         $1, $2, 'pending', 'pending',
         $3, $4, $5, $6, 'EUR',
         $7, $8, $9,
         'card', 'stripe',
-        CURRENT_DATE + INTERVAL '5 days'
+        CURRENT_DATE + INTERVAL '5 days', $10
       ) RETURNING *`,
       [
         orderNumber,
@@ -1389,12 +1412,22 @@ export const createOrderCheckoutSession = async (
           ? JSON.stringify(billingAddress)
           : JSON.stringify(shippingAddress),
         customerNotes || null,
+        storeCreditApplied,
       ],
     )
     const order = orderResult.rows[0]
 
     await insertOrderItemsAndReserveStock(client, order.id, orderItems)
 
+    // The ledger debit itself is deferred to the Stripe webhook
+    // (handlePaymentSucceeded), not recorded here -- this order is still
+    // 'pending' with no confirmed payment. Debiting now would spend the
+    // customer's store credit on an order they might abandon or whose
+    // payment fails. store_credit_applied is already on the row above so
+    // the webhook knows exactly how much to debit once payment actually
+    // succeeds. Known v1 limitation: two concurrent checkout attempts can
+    // both compute against the same pre-payment balance snapshot (no
+    // reservation/lock) -- acceptable at this scale, not built for now.
     await client.query('COMMIT')
     committed = true
 
@@ -1402,8 +1435,9 @@ export const createOrderCheckoutSession = async (
     // open across a network call to a third party.
     const stripeService = (await import('../../../services/stripe.service'))
       .default
+    const chargeAmount = grandTotal - storeCreditApplied
     const paymentIntent = await stripeService.createPaymentIntent({
-      amount: Math.round(grandTotal * 100),
+      amount: Math.round(chargeAmount * 100),
       currency: 'eur',
       orderId: order.id,
       customerEmail: userEmail,
@@ -1423,6 +1457,7 @@ export const createOrderCheckoutSession = async (
       metadata: {
         orderNumber: order.order_number,
         userId: userId || 'guest',
+        ...(affiliateId ? { affiliateId } : {}),
       },
     })
 
@@ -1442,6 +1477,7 @@ export const createOrderCheckoutSession = async (
         taxAmount,
         shippingAmount,
         grandTotal,
+        storeCreditApplied,
       },
     })
   } catch (error) {
@@ -1477,6 +1513,7 @@ export const createGuestOrderCheckoutSession = async (req: any, res: Response) =
     customerNotes,
     guestEmail,
     guestPhone,
+    referralCode,
   } = req.body
 
   if (!items || !Array.isArray(items) || items.length === 0) {
@@ -1508,6 +1545,13 @@ export const createGuestOrderCheckoutSession = async (req: any, res: Response) =
       error: 'Email already registered. Please login instead.',
     })
   }
+
+  // Guests never redeem store credit (no account to hold a balance) --
+  // only referral attribution applies here.
+  const { resolveAffiliateForCheckout } = await import(
+    '../../../services/affiliate.service'
+  )
+  const affiliateId = await resolveAffiliateForCheckout(referralCode, guestEmail, undefined)
 
   const client = await getClient()
   let committed = false
@@ -1594,6 +1638,7 @@ export const createGuestOrderCheckoutSession = async (req: any, res: Response) =
       metadata: {
         orderNumber: order.order_number,
         userId: 'guest',
+        ...(affiliateId ? { affiliateId } : {}),
       },
     })
 

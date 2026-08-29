@@ -28,6 +28,7 @@ import {
   Star,
   Store,
   BookOpen,
+  Gift,
 } from 'lucide-react'
 import { supportApi, userApi, ordersApiNew } from '../api'
 import { SupportConcierge } from '../components/layout/SupportConcierge'
@@ -157,6 +158,7 @@ export default function ProfilePage() {
     { label: 'Track Order', icon: Package, href: '/track-order' },
     { label: 'Returns', icon: MessageCircle, href: '/returns' },
     { label: 'Payment Methods', icon: CreditCard, href: '/payment-methods' },
+    { label: 'Refer & Earn', icon: Gift, href: '/refer' },
     { label: 'Seller Hub', icon: Store, href: '/seller-hub' },
     { label: 'Creator Dashboard', icon: Store, href: '/creator-dashboard' },
     { label: 'Settings', icon: Settings, href: '/settings' },
@@ -317,7 +319,27 @@ export default function ProfilePage() {
               </div>
             )}
 
-            <div className='mb-6 grid grid-cols-1 gap-4 md:grid-cols-2'>
+            <div className='mb-6 grid grid-cols-1 gap-4 md:grid-cols-3'>
+              <Link
+                to='/refer'
+                className='group rounded-2xl bg-linear-to-br from-emerald-600 via-emerald-500 to-teal-500 p-5 text-white shadow-sm transition hover:shadow-lg'
+              >
+                <div className='flex items-center justify-between gap-4'>
+                  <div className='flex items-start gap-3'>
+                    <span className='inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white/15'>
+                      <Gift className='h-5 w-5' />
+                    </span>
+                    <div>
+                      <p className='text-lg font-bold'>Refer & Earn</p>
+                      <p className='mt-1 text-sm text-emerald-50/90'>
+                        Share your link, earn store credit on every referred order.
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronRight className='h-5 w-5 text-emerald-100 transition group-hover:text-white' />
+                </div>
+              </Link>
+
               <Link
                 to='/books'
                 className='group rounded-2xl bg-linear-to-br from-slate-950 via-slate-900 to-orange-700 p-5 text-white shadow-sm transition hover:shadow-lg'

@@ -489,6 +489,19 @@ class StripeService {
       // Grant digital entitlements for paid orders (idempotent).
       await digitalEntitlementsService.grantEntitlementsForPaidOrder(orderId)
 
+      // Affiliate commission + store-credit redemption -- both deferred
+      // to here (payment actually succeeded), never at checkout-session
+      // creation time, so an abandoned/failed PaymentIntent never creates
+      // a conversion or spends store credit that was never really used.
+      try {
+        await this.recordAffiliateEffectsForOrder(orderId, paymentIntent)
+      } catch (affiliateError) {
+        logger.error(
+          'Failed to record affiliate effects after payment succeeded:',
+          affiliateError,
+        )
+      }
+
       // Send the order confirmation email/WhatsApp now that payment is
       // actually confirmed -- not a fatal error for the webhook if this
       // fails, same "don't fail the order over a notification" rule the
@@ -506,6 +519,66 @@ class StripeService {
     } catch (error) {
       logger.error('Error handling payment succeeded:', error)
       throw error
+    }
+  }
+
+  /**
+   * Affiliate commission attribution + store-credit redemption, both run
+   * exactly once per order (order_id UNIQUE on affiliate_conversions, and
+   * a NOT EXISTS guard on the ledger insert, cover Stripe webhook
+   * retries -- this whole method can safely run more than once for the
+   * same order). Two independent, unrelated effects can both be present
+   * on the same order: a buyer can pay with someone else's referral link
+   * (creates a conversion) AND redeem their own accumulated store credit
+   * (debits the ledger) in the same purchase.
+   */
+  private async recordAffiliateEffectsForOrder(
+    orderId: string,
+    paymentIntent: Stripe.PaymentIntent,
+  ): Promise<void> {
+    const affiliateId = paymentIntent.metadata?.affiliateId
+    if (affiliateId) {
+      const orderRow = await query(
+        'SELECT total_amount FROM orders WHERE id = $1',
+        [orderId],
+      )
+      const orderValue = Number(orderRow.rows[0]?.total_amount || 0)
+      const { getAffiliateSettings } = await import('./affiliate.service')
+      const settings = await getAffiliateSettings()
+      const commissionAmount =
+        Math.round(orderValue * (settings.commissionRatePercent / 100) * 100) / 100
+
+      if (commissionAmount > 0) {
+        await query(
+          `INSERT INTO affiliate_conversions
+            (affiliate_id, order_id, order_value, commission_rate_snapshot, commission_amount, status)
+           VALUES ($1, $2, $3, $4, $5, 'pending')
+           ON CONFLICT (order_id) DO NOTHING`,
+          [affiliateId, orderId, orderValue, settings.commissionRatePercent, commissionAmount],
+        )
+      }
+    }
+
+    // Store credit the buyer chose to redeem at checkout (see
+    // order.controller.ts's createOrderCheckoutSession) -- the ledger
+    // debit itself was deliberately deferred until now, so an abandoned
+    // or failed payment never spends real credit.
+    const creditRow = await query(
+      'SELECT user_id, store_credit_applied FROM orders WHERE id = $1',
+      [orderId],
+    )
+    const userId = creditRow.rows[0]?.user_id
+    const storeCreditApplied = Number(creditRow.rows[0]?.store_credit_applied || 0)
+    if (userId && storeCreditApplied > 0) {
+      await query(
+        `INSERT INTO store_credit_ledger (user_id, delta_amount, reason, reference_type, reference_id)
+         SELECT $1, $2, 'redeemed_at_checkout', 'order', $3
+         WHERE NOT EXISTS (
+           SELECT 1 FROM store_credit_ledger
+           WHERE reference_type = 'order' AND reference_id = $3 AND reason = 'redeemed_at_checkout'
+         )`,
+        [userId, -storeCreditApplied, orderId],
+      )
     }
   }
 

@@ -51,6 +51,13 @@ export type Permission =
   | 'marketing.manage'
   | 'campaigns.view'
   | 'campaigns.manage'
+  // Affiliate/referral program. 'affiliates.payouts' is split off from
+  // 'affiliates.manage' the same way 'orders.refund' is split off from
+  // 'orders.manage' below -- it gates the store-credit ledger view, a
+  // money-movement surface, tighter than ordinary program administration.
+  | 'affiliates.view'
+  | 'affiliates.manage'
+  | 'affiliates.payouts'
   | 'social.view'
   | 'social.publish'
   | 'social.schedule'
@@ -110,6 +117,9 @@ const ALL_PERMISSIONS: Permission[] = [
   'marketing.manage',
   'campaigns.view',
   'campaigns.manage',
+  'affiliates.view',
+  'affiliates.manage',
+  'affiliates.payouts',
   'social.view',
   'social.publish',
   'social.schedule',
@@ -182,6 +192,9 @@ export const STAFF_ROLE_PERMISSIONS: Record<StaffRole, ReadonlySet<Permission>> 
     'marketing.manage',
     'campaigns.view',
     'campaigns.manage',
+    'affiliates.view',
+    'affiliates.manage',
+    'affiliates.payouts',
     'social.view',
     'social.publish',
     'social.schedule',
@@ -302,6 +315,13 @@ export const STAFF_ROLE_PERMISSIONS: Record<StaffRole, ReadonlySet<Permission>> 
     'marketing.manage',
     'campaigns.view',
     'campaigns.manage',
+    // Program administration (rate/hold-period settings, suspending an
+    // affiliate) fits this role's remit exactly like coupons/campaigns
+    // above. 'affiliates.payouts' (the store-credit ledger) is withheld --
+    // same money-movement split as ADMIN's 'orders.refund' vs
+    // 'orders.manage' -- not needed to run the program day to day.
+    'affiliates.view',
+    'affiliates.manage',
     'social.view',
     'social.publish',
     'social.schedule',
