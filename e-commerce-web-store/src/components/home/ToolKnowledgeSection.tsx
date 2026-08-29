@@ -88,7 +88,7 @@ export default function ToolKnowledgeSection() {
               <Link
                 key={post.id}
                 to={`/blog/${post.slug}`}
-                className='group flex flex-col rounded-lg border border-slate-200 bg-white overflow-hidden transition-colors hover:border-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900'
+                className='group flex flex-col rounded-lg border border-slate-200 bg-white overflow-hidden transition-colors hover:border-slate-900 focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-slate-900'
               >
                 {post.featured_image_url && (
                   <div className='aspect-video w-full overflow-hidden bg-slate-100'>
