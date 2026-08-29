@@ -3,6 +3,7 @@ import {
   createCategoryCollection,
   getAllCategoryCollections,
   getCategoryCollectionById,
+  getCategoryCollectionBySlug,
   updateCategoryCollection,
   deleteCategoryCollection,
   addCategoriesToCollection,
@@ -33,6 +34,12 @@ router.post(
 
 // Get all category collections (public with filters)
 router.get('/', authenticateIfPresent, getAllCategoryCollections)
+
+// Get single category collection by slug (public storefront page) -- must
+// be registered before /:collectionId; it's a distinct two-segment path so
+// there's no route-shape collision, but keeping the more specific route
+// first matches this file's own convention for the rest.
+router.get('/slug/:slug', authenticateIfPresent, getCategoryCollectionBySlug)
 
 // Get single category collection by ID (public)
 router.get('/:collectionId', authenticateIfPresent, getCategoryCollectionById)

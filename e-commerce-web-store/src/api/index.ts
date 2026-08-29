@@ -8,6 +8,7 @@ import type {
   Product,
   Category,
   CategoryAttribute,
+  CategoryCollection,
   Brand,
   ProductCollection,
   Book,
@@ -296,6 +297,23 @@ export const categoriesApi = {
       data: { attributes: CategoryAttribute[] }
     }>(`/categories/${categoryId}/attributes`)
     return response.data.data.attributes
+  },
+}
+
+// ============================================
+// Category Collections API -- real, admin-curated cross-category
+// merchandising campaigns (e.g. "Autumn Power Tools Sale"), each with a
+// real banner and a real set of linked categories, gated server-side to
+// only ever return one that's genuinely active/public/within its
+// scheduled window.
+// ============================================
+export const categoryCollectionsApi = {
+  async getBySlug(slug: string) {
+    const response = await api.get<{
+      success: boolean
+      data: CategoryCollection
+    }>(`/collections/categories/slug/${slug}`)
+    return response.data.data
   },
 }
 

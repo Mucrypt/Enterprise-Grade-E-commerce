@@ -126,6 +126,14 @@ export interface CategoryMedia {
   position?: number
 }
 
+export interface CategoryCollectionRef {
+  id: string
+  name: string
+  slug: string
+  banner_url: string | null
+  image_url: string | null
+}
+
 export interface Category extends BaseEntity {
   name: string
   slug: string
@@ -138,6 +146,26 @@ export interface Category extends BaseEntity {
   product_count?: number
   children?: Category[]
   media?: CategoryMedia[] | null
+  /** Real, currently-active (is_active/public/within starts_at-ends_at)
+   * category_collections linked to this category -- absent/empty when
+   * nothing real is running, never a placeholder promo. */
+  active_collections?: CategoryCollectionRef[] | null
+}
+
+export interface CategoryCollection {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  short_description: string | null
+  image_url: string | null
+  banner_url: string | null
+  is_active: boolean
+  is_featured: boolean
+  visibility: 'public' | 'private' | 'hidden'
+  starts_at: string | null
+  ends_at: string | null
+  categories: Category[]
 }
 
 // Category-specific structured attributes (Voltage, Material...) --

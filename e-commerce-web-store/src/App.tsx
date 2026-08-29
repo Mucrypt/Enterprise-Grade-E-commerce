@@ -32,6 +32,7 @@ const CreatorDashboardPage = lazy(() => import('./pages/CreatorDashboardPage'))
 const OrdersPage = lazy(() => import('./pages/OrdersPage'))
 const WishlistPage = lazy(() => import('./pages/WishlistPage'))
 const ComparePage = lazy(() => import('./pages/ComparePage'))
+const CollectionPage = lazy(() => import('./pages/CollectionPage'))
 const ReferAndEarnPage = lazy(() => import('./pages/ReferAndEarnPage'))
 const PaymentMethodsPage = lazy(() => import('./pages/PaymentMethodsPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
@@ -126,6 +127,7 @@ function App() {
                 <Route path='orders' element={<OrdersPage />} />
                 <Route path='wishlist' element={<WishlistPage />} />
                 <Route path='compare' element={<ComparePage />} />
+                <Route path='collections/:slug' element={<CollectionPage />} />
                 <Route path='refer' element={<ReferAndEarnPage />} />
                 <Route
                   path='payment-methods'

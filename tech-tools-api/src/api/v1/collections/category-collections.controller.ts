@@ -295,6 +295,79 @@ export const getCategoryCollectionById = async (
 }
 
 // =====================================================
+// GET SINGLE CATEGORY COLLECTION BY SLUG (public storefront page)
+// =====================================================
+
+export const getCategoryCollectionBySlug = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    const { slug } = req.params
+    const adminRequest = isAdminRequest(req)
+
+    const collectionResult = await dbQuery(
+      'SELECT * FROM category_collections WHERE slug = $1',
+      [slug],
+    )
+
+    if (collectionResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Collection not found',
+      })
+    }
+
+    const collection = collectionResult.rows[0]
+
+    // Same real-availability gating as getCategoryCollectionById -- a
+    // collection scheduled for later, expired, inactive, or non-public is
+    // never shown to a non-admin, even if someone has the direct link.
+    if (
+      !adminRequest &&
+      (collection.visibility !== 'public' ||
+        !collection.is_active ||
+        (collection.starts_at && new Date(collection.starts_at) > new Date()) ||
+        (collection.ends_at && new Date(collection.ends_at) <= new Date()))
+    ) {
+      return res.status(404).json({
+        success: false,
+        message: 'Collection not found',
+      })
+    }
+
+    // Real linked categories, each with its real category_media (icon/
+    // banner/thumbnail) -- same shape the storefront's category tree
+    // already returns, so the collection page can reuse the same icon-tile
+    // rendering as the mega menu.
+    const categoriesResult = await dbQuery(
+      `SELECT c.*, cci.position as collection_position,
+              (SELECT json_agg(cm ORDER BY cm.position)
+               FROM category_media cm
+               WHERE cm.category_id = c.id) as media
+       FROM categories c
+       JOIN category_collection_items cci ON c.id = cci.category_id
+       WHERE cci.collection_id = $1 AND c.is_active = true
+       ORDER BY cci.position ASC`,
+      [collection.id],
+    )
+    collection.categories = categoriesResult.rows
+
+    res.status(200).json({
+      success: true,
+      data: collection,
+    })
+  } catch (error: any) {
+    console.error('Error fetching category collection by slug:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch collection',
+      error: error.message,
+    })
+  }
+}
+
+// =====================================================
 // UPDATE CATEGORY COLLECTION
 // =====================================================
 

@@ -151,11 +151,30 @@ export const getCategories = async (req: Request, res: Response) => {
     // endpoint only ever returned the legacy categories.image_url column,
     // so anything an admin uploaded via CategoryForm's Media tab was
     // invisible to the storefront.
+    //
+    // Also joins any real, currently-active category_collections linked to
+    // this category (same visibility/is_active/starts_at/ends_at gating as
+    // category-collections.controller.ts's own public reads) so the mega
+    // menu can show a genuine promo tile without a second request per
+    // hover -- absent entirely, never a placeholder, when nothing real is
+    // running for that category.
     const result = await query(
       `SELECT c.*,
         (SELECT json_agg(cm ORDER BY cm.position)
          FROM category_media cm
-         WHERE cm.category_id = c.id) as media
+         WHERE cm.category_id = c.id) as media,
+        (SELECT json_agg(json_build_object(
+            'id', cc.id, 'name', cc.name, 'slug', cc.slug,
+            'banner_url', cc.banner_url, 'image_url', cc.image_url
+          ) ORDER BY cci.position)
+         FROM category_collection_items cci
+         JOIN category_collections cc ON cc.id = cci.collection_id
+         WHERE cci.category_id = c.id
+           AND cc.is_active = true
+           AND cc.visibility = 'public'
+           AND (cc.starts_at IS NULL OR cc.starts_at <= CURRENT_TIMESTAMP)
+           AND (cc.ends_at IS NULL OR cc.ends_at > CURRENT_TIMESTAMP)
+        ) as active_collections
        FROM categories c
        WHERE c.is_active = true
        ORDER BY c.display_order ASC, c.name ASC`,
