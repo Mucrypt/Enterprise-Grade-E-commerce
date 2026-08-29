@@ -30,8 +30,26 @@ export interface Product {
   inventory?: ProductInventory[]
   average_rating?: number | string
   review_count?: number | string
+  units_sold?: number | string
+  // Real backend badge-driving fields (shared with the web storefront's
+  // Product type / product.controller.ts getProducts) -- used to compute
+  // real, threshold-gated badges (TOP RATED, NEW, BEST SELLER, TRENDING,
+  // EU WAREHOUSE) instead of a caller-supplied label.
+  is_new?: boolean
+  units_sold_90d?: number | string
+  units_sold_7d?: number | string
+  views_7d?: number | string
+  is_eu_warehouse?: boolean
+  attribute_values?: ProductAttributeValue[] | null
   created_at: string
   updated_at: string
+}
+
+export interface ProductAttributeValue {
+  attribute_id: string
+  name: string
+  value: string
+  unit: string | null
 }
 
 export interface ProductImage {
@@ -287,12 +305,30 @@ export interface ProductFilters {
   brand?: string
   minPrice?: number
   maxPrice?: number
+  minRating?: number
   inStock?: boolean
   featured?: boolean
   sortBy?: string
   search?: string
   page?: number
   limit?: number
+  // { [attributeName]: value } -- serialized as attributes[name]=value.
+  // Mirrors the web storefront's ProductFilters['attributes'].
+  attributes?: Record<string, string>
+}
+
+// Category-specific structured attributes (Voltage, Material...) --
+// deliberately separate from the free-text product_specifications system.
+// Mirrors the web storefront's CategoryAttribute type exactly.
+export interface CategoryAttribute {
+  id: string
+  category_id: string
+  name: string
+  input_type: 'text' | 'number' | 'select'
+  options: string[] | null
+  unit: string | null
+  display_order: number
+  is_filterable: boolean
 }
 
 export interface Pagination {

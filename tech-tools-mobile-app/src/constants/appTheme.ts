@@ -49,6 +49,18 @@ export const AppColors = {
   badgeNew: '#10B981',
   badgeSale: '#FF6B35',
 
+  // Computed product-badge colors -- mirror the web storefront's
+  // ProductCard.tsx badge palette exactly (Tailwind color values) so both
+  // apps read as the same visual language for the same real-data badges.
+  badgeFeatured: '#F97316', // orange-500 (HOT / is_featured)
+  badgeTopRated: '#111827', // gray-900
+  badgeProductNew: '#3B82F6', // blue-500
+  badgeBestSeller: '#9333EA', // purple-600
+  badgeTrending: '#EC4899', // pink-500
+  badgeLowStock: '#EAB308', // yellow-500
+  badgeEuWarehouse: '#0D9488', // teal-600
+  badgeOutOfStock: '#6B7280', // gray-500
+
   // Industrial / professional-tools tone (dark hero, workshop and
   // newsletter sections on the home screen) -- mirrors the web
   // storefront's slate/orange B2B palette.

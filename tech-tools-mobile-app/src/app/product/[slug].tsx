@@ -33,7 +33,7 @@ import {
   generateStarRating,
 } from '@/utils'
 import { useCartStore, useWishlistStore } from '@/stores'
-import { ProductCard } from '@/components'
+import { ProductCard, DeliveryEstimate } from '@/components'
 import { useEventTracking } from '@/hooks/useEventTracking'
 
 const { width } = Dimensions.get('window')
@@ -121,7 +121,21 @@ export default function ProductDetailScreen() {
     ? calculateDiscount(basePrice, salePrice!)
     : 0
   const inWishlist = isInWishlist(product.id)
-  const stars = generateStarRating(product.average_rating || 0)
+
+  // Anti-fabrication gate: never render "0.0 (0 reviews)" -- only show
+  // stars/review count when the API actually returned a real,
+  // review-backed rating. Mirrors the web storefront's RatingSummary /
+  // ProductCard hasRealRating gate.
+  const rating =
+    typeof product.average_rating === 'string'
+      ? parseFloat(product.average_rating)
+      : product.average_rating
+  const reviewCount =
+    typeof product.review_count === 'string'
+      ? parseInt(product.review_count, 10)
+      : product.review_count
+  const hasRealRating = !!rating && !!reviewCount && reviewCount > 0
+  const stars = hasRealRating ? generateStarRating(rating!) : []
 
   // Render media item (image or video)
   const renderMediaItem = ({ item }: { item: ProductMedia }) => {
@@ -269,29 +283,31 @@ export default function ProductDetailScreen() {
             <Text style={styles.category}>{product.category_name}</Text>
             <Text style={styles.name}>{product.name}</Text>
 
-            {/* Rating */}
-            <View style={styles.ratingRow}>
-              <View style={styles.stars}>
-                {stars.map((star, index) => (
-                  <Ionicons
-                    key={index}
-                    name={
-                      star === 'full'
-                        ? 'star'
-                        : star === 'half'
-                        ? 'star-half'
-                        : 'star-outline'
-                    }
-                    size={16}
-                    color={AppColors.warning}
-                  />
-                ))}
+            {/* Rating -- omitted entirely when there's no real,
+                review-backed rating (never a fabricated "0.0 (0 reviews)"). */}
+            {hasRealRating && (
+              <View style={styles.ratingRow}>
+                <View style={styles.stars}>
+                  {stars.map((star, index) => (
+                    <Ionicons
+                      key={index}
+                      name={
+                        star === 'full'
+                          ? 'star'
+                          : star === 'half'
+                          ? 'star-half'
+                          : 'star-outline'
+                      }
+                      size={16}
+                      color={AppColors.warning}
+                    />
+                  ))}
+                </View>
+                <Text style={styles.ratingText}>
+                  {rating!.toFixed(1)} ({reviewCount} reviews)
+                </Text>
               </View>
-              <Text style={styles.ratingText}>
-                {Number(product.average_rating || 0).toFixed(1)} (
-                {product.review_count || 0} reviews)
-              </Text>
-            </View>
+            )}
 
             {/* Price */}
             <View style={styles.priceRow}>
@@ -342,6 +358,51 @@ export default function ProductDetailScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+
+            {/* Delivery estimate -- real, admin-configured delivery-template
+                data resolved server-side (product override -> category ->
+                location -> global). Renders nothing on fetch failure. */}
+            <View style={styles.deliverySection}>
+              <DeliveryEstimate productId={product.id} />
+            </View>
+
+            {/* Trust badges -- only genuine, site-wide policy claims
+                (same as Footer/FAQ/Terms/Returns), never a per-product
+                invented claim like an unverified warranty length. */}
+            <View style={styles.trustRow}>
+              <View style={styles.trustBadge}>
+                <View style={styles.trustIconWrap}>
+                  <Ionicons
+                    name='lock-closed-outline'
+                    size={18}
+                    color={AppColors.orangeAccent}
+                  />
+                </View>
+                <View style={styles.trustTextWrap}>
+                  <Text style={styles.trustTitle}>Secure Checkout</Text>
+                  <Text style={styles.trustSubtitle}>Stripe-powered</Text>
+                </View>
+              </View>
+              <View style={styles.trustBadge}>
+                <View style={styles.trustIconWrap}>
+                  <Ionicons
+                    name='refresh-outline'
+                    size={18}
+                    color={AppColors.orangeAccent}
+                  />
+                </View>
+                <View style={styles.trustTextWrap}>
+                  <Text style={styles.trustTitle}>30-Day Returns</Text>
+                  <Text style={styles.trustSubtitle}>Easy returns</Text>
+                </View>
+              </View>
+            </View>
+
+            {product.sku && (
+              <Text style={styles.skuText}>
+                SKU: <Text style={styles.skuValue}>{product.sku}</Text>
+              </Text>
+            )}
 
             {/* Description */}
             <View style={styles.descriptionSection}>
@@ -528,12 +589,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: AppColors.gray900,
     marginTop: AppSpacing.xs,
-    marginBottom: AppSpacing.sm,
+    marginBottom: AppSpacing.xs,
+    lineHeight: 28,
   },
   ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: AppSpacing.md,
+    marginBottom: AppSpacing.sm,
   },
   stars: {
     flexDirection: 'row',
@@ -548,12 +610,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: AppSpacing.md,
-    marginBottom: AppSpacing.md,
+    marginBottom: AppSpacing.sm,
   },
   price: {
-    fontSize: 28,
-    fontWeight: '700',
+    fontSize: 30,
+    fontWeight: '800',
     color: AppColors.primary,
+    letterSpacing: -0.5,
   },
   originalPrice: {
     fontSize: 18,
@@ -561,7 +624,7 @@ const styles = StyleSheet.create({
     textDecorationLine: 'line-through',
   },
   stockRow: {
-    marginBottom: AppSpacing.lg,
+    marginBottom: AppSpacing.md,
   },
   stockBadge: {
     alignSelf: 'flex-start',
@@ -609,6 +672,53 @@ const styles = StyleSheet.create({
     color: AppColors.gray900,
     minWidth: 40,
     textAlign: 'center',
+  },
+  deliverySection: {
+    marginBottom: AppSpacing.md,
+  },
+  trustRow: {
+    flexDirection: 'row',
+    gap: AppSpacing.sm,
+    marginBottom: AppSpacing.md,
+  },
+  trustBadge: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: AppSpacing.sm,
+    backgroundColor: AppColors.gray50,
+    borderRadius: AppBorderRadius.md,
+    padding: AppSpacing.sm,
+  },
+  trustIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: AppBorderRadius.full,
+    backgroundColor: `${AppColors.orangeAccent}1A`,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  trustTextWrap: {
+    flex: 1,
+  },
+  trustTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: AppColors.gray900,
+  },
+  trustSubtitle: {
+    fontSize: 11,
+    color: AppColors.gray500,
+    marginTop: 1,
+  },
+  skuText: {
+    fontSize: 12,
+    color: AppColors.gray500,
+    marginBottom: AppSpacing.lg,
+  },
+  skuValue: {
+    fontFamily: 'monospace',
+    color: AppColors.gray600,
   },
   descriptionSection: {
     marginBottom: AppSpacing.lg,

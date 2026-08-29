@@ -31,9 +31,52 @@ import { useCartStore, useWishlistStore } from '@/stores'
 const { width } = Dimensions.get('window')
 const CARD_WIDTH = (width - AppSpacing.base * 3) / 2
 
+// Real, threshold-gated badge system -- mirrors the web storefront's
+// ProductCard.tsx exactly, computed from real product fields rather than
+// a caller-supplied label. See product.controller.ts's getProducts for
+// where units_sold_90d/7d and views_7d come from.
+// TOP RATED requires both a real minimum rating AND a minimum review
+// count -- a single 5-star review shouldn't earn the same badge as a
+// product with a genuinely large, consistently high-rated review base.
+const TOP_RATED_MIN_RATING = 4.5
+const TOP_RATED_MIN_REVIEWS = 5
+const LOW_STOCK_THRESHOLD = 10
+const BEST_SELLER_MIN_UNITS_90D = 5
+const TRENDING_MIN_VIEWS_7D = 20
+const TRENDING_MIN_UNITS_7D = 3
+// Badges are capped so a card never turns into a badge wall -- priority
+// order, most important first, only the top 2 actually render (Out of
+// Stock overrides everything and shows alone).
+const MAX_BADGES_SHOWN = 2
+
+interface ComputedBadge {
+  key: string
+  label: string
+  icon?: string
+  bg: string
+}
+
+// Legacy caller-supplied badge styles -- kept only for backward
+// compatibility with the old caller-supplied `badge` prop. No current
+// call site passes it (grepped every <ProductCard> usage in the app), but
+// if one ever does, it renders as the top-priority badge.
+const LEGACY_BADGE_STYLES: Record<
+  string,
+  { bg: string; icon: string }
+> = {
+  HOT: { bg: AppColors.badgeHot, icon: 'flame' },
+  FLASH: { bg: AppColors.badgeFlash, icon: 'flash' },
+  DEAL: { bg: AppColors.badgeDeal, icon: 'pricetag' },
+  NEW: { bg: AppColors.badgeNew, icon: 'sparkles' },
+  SALE: { bg: AppColors.badgeSale, icon: 'percent' },
+}
+
 interface ProductCardProps {
   product: Product
   showAddToCart?: boolean
+  /** @deprecated Badges are now computed from real product fields. Only
+   * kept for backward compatibility -- if passed, renders as the
+   * top-priority badge. */
   badge?: 'HOT' | 'FLASH' | 'DEAL' | 'NEW' | 'SALE'
 }
 
@@ -61,7 +104,105 @@ export default function ProductCard({
     ? calculateDiscount(basePrice, salePrice!)
     : 0
   const inWishlist = isInWishlist(product.id)
-  const stars = generateStarRating(product.average_rating || 0)
+
+  // Anti-fabrication gate: never render a fake "0.0 (0)" -- only show
+  // stars/review count when the API actually returned a real,
+  // review-backed rating. Mirrors the web storefront's hasRealRating gate.
+  const rating =
+    typeof product.average_rating === 'string'
+      ? parseFloat(product.average_rating)
+      : product.average_rating
+  const reviewCount =
+    typeof product.review_count === 'string'
+      ? parseInt(product.review_count, 10)
+      : product.review_count
+  const hasRealRating = !!rating && !!reviewCount && reviewCount > 0
+  const isTopRated =
+    hasRealRating &&
+    rating! >= TOP_RATED_MIN_RATING &&
+    reviewCount! >= TOP_RATED_MIN_REVIEWS
+  const stars = hasRealRating ? generateStarRating(rating!) : []
+
+  const isOutOfStock = product.total_stock <= 0
+  const isLowStock = product.total_stock > 0 && product.total_stock < LOW_STOCK_THRESHOLD
+  const unitsSold90d = Number(product.units_sold_90d || 0)
+  const unitsSold7d = Number(product.units_sold_7d || 0)
+  const views7d = Number(product.views_7d || 0)
+  const isBestSeller = unitsSold90d >= BEST_SELLER_MIN_UNITS_90D
+  const isTrending =
+    views7d >= TRENDING_MIN_VIEWS_7D || unitsSold7d >= TRENDING_MIN_UNITS_7D
+
+  // Priority order, most important first -- only MAX_BADGES_SHOWN render.
+  const badges: ComputedBadge[] = []
+  if (badge && LEGACY_BADGE_STYLES[badge]) {
+    badges.push({
+      key: 'legacy',
+      label: badge,
+      icon: LEGACY_BADGE_STYLES[badge].icon,
+      bg: LEGACY_BADGE_STYLES[badge].bg,
+    })
+  }
+  if (hasDiscount) {
+    badges.push({
+      key: 'discount',
+      label: `-${discountPercent}%`,
+      bg: AppColors.badgeSale,
+    })
+  }
+  if (product.is_featured) {
+    badges.push({ key: 'featured', label: 'HOT', bg: AppColors.badgeFeatured })
+  }
+  if (isTopRated) {
+    badges.push({
+      key: 'top-rated',
+      label: 'TOP RATED',
+      icon: 'ribbon-outline',
+      bg: AppColors.badgeTopRated,
+    })
+  }
+  if (product.is_new) {
+    badges.push({
+      key: 'new',
+      label: 'NEW',
+      icon: 'sparkles',
+      bg: AppColors.badgeProductNew,
+    })
+  }
+  if (isBestSeller) {
+    badges.push({
+      key: 'best-seller',
+      label: 'BEST SELLER',
+      icon: 'flame',
+      bg: AppColors.badgeBestSeller,
+    })
+  }
+  if (isTrending) {
+    badges.push({
+      key: 'trending',
+      label: 'TRENDING',
+      icon: 'trending-up',
+      bg: AppColors.badgeTrending,
+    })
+  }
+  if (isLowStock) {
+    badges.push({
+      key: 'low-stock',
+      label: `Only ${product.total_stock} left`,
+      bg: AppColors.badgeLowStock,
+    })
+  }
+  if (product.is_eu_warehouse) {
+    badges.push({
+      key: 'eu-warehouse',
+      label: 'EU WAREHOUSE',
+      icon: 'globe-outline',
+      bg: AppColors.badgeEuWarehouse,
+    })
+  }
+
+  const visibleBadges: ComputedBadge[] = isOutOfStock
+    ? [{ key: 'out-of-stock', label: 'Out of Stock', bg: AppColors.badgeOutOfStock }]
+    : badges.slice(0, MAX_BADGES_SHOWN)
 
   const handlePress = () => {
     router.push(`/product/${product.slug}`)
@@ -79,25 +220,6 @@ export default function ProductCard({
     e.stopPropagation()
     toggleItem(product)
   }
-
-  const getBadgeStyle = () => {
-    switch (badge) {
-      case 'HOT':
-        return { bg: AppColors.badgeHot, icon: 'flame' }
-      case 'FLASH':
-        return { bg: AppColors.badgeFlash, icon: 'flash' }
-      case 'DEAL':
-        return { bg: AppColors.badgeDeal, icon: 'pricetag' }
-      case 'NEW':
-        return { bg: AppColors.badgeNew, icon: 'sparkles' }
-      case 'SALE':
-        return { bg: AppColors.badgeSale, icon: 'percent' }
-      default:
-        return null
-    }
-  }
-
-  const badgeStyle = getBadgeStyle()
 
   return (
     <TouchableOpacity
@@ -124,24 +246,19 @@ export default function ProductCard({
           />
         </TouchableOpacity>
 
-        {/* Badge */}
-        {badgeStyle && (
-          <View style={[styles.badge, { backgroundColor: badgeStyle.bg }]}>
-            <Ionicons
-              name={badgeStyle.icon as any}
-              size={10}
-              color={AppColors.white}
-            />
-            <Text style={styles.badgeText}>{badge}</Text>
-          </View>
-        )}
-
-        {/* Discount badge */}
-        {hasDiscount && !badge && (
-          <View
-            style={[styles.badge, { backgroundColor: AppColors.badgeSale }]}
-          >
-            <Text style={styles.badgeText}>-{discountPercent}%</Text>
+        {/* Badges -- computed from real product fields, capped to
+            MAX_BADGES_SHOWN by priority; Out of Stock overrides everything
+            else and renders alone. */}
+        {visibleBadges.length > 0 && (
+          <View style={styles.badgesColumn}>
+            {visibleBadges.map((b) => (
+              <View key={b.key} style={[styles.badge, { backgroundColor: b.bg }]}>
+                {b.icon && (
+                  <Ionicons name={b.icon as any} size={10} color={AppColors.white} />
+                )}
+                <Text style={styles.badgeText}>{b.label}</Text>
+              </View>
+            ))}
           </View>
         )}
 
@@ -182,28 +299,29 @@ export default function ProductCard({
           {product.name}
         </Text>
 
-        {/* Rating */}
-        <View style={styles.ratingContainer}>
-          <View style={styles.stars}>
-            {stars.map((star, index) => (
-              <Ionicons
-                key={index}
-                name={
-                  star === 'full'
-                    ? 'star'
-                    : star === 'half'
-                    ? 'star-half'
-                    : 'star-outline'
-                }
-                size={12}
-                color={AppColors.warning}
-              />
-            ))}
+        {/* Rating -- omitted entirely when there's no real, review-backed
+            rating (never a fabricated "0.0 (0)"). */}
+        {hasRealRating && (
+          <View style={styles.ratingContainer}>
+            <View style={styles.stars}>
+              {stars.map((star, index) => (
+                <Ionicons
+                  key={index}
+                  name={
+                    star === 'full'
+                      ? 'star'
+                      : star === 'half'
+                      ? 'star-half'
+                      : 'star-outline'
+                  }
+                  size={12}
+                  color={AppColors.warning}
+                />
+              ))}
+            </View>
+            <Text style={styles.reviewCount}>({reviewCount})</Text>
           </View>
-          {product.review_count && (
-            <Text style={styles.reviewCount}>({product.review_count})</Text>
-          )}
-        </View>
+        )}
 
         {/* Price */}
         <View style={styles.priceContainer}>
@@ -249,16 +367,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     ...AppShadows.sm,
   },
-  badge: {
+  badgesColumn: {
     position: 'absolute',
     top: AppSpacing.sm,
     left: AppSpacing.sm,
+    gap: 6,
+    maxWidth: '70%',
+  },
+  badge: {
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
     paddingHorizontal: AppSpacing.sm,
     paddingVertical: 4,
     borderRadius: AppBorderRadius.sm,
     gap: 4,
+    ...AppShadows.sm,
   },
   badgeText: {
     color: AppColors.white,
@@ -302,9 +426,10 @@ const styles = StyleSheet.create({
     marginBottom: AppSpacing.sm,
   },
   price: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 17,
+    fontWeight: '800',
     color: AppColors.primary,
+    letterSpacing: -0.3,
   },
   originalPrice: {
     fontSize: 12,

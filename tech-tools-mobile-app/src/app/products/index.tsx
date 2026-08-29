@@ -15,10 +15,18 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { ProductCard, SearchBar } from '@/components'
+import {
+  ProductCard,
+  SearchBar,
+  FilterSheet,
+  ActiveFilterChips,
+} from '@/components'
+import type { ProductFilterState } from '@/components'
+import type { RemovableFilterKey } from '@/components/product/ActiveFilterChips'
+import { countActiveFilters } from '@/components/product/FilterSheet'
 import { AppColors, AppSpacing, AppBorderRadius } from '@/constants/appTheme'
-import { productsApi, collectionsApi } from '@/api'
-import { Product, ProductFilters } from '@/types'
+import { productsApi, collectionsApi, categoriesApi, brandsApi } from '@/api'
+import { Product, ProductFilters, Category, Brand } from '@/types'
 
 const { width } = Dimensions.get('window')
 const CARD_WIDTH = (width - AppSpacing.base * 3) / 2
@@ -34,6 +42,7 @@ export default function ProductsScreen() {
   const router = useRouter()
   const params = useLocalSearchParams()
   const [products, setProducts] = useState<Product[]>([])
+  const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [page, setPage] = useState(1)
@@ -41,6 +50,28 @@ export default function ProductsScreen() {
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState('created_at:desc')
   const [showSort, setShowSort] = useState(false)
+
+  // Real, user-selectable filters (category/brand/price/rating/category
+  // attributes/in-stock) -- category seeds from the route param (e.g. a
+  // category card deep-link) but stays editable/clearable here, it isn't
+  // locked to the route.
+  const [appliedFilters, setAppliedFilters] = useState<ProductFilterState>({
+    category: typeof params.category === 'string' ? params.category : undefined,
+  })
+  const [filterSheetVisible, setFilterSheetVisible] = useState(false)
+  const [categories, setCategories] = useState<Category[]>([])
+  const [brands, setBrands] = useState<Brand[]>([])
+
+  useEffect(() => {
+    categoriesApi
+      .getAll()
+      .then(setCategories)
+      .catch(() => setCategories([]))
+    brandsApi
+      .getAll()
+      .then(setBrands)
+      .catch(() => setBrands([]))
+  }, [])
 
   const fetchProducts = useCallback(
     async (pageNum = 1, refresh = false) => {
@@ -50,6 +81,7 @@ export default function ProductsScreen() {
           const collectionProducts = collection.products || []
 
           setProducts(collectionProducts)
+          setTotalCount(collectionProducts.length)
           setHasMore(false)
           setPage(1)
           return
@@ -60,7 +92,13 @@ export default function ProductsScreen() {
           limit: 20,
           sortBy,
           search: searchQuery || undefined,
-          category: params.category as string | undefined,
+          category: appliedFilters.category,
+          brand: appliedFilters.brand,
+          minPrice: appliedFilters.minPrice,
+          maxPrice: appliedFilters.maxPrice,
+          minRating: appliedFilters.minRating,
+          inStock: appliedFilters.inStock || undefined,
+          attributes: appliedFilters.attributes,
           featured: params.featured === 'true' ? true : undefined,
         }
 
@@ -72,6 +110,7 @@ export default function ProductsScreen() {
           setProducts((prev) => [...prev, ...result.products])
         }
 
+        setTotalCount(result.pagination?.total ?? result.products.length)
         setHasMore(result.products.length === 20)
         setPage(pageNum)
       } catch (error) {
@@ -81,12 +120,41 @@ export default function ProductsScreen() {
         setRefreshing(false)
       }
     },
-    [sortBy, searchQuery, params.category, params.featured, params.collection],
+    [
+      sortBy,
+      searchQuery,
+      appliedFilters,
+      params.featured,
+      params.collection,
+    ],
   )
 
   useEffect(() => {
     fetchProducts(1, true)
   }, [fetchProducts])
+
+  // Real backend count preview for a draft filter set (search + featured
+  // context preserved) -- powers the filter sheet's sticky "Show N
+  // results" button. Never a fabricated number.
+  const fetchPreviewCount = useCallback(
+    async (draft: ProductFilterState): Promise<number> => {
+      const result = await productsApi.getAll({
+        page: 1,
+        limit: 1,
+        search: searchQuery || undefined,
+        category: draft.category,
+        brand: draft.brand,
+        minPrice: draft.minPrice,
+        maxPrice: draft.maxPrice,
+        minRating: draft.minRating,
+        inStock: draft.inStock || undefined,
+        attributes: draft.attributes,
+        featured: params.featured === 'true' ? true : undefined,
+      })
+      return result.pagination?.total ?? result.products.length
+    },
+    [searchQuery, params.featured],
+  )
 
   const onRefresh = () => {
     setRefreshing(true)
@@ -112,6 +180,46 @@ export default function ProductsScreen() {
     fetchProducts(1, true)
   }
 
+  const handleApplyFilters = (newFilters: ProductFilterState) => {
+    setAppliedFilters(newFilters)
+    setLoading(true)
+  }
+
+  const handleRemoveFilter = (key: RemovableFilterKey) => {
+    setAppliedFilters((prev) => {
+      if (typeof key === 'object') {
+        const attrs = { ...(prev.attributes || {}) }
+        delete attrs[key.attribute]
+        return {
+          ...prev,
+          attributes: Object.keys(attrs).length ? attrs : undefined,
+        }
+      }
+      switch (key) {
+        case 'category':
+          return { ...prev, category: undefined }
+        case 'brand':
+          return { ...prev, brand: undefined }
+        case 'price':
+          return { ...prev, minPrice: undefined, maxPrice: undefined }
+        case 'rating':
+          return { ...prev, minRating: undefined }
+        case 'inStock':
+          return { ...prev, inStock: undefined }
+        default:
+          return prev
+      }
+    })
+    setLoading(true)
+  }
+
+  const handleClearAllFilters = () => {
+    setAppliedFilters({})
+    setLoading(true)
+  }
+
+  const activeFilterCount = countActiveFilters(appliedFilters)
+
   const renderHeader = () => (
     <View style={styles.header}>
       <View style={styles.searchRow}>
@@ -131,15 +239,60 @@ export default function ProductsScreen() {
         </View>
       </View>
 
-      <View style={styles.filterRow}>
-        <Text style={styles.resultCount}>{products.length} products</Text>
-        <TouchableOpacity
-          style={styles.sortButton}
-          onPress={() => setShowSort(!showSort)}
-        >
-          <Ionicons name='swap-vertical' size={18} color={AppColors.gray600} />
-          <Text style={styles.sortText}>Sort</Text>
-        </TouchableOpacity>
+      <View style={styles.toolbar}>
+        <Text style={styles.resultCount}>
+          {totalCount} {totalCount === 1 ? 'result' : 'results'}
+        </Text>
+
+        <View style={styles.toolbarActions}>
+          <TouchableOpacity
+            style={styles.toolbarButton}
+            onPress={() => setShowSort(!showSort)}
+          >
+            <Ionicons
+              name='swap-vertical'
+              size={16}
+              color={showSort ? AppColors.primary : AppColors.slate500}
+            />
+            <Text
+              style={[
+                styles.toolbarButtonText,
+                showSort && styles.toolbarButtonTextActive,
+              ]}
+            >
+              Sort
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.toolbarButton,
+              activeFilterCount > 0 && styles.toolbarButtonActive,
+            ]}
+            onPress={() => setFilterSheetVisible(true)}
+          >
+            <Ionicons
+              name='options-outline'
+              size={16}
+              color={
+                activeFilterCount > 0 ? AppColors.primary : AppColors.slate500
+              }
+            />
+            <Text
+              style={[
+                styles.toolbarButtonText,
+                activeFilterCount > 0 && styles.toolbarButtonTextActive,
+              ]}
+            >
+              Filters
+            </Text>
+            {activeFilterCount > 0 && (
+              <View style={styles.filterBadge}>
+                <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       {showSort && (
@@ -172,6 +325,14 @@ export default function ProductsScreen() {
           ))}
         </View>
       )}
+
+      <ActiveFilterChips
+        filters={appliedFilters}
+        categories={categories}
+        brands={brands}
+        onRemove={handleRemoveFilter}
+        onClearAll={handleClearAllFilters}
+      />
     </View>
   )
 
@@ -222,6 +383,16 @@ export default function ProductsScreen() {
           ) : null
         }
       />
+
+      <FilterSheet
+        visible={filterSheetVisible}
+        onClose={() => setFilterSheetVisible(false)}
+        categories={categories}
+        brands={brands}
+        filters={appliedFilters}
+        onApply={handleApplyFilters}
+        fetchPreviewCount={fetchPreviewCount}
+      />
     </SafeAreaView>
   )
 }
@@ -239,7 +410,7 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: AppColors.white,
-    paddingBottom: AppSpacing.md,
+    paddingBottom: AppSpacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: AppColors.gray100,
   },
@@ -255,7 +426,7 @@ const styles = StyleSheet.create({
   searchContainer: {
     flex: 1,
   },
-  filterRow: {
+  toolbar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -263,17 +434,53 @@ const styles = StyleSheet.create({
     paddingTop: AppSpacing.md,
   },
   resultCount: {
-    fontSize: 14,
-    color: AppColors.gray600,
+    fontSize: 13,
+    fontWeight: '600',
+    color: AppColors.slate500,
+    letterSpacing: 0.1,
   },
-  sortButton: {
+  toolbarActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: AppSpacing.sm,
   },
-  sortText: {
-    fontSize: 14,
-    color: AppColors.gray600,
+  toolbarButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: AppSpacing.md,
+    paddingVertical: 7,
+    borderRadius: AppBorderRadius.full,
+    backgroundColor: AppColors.gray50,
+    borderWidth: 1,
+    borderColor: AppColors.gray100,
+  },
+  toolbarButtonActive: {
+    backgroundColor: 'rgba(251, 146, 60, 0.12)',
+    borderColor: AppColors.primaryLight,
+  },
+  toolbarButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: AppColors.slate500,
+  },
+  toolbarButtonTextActive: {
+    color: AppColors.primary,
+  },
+  filterBadge: {
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 3,
+    backgroundColor: AppColors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 2,
+  },
+  filterBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: AppColors.white,
   },
   sortOptions: {
     marginTop: AppSpacing.md,

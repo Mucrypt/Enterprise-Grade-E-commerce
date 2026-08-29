@@ -31,6 +31,7 @@ import {
   SellerTierConfig,
   SellerVerificationRequest,
   CreatorDashboardActivity,
+  CategoryAttribute,
 } from '../types'
 import { API_BASE_URL } from '../config/env'
 
@@ -864,6 +865,8 @@ export const productsApi = {
       params.append('minPrice', filters.minPrice.toString())
     if (filters?.maxPrice)
       params.append('maxPrice', filters.maxPrice.toString())
+    if (filters?.minRating)
+      params.append('minRating', filters.minRating.toString())
     if (filters?.inStock !== undefined)
       params.append('inStock', filters.inStock.toString())
     if (filters?.featured !== undefined)
@@ -872,6 +875,11 @@ export const productsApi = {
     if (filters?.search) params.append('search', filters.search)
     if (filters?.page) params.append('page', filters.page.toString())
     if (filters?.limit) params.append('limit', filters.limit.toString())
+    if (filters?.attributes) {
+      for (const [name, value] of Object.entries(filters.attributes)) {
+        if (value) params.append(`attributes[${name}]`, value)
+      }
+    }
 
     const response = await apiClient.get(`/products?${params.toString()}`)
     const data = response.data.data || response.data
@@ -945,6 +953,38 @@ export const productsApi = {
     const result = await productsApi.getAll({ ...filters, search: query })
     return result.products
   },
+
+  // Get the admin-configured delivery date-range estimate for one product,
+  // optionally narrowed by an explicit ISO country code (defaults to the
+  // server's own IP-based guess when omitted). Same endpoint/shape as the
+  // web storefront's productsApi.getDeliveryEstimate, against the same
+  // tech-tools-api backend (see shipping_delivery_templates precedence:
+  // product override -> category -> location -> global).
+  getDeliveryEstimate: async (
+    productId: string,
+    countryCode?: string,
+  ): Promise<DeliveryEstimate> => {
+    const params = new URLSearchParams({ productId })
+    if (countryCode) params.append('country', countryCode)
+    const response = await apiClient.get(
+      `/shipping/delivery-estimate?${params.toString()}`,
+    )
+    return response.data.data || response.data
+  },
+}
+
+export interface DeliveryEstimate {
+  scopeMatched: 'product_override' | 'category' | 'location' | 'global'
+  templateName: string
+  standardLabel: string
+  standardDateFrom: string
+  standardDateTo: string
+  expressLabel: string | null
+  expressDate: string | null
+  resolvedCountry: string | null
+  resolvedCountryName: string | null
+  resolvedVia: 'query' | 'geoip' | 'none'
+  freeShippingThreshold: number | null
 }
 
 // ============================================
@@ -970,6 +1010,16 @@ export const categoriesApi = {
     pagination: Pagination
   }> => {
     return productsApi.getAll({ ...filters, category: categorySlug })
+  },
+
+  // Structured attribute definitions for this category -- only
+  // 'select'-type ones carry real filter value, but text/number are
+  // returned too (for display elsewhere). Mirrors the web storefront's
+  // categoriesApi.getAttributes exactly.
+  getAttributes: async (categoryId: string): Promise<CategoryAttribute[]> => {
+    const response = await apiClient.get(`/categories/${categoryId}/attributes`)
+    const data = response.data.data || response.data
+    return data.attributes || data
   },
 }
 
@@ -1332,6 +1382,22 @@ export const newsletterApi = {
   }): Promise<NewsletterSubscribeResponse> => {
     const response = await apiClient.post('/newsletter/subscribe', data)
     return response.data
+  },
+}
+
+// ============================================
+// Shipping API -- same endpoint/shape as the web storefront's shippingApi,
+// against the same tech-tools-api backend.
+// ============================================
+export const shippingApi = {
+  // The one public subset of shipping_settings -- just the free-shipping
+  // threshold, no auth required. See tech-tools-api's
+  // getPublicShippingSettings.
+  getPublicSettings: async (): Promise<{
+    freeShippingThreshold: number | null
+  }> => {
+    const response = await apiClient.get('/shipping/settings/public')
+    return response.data.data || response.data
   },
 }
 
@@ -2100,4 +2166,5 @@ export const api = {
   payments: paymentsApi,
   newsletter: newsletterApi,
   affiliates: affiliatesApi,
+  shipping: shippingApi,
 }
