@@ -60,7 +60,7 @@ export default function ComparePage() {
       </div>
 
       <div className='overflow-x-auto'>
-        <table className='w-full-160 border-separate border-spacing-0'>
+        <table className='w-full min-w-160 border-separate border-spacing-0'>
           <thead>
             <tr>
               <th className='w-40' />
