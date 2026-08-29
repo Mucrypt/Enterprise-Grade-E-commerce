@@ -315,6 +315,25 @@ export const categoryCollectionsApi = {
     }>(`/collections/categories/slug/${slug}`)
     return response.data.data
   },
+
+  // Admin-curated shell list (no linked categories in this response --
+  // fetch each one's full detail via getBySlug when the categories are
+  // actually needed for rendering).
+  async getAll(filters?: { featured?: boolean; limit?: number }) {
+    const params = new URLSearchParams()
+    if (filters?.featured) params.set('featured', 'true')
+    if (filters?.limit) params.set('limit', String(filters.limit))
+
+    const response = await api.get<{
+      success: boolean
+      data: CategoryCollection[]
+    }>(`/collections/categories?${params.toString()}`)
+    return response.data.data
+  },
+
+  async getFeatured(limit = 5) {
+    return categoryCollectionsApi.getAll({ featured: true, limit })
+  },
 }
 
 // ============================================

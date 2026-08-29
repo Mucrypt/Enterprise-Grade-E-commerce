@@ -8,6 +8,8 @@ import {
   ToolsHero,
   TrustStrip,
   ShopByTrade,
+  FeaturedCollectionsShowcase,
+  CategoryShowcaseBanner,
   FeaturedProfessionalTools,
   WorkshopMachinerySection,
   BusinessBuyerSection,
@@ -49,6 +51,13 @@ export default function HomePage() {
 
       {/* Shop by Trade */}
       <ShopByTrade />
+
+      {/* Curated, admin-featured product collections (Best Sellers, New
+          Arrivals, etc.) -- the homepage's main "showroom" rows */}
+      <FeaturedCollectionsShowcase />
+
+      {/* Spotlight banner for the top admin-featured category collection */}
+      <CategoryShowcaseBanner />
 
       {/* Featured Professional Tools */}
       <FeaturedProfessionalTools />
