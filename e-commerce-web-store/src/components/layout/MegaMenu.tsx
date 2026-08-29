@@ -98,11 +98,6 @@ function ViewAllTile({ category, size = 'md' }: { category: Category; size?: 'md
 export default function MegaMenu({ categories }: MegaMenuProps) {
   if (categories.length === 0) return null
 
-  const hasAnyChildren = categories.some((c) => (c.children?.length || 0) > 0)
-  if (!hasAnyChildren && categories.length === 1) {
-    return null
-  }
-
   // Single-category hover: one spacious panel, mirrors SHEIN's own
   // per-category dropdown (a "SHOP BY CATEGORY" icon grid).
   if (categories.length === 1) {
@@ -117,6 +112,40 @@ export default function MegaMenu({ categories }: MegaMenuProps) {
     const promo = category.active_collections?.[0]
     const promoImage = promo?.banner_url || promo?.image_url
     const banner = mediaUrl(category, 'banner')
+    const icon = mediaUrl(category, 'icon')
+
+    // No subcategories yet -- most real catalogs start flat. Still show a
+    // real, useful panel (the category's own icon/banner if uploaded, a
+    // fallback tile if not, and a direct "Shop" CTA) rather than nothing
+    // at all -- an empty dropdown reads as broken, not "nothing to show
+    // here yet."
+    if (children.length === 0) {
+      return (
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex items-center gap-6">
+            {icon ? (
+              <img src={icon} alt={category.name} className="h-20 w-20 shrink-0 rounded-full border border-gray-100 object-cover shadow-sm" />
+            ) : (
+              <span className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-full text-2xl font-bold ${fallbackStyle(category.slug)}`}>
+                {category.name.charAt(0).toUpperCase()}
+              </span>
+            )}
+            <div>
+              <p className="text-lg font-bold text-gray-900">{category.name}</p>
+              <Link
+                to={`/category/${category.slug}`}
+                className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-orange-600 hover:text-orange-700"
+              >
+                Shop {category.name}
+                <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" stroke="currentColor" strokeWidth="2">
+                  <path d="M5 12h14M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </Link>
+            </div>
+          </div>
+        </div>
+      )
+    }
 
     return (
       <div className="container mx-auto px-4 py-8">
@@ -178,13 +207,21 @@ export default function MegaMenu({ categories }: MegaMenuProps) {
       <div className="grid grid-cols-1 gap-8 md:grid-cols-3 lg:grid-cols-4">
         {categories.map((category) => {
           const children = category.children || []
+          const icon = mediaUrl(category, 'icon')
 
           return (
             <div key={category.id}>
               <Link
                 to={`/category/${category.slug}`}
-                className="mb-3 block text-sm font-bold uppercase tracking-wide text-gray-900 hover:text-orange-600"
+                className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-gray-900 hover:text-orange-600"
               >
+                {icon ? (
+                  <img src={icon} alt="" className="h-6 w-6 shrink-0 rounded-full object-cover" />
+                ) : (
+                  <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${fallbackStyle(category.slug)}`}>
+                    {category.name.charAt(0).toUpperCase()}
+                  </span>
+                )}
                 {category.name}
               </Link>
               {children.length > 0 && (
