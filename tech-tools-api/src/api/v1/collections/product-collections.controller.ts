@@ -350,6 +350,15 @@ export const updateProductCollection = async (req: Request, res: Response) => {
     const { collectionId } = req.params
     const updates = req.body
 
+    // A cleared/never-set date field arrives as '' (the admin form's date
+    // inputs default to an empty string, not undefined) -- '' is not a
+    // valid TIMESTAMP literal, so Postgres rejects it outright. Only these
+    // two fields need this: every other TEXT/VARCHAR column here is happy
+    // to store an empty string.
+    for (const dateField of ['startsAt', 'starts_at', 'endsAt', 'ends_at']) {
+      if (updates[dateField] === '') updates[dateField] = null
+    }
+
     // Check if collection exists
     const collectionCheck = await dbQuery(
       'SELECT id FROM product_collections WHERE id = $1',
