@@ -29,6 +29,7 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "dompurify": "^3.4.14",
+    "gsap": "^3.15.0",
     "i18next": "^26.3.6",
     "lucide-react": "^0.576.0",
     "qrcode.react": "^4.2.0",

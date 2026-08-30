@@ -12,6 +12,7 @@ import { useAuthStore, useConsentStore } from '../../stores'
 import { supportApi } from '../../api'
 import { NotificationToast } from '../notifications/NotificationToast'
 import { CompareTray } from '../product/CompareTray'
+import PromoDrawer from '../promo/PromoDrawer'
 
 export default function Layout() {
   const { fetchUser, user, isAuthenticated, hasHydrated } = useAuthStore()
@@ -38,6 +39,7 @@ export default function Layout() {
       <Footer />
       <NotificationToast />
       <CompareTray />
+      <PromoDrawer />
       <DriftChat
         enabled={hasHydrated && isAuthenticated && functionalConsent}
         supportProfile={supportProfile || null}
