@@ -8,12 +8,19 @@ import Header from './Header'
 import Footer from './Footer'
 import { DriftChat } from './DriftChat'
 import HomepageNewsletter from '../home/HomepageNewsletter'
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { useAuthStore, useConsentStore } from '../../stores'
 import { supportApi } from '../../api'
 import { NotificationToast } from '../notifications/NotificationToast'
 import { CompareTray } from '../product/CompareTray'
-import PromoDrawer from '../promo/PromoDrawer'
+
+// Lazy: pulls in GSAP, which is otherwise sizeable enough to blow the
+// entry-bundle performance budget if imported eagerly here (Layout wraps
+// every route, so anything imported directly at the top of this file
+// ships in the critical, non-code-split entry chunk). The drawer is a
+// progressive-enhancement promo surface, not above-the-fold content, so
+// deferring it costs nothing visible.
+const PromoDrawer = lazy(() => import('../promo/PromoDrawer'))
 
 export default function Layout() {
   const { fetchUser, user, isAuthenticated, hasHydrated } = useAuthStore()
@@ -41,7 +48,9 @@ export default function Layout() {
       <Footer />
       <NotificationToast />
       <CompareTray />
-      <PromoDrawer />
+      <Suspense fallback={null}>
+        <PromoDrawer />
+      </Suspense>
       <DriftChat
         enabled={hasHydrated && isAuthenticated && functionalConsent}
         supportProfile={supportProfile || null}
