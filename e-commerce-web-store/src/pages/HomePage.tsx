@@ -15,7 +15,6 @@ import {
   BusinessBuyerSection,
   ProfessionalBrands,
   ToolKnowledgeSection,
-  HomepageNewsletter,
 } from '../components/home'
 
 export default function HomePage() {
@@ -73,9 +72,6 @@ export default function HomePage() {
 
       {/* Tool Guides & Workshop Knowledge */}
       <ToolKnowledgeSection />
-
-      {/* Newsletter Signup */}
-      <HomepageNewsletter />
     </>
   )
 }

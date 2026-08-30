@@ -2,7 +2,6 @@
 // Footer Component (Modern E-commerce Style)
 // ============================================
 
-import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useConsentStore } from '../../stores'
 import {
@@ -14,16 +13,7 @@ import {
   Phone,
   MapPin,
   CreditCard,
-  Truck,
-  ShieldCheck,
-  RotateCcw,
-  ChevronRight,
-  CheckCircle,
-  Loader2,
 } from 'lucide-react'
-import { newsletterApi } from '../../api'
-import { formatPrice } from '../../utils'
-import { useFreeShippingThreshold } from '../../hooks/useFreeShippingThreshold'
 
 const footerLinks = {
   shop: {
@@ -71,136 +61,12 @@ const footerLinks = {
 
 export default function Footer() {
   const currentYear = new Date().getFullYear()
-  // Real, admin-configured threshold -- was previously a hand-typed "€50"
-  // here, independent of shipping_settings.free_shipping_threshold.
-  const freeShippingThreshold = useFreeShippingThreshold() ?? 50
-  const features = [
-    {
-      icon: Truck,
-      title: 'Free Shipping',
-      description: `On orders over ${formatPrice(freeShippingThreshold)}`,
-    },
-    {
-      icon: RotateCcw,
-      title: '30-Day Returns',
-      description: 'Hassle-free returns',
-    },
-    {
-      icon: ShieldCheck,
-      title: 'Secure Payment',
-      description: '100% secure checkout',
-    },
-    {
-      icon: Phone,
-      title: '24/7 Support',
-      description: 'Dedicated support',
-    },
-  ]
   const openCookiePreferences = useConsentStore(
     (state) => state.openPreferences,
   )
-  const [email, setEmail] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [isSubscribed, setIsSubscribed] = useState(false)
-  const [message, setMessage] = useState('')
-
-  const handleNewsletterSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-
-    try {
-      const response = await newsletterApi.subscribe({
-        email,
-        source: 'footer',
-      })
-      setIsSubscribed(true)
-      setMessage(response.message || 'Thanks for subscribing!')
-      setEmail('')
-    } catch (err: unknown) {
-      const errorMessage =
-        (err as { response?: { data?: { error?: string } } })?.response?.data
-          ?.error || 'Failed to subscribe'
-      setMessage(errorMessage)
-    } finally {
-      setIsLoading(false)
-    }
-  }
 
   return (
     <footer className='bg-gray-900 text-gray-300'>
-      {/* Features Bar */}
-      <div className='border-b border-gray-800'>
-        <div className='container mx-auto px-4 py-8'>
-          <div className='grid grid-cols-2 md:grid-cols-4 gap-6'>
-            {features.map((feature) => (
-              <div key={feature.title} className='flex items-center gap-4'>
-                <div className='w-12 h-12 bg-orange-500/10 rounded-full flex items-center justify-center shrink-0'>
-                  <feature.icon className='w-6 h-6 text-orange-500' />
-                </div>
-                <div>
-                  <h4 className='font-semibold text-white'>{feature.title}</h4>
-                  <p className='text-sm text-gray-400'>{feature.description}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Newsletter */}
-      <div className='border-b border-gray-800'>
-        <div className='container mx-auto px-4 py-10'>
-          <div className='max-w-2xl mx-auto text-center'>
-            <h3 className='text-2xl font-bold text-white mb-2'>
-              Subscribe to Our Newsletter
-            </h3>
-            <p className='text-gray-400 mb-6'>
-              Get exclusive deals, new arrivals, and 10% off your first order!
-            </p>
-            {isSubscribed ? (
-              <div className='flex items-center justify-center gap-2 text-green-400'>
-                <CheckCircle className='w-5 h-5' />
-                <span>{message}</span>
-              </div>
-            ) : (
-              <form
-                onSubmit={handleNewsletterSubmit}
-                className='flex gap-2 max-w-md mx-auto'
-              >
-                <div className='flex-1 relative'>
-                  <Mail className='absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400' />
-                  <input
-                    type='email'
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder='Enter your email'
-                    className='w-full pl-12 pr-4 py-3.5 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-orange-500 transition-colors'
-                    required
-                  />
-                </div>
-                <button
-                  type='submit'
-                  disabled={isLoading}
-                  className='px-6 py-3.5 bg-orange-500 text-white font-semibold rounded-lg hover:bg-orange-600 transition-colors flex items-center gap-2 disabled:opacity-70'
-                >
-                  {isLoading ? (
-                    <Loader2 className='w-5 h-5 animate-spin' />
-                  ) : (
-                    <>
-                      Subscribe
-                      <ChevronRight className='w-4 h-4' />
-                    </>
-                  )}
-                </button>
-              </form>
-            )}
-            {!isSubscribed && message && (
-              <p className='text-red-400 mt-2 text-sm'>{message}</p>
-            )}
-          </div>
-        </div>
-      </div>
-
       {/* Main Footer Links */}
       <div className='container mx-auto px-4 py-12'>
         <div className='grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-8'>

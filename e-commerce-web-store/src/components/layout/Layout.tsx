@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query'
 import Header from './Header'
 import Footer from './Footer'
 import { DriftChat } from './DriftChat'
+import HomepageNewsletter from '../home/HomepageNewsletter'
 import { useEffect } from 'react'
 import { useAuthStore, useConsentStore } from '../../stores'
 import { supportApi } from '../../api'
@@ -36,6 +37,7 @@ export default function Layout() {
       <main className='flex-1'>
         <Outlet />
       </main>
+      <HomepageNewsletter />
       <Footer />
       <NotificationToast />
       <CompareTray />

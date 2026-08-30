@@ -160,12 +160,15 @@ export const homepageConfig = {
     displayLimit: 3,
   },
 
+  // Rendered globally in Layout.tsx (every page, just above the footer),
+  // not only the homepage -- source reflects that it's the site's one
+  // newsletter capture point, not homepage-specific.
   newsletter: {
     heading: 'Stay equipped.',
     description:
       'Get tool guides, product updates and professional offers from TechTools.',
     ctaLabel: 'Subscribe',
-    source: 'homepage',
+    source: 'footer',
   },
 }
 
