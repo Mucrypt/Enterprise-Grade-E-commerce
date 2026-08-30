@@ -17,26 +17,36 @@ async function resolveCollectionImages(
     | { [fieldname: string]: Express.Multer.File[] }
     | undefined
 
-  let imageUrl = bodyImageUrl
-  let bannerUrl = bodyBannerUrl
+  const imageFile = files?.image?.[0]
+  const bannerFile = files?.banner?.[0]
 
-  if (files?.image?.[0]) {
-    const file = files.image[0]
-    const validation = validateImageFile(file)
+  // Validate both up front (fast, synchronous) before doing any of the
+  // slow processing below.
+  if (imageFile) {
+    const validation = validateImageFile(imageFile)
     if (!validation.valid) throw new Error(`Image: ${validation.error}`)
-    const processed = await processCollectionImage(file)
-    imageUrl = processed.optimized.large?.url || processed.original.url
   }
-
-  if (files?.banner?.[0]) {
-    const file = files.banner[0]
-    const validation = validateImageFile(file)
+  if (bannerFile) {
+    const validation = validateImageFile(bannerFile)
     if (!validation.valid) throw new Error(`Banner: ${validation.error}`)
-    const processed = await processCollectionImage(file)
-    bannerUrl = processed.optimized.large?.url || processed.original.url
   }
 
-  return { imageUrl, bannerUrl }
+  // Process image + banner concurrently instead of one after the other --
+  // together with optimizeImage's trimmed size set, this was the rest of
+  // what turned a real-world image+banner update into a 30s+ timeout.
+  const [processedImage, processedBanner] = await Promise.all([
+    imageFile ? processCollectionImage(imageFile) : Promise.resolve(null),
+    bannerFile ? processCollectionImage(bannerFile) : Promise.resolve(null),
+  ])
+
+  return {
+    imageUrl: processedImage
+      ? processedImage.optimized.large?.url || processedImage.original.url
+      : bodyImageUrl,
+    bannerUrl: processedBanner
+      ? processedBanner.optimized.large?.url || processedBanner.original.url
+      : bodyBannerUrl,
+  }
 }
 
 const COLLECTION_UPDATE_FIELD_MAP: Record<string, string> = {

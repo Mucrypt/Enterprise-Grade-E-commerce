@@ -255,6 +255,16 @@ export async function optimizeImage(
   filePath: string,
   destinationFolder: string,
   filename: string,
+  // Callers that only ever read one variant (e.g. processCollectionImage,
+  // which the code only ever reads `.optimized.large` from) can pass a
+  // trimmed size set instead of the full product/category set -- each
+  // unused size is a full sharp resize+encode+disk-write for nothing,
+  // and was the real cause of a 30s+ request timeout when a collection
+  // update processed an image and a banner (2 files x 4 unused sizes).
+  sizes: Record<
+    string,
+    { width: number; height: number; fit: keyof sharp.FitEnum }
+  > = IMAGE_SIZES,
 ): Promise<{
   original: OptimizedImage
   optimized: { [key: string]: OptimizedImage }
@@ -274,7 +284,7 @@ export async function optimizeImage(
   const originalHeight = metadata.height || 0
 
   // Create optimized versions for each size
-  for (const [sizeName, config] of Object.entries(IMAGE_SIZES)) {
+  for (const [sizeName, config] of Object.entries(sizes)) {
     const outputKey = `${storageFolder}/${sizeName}-${filename}`
     const optimizedBuffer = await sharp(filePath)
       .resize(config.width, config.height, { fit: config.fit })
@@ -348,7 +358,10 @@ export async function processCollectionImage(file: Express.Multer.File) {
   const filename = `${uuidv4()}.webp`
   const destinationFolder = `${UPLOAD_DIR}/collections/images`
 
-  const result = await optimizeImage(file.path, destinationFolder, filename)
+  // Only 'large' is ever read by callers -- see resolveCollectionImages.
+  const result = await optimizeImage(file.path, destinationFolder, filename, {
+    large: IMAGE_SIZES.large,
+  })
 
   // Delete temp file
   await fs.unlink(file.path)

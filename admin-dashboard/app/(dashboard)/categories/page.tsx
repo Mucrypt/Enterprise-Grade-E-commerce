@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useMemo, useCallback } from 'react'
+import Link from 'next/link'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getAbsoluteMediaUrl } from '@/lib/utils'
 import {
@@ -52,6 +53,7 @@ import {
 import {
   FolderTree,
   Plus,
+  Images,
   Search,
   MoreHorizontal,
   Pencil,
@@ -427,6 +429,12 @@ export default function CategoriesPage() {
               className={`h-4 w-4 mr-2 ${isFetching ? 'animate-spin' : ''}`}
             />
             \n Refresh
+          </Button>
+          <Button variant='outline' size='sm' asChild>
+            <Link href='/categories/bulk-media'>
+              <Images className='h-4 w-4 mr-2' />
+              Bulk Upload Media
+            </Link>
           </Button>
           <Button onClick={() => setIsFormOpen(true)}>
             <Plus className='h-4 w-4 mr-2' />

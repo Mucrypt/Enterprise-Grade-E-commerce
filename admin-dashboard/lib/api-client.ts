@@ -121,12 +121,15 @@ class ApiClient {
     return response.data
   }
 
-  // Multipart form data
+  // Multipart form data -- a longer timeout than the default 30s JSON
+  // budget: real image files take real upload + server-side processing
+  // time, especially multiple files in one request (bulk uploads).
   async postFormData<T>(url: string, formData: FormData): Promise<T> {
     const response = await this.client.post<T>(url, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      timeout: 120000,
     })
     return response.data
   }
@@ -136,6 +139,7 @@ class ApiClient {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      timeout: 120000,
     })
     return response.data
   }
