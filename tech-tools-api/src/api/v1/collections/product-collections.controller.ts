@@ -3,6 +3,51 @@ import { query as dbQuery, getClient } from '../../../database/connection'
 import { AuthRequest } from '../../../middleware/auth'
 import { processCollectionImage, validateImageFile } from '../../../utils/media'
 
+// A plain `SELECT p.*` (used everywhere below before this fix) returns
+// only raw products-table columns -- no images (a separate product_media
+// table), no total_stock (a separate inventory-table SUM; the raw
+// stock_quantity column on the row isn't the real figure the storefront
+// uses), no category name. Every consumer of these endpoints
+// (storefront collection rows, the admin's collection item picker) reads
+// `.images`/`.total_stock`/`.category_name`, so without this every
+// product rendered via a collection endpoint looked like a no-photo,
+// permanently "Out of Stock" item regardless of real inventory -- this
+// mirrors the same fields (same formulas) product.controller.ts's main
+// listing query already computes.
+const PRODUCT_SELECT_FIELDS = `
+  p.*,
+  c.name as category_name,
+  c.slug as category_slug,
+  (
+    SELECT COALESCE(
+      json_agg(
+        json_build_object(
+          'id', pm.id,
+          'url', pm.url,
+          'image_url', pm.url,
+          'alt_text', pm.alt_text,
+          'is_primary', pm.is_primary,
+          'display_order', pm.position,
+          'cdn_urls', pm.cdn_urls
+        ) ORDER BY pm.is_primary DESC, pm.position
+      ),
+      '[]'::json
+    )
+    FROM (
+      SELECT id, url, alt_text, is_primary, position, cdn_urls
+      FROM product_media
+      WHERE product_id = p.id AND type = 'image'
+      ORDER BY is_primary DESC, position
+      LIMIT 5
+    ) pm
+  ) as images,
+  (
+    SELECT COALESCE(SUM(i.available_stock), 0)
+    FROM inventory i
+    WHERE i.product_id = p.id
+  ) as total_stock
+`
+
 // Real image/banner upload -- multer (product-collections.routes.ts) has
 // already parsed any multipart request into req.files by the time this
 // runs; a plain JSON request (no files) leaves req.files undefined and
@@ -324,8 +369,9 @@ export const getProductCollectionById = async (req: Request, res: Response) => {
     // Get products if requested
     if (includeProducts === 'true') {
       const productsResult = await dbQuery(
-        `SELECT p.*, pci.position as collection_position, pci.is_featured as is_featured_in_collection
+        `SELECT ${PRODUCT_SELECT_FIELDS}, pci.position as collection_position, pci.is_featured as is_featured_in_collection
          FROM products p
+         LEFT JOIN categories c ON p.category_id = c.id
          JOIN product_collection_items pci ON p.id = pci.product_id
          WHERE pci.collection_id = $1
            AND p.is_active = TRUE
@@ -556,8 +602,9 @@ export const addProductsToCollection = async (req: Request, res: Response) => {
 
       // Fetch updated collection with products
       const result = await dbQuery(
-        `SELECT p.*, pci.position as collection_position, pci.is_featured as is_featured_in_collection
+        `SELECT ${PRODUCT_SELECT_FIELDS}, pci.position as collection_position, pci.is_featured as is_featured_in_collection
          FROM products p
+         LEFT JOIN categories c ON p.category_id = c.id
          JOIN product_collection_items pci ON p.id = pci.product_id
          WHERE pci.collection_id = $1
          ORDER BY pci.position ASC`,
@@ -657,8 +704,9 @@ export const reorderProductsInCollection = async (
 
       // Fetch updated collection
       const result = await dbQuery(
-        `SELECT p.*, pci.position as collection_position
+        `SELECT ${PRODUCT_SELECT_FIELDS}, pci.position as collection_position
          FROM products p
+         LEFT JOIN categories c ON p.category_id = c.id
          JOIN product_collection_items pci ON p.id = pci.product_id
          WHERE pci.collection_id = $1
          ORDER BY pci.position ASC`,

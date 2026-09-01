@@ -45,9 +45,20 @@ export default function FeaturedCollectionsShowcase() {
         )
         if (cancelled) return
 
-        const withProducts = full.filter(
-          (c): c is ProductCollection => !!c && !!c.products && c.products.length > 0,
-        )
+        // Only ever show in-stock, active products in this merchandising
+        // row -- a "Best Sellers"/"New Arrivals" shelf full of "Out of
+        // Stock" placeholder cards is worse than not showing the row at
+        // all. A collection with real products that are all currently
+        // out of stock is dropped entirely rather than shown empty.
+        const withProducts = full
+          .filter((c): c is ProductCollection => !!c && !!c.products)
+          .map((c) => ({
+            ...c,
+            products: (c.products || []).filter(
+              (p) => p.is_active && p.total_stock > 0,
+            ),
+          }))
+          .filter((c) => c.products.length > 0)
         setCollections(withProducts)
       } catch (error) {
         console.error('Failed to load featured collections:', error)
