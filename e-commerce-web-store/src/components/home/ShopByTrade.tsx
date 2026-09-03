@@ -14,11 +14,16 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Hammer,
-  HardHat,
-  Flame,
-  Zap,
   Car,
+  Armchair,
   ShieldCheck,
+  Siren,
+  Music2,
+  CarFront,
+  Lightbulb,
+  SprayCan,
+  Smartphone,
+  Gauge,
   Wrench,
   ChevronRight,
 } from 'lucide-react'
@@ -28,11 +33,16 @@ import { homepageConfig } from '../../config/homepage.config'
 
 const iconBySlug: Record<string, React.ComponentType<{ className?: string }>> = {
   woodworking: Hammer,
-  construction: HardHat,
-  metalworking: Flame,
-  electrical: Zap,
   automotive: Car,
+  interior: Armchair,
   safety: ShieldCheck,
+  emergency: Siren,
+  audio: Music2,
+  exterior: CarFront,
+  lighting: Lightbulb,
+  cleaning: SprayCan,
+  mounts: Smartphone,
+  performance: Gauge,
 }
 
 export default function ShopByTrade() {
@@ -46,9 +56,14 @@ export default function ShopByTrade() {
       try {
         const data = await categoriesApi.getAll()
         if (cancelled) return
+        // Top-level only -- the plain (non-tree) categories endpoint
+        // returns all ~80+ categories flat, alphabetically, with no
+        // parent/child distinction. Without this filter, "Shop by Trade"
+        // could show subcategories (e.g. "Adhesives & Sealants") instead
+        // of the real trade verticals (e.g. "Home Improvement & Tools").
         setCategories(
           data
-            .filter((category) => category.is_active)
+            .filter((category) => category.is_active && !category.parent_id)
             .slice(0, homepageConfig.shopByTrade.displayLimit),
         )
       } catch (error) {

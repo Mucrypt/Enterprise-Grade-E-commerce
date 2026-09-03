@@ -55,59 +55,30 @@ export const homepageConfig = {
     heading: 'Shop by Trade',
     description:
       'Find tools and equipment for your workshop, job site or professional trade.',
-    displayLimit: 6,
-    // Curated copy applied ONLY when a category with this exact slug is
-    // actually returned by the real categories API. Categories that don't
-    // match any entry below still render honestly using their own real
-    // name/description from the API — nothing here invents a category.
+    displayLimit: 8,
+    // Icon applied ONLY when a real, top-level category with this exact
+    // slug is actually returned by the categories API -- these are the
+    // real slugs created in migration 055 (category taxonomy expansion),
+    // not invented trade names. Title/description are intentionally
+    // omitted here: the component always falls back to that category's
+    // own real name/description from the API, so nothing here duplicates
+    // or risks drifting from the real copy. Any other real, active
+    // category (including one not listed here) still renders honestly
+    // with a generic icon -- nothing is invented.
     curatedBySlug: {
-      woodworking: {
-        title: 'Woodworking',
-        description:
-          'Machines, cutting tools and workshop essentials for wood professionals.',
-        icon: 'woodworking',
-      },
-      construction: {
-        title: 'Construction',
-        description:
-          'Reliable tools and site equipment for demanding building work.',
-        icon: 'construction',
-      },
-      metalworking: {
-        title: 'Metalworking',
-        description: 'Cutting, grinding, welding and fabrication equipment.',
-        icon: 'metalworking',
-      },
-      electrical: {
-        title: 'Electrical',
-        description:
-          'Electrical tools, testing equipment and professional accessories.',
-        icon: 'electrical',
-      },
-      'automotive-workshop': {
-        title: 'Automotive Workshop',
-        description: 'Diagnostic, repair and maintenance tools for workshops.',
-        icon: 'automotive',
-      },
-      'safety-ppe': {
-        title: 'Safety & PPE',
-        description:
-          'Protective equipment designed for professional work environments.',
-        icon: 'safety',
-      },
-      'safety-security': {
-        title: 'Safety & PPE',
-        description:
-          'Protective equipment designed for professional work environments.',
-        icon: 'safety',
-      },
-      'work-safety-gear': {
-        title: 'Safety & PPE',
-        description:
-          'Protective equipment designed for professional work environments.',
-        icon: 'safety',
-      },
-    } as Record<string, { title: string; description: string; icon: string }>,
+      'home-improvement-tools': { icon: 'woodworking' },
+      'car-electronics': { icon: 'automotive' },
+      'interior-comfort': { icon: 'interior' },
+      'safety-security': { icon: 'safety' },
+      'tools-emergency': { icon: 'emergency' },
+      'audio-entertainment': { icon: 'audio' },
+      'exterior-accessories': { icon: 'exterior' },
+      lighting: { icon: 'lighting' },
+      'cleaning-maintenance': { icon: 'cleaning' },
+      'phone-gps-mounts': { icon: 'mounts' },
+      'performance-parts': { icon: 'performance' },
+      'work-safety-gear': { icon: 'safety' },
+    } as Record<string, { title?: string; description?: string; icon: string }>,
   },
 
   featuredTools: {
