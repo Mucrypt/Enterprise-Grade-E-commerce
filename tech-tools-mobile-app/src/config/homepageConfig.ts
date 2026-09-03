@@ -62,58 +62,39 @@ export const homepageConfig = {
     description:
       'Find tools and equipment for your workshop, job site or professional trade.',
     displayLimit: 6,
-    // Curated copy applied ONLY when a category with this exact slug is
-    // actually returned by the real categories API. Categories that don't
-    // match any entry below still render honestly using their own real
-    // name/description from the API -- nothing here invents a category.
+    // Curated icon applied ONLY when a category with this exact real slug
+    // is actually returned by the categories API (the store's real 12
+    // top-level slugs, added via the taxonomy migration). Title/description
+    // are intentionally NOT overridden here -- every category renders
+    // honestly using its own real name/description from the API; nothing
+    // here invents a category or its copy. Mirrors
+    // e-commerce-web-store/src/config/homepage.config.ts's curatedBySlug
+    // exactly (same slugs, same icon tags).
     curatedBySlug: {
-      woodworking: {
-        title: 'Woodworking',
-        description:
-          'Machines, cutting tools and workshop essentials for wood professionals.',
-        icon: 'woodworking',
-      },
-      construction: {
-        title: 'Construction',
-        description:
-          'Reliable tools and site equipment for demanding building work.',
-        icon: 'construction',
-      },
-      metalworking: {
-        title: 'Metalworking',
-        description: 'Cutting, grinding, welding and fabrication equipment.',
-        icon: 'metalworking',
-      },
-      electrical: {
-        title: 'Electrical',
-        description:
-          'Electrical tools, testing equipment and professional accessories.',
-        icon: 'electrical',
-      },
-      'automotive-workshop': {
-        title: 'Automotive Workshop',
-        description: 'Diagnostic, repair and maintenance tools for workshops.',
-        icon: 'automotive',
-      },
-      'safety-ppe': {
-        title: 'Safety & PPE',
-        description:
-          'Protective equipment designed for professional work environments.',
-        icon: 'safety',
-      },
-      'safety-security': {
-        title: 'Safety & PPE',
-        description:
-          'Protective equipment designed for professional work environments.',
-        icon: 'safety',
-      },
-      'work-safety-gear': {
-        title: 'Safety & PPE',
-        description:
-          'Protective equipment designed for professional work environments.',
-        icon: 'safety',
-      },
-    } as Record<string, { title: string; description: string; icon: string }>,
+      'home-improvement-tools': { icon: 'woodworking' },
+      'car-electronics': { icon: 'automotive' },
+      'interior-comfort': { icon: 'interior' },
+      'safety-security': { icon: 'safety' },
+      'tools-emergency': { icon: 'emergency' },
+      'audio-entertainment': { icon: 'audio' },
+      'exterior-accessories': { icon: 'exterior' },
+      lighting: { icon: 'lighting' },
+      'cleaning-maintenance': { icon: 'cleaning' },
+      'phone-gps-mounts': { icon: 'mounts' },
+      'performance-parts': { icon: 'performance' },
+      'work-safety-gear': { icon: 'safety' },
+    } as Record<string, { title?: string; description?: string; icon: string }>,
+  },
+
+  featuredCollections: {
+    // Admin-curated, is_featured=true product collections (Collections
+    // admin page star toggle), each rendered as its own titled row using
+    // the collection's own real name/description. Capped low -- mobile
+    // screens are far more space-constrained than desktop (which shows up
+    // to 3) -- so the home screen stays a tight scroll rather than a stack
+    // of near-identical product shelves.
+    maxCollections: 2,
+    maxProductsPerRow: 8,
   },
 
   featuredTools: {

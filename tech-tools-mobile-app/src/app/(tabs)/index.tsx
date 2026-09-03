@@ -24,6 +24,7 @@ import {
   ToolsHero,
   TrustStrip,
   ShopByTrade,
+  FeaturedCollectionsShowcase,
   FeaturedProfessionalTools,
   WorkshopMachinerySection,
   BusinessBuyerSection,
@@ -67,6 +68,10 @@ export default function HomeTabScreen() {
 
           {/* Shop by Trade */}
           <ShopByTrade />
+
+          {/* Admin-curated featured collections (Best Sellers / New
+              Arrivals-style rows), real products only */}
+          <FeaturedCollectionsShowcase />
 
           {/* Featured Professional Tools */}
           <FeaturedProfessionalTools />

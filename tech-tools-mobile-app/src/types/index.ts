@@ -551,6 +551,26 @@ export interface ProductCollection {
   products?: Product[]
 }
 
+// A category_collections campaign -- a curated set of real categories
+// (e.g. "Featured Categories"), distinct from ProductCollection above
+// (a curated set of real products, e.g. "Best Sellers"). Mirrors
+// e-commerce-web-store/src/types/index.ts's CategoryCollection exactly.
+export interface CategoryCollection {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  short_description: string | null
+  image_url: string | null
+  banner_url: string | null
+  is_active: boolean
+  is_featured: boolean
+  visibility: 'public' | 'private' | 'hidden'
+  starts_at: string | null
+  ends_at: string | null
+  categories: Category[]
+}
+
 export interface TrendingBrand extends Brand {
   follower_count: number
   products_sold: number

@@ -2,25 +2,52 @@
 // Tools Hero - Professional workshop positioning
 //
 // Mirrors e-commerce-web-store/src/components/home/ToolsHero.tsx.
-// No photographic asset is used: this app has no licensed hero
-// photography, so the hero is a dark industrial gradient plus
-// decorative Ionicons tool glyphs -- no network image request,
-// no layout shift, nothing copyrighted invented. Copy comes from
+// The hero is a dark industrial gradient plus decorative Ionicons tool
+// glyphs, PLUS a real, in-stock catalog product mosaic (never licensed
+// or fabricated photography) -- productsApi.getFeatured, filtered to
+// is_active && total_stock > 0, first 3. Renders the plain gradient
+// hero (no mosaic) while loading or if nothing is in stock, so this
+// never shows a broken image or an empty gap. Copy comes from
 // homepageConfig, not hardcoded here.
 // ============================================
 
-import React from 'react'
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
+import React, { useEffect, useState } from 'react'
+import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import { AppColors, AppSpacing, AppGradients } from '@/constants/appTheme'
 import { homepageConfig } from '@/config/homepageConfig'
+import { productsApi } from '@/api'
+import { Product } from '@/types'
+import { formatPrice, getProductImage } from '@/utils'
+
+const MOSAIC_PRODUCT_COUNT = 3
 
 export default function ToolsHero() {
   const router = useRouter()
   const { eyebrow, headline, description, primaryCta, secondaryCta } =
     homepageConfig.hero
+  const [mosaicProducts, setMosaicProducts] = useState<Product[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+
+    productsApi
+      .getFeatured(12)
+      .then((data) => {
+        if (cancelled) return
+        const inStock = data.filter((p) => p.is_active && p.total_stock > 0)
+        setMosaicProducts(inStock.slice(0, MOSAIC_PRODUCT_COUNT))
+      })
+      .catch(() => {
+        if (!cancelled) setMosaicProducts([])
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <LinearGradient
@@ -72,6 +99,39 @@ export default function ToolsHero() {
             </Text>
           </TouchableOpacity>
         </View>
+
+        {/* Real, in-stock product mosaic -- the site's actual catalog, not
+            stock photography, so the hero reads as a real store front page
+            rather than a text-only B2B SaaS landing hero. */}
+        {mosaicProducts.length > 0 && (
+          <View style={styles.mosaic}>
+            {mosaicProducts.map((product) => (
+              <TouchableOpacity
+                key={product.id}
+                style={styles.mosaicItem}
+                activeOpacity={0.85}
+                onPress={() => router.push(`/product/${product.slug}` as never)}
+              >
+                <Image
+                  source={{ uri: getProductImage(product) }}
+                  style={styles.mosaicImage}
+                  resizeMode='cover'
+                />
+                <LinearGradient
+                  colors={['transparent', 'rgba(0,0,0,0.8)']}
+                  style={styles.mosaicOverlay}
+                >
+                  <Text style={styles.mosaicName} numberOfLines={1}>
+                    {product.name}
+                  </Text>
+                  <Text style={styles.mosaicPrice}>
+                    {formatPrice(product.sale_price ?? product.base_price)}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </View>
     </LinearGradient>
   )
@@ -169,5 +229,42 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
     textTransform: 'uppercase',
     color: AppColors.white,
+  },
+  mosaic: {
+    marginTop: AppSpacing.xl,
+    flexDirection: 'row',
+    gap: AppSpacing.sm,
+  },
+  mosaicItem: {
+    flex: 1,
+    aspectRatio: 1,
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  mosaicImage: {
+    width: '100%',
+    height: '100%',
+  },
+  mosaicOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: AppSpacing.sm,
+    paddingVertical: AppSpacing.sm,
+  },
+  mosaicName: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.9)',
+  },
+  mosaicPrice: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: '800',
+    color: AppColors.orangeAccent,
   },
 })

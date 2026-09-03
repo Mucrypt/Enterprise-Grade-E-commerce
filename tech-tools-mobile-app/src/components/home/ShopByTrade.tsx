@@ -24,13 +24,22 @@ import { homepageConfig } from '@/config/homepageConfig'
 import { categoriesApi } from '@/api'
 import { Category } from '@/types'
 
+// Keyed by the curated `icon` tag in homepageConfig.shopByTrade.curatedBySlug
+// (see there), not the category slug itself -- one distinct Ionicon per
+// real trade vertical, same choices as CategoryIcons in appTheme.ts so
+// this screen and the Categories grid read as one visual system.
 const iconBySlug: Record<string, string> = {
   woodworking: 'hammer-outline',
-  construction: 'construct-outline',
-  metalworking: 'flame-outline',
-  electrical: 'flash-outline',
-  automotive: 'car-outline',
+  automotive: 'car-sport-outline',
+  interior: 'bed-outline',
   safety: 'shield-checkmark-outline',
+  emergency: 'warning-outline',
+  audio: 'musical-notes-outline',
+  exterior: 'car-outline',
+  lighting: 'bulb-outline',
+  cleaning: 'water-outline',
+  mounts: 'phone-portrait-outline',
+  performance: 'speedometer-outline',
 }
 
 const FALLBACK_ICON = 'build-outline'
@@ -47,9 +56,14 @@ export default function ShopByTrade() {
       try {
         const data = await categoriesApi.getAll()
         if (cancelled) return
+        // Top-level only -- the plain (non-tree) categories endpoint
+        // returns all ~84 categories flat, alphabetically, with no
+        // parent/child distinction. Without this filter, "Shop by Trade"
+        // could show subcategories (e.g. "Adhesives & Sealants") instead
+        // of the real trade verticals (e.g. "Home Improvement & Tools").
         setCategories(
           data
-            .filter((category) => category.is_active)
+            .filter((category) => category.is_active && !category.parent_id)
             .slice(0, homepageConfig.shopByTrade.displayLimit),
         )
       } catch (error) {

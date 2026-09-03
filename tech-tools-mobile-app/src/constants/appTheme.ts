@@ -146,6 +146,25 @@ export const CategoryIcons: Record<string, string> = {
   networking: 'wifi-outline',
   storage: 'server-outline',
   software: 'code-slash-outline',
+
+  // The store's real 12 top-level category slugs (added via the taxonomy
+  // migration -- see tech-tools-api). Without these, every real TechTools
+  // category fell through to the generic 'default' cube icon on the
+  // Categories screen. One distinct Ionicon per vertical, same choices as
+  // ShopByTrade's iconBySlug so the two screens read as one visual system.
+  'home-improvement-tools': 'hammer-outline',
+  'car-electronics': 'car-sport-outline',
+  'interior-comfort': 'bed-outline',
+  'safety-security': 'shield-checkmark-outline',
+  'tools-emergency': 'warning-outline',
+  'audio-entertainment': 'musical-notes-outline',
+  'exterior-accessories': 'car-outline',
+  lighting: 'bulb-outline',
+  'cleaning-maintenance': 'water-outline',
+  'phone-gps-mounts': 'phone-portrait-outline',
+  'performance-parts': 'speedometer-outline',
+  'work-safety-gear': 'body-outline',
+
   default: 'cube-outline',
 }
 
@@ -161,6 +180,21 @@ export const CategoryColors: Record<string, string> = {
   networking: '#6366F1',
   storage: '#14B8A6',
   software: '#6B7280',
+
+  // Real top-level category slugs -- see CategoryIcons above.
+  'home-improvement-tools': '#F97316',
+  'car-electronics': '#3B82F6',
+  'interior-comfort': '#8B5CF6',
+  'safety-security': '#EF4444',
+  'tools-emergency': '#F59E0B',
+  'audio-entertainment': '#EC4899',
+  'exterior-accessories': '#0D9488',
+  lighting: '#EAB308',
+  'cleaning-maintenance': '#10B981',
+  'phone-gps-mounts': '#6366F1',
+  'performance-parts': '#111827',
+  'work-safety-gear': '#DC2626',
+
   default: '#9CA3AF',
 }
 

@@ -28,7 +28,15 @@ export default function CategoriesScreen() {
     const fetchCategories = async () => {
       try {
         const data = await categoriesApi.getAll()
-        setCategories(data)
+        // The plain (non-tree) /categories endpoint returns ALL ~84
+        // categories (12 top-level + ~72 subcategories) as one flat list,
+        // sorted alphabetically, with no parent/child distinction. Without
+        // this filter, subcategories (e.g. "Adhesives & Sealants") render
+        // interleaved with real top-level categories (e.g. "Car
+        // Electronics") in one undifferentiated grid. Subcategories are
+        // reachable from the top-level category's own detail screen (see
+        // category/[slug].tsx), not mixed in here.
+        setCategories(data.filter((category) => !category.parent_id))
       } catch (error) {
         console.error('Error fetching categories:', error)
       } finally {

@@ -40,8 +40,7 @@ export default function TrendingCollectionCard({
   const router = useRouter()
 
   const handlePress = () => {
-    // Navigate to collection page
-    router.push(`/products?collection=${collection.slug}`)
+    router.push(`/collections/${collection.slug}` as never)
   }
 
   const displayProducts = products.slice(0, 3)

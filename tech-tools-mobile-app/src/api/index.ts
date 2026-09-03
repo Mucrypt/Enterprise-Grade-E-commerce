@@ -25,6 +25,7 @@ import {
   BlogAuthor,
   BlogFilters,
   ProductCollection,
+  CategoryCollection,
   Book,
   BookSampleAccess,
   SellerProfile,
@@ -1549,6 +1550,20 @@ export const collectionsApi = {
 }
 
 // ============================================
+// Category Collections API -- real, admin-curated cross-category
+// merchandising campaigns (e.g. "Featured Categories"), each with a real
+// set of linked categories, gated server-side to only ever return one
+// that's genuinely active/public/within its scheduled window. Mirrors
+// e-commerce-web-store/src/api/index.ts's categoryCollectionsApi.
+// ============================================
+export const categoryCollectionsApi = {
+  getBySlug: async (slug: string): Promise<CategoryCollection> => {
+    const response = await apiClient.get(`/collections/categories/slug/${slug}`)
+    return response.data.data || response.data
+  },
+}
+
+// ============================================
 // Books API
 // ============================================
 export const booksApi = {
@@ -2162,6 +2177,7 @@ export const api = {
   wishlist: wishlistApi,
   blog: blogApi,
   collections: collectionsApi,
+  categoryCollections: categoryCollectionsApi,
   trending: trendingApi,
   payments: paymentsApi,
   newsletter: newsletterApi,

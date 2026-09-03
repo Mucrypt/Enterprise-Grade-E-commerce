@@ -25,6 +25,12 @@ export default function CategoryDetailScreen() {
 
   const [products, setProducts] = useState<Product[]>([])
   const [category, setCategory] = useState<Category | null>(null)
+  // Real subcategories of the current category (parent_id === category.id),
+  // computed from the same flat /categories list. Only populated when the
+  // current category is itself top-level (a subcategory has no children of
+  // its own in this taxonomy) -- see categories.tsx for why the flat list
+  // can't be shown ungrouped.
+  const [subcategories, setSubcategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -40,6 +46,11 @@ export default function CategoryDetailScreen() {
       const foundCategory = categories.find((c) => c.slug === slug)
       if (foundCategory) {
         setCategory(foundCategory)
+        setSubcategories(
+          categories.filter((c) => c.parent_id === foundCategory.id),
+        )
+      } else {
+        setSubcategories([])
       }
 
       // Fetch products for this category
@@ -93,6 +104,32 @@ export default function CategoryDetailScreen() {
         <Text style={styles.headerTitle}>{category?.name || slug}</Text>
         <View style={{ width: 24 }} />
       </View>
+
+      {/* Real subcategories, when this category has any -- lets a shopper
+          narrow down into a specific subcategory instead of only seeing
+          this category's own directly-assigned products (which, for a
+          top-level category, is often none). Never mixed into the same
+          grid as top-level categories (see categories.tsx). */}
+      {!error && subcategories.length > 0 && (
+        <View style={styles.subcategoryBar}>
+          <FlatList
+            data={subcategories}
+            keyExtractor={(item) => item.id}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.subcategoryList}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.subcategoryChip}
+                activeOpacity={0.8}
+                onPress={() => router.push(`/category/${item.slug}`)}
+              >
+                <Text style={styles.subcategoryChipText}>{item.name}</Text>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      )}
 
       {error ? (
         <View style={styles.errorContainer}>
@@ -155,6 +192,29 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  subcategoryBar: {
+    backgroundColor: AppColors.white,
+    borderBottomWidth: 1,
+    borderBottomColor: AppColors.gray100,
+    paddingVertical: AppSpacing.sm,
+  },
+  subcategoryList: {
+    paddingHorizontal: AppSpacing.base,
+    gap: AppSpacing.sm,
+  },
+  subcategoryChip: {
+    borderWidth: 1,
+    borderColor: AppColors.gray200,
+    backgroundColor: AppColors.background,
+    borderRadius: AppBorderRadius.full,
+    paddingHorizontal: AppSpacing.md,
+    paddingVertical: AppSpacing.sm,
+  },
+  subcategoryChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: AppColors.gray700,
   },
   errorContainer: {
     flex: 1,
