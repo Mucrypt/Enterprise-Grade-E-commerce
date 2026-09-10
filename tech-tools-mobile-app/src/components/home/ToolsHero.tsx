@@ -40,9 +40,10 @@ import { Ionicons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import { AppColors, AppSpacing, AppGradients } from '@/constants/appTheme'
 import { homepageConfig } from '@/config/homepageConfig'
-import { productsApi, collectionsApi } from '@/api'
+import { productsApi, collectionsApi, homepageSettingsApi } from '@/api'
 import { Product, ProductCollection } from '@/types'
 import { formatPrice, getProductImage } from '@/utils'
+import { resolveMobileRoute } from '@/utils/resolveMobileRoute'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const MOSAIC_PRODUCT_COUNT = 3
@@ -63,14 +64,48 @@ type HeroSlide =
 
 export default function ToolsHero() {
   const router = useRouter()
-  const { eyebrow, headline, description, primaryCta, secondaryCta } =
-    homepageConfig.hero
+  const [copy, setCopy] = useState(homepageConfig.hero)
+  const { eyebrow, headline, description, primaryCta, secondaryCta } = copy
   const [mosaicProducts, setMosaicProducts] = useState<Product[]>([])
   const [slideProducts, setSlideProducts] = useState<Product[]>([])
   const [collectionSlide, setCollectionSlide] =
     useState<ProductCollection | null>(null)
   const [activeIndex, setActiveIndex] = useState(0)
   const listRef = useRef<FlatList<HeroSlide>>(null)
+
+  // Real, admin-editable copy (Settings > Homepage Content) -- falls back
+  // to the static homepageConfig.hero value already in state if the
+  // request fails or hasn't resolved yet, so the hero is never blank.
+  useEffect(() => {
+    let cancelled = false
+
+    homepageSettingsApi
+      .getPublic()
+      .then((settings) => {
+        if (cancelled || !settings?.hero) return
+        const { hero } = settings
+        setCopy({
+          eyebrow: hero.eyebrow,
+          headline: hero.headline,
+          description: hero.description,
+          primaryCta: {
+            label: hero.primaryCtaLabel,
+            to: resolveMobileRoute(hero.primaryCtaTo),
+          },
+          secondaryCta: {
+            label: hero.secondaryCtaLabel,
+            to: resolveMobileRoute(hero.secondaryCtaTo),
+          },
+        })
+      })
+      .catch(() => {
+        // Keep the static homepageConfig.hero fallback already in state.
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false

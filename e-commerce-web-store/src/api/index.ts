@@ -196,6 +196,56 @@ export const shippingApi = {
 }
 
 // ============================================
+// Homepage Settings API
+// ============================================
+// Real, admin-editable copy for the hero/workshop-banner/business-banner/
+// newsletter sections (Settings > Homepage Content in the admin
+// dashboard) -- each homepage component fetches this and falls back to
+// its own static homepage.config.ts value if the request fails, so the
+// page is never blank while this loads or if the API is briefly down.
+export interface HomepageSettings {
+  hero: {
+    eyebrow: string
+    headline: string
+    description: string
+    primaryCtaLabel: string
+    primaryCtaTo: string
+    secondaryCtaLabel: string
+    secondaryCtaTo: string
+  }
+  workshop_banner: {
+    eyebrow: string
+    headline: string
+    description: string
+    primaryCtaLabel: string
+    primaryCtaTo: string
+    secondaryCtaLabel: string
+    secondaryCtaTo: string
+  }
+  business_banner: {
+    heading: string
+    description: string
+    ctaLabel: string
+    ctaTo: string
+  }
+  newsletter: {
+    heading: string
+    description: string
+    ctaLabel: string
+  }
+}
+
+export const homepageSettingsApi = {
+  async getPublic() {
+    const response = await api.get<{
+      success: boolean
+      data: HomepageSettings
+    }>('/settings/homepage/public')
+    return response.data.data
+  },
+}
+
+// ============================================
 // Affiliates API (Refer & Earn)
 // ============================================
 export const affiliatesApi = {

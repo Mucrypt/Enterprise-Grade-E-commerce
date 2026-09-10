@@ -10,18 +10,54 @@
 // cards.
 // ============================================
 
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import { AppColors, AppSpacing, AppGradients } from '@/constants/appTheme'
 import { homepageConfig } from '@/config/homepageConfig'
+import { homepageSettingsApi } from '@/api'
+import { resolveMobileRoute } from '@/utils/resolveMobileRoute'
 
 export default function WorkshopMachinerySection() {
   const router = useRouter()
-  const { eyebrow, headline, description, primaryCta, secondaryCta } =
-    homepageConfig.workshopMachinery
+  const [copy, setCopy] = useState(homepageConfig.workshopMachinery)
+  const { eyebrow, headline, description, primaryCta, secondaryCta } = copy
+
+  // Real, admin-editable copy (Settings > Homepage Content) -- falls back
+  // to the static homepageConfig value already in state if the request
+  // fails or hasn't resolved yet.
+  useEffect(() => {
+    let cancelled = false
+
+    homepageSettingsApi
+      .getPublic()
+      .then((settings) => {
+        if (cancelled || !settings?.workshop_banner) return
+        const banner = settings.workshop_banner
+        setCopy({
+          eyebrow: banner.eyebrow,
+          headline: banner.headline,
+          description: banner.description,
+          primaryCta: {
+            label: banner.primaryCtaLabel,
+            to: resolveMobileRoute(banner.primaryCtaTo),
+          },
+          secondaryCta: {
+            label: banner.secondaryCtaLabel,
+            to: resolveMobileRoute(banner.secondaryCtaTo),
+          },
+        })
+      })
+      .catch(() => {
+        // Keep the static homepageConfig fallback already in state.
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <LinearGradient

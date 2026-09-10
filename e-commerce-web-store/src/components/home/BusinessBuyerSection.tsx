@@ -5,15 +5,52 @@
 // number, wholesale portal, credit terms, discounts or
 // exclusive supplier claims. CTA routes to the real /contact
 // page.
+//
+// heading/description/cta are real and admin-editable (Settings >
+// Homepage Content), falling back to the static homepage.config.ts
+// value if the request fails or hasn't resolved yet. customerTypes
+// stays static structural data (the real business segments this store
+// serves), not marketing copy.
 // ============================================
 
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Building2, CheckCircle2 } from 'lucide-react'
+import { homepageSettingsApi } from '../../api'
 import { homepageConfig } from '../../config/homepage.config'
 
 export default function BusinessBuyerSection() {
-  const { heading, description, customerTypes, cta } =
-    homepageConfig.businessBuyer
+  const { customerTypes } = homepageConfig.businessBuyer
+  const [copy, setCopy] = useState({
+    heading: homepageConfig.businessBuyer.heading,
+    description: homepageConfig.businessBuyer.description,
+    cta: homepageConfig.businessBuyer.cta,
+  })
+
+  useEffect(() => {
+    let cancelled = false
+
+    homepageSettingsApi
+      .getPublic()
+      .then((settings) => {
+        if (cancelled || !settings?.business_banner) return
+        const banner = settings.business_banner
+        setCopy({
+          heading: banner.heading,
+          description: banner.description,
+          cta: { label: banner.ctaLabel, to: banner.ctaTo },
+        })
+      })
+      .catch(() => {
+        // Keep the static homepage.config.ts fallback already in state.
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const { heading, description, cta } = copy
 
   return (
     <section aria-label='Business and bulk orders' className='border-y border-slate-200 bg-white py-10 sm:py-12'>

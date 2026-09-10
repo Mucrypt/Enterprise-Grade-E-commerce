@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Card,
@@ -25,6 +26,7 @@ import {
   Mail,
   Save,
   Image,
+  Sparkles,
 } from 'lucide-react'
 import { RequirePagePermission } from '@/components/auth/RequirePagePermission'
 
@@ -184,6 +186,21 @@ function SettingsPageContent() {
       </Card>
 
       <div className='grid gap-4 md:grid-cols-2'>
+        <Link href='/dashboard/settings/homepage'>
+          <Card className='cursor-pointer hover:shadow-md transition-shadow'>
+            <CardHeader>
+              <CardTitle className='flex items-center gap-2'>
+                <Sparkles className='h-5 w-5 text-orange-500' />
+                Homepage Content
+              </CardTitle>
+              <CardDescription>
+                Edit the hero, workshop banner, business banner and
+                newsletter copy shown on web and mobile
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+
         <Card className='cursor-pointer hover:shadow-md transition-shadow'>
           <CardHeader>
             <CardTitle className='flex items-center gap-2'>

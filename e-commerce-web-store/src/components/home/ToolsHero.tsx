@@ -1,6 +1,13 @@
 // ============================================
 // Tools Hero
 //
+// Copy (eyebrow/headline/description/CTA labels+links) is real and
+// admin-editable -- Settings > Homepage Content in the admin dashboard --
+// fetched via homepageSettingsApi.getPublic(). Falls back to the static
+// homepage.config.ts values (the same real copy the settings row is
+// seeded with) if that request fails or hasn't resolved yet, so the
+// hero is never blank.
+//
 // No stock/fabricated photography: the right-side mosaic uses real,
 // in-stock catalog product photos (productsApi.getFeatured, same
 // in-stock-first filter FeaturedProfessionalTools already uses), never
@@ -13,15 +20,40 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
 import type { Product } from '../../types'
-import { productsApi } from '../../api'
+import { productsApi, homepageSettingsApi } from '../../api'
 import { formatPrice, getProductImage } from '../../utils'
 import { homepageConfig } from '../../config/homepage.config'
 
 export default function ToolsHero() {
-  const { eyebrow, headline, description, primaryCta, secondaryCta } =
-    homepageConfig.hero
-
+  const [copy, setCopy] = useState(homepageConfig.hero)
   const [products, setProducts] = useState<Product[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+
+    homepageSettingsApi
+      .getPublic()
+      .then((settings) => {
+        if (cancelled || !settings?.hero) return
+        const { hero } = settings
+        setCopy({
+          eyebrow: hero.eyebrow,
+          headline: hero.headline,
+          description: hero.description,
+          primaryCta: { label: hero.primaryCtaLabel, to: hero.primaryCtaTo },
+          secondaryCta: { label: hero.secondaryCtaLabel, to: hero.secondaryCtaTo },
+        })
+      })
+      .catch(() => {
+        // Keep the static homepage.config.ts fallback already in state.
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const { eyebrow, headline, description, primaryCta, secondaryCta } = copy
 
   useEffect(() => {
     let cancelled = false

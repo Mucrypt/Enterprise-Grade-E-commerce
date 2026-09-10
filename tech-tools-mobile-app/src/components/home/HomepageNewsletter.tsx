@@ -9,7 +9,7 @@
 // fabricated discount claim.
 // ============================================
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   View,
   Text,
@@ -21,7 +21,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { AppColors, AppSpacing, AppBorderRadius } from '@/constants/appTheme'
 import { homepageConfig } from '@/config/homepageConfig'
-import { newsletterApi, getApiErrorContext } from '@/api'
+import { newsletterApi, homepageSettingsApi, getApiErrorContext } from '@/api'
 
 export default function HomepageNewsletter() {
   const [email, setEmail] = useState('')
@@ -29,6 +29,36 @@ export default function HomepageNewsletter() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [copy, setCopy] = useState({
+    heading: homepageConfig.newsletter.heading,
+    description: homepageConfig.newsletter.description,
+    ctaLabel: homepageConfig.newsletter.ctaLabel,
+  })
+
+  // Real, admin-editable copy (Settings > Homepage Content) -- falls back
+  // to the static homepageConfig value already in state if the request
+  // fails or hasn't resolved yet.
+  useEffect(() => {
+    let cancelled = false
+
+    homepageSettingsApi
+      .getPublic()
+      .then((settings) => {
+        if (cancelled || !settings?.newsletter) return
+        setCopy({
+          heading: settings.newsletter.heading,
+          description: settings.newsletter.description,
+          ctaLabel: settings.newsletter.ctaLabel,
+        })
+      })
+      .catch(() => {
+        // Keep the static homepageConfig fallback already in state.
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const handleSubmit = async () => {
     if (!email.trim()) return
@@ -55,7 +85,7 @@ export default function HomepageNewsletter() {
     }
   }
 
-  const { heading, description, ctaLabel } = homepageConfig.newsletter
+  const { heading, description, ctaLabel } = copy
 
   return (
     <View style={styles.section}>

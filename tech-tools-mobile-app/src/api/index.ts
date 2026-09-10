@@ -1403,6 +1403,53 @@ export const shippingApi = {
 }
 
 // ============================================
+// Homepage Settings API -- same endpoint/shape as the web storefront's
+// homepageSettingsApi, against the same tech-tools-api backend. Real,
+// admin-editable copy for the hero/workshop-banner/business-banner/
+// newsletter sections (Settings > Homepage Content in the admin
+// dashboard) -- ToolsHero.tsx etc. fall back to homepageConfig.ts's
+// static values if this request fails.
+// ============================================
+export interface HomepageSettings {
+  hero: {
+    eyebrow: string
+    headline: string
+    description: string
+    primaryCtaLabel: string
+    primaryCtaTo: string
+    secondaryCtaLabel: string
+    secondaryCtaTo: string
+  }
+  workshop_banner: {
+    eyebrow: string
+    headline: string
+    description: string
+    primaryCtaLabel: string
+    primaryCtaTo: string
+    secondaryCtaLabel: string
+    secondaryCtaTo: string
+  }
+  business_banner: {
+    heading: string
+    description: string
+    ctaLabel: string
+    ctaTo: string
+  }
+  newsletter: {
+    heading: string
+    description: string
+    ctaLabel: string
+  }
+}
+
+export const homepageSettingsApi = {
+  getPublic: async (): Promise<HomepageSettings> => {
+    const response = await apiClient.get('/settings/homepage/public')
+    return response.data.data || response.data
+  },
+}
+
+// ============================================
 // Affiliates API (Refer & Earn) -- same endpoints/shapes as the web
 // storefront's affiliatesApi, against the same tech-tools-api backend.
 // ============================================
@@ -2183,4 +2230,5 @@ export const api = {
   newsletter: newsletterApi,
   affiliates: affiliatesApi,
   shipping: shippingApi,
+  homepageSettings: homepageSettingsApi,
 }

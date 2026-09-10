@@ -7,15 +7,47 @@
 // feature that links only to always-valid routes (the full
 // catalogue and the real contact page) rather than a specific
 // unverified category slug or any fabricated machinery cards.
+//
+// Copy is real and admin-editable (Settings > Homepage Content),
+// falling back to the static homepage.config.ts value if the request
+// fails or hasn't resolved yet.
 // ============================================
 
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
+import { homepageSettingsApi } from '../../api'
 import { homepageConfig } from '../../config/homepage.config'
 
 export default function WorkshopMachinerySection() {
-  const { eyebrow, headline, description, primaryCta, secondaryCta } =
-    homepageConfig.workshopMachinery
+  const [copy, setCopy] = useState(homepageConfig.workshopMachinery)
+
+  useEffect(() => {
+    let cancelled = false
+
+    homepageSettingsApi
+      .getPublic()
+      .then((settings) => {
+        if (cancelled || !settings?.workshop_banner) return
+        const banner = settings.workshop_banner
+        setCopy({
+          eyebrow: banner.eyebrow,
+          headline: banner.headline,
+          description: banner.description,
+          primaryCta: { label: banner.primaryCtaLabel, to: banner.primaryCtaTo },
+          secondaryCta: { label: banner.secondaryCtaLabel, to: banner.secondaryCtaTo },
+        })
+      })
+      .catch(() => {
+        // Keep the static homepage.config.ts fallback already in state.
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const { eyebrow, headline, description, primaryCta, secondaryCta } = copy
 
   return (
     <section

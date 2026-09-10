@@ -7,12 +7,16 @@
 // visual design and copy changed. No fake subscriber counts,
 // no pre-checked consent boxes, no hidden subscriptions, no
 // fabricated discount claim.
+//
+// heading/description/ctaLabel are real and admin-editable (Settings >
+// Homepage Content), falling back to the static homepage.config.ts
+// value if the request fails or hasn't resolved yet.
 // ============================================
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Mail, CheckCircle, AlertCircle } from 'lucide-react'
 import { cn } from '../../utils'
-import { newsletterApi } from '../../api'
+import { newsletterApi, homepageSettingsApi } from '../../api'
 import { homepageConfig } from '../../config/homepage.config'
 
 export default function HomepageNewsletter() {
@@ -21,6 +25,33 @@ export default function HomepageNewsletter() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [copy, setCopy] = useState({
+    heading: homepageConfig.newsletter.heading,
+    description: homepageConfig.newsletter.description,
+    ctaLabel: homepageConfig.newsletter.ctaLabel,
+  })
+
+  useEffect(() => {
+    let cancelled = false
+
+    homepageSettingsApi
+      .getPublic()
+      .then((settings) => {
+        if (cancelled || !settings?.newsletter) return
+        setCopy({
+          heading: settings.newsletter.heading,
+          description: settings.newsletter.description,
+          ctaLabel: settings.newsletter.ctaLabel,
+        })
+      })
+      .catch(() => {
+        // Keep the static homepage.config.ts fallback already in state.
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -48,7 +79,7 @@ export default function HomepageNewsletter() {
     }
   }
 
-  const { heading, description, ctaLabel } = homepageConfig.newsletter
+  const { heading, description, ctaLabel } = copy
 
   return (
     <section aria-label='Newsletter signup' className='bg-slate-900 py-16'>

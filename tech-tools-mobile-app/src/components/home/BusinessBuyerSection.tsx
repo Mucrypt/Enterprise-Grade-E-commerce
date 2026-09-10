@@ -7,17 +7,51 @@
 // claims. CTA routes to the real contact screen.
 // ============================================
 
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { AppColors, AppSpacing, AppBorderRadius } from '@/constants/appTheme'
 import { homepageConfig } from '@/config/homepageConfig'
+import { homepageSettingsApi } from '@/api'
+import { resolveMobileRoute } from '@/utils/resolveMobileRoute'
 
 export default function BusinessBuyerSection() {
   const router = useRouter()
-  const { heading, description, customerTypes, cta } =
-    homepageConfig.businessBuyer
+  const { customerTypes } = homepageConfig.businessBuyer
+  const [copy, setCopy] = useState({
+    heading: homepageConfig.businessBuyer.heading,
+    description: homepageConfig.businessBuyer.description,
+    cta: homepageConfig.businessBuyer.cta,
+  })
+  const { heading, description, cta } = copy
+
+  // Real, admin-editable copy (Settings > Homepage Content) -- falls back
+  // to the static homepageConfig value already in state if the request
+  // fails or hasn't resolved yet. customerTypes stays static structural
+  // data (the real business segments this store serves), not copy.
+  useEffect(() => {
+    let cancelled = false
+
+    homepageSettingsApi
+      .getPublic()
+      .then((settings) => {
+        if (cancelled || !settings?.business_banner) return
+        const banner = settings.business_banner
+        setCopy({
+          heading: banner.heading,
+          description: banner.description,
+          cta: { label: banner.ctaLabel, to: resolveMobileRoute(banner.ctaTo) },
+        })
+      })
+      .catch(() => {
+        // Keep the static homepageConfig fallback already in state.
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <View style={styles.section}>
