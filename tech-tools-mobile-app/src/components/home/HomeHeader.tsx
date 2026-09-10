@@ -64,7 +64,7 @@ export default function HomeHeader() {
       >
         <Ionicons
           name='notifications-outline'
-          size={22}
+          size={19}
           color={AppColors.gray800}
         />
         {unreadCount > 0 && (
@@ -77,7 +77,7 @@ export default function HomeHeader() {
       </TouchableOpacity>
 
       <View style={styles.searchWrap}>
-        <SearchBar placeholder='Search tools, brands, categories...' />
+        <SearchBar placeholder='Search tools, brands...' compact />
       </View>
 
       <TouchableOpacity
@@ -85,7 +85,7 @@ export default function HomeHeader() {
         activeOpacity={0.8}
         onPress={() => router.push('/wishlist' as never)}
       >
-        <Ionicons name='heart-outline' size={22} color={AppColors.gray800} />
+        <Ionicons name='heart-outline' size={19} color={AppColors.gray800} />
         {wishlistCount > 0 && (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>
@@ -102,15 +102,15 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: AppSpacing.sm,
+    gap: AppSpacing.xs,
     paddingHorizontal: AppSpacing.base,
-    paddingVertical: AppSpacing.sm,
+    paddingVertical: AppSpacing.xs,
     backgroundColor: AppColors.background,
   },
   iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: AppColors.white,
     justifyContent: 'center',
     alignItems: 'center',
@@ -119,24 +119,25 @@ const styles = StyleSheet.create({
   },
   badge: {
     position: 'absolute',
-    top: -4,
-    right: -4,
+    top: -3,
+    right: -3,
     backgroundColor: AppColors.error,
-    borderRadius: 10,
-    minWidth: 18,
-    height: 18,
+    borderRadius: 9,
+    minWidth: 16,
+    height: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 4,
-    borderWidth: 2,
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
     borderColor: AppColors.background,
   },
   badgeText: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '700',
     color: AppColors.white,
   },
   searchWrap: {
     flex: 1,
+    marginHorizontal: AppSpacing.xs,
   },
 })

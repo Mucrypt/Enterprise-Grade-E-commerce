@@ -72,29 +72,30 @@ export default function CategoryTabRow() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        <View style={[styles.pill, styles.pillActive]}>
-          <Text style={[styles.pillText, styles.pillTextActive]}>All</Text>
+        <View style={styles.tab}>
+          <Text style={[styles.tabText, styles.tabTextActive]}>All</Text>
+          <View style={styles.tabUnderline} />
         </View>
 
         {MARKETING_PILLS.map((pill) => (
           <TouchableOpacity
             key={pill.key}
-            style={styles.pill}
-            activeOpacity={0.8}
+            style={styles.tab}
+            activeOpacity={0.6}
             onPress={() => router.push(pill.to as never)}
           >
-            <Text style={styles.pillText}>{pill.label}</Text>
+            <Text style={styles.tabText}>{pill.label}</Text>
           </TouchableOpacity>
         ))}
 
         {topLevel.map((category) => (
           <TouchableOpacity
             key={category.id}
-            style={styles.pill}
-            activeOpacity={0.8}
+            style={styles.tab}
+            activeOpacity={0.6}
             onPress={() => router.push(`/category/${category.slug}` as never)}
           >
-            <Text style={styles.pillText} numberOfLines={1}>
+            <Text style={styles.tabText} numberOfLines={1}>
               {category.name}
             </Text>
           </TouchableOpacity>
@@ -102,10 +103,10 @@ export default function CategoryTabRow() {
 
         <TouchableOpacity
           style={styles.menuButton}
-          activeOpacity={0.8}
+          activeOpacity={0.6}
           onPress={() => setDrawerVisible(true)}
         >
-          <Ionicons name='menu' size={20} color={AppColors.gray900} />
+          <Ionicons name='menu' size={22} color={AppColors.gray900} />
         </TouchableOpacity>
       </ScrollView>
 
@@ -128,35 +129,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: AppSpacing.base,
     paddingVertical: AppSpacing.sm,
     alignItems: 'center',
-    gap: AppSpacing.sm,
+    gap: AppSpacing.lg,
   },
-  pill: {
-    paddingHorizontal: AppSpacing.md,
-    paddingVertical: 8,
+  tab: {
+    alignItems: 'center',
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: AppColors.gray500,
+  },
+  tabTextActive: {
+    fontWeight: '800',
+    color: AppColors.gray900,
+  },
+  tabUnderline: {
+    marginTop: 6,
+    width: 16,
+    height: 2.5,
     borderRadius: AppBorderRadius.full,
-    backgroundColor: AppColors.white,
-    borderWidth: 1,
-    borderColor: AppColors.gray200,
-  },
-  pillActive: {
     backgroundColor: AppColors.gray900,
-    borderColor: AppColors.gray900,
-  },
-  pillText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: AppColors.gray700,
-  },
-  pillTextActive: {
-    color: AppColors.white,
   },
   menuButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: AppColors.white,
-    borderWidth: 1,
-    borderColor: AppColors.gray200,
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: AppSpacing.xs,

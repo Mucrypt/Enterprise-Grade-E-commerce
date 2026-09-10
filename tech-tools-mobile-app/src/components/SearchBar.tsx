@@ -20,6 +20,12 @@ interface SearchBarProps {
   value?: string
   onChangeText?: (text: string) => void
   onSubmit?: () => void
+  // Tighter padding + a true full-pill shape (vs. the default's roomier
+  // touch target) for placements like the sticky home header, where the
+  // bar sits alongside icon buttons and needs to read as one sleek row
+  // rather than its own oversized element. Every other usage (the full
+  // search screen, product listing) is unaffected -- default is false.
+  compact?: boolean
 }
 
 export default function SearchBar({
@@ -29,6 +35,7 @@ export default function SearchBar({
   value,
   onChangeText,
   onSubmit,
+  compact = false,
 }: SearchBarProps) {
   const router = useRouter()
   const [internalQuery, setInternalQuery] = useState('')
@@ -54,10 +61,14 @@ export default function SearchBar({
   }
 
   return (
-    <View style={styles.container}>
-      <Ionicons name='search-outline' size={20} color={AppColors.gray400} />
+    <View style={[styles.container, compact && styles.containerCompact]}>
+      <Ionicons
+        name='search-outline'
+        size={compact ? 17 : 20}
+        color={AppColors.gray400}
+      />
       <TextInput
-        style={styles.input}
+        style={[styles.input, compact && styles.inputCompact]}
         placeholder={placeholder}
         placeholderTextColor={AppColors.gray400}
         value={query}
@@ -68,7 +79,11 @@ export default function SearchBar({
       />
       {query.length > 0 && (
         <TouchableOpacity onPress={handleClear}>
-          <Ionicons name='close-circle' size={20} color={AppColors.gray400} />
+          <Ionicons
+            name='close-circle'
+            size={compact ? 17 : 20}
+            color={AppColors.gray400}
+          />
         </TouchableOpacity>
       )}
     </View>
@@ -86,9 +101,18 @@ const styles = StyleSheet.create({
     gap: AppSpacing.sm,
     ...AppShadows.sm,
   },
+  containerCompact: {
+    borderRadius: AppBorderRadius.full,
+    paddingHorizontal: AppSpacing.md,
+    paddingVertical: 9,
+    gap: AppSpacing.xs,
+  },
   input: {
     flex: 1,
     fontSize: 15,
     color: AppColors.gray800,
+  },
+  inputCompact: {
+    fontSize: 13,
   },
 })
