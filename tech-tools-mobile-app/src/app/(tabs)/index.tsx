@@ -21,7 +21,10 @@ import { View, ScrollView, StyleSheet, RefreshControl } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { AppColors } from '@/constants/appTheme'
 import {
+  HomeHeader,
+  CategoryTabRow,
   ToolsHero,
+  CampaignTilesRow,
   TrustStrip,
   ShopByTrade,
   FeaturedCollectionsShowcase,
@@ -48,6 +51,12 @@ export default function HomeTabScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Sticky header + category tabs -- rendered above the ScrollView so
+          they never scroll away, matching the reference layout's sticky
+          top chrome. */}
+      <HomeHeader />
+      <CategoryTabRow />
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
@@ -60,8 +69,11 @@ export default function HomeTabScreen() {
         }
       >
         <View key={refreshKey}>
-          {/* Professional Hero */}
+          {/* Professional Hero -- real swipeable carousel */}
           <ToolsHero />
+
+          {/* Real admin-curated campaign tiles, renders nothing if none exist */}
+          <CampaignTilesRow />
 
           {/* Trust / service strip */}
           <TrustStrip />

@@ -107,7 +107,7 @@ export default function ToolsHero() {
                 key={product.id}
                 to={`/product/${product.slug}`}
                 className={`group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm transition-transform hover:-translate-y-1 ${
-                  index === 0 ? 'col-span-2 aspect-[2/1]' : 'aspect-square'
+                  index === 0 ? 'col-span-2 aspect-2/1' : 'aspect-square'
                 }`}
               >
                 <img

@@ -9,10 +9,24 @@
 // active category still renders honestly using its own
 // name/description from the API. No category is invented and no
 // database id is hardcoded.
+//
+// Layout: a dense, icon-forward circular grid (5 per row) rather than
+// the previous 2-per-row description cards -- matches the reference
+// mobile layout's category grid density (scannable at a glance, more
+// items visible at once). Per-category description/"Shop X" copy was
+// dropped to make room; the category name plus its real icon is still
+// enough to identify it, and tapping still goes to the same real
+// /category/[slug] screen either way.
 // ============================================
 
 import React, { useEffect, useState } from 'react'
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native'
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Dimensions,
+} from 'react-native'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import {
@@ -23,6 +37,12 @@ import {
 import { homepageConfig } from '@/config/homepageConfig'
 import { categoriesApi } from '@/api'
 import { Category } from '@/types'
+
+const COLUMNS = 5
+const GRID_GAP = AppSpacing.sm
+const { width: SCREEN_WIDTH } = Dimensions.get('window')
+const ITEM_WIDTH =
+  (SCREEN_WIDTH - AppSpacing.base * 2 - GRID_GAP * (COLUMNS - 1)) / COLUMNS
 
 // Keyed by the curated `icon` tag in homepageConfig.shopByTrade.curatedBySlug
 // (see there), not the category slug itself -- one distinct Ionicon per
@@ -89,7 +109,10 @@ export default function ShopByTrade() {
       {loading ? (
         <View style={styles.grid}>
           {[...Array(homepageConfig.shopByTrade.displayLimit)].map((_, i) => (
-            <View key={i} style={[styles.card, styles.skeletonCard]} />
+            <View key={i} style={styles.item}>
+              <View style={[styles.cardIconBadge, styles.skeletonBadge]} />
+              <View style={styles.skeletonLabel} />
+            </View>
           ))}
         </View>
       ) : categories.length === 0 ? (
@@ -112,13 +135,12 @@ export default function ShopByTrade() {
               ? iconBySlug[curated.icon] ?? FALLBACK_ICON
               : FALLBACK_ICON
             const title = curated?.title ?? category.name
-            const description = curated?.description ?? category.description
 
             return (
               <TouchableOpacity
                 key={category.id}
-                style={styles.card}
-                activeOpacity={0.85}
+                style={styles.item}
+                activeOpacity={0.8}
                 onPress={() =>
                   router.push(`/category/${category.slug}` as never)
                 }
@@ -130,20 +152,9 @@ export default function ShopByTrade() {
                     color={AppColors.orangeAccent}
                   />
                 </View>
-                <Text style={styles.cardTitle}>{title}</Text>
-                {!!description && (
-                  <Text style={styles.cardDescription} numberOfLines={3}>
-                    {description}
-                  </Text>
-                )}
-                <View style={styles.cardFooter}>
-                  <Text style={styles.cardFooterText}>Shop {title}</Text>
-                  <Ionicons
-                    name='chevron-forward'
-                    size={14}
-                    color={AppColors.gray900}
-                  />
-                </View>
+                <Text style={styles.cardTitle} numberOfLines={2}>
+                  {title}
+                </Text>
               </TouchableOpacity>
             )
           })}
@@ -175,51 +186,37 @@ const styles = StyleSheet.create({
     marginTop: AppSpacing.xl,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    columnGap: AppSpacing.md,
-    rowGap: AppSpacing.md,
+    columnGap: GRID_GAP,
+    rowGap: AppSpacing.lg,
   },
-  card: {
-    width: '47%',
-    borderWidth: 1,
-    borderColor: AppColors.slate200,
-    borderRadius: AppBorderRadius.lg,
-    padding: AppSpacing.base,
-  },
-  skeletonCard: {
-    height: 150,
-    backgroundColor: AppColors.gray100,
-    borderColor: AppColors.gray100,
+  item: {
+    width: ITEM_WIDTH,
+    alignItems: 'center',
   },
   cardIconBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: AppBorderRadius.md,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: AppColors.slate900,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  skeletonBadge: {
+    backgroundColor: AppColors.gray100,
+  },
+  skeletonLabel: {
+    marginTop: AppSpacing.sm,
+    width: '80%',
+    height: 10,
+    borderRadius: AppBorderRadius.sm,
+    backgroundColor: AppColors.gray100,
+  },
   cardTitle: {
     marginTop: AppSpacing.sm,
-    fontSize: 15,
+    fontSize: 11,
     fontWeight: '700',
     color: AppColors.gray900,
-  },
-  cardDescription: {
-    marginTop: 4,
-    fontSize: 12,
-    lineHeight: 17,
-    color: AppColors.slate500,
-  },
-  cardFooter: {
-    marginTop: AppSpacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  cardFooterText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: AppColors.gray900,
+    textAlign: 'center',
   },
   emptyState: {
     marginTop: AppSpacing.xl,

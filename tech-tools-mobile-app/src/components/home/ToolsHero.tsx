@@ -1,34 +1,76 @@
 // ============================================
 // Tools Hero - Professional workshop positioning
 //
-// Mirrors e-commerce-web-store/src/components/home/ToolsHero.tsx.
-// The hero is a dark industrial gradient plus decorative Ionicons tool
-// glyphs, PLUS a real, in-stock catalog product mosaic (never licensed
-// or fabricated photography) -- productsApi.getFeatured, filtered to
-// is_active && total_stock > 0, first 3. Renders the plain gradient
-// hero (no mosaic) while loading or if nothing is in stock, so this
-// never shows a broken image or an empty gap. Copy comes from
-// homepageConfig, not hardcoded here.
+// A real, swipeable, paginated carousel (FlatList + pagingEnabled + dot
+// indicators, mirroring the reference layout the founder shared) built
+// entirely from real data -- never a fabricated slide:
+//
+//  1. "Brand" slide -- always present, unchanged from the previous
+//     static hero: real homepageConfig marketing copy plus a real,
+//     in-stock catalog product mosaic (productsApi.getFeatured, filtered
+//     to is_active && total_stock > 0).
+//  2. "Collection" slide -- only when a real, active is_featured
+//     product_collection with a real banner_url/image_url exists
+//     (collectionsApi.getFeatured), shown as a full-bleed image with the
+//     collection's own name and a Shop Now button to /collections/[slug].
+//  3. "Product" slides -- one per additional real in-stock featured
+//     product beyond the 3 already used in the brand slide's mosaic, each
+//     a full-bleed product photo with its real name/price and a Shop Now
+//     button to /product/[slug].
+//
+// Dots only render when there is more than one real slide -- a single
+// real slide (e.g. while loading, or if no other real data exists yet)
+// never grows a fake multi-dot carousel around it.
 // ============================================
 
-import React, { useEffect, useState } from 'react'
-import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native'
+import React, { useEffect, useRef, useState } from 'react'
+import {
+  View,
+  Text,
+  Image,
+  TouchableOpacity,
+  StyleSheet,
+  FlatList,
+  Dimensions,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
+} from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import { AppColors, AppSpacing, AppGradients } from '@/constants/appTheme'
 import { homepageConfig } from '@/config/homepageConfig'
-import { productsApi } from '@/api'
-import { Product } from '@/types'
+import { productsApi, collectionsApi } from '@/api'
+import { Product, ProductCollection } from '@/types'
 import { formatPrice, getProductImage } from '@/utils'
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const MOSAIC_PRODUCT_COUNT = 3
+const EXTRA_SLIDE_PRODUCT_COUNT = 3
+// Every slide -- the brand slide (copy + CTA + mosaic) and the real
+// product/collection image slides -- shares this one fixed height so the
+// carousel doesn't jump or leave a blank gap when paging between a
+// text-heavy slide and a plain full-bleed photo. Sized generously above
+// the brand slide's real measured content height (~550px at default font
+// scale) so nothing gets clipped in normal use.
+const HERO_HEIGHT = 600
+const SLIDE_DIMENSIONS = { width: SCREEN_WIDTH, height: HERO_HEIGHT }
+
+type HeroSlide =
+  | { key: string; type: 'brand' }
+  | { key: string; type: 'product'; product: Product }
+  | { key: string; type: 'collection'; collection: ProductCollection }
 
 export default function ToolsHero() {
   const router = useRouter()
   const { eyebrow, headline, description, primaryCta, secondaryCta } =
     homepageConfig.hero
   const [mosaicProducts, setMosaicProducts] = useState<Product[]>([])
+  const [slideProducts, setSlideProducts] = useState<Product[]>([])
+  const [collectionSlide, setCollectionSlide] =
+    useState<ProductCollection | null>(null)
+  const [activeIndex, setActiveIndex] = useState(0)
+  const listRef = useRef<FlatList<HeroSlide>>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -39,9 +81,31 @@ export default function ToolsHero() {
         if (cancelled) return
         const inStock = data.filter((p) => p.is_active && p.total_stock > 0)
         setMosaicProducts(inStock.slice(0, MOSAIC_PRODUCT_COUNT))
+        setSlideProducts(
+          inStock.slice(
+            MOSAIC_PRODUCT_COUNT,
+            MOSAIC_PRODUCT_COUNT + EXTRA_SLIDE_PRODUCT_COUNT,
+          ),
+        )
       })
       .catch(() => {
-        if (!cancelled) setMosaicProducts([])
+        if (!cancelled) {
+          setMosaicProducts([])
+          setSlideProducts([])
+        }
+      })
+
+    collectionsApi
+      .getFeatured(4)
+      .then((data) => {
+        if (cancelled) return
+        const withImage = data.find(
+          (c) => c.is_active && (c.banner_url || c.image_url),
+        )
+        setCollectionSlide(withImage || null)
+      })
+      .catch(() => {
+        if (!cancelled) setCollectionSlide(null)
       })
 
     return () => {
@@ -49,100 +113,237 @@ export default function ToolsHero() {
     }
   }, [])
 
-  return (
-    <LinearGradient
-      colors={AppGradients.industrial}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={styles.container}
-    >
-      {/* Decorative glyphs, purely presentational */}
-      <View pointerEvents='none' style={styles.decor}>
-        <Ionicons
-          name='build-outline'
-          size={140}
-          color='rgba(255,255,255,0.08)'
-          style={styles.decorWrench}
-        />
-        <Ionicons
-          name='hammer-outline'
-          size={100}
-          color='rgba(255,255,255,0.08)'
-          style={styles.decorHammer}
-        />
-      </View>
+  const slides: HeroSlide[] = [
+    { key: 'brand', type: 'brand' },
+    ...(collectionSlide
+      ? [
+          {
+            key: `collection-${collectionSlide.id}`,
+            type: 'collection' as const,
+            collection: collectionSlide,
+          },
+        ]
+      : []),
+    ...slideProducts.map((product) => ({
+      key: `product-${product.id}`,
+      type: 'product' as const,
+      product,
+    })),
+  ]
 
-      <View style={styles.content}>
-        <View style={styles.eyebrowPill}>
-          <Text style={styles.eyebrowText}>{eyebrow}</Text>
-        </View>
+  const handleMomentumScrollEnd = (
+    event: NativeSyntheticEvent<NativeScrollEvent>,
+  ) => {
+    const index = Math.round(
+      event.nativeEvent.contentOffset.x / SCREEN_WIDTH,
+    )
+    setActiveIndex(Math.max(0, Math.min(index, slides.length - 1)))
+  }
 
-        <Text style={styles.headline}>{headline}</Text>
-        <Text style={styles.description}>{description}</Text>
-
-        <View style={styles.ctaRow}>
-          <TouchableOpacity
-            style={styles.primaryButton}
-            activeOpacity={0.85}
-            onPress={() => router.push(primaryCta.to as never)}
+  const renderSlide = ({ item }: { item: HeroSlide }) => {
+    if (item.type === 'product') {
+      const { product } = item
+      return (
+        <View style={[styles.slide, SLIDE_DIMENSIONS]}>
+          <Image
+            source={{ uri: getProductImage(product) }}
+            style={styles.slideImage}
+            resizeMode='cover'
+          />
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.85)']}
+            style={styles.slideOverlay}
           >
-            <Text style={styles.primaryButtonText}>{primaryCta.label}</Text>
-            <Ionicons name='arrow-forward' size={16} color={AppColors.white} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            activeOpacity={0.85}
-            onPress={() => router.push(secondaryCta.to as never)}
-          >
-            <Text style={styles.secondaryButtonText}>
-              {secondaryCta.label}
+            <Text style={styles.slideHeadline} numberOfLines={2}>
+              {product.name}
             </Text>
-          </TouchableOpacity>
+            <Text style={styles.slidePrice}>
+              {formatPrice(product.sale_price ?? product.base_price)}
+            </Text>
+            <TouchableOpacity
+              style={styles.shopNowButton}
+              activeOpacity={0.85}
+              onPress={() => router.push(`/product/${product.slug}` as never)}
+            >
+              <Text style={styles.shopNowText}>SHOP NOW</Text>
+              <Ionicons name='arrow-forward' size={14} color={AppColors.white} />
+            </TouchableOpacity>
+          </LinearGradient>
+        </View>
+      )
+    }
+
+    if (item.type === 'collection') {
+      const { collection } = item
+      const image = collection.banner_url || collection.image_url
+      return (
+        <View style={[styles.slide, SLIDE_DIMENSIONS]}>
+          <Image
+            source={{ uri: image as string }}
+            style={styles.slideImage}
+            resizeMode='cover'
+          />
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.85)']}
+            style={styles.slideOverlay}
+          >
+            <Text style={styles.slideHeadline} numberOfLines={2}>
+              {collection.name}
+            </Text>
+            {!!(collection.short_description || collection.description) && (
+              <Text style={styles.slideDescription} numberOfLines={2}>
+                {collection.short_description || collection.description}
+              </Text>
+            )}
+            <TouchableOpacity
+              style={styles.shopNowButton}
+              activeOpacity={0.85}
+              onPress={() =>
+                router.push(`/collections/${collection.slug}` as never)
+              }
+            >
+              <Text style={styles.shopNowText}>SHOP NOW</Text>
+              <Ionicons name='arrow-forward' size={14} color={AppColors.white} />
+            </TouchableOpacity>
+          </LinearGradient>
+        </View>
+      )
+    }
+
+    return (
+      <LinearGradient
+        colors={AppGradients.industrial}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.slide, styles.brandSlide, SLIDE_DIMENSIONS]}
+      >
+        {/* Decorative glyphs, purely presentational */}
+        <View pointerEvents='none' style={styles.decor}>
+          <Ionicons
+            name='build-outline'
+            size={140}
+            color='rgba(255,255,255,0.08)'
+            style={styles.decorWrench}
+          />
+          <Ionicons
+            name='hammer-outline'
+            size={100}
+            color='rgba(255,255,255,0.08)'
+            style={styles.decorHammer}
+          />
         </View>
 
-        {/* Real, in-stock product mosaic -- the site's actual catalog, not
-            stock photography, so the hero reads as a real store front page
-            rather than a text-only B2B SaaS landing hero. */}
-        {mosaicProducts.length > 0 && (
-          <View style={styles.mosaic}>
-            {mosaicProducts.map((product) => (
-              <TouchableOpacity
-                key={product.id}
-                style={styles.mosaicItem}
-                activeOpacity={0.85}
-                onPress={() => router.push(`/product/${product.slug}` as never)}
-              >
-                <Image
-                  source={{ uri: getProductImage(product) }}
-                  style={styles.mosaicImage}
-                  resizeMode='cover'
-                />
-                <LinearGradient
-                  colors={['transparent', 'rgba(0,0,0,0.8)']}
-                  style={styles.mosaicOverlay}
-                >
-                  <Text style={styles.mosaicName} numberOfLines={1}>
-                    {product.name}
-                  </Text>
-                  <Text style={styles.mosaicPrice}>
-                    {formatPrice(product.sale_price ?? product.base_price)}
-                  </Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            ))}
+        <View style={styles.content}>
+          <View style={styles.eyebrowPill}>
+            <Text style={styles.eyebrowText}>{eyebrow}</Text>
           </View>
-        )}
-      </View>
-    </LinearGradient>
+
+          <Text style={styles.headline}>{headline}</Text>
+          <Text style={styles.description}>{description}</Text>
+
+          <View style={styles.ctaRow}>
+            <TouchableOpacity
+              style={styles.primaryButton}
+              activeOpacity={0.85}
+              onPress={() => router.push(primaryCta.to as never)}
+            >
+              <Text style={styles.primaryButtonText}>{primaryCta.label}</Text>
+              <Ionicons name='arrow-forward' size={16} color={AppColors.white} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              activeOpacity={0.85}
+              onPress={() => router.push(secondaryCta.to as never)}
+            >
+              <Text style={styles.secondaryButtonText}>
+                {secondaryCta.label}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Real, in-stock product mosaic -- the site's actual catalog, not
+              stock photography, so the hero reads as a real store front page
+              rather than a text-only B2B SaaS landing hero. */}
+          {mosaicProducts.length > 0 && (
+            <View style={styles.mosaic}>
+              {mosaicProducts.map((product) => (
+                <TouchableOpacity
+                  key={product.id}
+                  style={styles.mosaicItem}
+                  activeOpacity={0.85}
+                  onPress={() => router.push(`/product/${product.slug}` as never)}
+                >
+                  <Image
+                    source={{ uri: getProductImage(product) }}
+                    style={styles.mosaicImage}
+                    resizeMode='cover'
+                  />
+                  <LinearGradient
+                    colors={['transparent', 'rgba(0,0,0,0.8)']}
+                    style={styles.mosaicOverlay}
+                  >
+                    <Text style={styles.mosaicName} numberOfLines={1}>
+                      {product.name}
+                    </Text>
+                    <Text style={styles.mosaicPrice}>
+                      {formatPrice(product.sale_price ?? product.base_price)}
+                    </Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+      </LinearGradient>
+    )
+  }
+
+  return (
+    <View style={styles.container}>
+      <FlatList
+        ref={listRef}
+        data={slides}
+        keyExtractor={(item) => item.key}
+        renderItem={renderSlide}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={handleMomentumScrollEnd}
+        getItemLayout={(_, index) => ({
+          length: SCREEN_WIDTH,
+          offset: SCREEN_WIDTH * index,
+          index,
+        })}
+      />
+
+      {slides.length > 1 && (
+        <View style={styles.dots} pointerEvents='none'>
+          {slides.map((slide, index) => (
+            <View
+              key={slide.key}
+              style={[
+                styles.dot,
+                index === activeIndex && styles.dotActive,
+              ]}
+            />
+          ))}
+        </View>
+      )}
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
   container: {
-    paddingTop: 64,
+    overflow: 'hidden',
+  },
+  slide: {
+    overflow: 'hidden',
+  },
+  brandSlide: {
+    paddingTop: AppSpacing.xl,
     paddingBottom: AppSpacing['3xl'],
     paddingHorizontal: AppSpacing.base,
-    overflow: 'hidden',
   },
   decor: {
     position: 'absolute',
@@ -266,5 +467,71 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: AppColors.orangeAccent,
+  },
+  slideImage: {
+    width: '100%',
+    height: '100%',
+  },
+  slideOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: AppSpacing.base,
+    paddingVertical: AppSpacing.lg,
+  },
+  slideHeadline: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: AppColors.white,
+    letterSpacing: -0.3,
+  },
+  slideDescription: {
+    marginTop: 4,
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(255,255,255,0.85)',
+  },
+  slidePrice: {
+    marginTop: 4,
+    fontSize: 16,
+    fontWeight: '800',
+    color: AppColors.orangeAccent,
+  },
+  shopNowButton: {
+    marginTop: AppSpacing.md,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: AppSpacing.xs,
+    backgroundColor: AppColors.primary,
+    paddingHorizontal: AppSpacing.base,
+    paddingVertical: AppSpacing.sm,
+    borderRadius: 8,
+  },
+  shopNowText: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    color: AppColors.white,
+  },
+  dots: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: AppSpacing.sm,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.45)',
+  },
+  dotActive: {
+    width: 18,
+    backgroundColor: AppColors.white,
   },
 })

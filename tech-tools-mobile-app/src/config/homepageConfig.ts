@@ -61,7 +61,11 @@ export const homepageConfig = {
     heading: 'Shop by Trade',
     description:
       'Find tools and equipment for your workshop, job site or professional trade.',
-    displayLimit: 6,
+    // Raised from 6 -- the denser, icon-forward circular grid (5 per row)
+    // reads fine with more real top-level categories visible at once,
+    // matching the reference layout's richer category-grid density. The
+    // store has 12 real top-level categories, so this shows up to 3 rows.
+    displayLimit: 10,
     // Curated icon applied ONLY when a category with this exact real slug
     // is actually returned by the categories API (the store's real 12
     // top-level slugs, added via the taxonomy migration). Title/description
@@ -95,6 +99,15 @@ export const homepageConfig = {
     // of near-identical product shelves.
     maxCollections: 2,
     maxProductsPerRow: 8,
+  },
+
+  // Same real is_featured product_collections used by
+  // FeaturedCollectionsShowcase, rendered instead as compact image tiles
+  // (CampaignTilesRow) directly under the hero. A higher fetch limit than
+  // featuredCollections above is fine here -- tiles are thumbnail-sized
+  // and horizontally scrollable, so more of them read fine at a glance.
+  campaignTiles: {
+    fetchLimit: 8,
   },
 
   featuredTools: {

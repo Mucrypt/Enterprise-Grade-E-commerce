@@ -5,6 +5,10 @@
 // mirroring e-commerce-web-store/src/components/home/index.ts.
 // ============================================
 
+export { default as HomeHeader } from './HomeHeader'
+export { default as CategoryTabRow } from './CategoryTabRow'
+export { default as CategoryNavDrawer } from './CategoryNavDrawer'
+export { default as CampaignTilesRow } from './CampaignTilesRow'
 export { default as ToolsHero } from './ToolsHero'
 export { default as TrustStrip } from './TrustStrip'
 export { default as ShopByTrade } from './ShopByTrade'
