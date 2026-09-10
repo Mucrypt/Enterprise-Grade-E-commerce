@@ -3,20 +3,19 @@
 //
 // Sticky top bar for the home screen (rendered above the ScrollView in
 // (tabs)/index.tsx, so it never scrolls away). Modeled on the reference
-// mobile layout the founder shared: a compact icon on the left, a large
-// pill search field taking most of the width, and a wishlist icon with a
-// count badge on the right.
+// mobile layout the founder shared: two compact icons on the left, a
+// pill search field taking most of the width, and a wishlist icon with
+// a count badge on the right.
 //
-// Deliberately only ONE left-side icon (a real notifications bell), not
-// two -- the reference screenshot's second icon is a gamified
-// promotions/check-in calendar feature that has no TechTools equivalent,
-// and this codebase never ships a button with no real feature behind it
-// (see also: no camera/visual-search icon, matching this same rule).
-// There is also no fabricated badge count: the notifications badge only
-// renders for a signed-in user, using the real unreadCount field from
-// notificationsApi.getAll(), and only fetches at all when authenticated
-// (the notifications endpoint requires auth and would otherwise just log
-// a 401 for every signed-out visitor on every home-screen mount).
+// The two left icons are both real, working features -- notifications
+// (real unreadCount from notificationsApi.getAll(), signed-in users
+// only) and Recently Viewed (real on-device browsing history recorded
+// from product/[slug].tsx, see recentlyViewedStore.ts). The reference
+// screenshot's second icon is a gamified promotions/check-in calendar
+// with no TechTools equivalent -- Recently Viewed replaces it with a
+// genuinely useful real feature instead, rather than copying it as a
+// dead button (same rule that keeps a camera/visual-search icon out of
+// this header: never ship a button with no real feature behind it).
 // ============================================
 
 import React, { useEffect, useState } from 'react'
@@ -25,13 +24,16 @@ import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { AppColors, AppSpacing, AppShadows } from '@/constants/appTheme'
 import { notificationsApi } from '@/api'
-import { useAuthStore, useWishlistStore } from '@/stores'
+import { useAuthStore, useWishlistStore, useRecentlyViewedStore } from '@/stores'
 import SearchBar from '@/components/SearchBar'
 
 export default function HomeHeader() {
   const router = useRouter()
   const { isAuthenticated, hasHydrated } = useAuthStore()
   const wishlistCount = useWishlistStore((state) => state.items.length)
+  const recentlyViewedCount = useRecentlyViewedStore(
+    (state) => state.items.length,
+  )
   const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {
@@ -71,6 +73,21 @@ export default function HomeHeader() {
           <View style={styles.badge}>
             <Text style={styles.badgeText}>
               {unreadCount > 9 ? '9+' : unreadCount}
+            </Text>
+          </View>
+        )}
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.iconButton}
+        activeOpacity={0.8}
+        onPress={() => router.push('/recently-viewed' as never)}
+      >
+        <Ionicons name='time-outline' size={19} color={AppColors.gray800} />
+        {recentlyViewedCount > 0 && (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>
+              {recentlyViewedCount > 9 ? '9+' : recentlyViewedCount}
             </Text>
           </View>
         )}

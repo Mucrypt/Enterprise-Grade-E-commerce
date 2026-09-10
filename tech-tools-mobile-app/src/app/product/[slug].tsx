@@ -32,7 +32,7 @@ import {
   getProductMedia,
   generateStarRating,
 } from '@/utils'
-import { useCartStore, useWishlistStore } from '@/stores'
+import { useCartStore, useWishlistStore, useRecentlyViewedStore } from '@/stores'
 import { ProductCard, DeliveryEstimate } from '@/components'
 import { useEventTracking } from '@/hooks/useEventTracking'
 
@@ -49,6 +49,7 @@ export default function ProductDetailScreen() {
 
   const addToCart = useCartStore((state) => state.addItem)
   const { isInWishlist, toggleItem } = useWishlistStore()
+  const recordView = useRecentlyViewedStore((state) => state.recordView)
   const { trackProductView, trackProductFavorite, trackAddToCart } =
     useEventTracking()
 
@@ -57,6 +58,7 @@ export default function ProductDetailScreen() {
       try {
         const productData = await productsApi.getBySlug(slug as string)
         setProduct(productData)
+        recordView(productData)
 
         // Track product view event
         trackProductView(
