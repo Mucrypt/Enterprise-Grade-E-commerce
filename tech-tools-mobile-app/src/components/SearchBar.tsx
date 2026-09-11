@@ -106,6 +106,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: AppSpacing.md,
     paddingVertical: 9,
     gap: AppSpacing.xs,
+    // A visible border (not just the shadow) is what makes this read as
+    // a crisp, defined pill rather than a soft rounded rectangle.
+    borderWidth: 1,
+    borderColor: AppColors.gray300,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   input: {
     flex: 1,

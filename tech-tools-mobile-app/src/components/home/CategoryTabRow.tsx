@@ -3,8 +3,12 @@
 //
 // Horizontal scrollable pill row directly under the home header: an
 // "All" pill, real marketing pills, then the store's real top-level
-// categories, ending in a hamburger icon that opens the two-pane
-// CategoryNavDrawer (mobile equivalent of the web mega menu).
+// categories. The hamburger icon that opens the two-pane
+// CategoryNavDrawer (mobile equivalent of the web mega menu) sits
+// OUTSIDE that scrollable area, pinned at the fixed right edge -- it
+// used to be the last item inside the ScrollView itself, which meant
+// scrolling all the way to the end of the category list just to reach
+// it. Always visible now regardless of scroll position.
 //
 // Marketing pills intentionally deviate from a literal copy of the web
 // storefront's navigationCategories ("New In" / "Sale" / "Trending"):
@@ -71,6 +75,7 @@ export default function CategoryTabRow() {
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        style={styles.scrollView}
       >
         <View style={styles.tab}>
           <Text style={[styles.tabText, styles.tabTextActive]}>All</Text>
@@ -100,15 +105,16 @@ export default function CategoryTabRow() {
             </Text>
           </TouchableOpacity>
         ))}
-
-        <TouchableOpacity
-          style={styles.menuButton}
-          activeOpacity={0.6}
-          onPress={() => setDrawerVisible(true)}
-        >
-          <Ionicons name='menu' size={22} color={AppColors.gray900} />
-        </TouchableOpacity>
       </ScrollView>
+
+      {/* Fixed, never scrolls away -- see the note above. */}
+      <TouchableOpacity
+        style={styles.menuButton}
+        activeOpacity={0.6}
+        onPress={() => setDrawerVisible(true)}
+      >
+        <Ionicons name='menu' size={22} color={AppColors.gray900} />
+      </TouchableOpacity>
 
       <CategoryNavDrawer
         visible={drawerVisible}
@@ -121,9 +127,14 @@ export default function CategoryTabRow() {
 
 const styles = StyleSheet.create({
   container: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: AppColors.background,
     borderBottomWidth: 1,
     borderBottomColor: AppColors.gray100,
+  },
+  scrollView: {
+    flex: 1,
   },
   scrollContent: {
     paddingHorizontal: AppSpacing.base,
@@ -153,6 +164,9 @@ const styles = StyleSheet.create({
   menuButton: {
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: AppSpacing.xs,
+    paddingHorizontal: AppSpacing.md,
+    paddingVertical: AppSpacing.sm,
+    borderLeftWidth: 1,
+    borderLeftColor: AppColors.gray100,
   },
 })
