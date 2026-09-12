@@ -20,16 +20,17 @@ interface SearchBarProps {
   value?: string
   onChangeText?: (text: string) => void
   onSubmit?: () => void
-  // Tighter padding + a true full-pill shape (vs. the default's roomier
-  // touch target) for placements like the sticky home header, where the
-  // bar sits alongside icon buttons and needs to read as one sleek row
-  // rather than its own oversized element. Every other usage (the full
-  // search screen, product listing) is unaffected -- default is false.
+  // Tighter padding + a bordered rectangular field (SHEIN reference, vs.
+  // the default's roomier full-pill shape) for placements like the sticky
+  // home header, where the bar sits alongside icon buttons and needs to
+  // read as one sleek row rather than its own oversized element. Every
+  // other usage (the full search screen, product listing) is unaffected
+  // -- default is false.
   compact?: boolean
-  // A distinct, dark search button next to the pill (reference layout).
-  // Fires the exact same real submit action as pressing enter in the
-  // field -- not a second, different feature, just a second way to
-  // trigger the one real search.
+  // A dark search button inset inside the same field (SHEIN reference),
+  // not a separate button floating outside it. Fires the exact same real
+  // submit action as pressing enter in the field -- not a second,
+  // different feature, just a second way to trigger the one real search.
   showSubmitButton?: boolean
 }
 
@@ -67,33 +68,31 @@ export default function SearchBar({
   }
 
   return (
-    <View style={styles.row}>
-      <View style={[styles.container, compact && styles.containerCompact]}>
-        <Ionicons
-          name='search-outline'
-          size={compact ? 17 : 20}
-          color={AppColors.gray400}
-        />
-        <TextInput
-          style={[styles.input, compact && styles.inputCompact]}
-          placeholder={placeholder}
-          placeholderTextColor={AppColors.gray400}
-          value={query}
-          onChangeText={setQuery}
-          onSubmitEditing={handleSubmit}
-          returnKeyType='search'
-          autoFocus={autoFocus}
-        />
-        {query.length > 0 && (
-          <TouchableOpacity onPress={handleClear}>
-            <Ionicons
-              name='close-circle'
-              size={compact ? 17 : 20}
-              color={AppColors.gray400}
-            />
-          </TouchableOpacity>
-        )}
-      </View>
+    <View style={[styles.container, compact && styles.containerCompact]}>
+      <Ionicons
+        name='search-outline'
+        size={compact ? 17 : 20}
+        color={AppColors.gray400}
+      />
+      <TextInput
+        style={[styles.input, compact && styles.inputCompact]}
+        placeholder={placeholder}
+        placeholderTextColor={AppColors.gray400}
+        value={query}
+        onChangeText={setQuery}
+        onSubmitEditing={handleSubmit}
+        returnKeyType='search'
+        autoFocus={autoFocus}
+      />
+      {query.length > 0 && (
+        <TouchableOpacity onPress={handleClear}>
+          <Ionicons
+            name='close-circle'
+            size={compact ? 17 : 20}
+            color={AppColors.gray400}
+          />
+        </TouchableOpacity>
+      )}
 
       {showSubmitButton && (
         <TouchableOpacity
@@ -103,7 +102,7 @@ export default function SearchBar({
         >
           <Ionicons
             name='search'
-            size={compact ? 16 : 18}
+            size={compact ? 15 : 18}
             color={AppColors.white}
           />
         </TouchableOpacity>
@@ -113,11 +112,6 @@ export default function SearchBar({
 }
 
 const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: AppSpacing.sm,
-  },
   container: {
     flex: 1,
     flexDirection: 'row',
@@ -130,12 +124,16 @@ const styles = StyleSheet.create({
     ...AppShadows.sm,
   },
   containerCompact: {
-    borderRadius: AppBorderRadius.full,
-    paddingHorizontal: AppSpacing.md,
-    paddingVertical: 9,
+    // A single, unified field (SHEIN reference) -- the submit button lives
+    // INSIDE this same bordered box, inset with a small margin, rather than
+    // floating as a separate circle outside it with a gap.
+    borderRadius: AppBorderRadius.lg,
+    paddingLeft: AppSpacing.md,
+    paddingRight: 4,
+    paddingVertical: 4,
     gap: AppSpacing.xs,
     // A visible border (not just the shadow) is what makes this read as
-    // a crisp, defined pill rather than a soft rounded rectangle.
+    // a crisp, defined field rather than a soft rounded rectangle.
     borderWidth: 1,
     borderColor: AppColors.gray300,
     shadowOpacity: 0,
@@ -150,16 +148,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   submitButton: {
-    width: 48,
-    height: 48,
-    borderRadius: AppBorderRadius.xl,
+    width: 40,
+    height: 40,
+    borderRadius: AppBorderRadius.lg,
     backgroundColor: AppColors.gray900,
     justifyContent: 'center',
     alignItems: 'center',
   },
   submitButtonCompact: {
-    width: 36,
-    height: 36,
-    borderRadius: AppBorderRadius.full,
+    width: 30,
+    height: 30,
+    borderRadius: AppBorderRadius.md,
   },
 })
