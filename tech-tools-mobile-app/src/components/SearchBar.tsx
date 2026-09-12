@@ -26,6 +26,11 @@ interface SearchBarProps {
   // rather than its own oversized element. Every other usage (the full
   // search screen, product listing) is unaffected -- default is false.
   compact?: boolean
+  // A distinct, dark search button next to the pill (reference layout).
+  // Fires the exact same real submit action as pressing enter in the
+  // field -- not a second, different feature, just a second way to
+  // trigger the one real search.
+  showSubmitButton?: boolean
 }
 
 export default function SearchBar({
@@ -36,6 +41,7 @@ export default function SearchBar({
   onChangeText,
   onSubmit,
   compact = false,
+  showSubmitButton = false,
 }: SearchBarProps) {
   const router = useRouter()
   const [internalQuery, setInternalQuery] = useState('')
@@ -61,28 +67,44 @@ export default function SearchBar({
   }
 
   return (
-    <View style={[styles.container, compact && styles.containerCompact]}>
-      <Ionicons
-        name='search-outline'
-        size={compact ? 17 : 20}
-        color={AppColors.gray400}
-      />
-      <TextInput
-        style={[styles.input, compact && styles.inputCompact]}
-        placeholder={placeholder}
-        placeholderTextColor={AppColors.gray400}
-        value={query}
-        onChangeText={setQuery}
-        onSubmitEditing={handleSubmit}
-        returnKeyType='search'
-        autoFocus={autoFocus}
-      />
-      {query.length > 0 && (
-        <TouchableOpacity onPress={handleClear}>
+    <View style={styles.row}>
+      <View style={[styles.container, compact && styles.containerCompact]}>
+        <Ionicons
+          name='search-outline'
+          size={compact ? 17 : 20}
+          color={AppColors.gray400}
+        />
+        <TextInput
+          style={[styles.input, compact && styles.inputCompact]}
+          placeholder={placeholder}
+          placeholderTextColor={AppColors.gray400}
+          value={query}
+          onChangeText={setQuery}
+          onSubmitEditing={handleSubmit}
+          returnKeyType='search'
+          autoFocus={autoFocus}
+        />
+        {query.length > 0 && (
+          <TouchableOpacity onPress={handleClear}>
+            <Ionicons
+              name='close-circle'
+              size={compact ? 17 : 20}
+              color={AppColors.gray400}
+            />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {showSubmitButton && (
+        <TouchableOpacity
+          style={[styles.submitButton, compact && styles.submitButtonCompact]}
+          activeOpacity={0.85}
+          onPress={handleSubmit}
+        >
           <Ionicons
-            name='close-circle'
-            size={compact ? 17 : 20}
-            color={AppColors.gray400}
+            name='search'
+            size={compact ? 16 : 18}
+            color={AppColors.white}
           />
         </TouchableOpacity>
       )}
@@ -91,7 +113,13 @@ export default function SearchBar({
 }
 
 const styles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: AppSpacing.sm,
+  },
   container: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: AppColors.white,
@@ -120,5 +148,18 @@ const styles = StyleSheet.create({
   },
   inputCompact: {
     fontSize: 13,
+  },
+  submitButton: {
+    width: 48,
+    height: 48,
+    borderRadius: AppBorderRadius.xl,
+    backgroundColor: AppColors.gray900,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  submitButtonCompact: {
+    width: 36,
+    height: 36,
+    borderRadius: AppBorderRadius.full,
   },
 })

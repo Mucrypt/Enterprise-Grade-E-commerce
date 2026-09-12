@@ -94,7 +94,11 @@ export default function HomeHeader() {
       </TouchableOpacity>
 
       <View style={styles.searchWrap}>
-        <SearchBar placeholder='Search tools, brands...' compact />
+        <SearchBar
+          placeholder='Search tools, brands...'
+          compact
+          showSubmitButton
+        />
       </View>
 
       <TouchableOpacity
