@@ -162,18 +162,25 @@ export default function ToolsHero() {
           {slides.map((slide) => {
             if (slide.type === 'product') {
               const { product } = slide
+              const productImage = getProductImage(product, { w: 1400, h: 700 })
               return (
                 <Link
                   key={slide.key}
                   to={`/product/${product.slug}`}
-                  className='relative h-full w-full shrink-0 overflow-hidden'
+                  className='relative h-full w-full shrink-0 overflow-hidden bg-[#0f1420]'
                 >
                   <img
-                    src={getProductImage(product, { w: 1400, h: 700 })}
-                    alt={product.name}
-                    className='absolute inset-0 h-full w-full object-cover'
+                    src={productImage}
+                    alt=''
+                    aria-hidden='true'
+                    className='absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl'
                   />
-                  <div className='absolute inset-0 bg-linear-to-t from-black/85 via-black/20 to-transparent' />
+                  <img
+                    src={productImage}
+                    alt={product.name}
+                    className='absolute inset-0 h-full w-full object-contain p-6 sm:p-10'
+                  />
+                  <div className='absolute inset-0 bg-linear-to-t from-black/85 via-black/10 to-transparent' />
                   <div className='absolute inset-x-0 bottom-0 p-8 sm:p-12'>
                     <h3 className='max-w-xl text-2xl font-black text-white sm:text-3xl'>
                       {product.name}
@@ -197,14 +204,20 @@ export default function ToolsHero() {
                 <Link
                   key={slide.key}
                   to={`/collections/${collection.slug}`}
-                  className='relative h-full w-full shrink-0 overflow-hidden'
+                  className='relative h-full w-full shrink-0 overflow-hidden bg-[#0f1420]'
                 >
                   <img
                     src={image as string}
-                    alt={collection.name}
-                    className='absolute inset-0 h-full w-full object-cover'
+                    alt=''
+                    aria-hidden='true'
+                    className='absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl'
                   />
-                  <div className='absolute inset-0 bg-linear-to-t from-black/85 via-black/20 to-transparent' />
+                  <img
+                    src={image as string}
+                    alt={collection.name}
+                    className='absolute inset-0 h-full w-full object-contain p-6 sm:p-10'
+                  />
+                  <div className='absolute inset-0 bg-linear-to-t from-black/85 via-black/10 to-transparent' />
                   <div className='absolute inset-x-0 bottom-0 p-8 sm:p-12'>
                     <h3 className='max-w-xl text-2xl font-black text-white sm:text-3xl'>
                       {collection.name}
@@ -224,14 +237,22 @@ export default function ToolsHero() {
             }
 
             return (
-              <div key={slide.key} className='relative h-full w-full shrink-0 overflow-hidden'>
+              <div key={slide.key} className='relative h-full w-full shrink-0 overflow-hidden bg-[#0f1420]'>
                 {heroImageUri ? (
-                  <img
-                    src={heroImageUri}
-                    alt=''
-                    aria-hidden='true'
-                    className='absolute inset-0 h-full w-full object-cover'
-                  />
+                  <>
+                    <img
+                      src={heroImageUri}
+                      alt=''
+                      aria-hidden='true'
+                      className='absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl'
+                    />
+                    <img
+                      src={heroImageUri}
+                      alt=''
+                      aria-hidden='true'
+                      className='absolute inset-0 h-full w-full object-contain p-6 sm:p-10'
+                    />
+                  </>
                 ) : (
                   <div
                     aria-hidden='true'
@@ -242,7 +263,7 @@ export default function ToolsHero() {
                     }}
                   />
                 )}
-                <div className='absolute inset-0 bg-linear-to-t from-black/80 via-black/30 to-transparent' />
+                <div className='absolute inset-0 bg-linear-to-t from-black/80 via-black/20 to-transparent' />
 
                 <div className='absolute inset-x-0 bottom-0 max-w-2xl p-8 sm:p-12'>
                   <span className='inline-flex items-center rounded-full border border-orange-500/40 bg-orange-500/10 px-4 py-1.5 text-xs font-semibold tracking-wider text-orange-400'>
