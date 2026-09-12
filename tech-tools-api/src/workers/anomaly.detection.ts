@@ -32,7 +32,7 @@ export function startAnomalyDetectionWorker(): void {
       } catch (error) {
         logger.error('Error in anomaly detection interval:', error);
       }
-    }, 15 * 60 * 1000); // 15 minutes
+    }, 20 * 90 * 1000); // 15 minutes
 
     logger.info('✅ Anomaly detection worker started (runs every 15 minutes)');
   } catch (error) {

@@ -1,33 +1,60 @@
 // ============================================
 // Tools Hero
 //
-// Copy (eyebrow/headline/description/CTA labels+links) is real and
-// admin-editable -- Settings > Homepage Content in the admin dashboard --
-// fetched via homepageSettingsApi.getPublic(). Falls back to the static
-// homepage.config.ts values (the same real copy the settings row is
-// seeded with) if that request fails or hasn't resolved yet, so the
-// hero is never blank.
+// A real, auto-advancing photo carousel -- matches the mobile app's
+// ToolsHero exactly (same slide types, same real data, same mechanic),
+// kept consistent across both apps rather than web staying a static
+// two-column layout while mobile became a rotating carousel:
 //
-// No stock/fabricated photography: the right-side mosaic uses real,
-// in-stock catalog product photos (productsApi.getFeatured, same
-// in-stock-first filter FeaturedProfessionalTools already uses), never
-// a licensed/placeholder image. Renders the plain gradient hero (no
-// mosaic) while products are loading or if none are in stock, so this
-// never shows a broken image or an empty gap.
+//  1. "Brand" slide -- always present: real homepageConfig/admin-edited
+//     copy (Settings > Homepage Content) over a real, in-stock featured
+//     product's own photo as the full-bleed background
+//     (productsApi.getFeatured, filtered to is_active && total_stock >
+//     0) -- falls back to a plain gradient only while that's still
+//     loading or none are in stock, never a stock/fabricated photo.
+//  2. "Collection" slide -- only when a real, active is_featured
+//     product_collection with a real banner_url/image_url exists
+//     (collectionsApi.getFeatured), full-bleed with the collection's own
+//     name/description and a link to /collections/:slug.
+//  3. "Product" slides -- one per additional real in-stock featured
+//     product beyond the one used as the brand slide's background, each
+//     full-bleed with its real name/price and a link to /product/:slug.
+//
+// Real auto-advance (setInterval, loops back to slide 0) plus manual
+// prev/next arrows and clickable dots -- dots/arrows only render when
+// there's more than one real slide.
 // ============================================
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight } from 'lucide-react'
-import type { Product } from '../../types'
-import { productsApi, homepageSettingsApi } from '../../api'
+import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react'
+import type { Product, ProductCollection } from '../../types'
+import { productsApi, collectionsApi, homepageSettingsApi } from '../../api'
 import { formatPrice, getProductImage } from '../../utils'
 import { homepageConfig } from '../../config/homepage.config'
 
+const EXTRA_SLIDE_PRODUCT_COUNT = 5
+const AUTO_ADVANCE_MS = 4500
+
+type HeroSlide =
+  | { key: string; type: 'brand' }
+  | { key: string; type: 'product'; product: Product }
+  | { key: string; type: 'collection'; collection: ProductCollection }
+
 export default function ToolsHero() {
   const [copy, setCopy] = useState(homepageConfig.hero)
-  const [products, setProducts] = useState<Product[]>([])
+  const [slideProducts, setSlideProducts] = useState<Product[]>([])
+  const [collectionSlide, setCollectionSlide] = useState<ProductCollection | null>(null)
+  const [activeIndex, setActiveIndex] = useState(0)
+  const activeIndexRef = useRef(0)
 
+  useEffect(() => {
+    activeIndexRef.current = activeIndex
+  }, [activeIndex])
+
+  // Real, admin-editable copy (Settings > Homepage Content) -- falls back
+  // to the static homepage.config.ts values if the request fails or
+  // hasn't resolved yet, so the hero is never blank.
   useEffect(() => {
     let cancelled = false
 
@@ -63,104 +90,227 @@ export default function ToolsHero() {
       .then((data) => {
         if (cancelled) return
         const inStock = data.filter((p) => p.is_active && p.total_stock > 0)
-        setProducts(inStock.slice(0, 4))
+        setSlideProducts(inStock.slice(0, EXTRA_SLIDE_PRODUCT_COUNT))
       })
-      .catch(() => setProducts([]))
+      .catch(() => {
+        if (!cancelled) setSlideProducts([])
+      })
+
+    collectionsApi
+      .getFeatured(4)
+      .then((data) => {
+        if (cancelled) return
+        const withImage = data.find((c) => c.is_active && (c.banner_url || c.image_url))
+        setCollectionSlide(withImage || null)
+      })
+      .catch(() => {
+        if (!cancelled) setCollectionSlide(null)
+      })
 
     return () => {
       cancelled = true
     }
   }, [])
 
+  // The brand slide's own real background photo -- the first in-stock
+  // featured product, kept distinct from the rest so the same product
+  // isn't shown twice in the carousel.
+  const heroBackgroundProduct = slideProducts[0] || null
+  const remainingSlideProducts = slideProducts.slice(1)
+
+  const slides: HeroSlide[] = [
+    { key: 'brand', type: 'brand' },
+    ...(collectionSlide
+      ? [{ key: `collection-${collectionSlide.id}`, type: 'collection' as const, collection: collectionSlide }]
+      : []),
+    ...remainingSlideProducts.map((product) => ({
+      key: `product-${product.id}`,
+      type: 'product' as const,
+      product,
+    })),
+  ]
+
+  // Real auto-advance -- reads activeIndexRef (not activeIndex directly)
+  // so it always resumes from wherever the visitor last manually
+  // navigated to, instead of a stale closure fighting a dot/arrow click.
+  useEffect(() => {
+    if (slides.length <= 1) return
+
+    const timer = setInterval(() => {
+      setActiveIndex((activeIndexRef.current + 1) % slides.length)
+    }, AUTO_ADVANCE_MS)
+
+    return () => clearInterval(timer)
+  }, [slides.length])
+
+  const goTo = (index: number) => {
+    setActiveIndex(((index % slides.length) + slides.length) % slides.length)
+  }
+
+  const heroImageUri = heroBackgroundProduct ? getProductImage(heroBackgroundProduct, { w: 1400, h: 700 }) : null
+
   return (
     <section
       aria-label='TechTools professional tools and workshop equipment'
       className='relative overflow-hidden bg-[#0f1420]'
     >
-      {/* Warm radial glow -- continues the orange/red promo-bar energy
-          from the top of the page into the hero instead of a flat, cold
-          B2B-SaaS gradient. */}
-      <div
-        aria-hidden='true'
-        className='absolute -right-1/4 top-1/2 h-[140%] w-[70%] -translate-y-1/2 rounded-full opacity-30 blur-3xl'
-        style={{
-          background:
-            'radial-gradient(closest-side, #f97316, transparent 70%)',
-        }}
-      />
-      <div
-        aria-hidden='true'
-        className='absolute inset-0 opacity-[0.06]'
-        style={{
-          backgroundImage:
-            'linear-gradient(to right, #ffffff 1px, transparent 1px), linear-gradient(to bottom, #ffffff 1px, transparent 1px)',
-          backgroundSize: '48px 48px',
-        }}
-      />
-
-      <div className='relative mx-auto grid max-w-7xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:items-center lg:gap-8 lg:px-8 lg:py-24'>
-        <div className='max-w-2xl'>
-          <span className='inline-flex items-center rounded-full border border-orange-500/40 bg-orange-500/10 px-4 py-1.5 text-xs font-semibold tracking-wider text-orange-400'>
-            {eyebrow}
-          </span>
-
-          <h1 className='mt-6 text-4xl font-black leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl'>
-            {headline}
-          </h1>
-
-          <p className='mt-6 max-w-xl text-lg leading-relaxed text-slate-300'>
-            {description}
-          </p>
-
-          <div className='mt-10 flex flex-col gap-4 sm:flex-row'>
-            <Link
-              to={primaryCta.to}
-              className='inline-flex items-center justify-center gap-2 rounded-md bg-orange-500 px-8 py-4 text-sm font-bold uppercase tracking-wide text-white shadow-lg shadow-orange-500/20 transition-colors hover:bg-orange-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white'
-            >
-              {primaryCta.label}
-              <ArrowRight className='h-4 w-4' aria-hidden='true' />
-            </Link>
-            <Link
-              to={secondaryCta.to}
-              className='inline-flex items-center justify-center gap-2 rounded-md border border-white/25 px-8 py-4 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white'
-            >
-              {secondaryCta.label}
-            </Link>
-          </div>
-        </div>
-
-        {/* Real, in-stock product mosaic -- the site's actual catalog,
-            not stock photography, so the hero reads as a real store
-            front page rather than a text-only SaaS landing hero. */}
-        {products.length > 0 && (
-          <div className='relative hidden grid-cols-2 gap-4 lg:grid'>
-            {products.map((product, index) => (
-              <Link
-                key={product.id}
-                to={`/product/${product.slug}`}
-                className={`group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm transition-transform hover:-translate-y-1 ${
-                  index === 0 ? 'col-span-2 aspect-2/1' : 'aspect-square'
-                }`}
-              >
-                <img
-                  src={getProductImage(product, { w: 500, h: 500 })}
-                  alt={product.name}
-                  loading='eager'
-                  className='h-full w-full object-cover transition-transform duration-300 group-hover:scale-105'
-                />
-                <div className='absolute inset-0 flex items-end bg-linear-to-t from-black/70 via-transparent to-transparent p-4'>
-                  <div>
-                    <p className='line-clamp-1 text-xs font-semibold text-white/90'>
+      <div className='relative h-105 w-full overflow-hidden sm:h-115 lg:h-125'>
+        <div
+          className='flex h-full transition-transform duration-500 ease-out'
+          style={{ transform: `translateX(-${activeIndex * 100}%)` }}
+        >
+          {slides.map((slide) => {
+            if (slide.type === 'product') {
+              const { product } = slide
+              return (
+                <Link
+                  key={slide.key}
+                  to={`/product/${product.slug}`}
+                  className='relative h-full w-full shrink-0 overflow-hidden'
+                >
+                  <img
+                    src={getProductImage(product, { w: 1400, h: 700 })}
+                    alt={product.name}
+                    className='absolute inset-0 h-full w-full object-cover'
+                  />
+                  <div className='absolute inset-0 bg-linear-to-t from-black/85 via-black/20 to-transparent' />
+                  <div className='absolute inset-x-0 bottom-0 p-8 sm:p-12'>
+                    <h3 className='max-w-xl text-2xl font-black text-white sm:text-3xl'>
                       {product.name}
+                    </h3>
+                    <p className='mt-2 text-xl font-black text-orange-400'>
+                      {formatPrice(product.sale_price ?? product.base_price)}
                     </p>
-                    <p className='text-sm font-black text-orange-400'>
-                      {formatPrice(product.sale_price || product.base_price)}
-                    </p>
+                    <span className='mt-5 inline-flex items-center gap-2 rounded-md bg-orange-500 px-6 py-3 text-sm font-bold uppercase tracking-wide text-white'>
+                      Shop Now
+                      <ArrowRight className='h-4 w-4' aria-hidden='true' />
+                    </span>
+                  </div>
+                </Link>
+              )
+            }
+
+            if (slide.type === 'collection') {
+              const { collection } = slide
+              const image = collection.banner_url || collection.image_url
+              return (
+                <Link
+                  key={slide.key}
+                  to={`/collections/${collection.slug}`}
+                  className='relative h-full w-full shrink-0 overflow-hidden'
+                >
+                  <img
+                    src={image as string}
+                    alt={collection.name}
+                    className='absolute inset-0 h-full w-full object-cover'
+                  />
+                  <div className='absolute inset-0 bg-linear-to-t from-black/85 via-black/20 to-transparent' />
+                  <div className='absolute inset-x-0 bottom-0 p-8 sm:p-12'>
+                    <h3 className='max-w-xl text-2xl font-black text-white sm:text-3xl'>
+                      {collection.name}
+                    </h3>
+                    {!!(collection.short_description || collection.description) && (
+                      <p className='mt-2 max-w-xl text-slate-200'>
+                        {collection.short_description || collection.description}
+                      </p>
+                    )}
+                    <span className='mt-5 inline-flex items-center gap-2 rounded-md bg-orange-500 px-6 py-3 text-sm font-bold uppercase tracking-wide text-white'>
+                      Shop Now
+                      <ArrowRight className='h-4 w-4' aria-hidden='true' />
+                    </span>
+                  </div>
+                </Link>
+              )
+            }
+
+            return (
+              <div key={slide.key} className='relative h-full w-full shrink-0 overflow-hidden'>
+                {heroImageUri ? (
+                  <img
+                    src={heroImageUri}
+                    alt=''
+                    aria-hidden='true'
+                    className='absolute inset-0 h-full w-full object-cover'
+                  />
+                ) : (
+                  <div
+                    aria-hidden='true'
+                    className='absolute inset-0'
+                    style={{
+                      background:
+                        'radial-gradient(circle at 80% 30%, rgba(249,115,22,0.35), transparent 60%), #0f1420',
+                    }}
+                  />
+                )}
+                <div className='absolute inset-0 bg-linear-to-t from-black/80 via-black/30 to-transparent' />
+
+                <div className='absolute inset-x-0 bottom-0 max-w-2xl p-8 sm:p-12'>
+                  <span className='inline-flex items-center rounded-full border border-orange-500/40 bg-orange-500/10 px-4 py-1.5 text-xs font-semibold tracking-wider text-orange-400'>
+                    {eyebrow}
+                  </span>
+
+                  <h1 className='mt-5 text-4xl font-black leading-[1.05] tracking-tight text-white sm:text-5xl'>
+                    {headline}
+                  </h1>
+
+                  <p className='mt-4 max-w-xl text-base leading-relaxed text-slate-300 sm:text-lg'>
+                    {description}
+                  </p>
+
+                  <div className='mt-7 flex flex-col gap-4 sm:flex-row'>
+                    <Link
+                      to={primaryCta.to}
+                      className='inline-flex items-center justify-center gap-2 rounded-md bg-orange-500 px-8 py-4 text-sm font-bold uppercase tracking-wide text-white shadow-lg shadow-orange-500/20 transition-colors hover:bg-orange-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white'
+                    >
+                      {primaryCta.label}
+                      <ArrowRight className='h-4 w-4' aria-hidden='true' />
+                    </Link>
+                    <Link
+                      to={secondaryCta.to}
+                      className='inline-flex items-center justify-center gap-2 rounded-md border border-white/25 px-8 py-4 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white'
+                    >
+                      {secondaryCta.label}
+                    </Link>
                   </div>
                 </div>
-              </Link>
-            ))}
-          </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {slides.length > 1 && (
+          <>
+            <button
+              type='button'
+              aria-label='Previous slide'
+              onClick={() => goTo(activeIndex - 1)}
+              className='absolute left-4 top-1/2 hidden -translate-y-1/2 items-center justify-center rounded-full bg-black/30 p-2 text-white transition-colors hover:bg-black/50 focus-visible:outline-2 focus-visible:outline-white sm:flex'
+            >
+              <ChevronLeft className='h-5 w-5' />
+            </button>
+            <button
+              type='button'
+              aria-label='Next slide'
+              onClick={() => goTo(activeIndex + 1)}
+              className='absolute right-4 top-1/2 hidden -translate-y-1/2 items-center justify-center rounded-full bg-black/30 p-2 text-white transition-colors hover:bg-black/50 focus-visible:outline-2 focus-visible:outline-white sm:flex'
+            >
+              <ChevronRight className='h-5 w-5' />
+            </button>
+
+            <div className='absolute inset-x-0 bottom-4 flex justify-center gap-1.5'>
+              {slides.map((slide, index) => (
+                <button
+                  key={slide.key}
+                  type='button'
+                  aria-label={`Go to slide ${index + 1}`}
+                  onClick={() => goTo(index)}
+                  className={`h-1.5 rounded-full transition-all ${
+                    index === activeIndex ? 'w-6 bg-white' : 'w-1.5 bg-white/45'
+                  }`}
+                />
+              ))}
+            </div>
+          </>
         )}
       </div>
     </section>
