@@ -148,7 +148,13 @@ export function HeroSlideForm({ open, onClose, onSubmit, slide, isLoading = fals
 
   const needsCustomCopy = formData.slideType === 'custom' || formData.slideType === 'product_grid'
   const showImageUpload = formData.slideType === 'custom'
-  const showCta = formData.slideType === 'custom'
+  // Grid slides render their own "Shop Now"-style button too (see
+  // ToolsHero.tsx's GridSlide), same as custom -- only product/category/
+  // collection types auto-derive their CTA from the referenced entity.
+  // Grid slides never render a second button, though, so only the
+  // primary pair is shown for that type.
+  const showCta = formData.slideType === 'custom' || formData.slideType === 'product_grid'
+  const showSecondaryCta = formData.slideType === 'custom'
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -387,6 +393,7 @@ export function HeroSlideForm({ open, onClose, onSubmit, slide, isLoading = fals
                   placeholder='/products'
                 />
               </div>
+              {showSecondaryCta && (
               <div className='space-y-2'>
                 <Label>Secondary button label</Label>
                 <Input
@@ -394,6 +401,8 @@ export function HeroSlideForm({ open, onClose, onSubmit, slide, isLoading = fals
                   onChange={(e) => setFormData((prev) => ({ ...prev, secondaryCtaLabel: e.target.value }))}
                 />
               </div>
+              )}
+              {showSecondaryCta && (
               <div className='space-y-2'>
                 <Label>Secondary button link</Label>
                 <Input
@@ -401,6 +410,7 @@ export function HeroSlideForm({ open, onClose, onSubmit, slide, isLoading = fals
                   onChange={(e) => setFormData((prev) => ({ ...prev, secondaryCtaLink: e.target.value }))}
                 />
               </div>
+              )}
             </div>
           )}
 
