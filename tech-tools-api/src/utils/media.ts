@@ -370,6 +370,25 @@ export async function processCollectionImage(file: Express.Multer.File) {
 }
 
 /**
+ * Process a hero slide image upload -- same shape as processCollectionImage
+ * (only the 'large' variant is ever read by callers), its own destination
+ * folder since a hero slide is its own entity, not a collection.
+ */
+export async function processHeroSlideImage(file: Express.Multer.File) {
+  const filename = `${uuidv4()}.webp`
+  const destinationFolder = `${UPLOAD_DIR}/hero-slides/images`
+
+  const result = await optimizeImage(file.path, destinationFolder, filename, {
+    large: IMAGE_SIZES.large,
+  })
+
+  // Delete temp file
+  await fs.unlink(file.path)
+
+  return result
+}
+
+/**
  * Process category image upload
  */
 export async function processCategoryImage(file: Express.Multer.File) {

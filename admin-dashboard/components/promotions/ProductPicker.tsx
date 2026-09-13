@@ -12,6 +12,10 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 interface ProductPickerProps {
   selectedProductIds: string[]
   onChange: (productIds: string[]) => void
+  /** Default true. Pass false for a single-product pick (e.g. a hero
+   * slide's "product" type) -- selecting a new item replaces the current
+   * selection instead of adding to it. */
+  multiple?: boolean
 }
 
 /**
@@ -19,7 +23,7 @@ interface ProductPickerProps {
  * the build's own audit of the coupons page) -- built fresh here against
  * the existing GET /products endpoint, not a new one.
  */
-export function ProductPicker({ selectedProductIds, onChange }: ProductPickerProps) {
+export function ProductPicker({ selectedProductIds, onChange, multiple = true }: ProductPickerProps) {
   const [search, setSearch] = useState('')
 
   const { data, isLoading } = useQuery({
@@ -30,6 +34,10 @@ export function ProductPicker({ selectedProductIds, onChange }: ProductPickerPro
   const products = data?.data?.items || []
 
   const toggle = (productId: string) => {
+    if (!multiple) {
+      onChange(selectedProductIds.includes(productId) ? [] : [productId])
+      return
+    }
     if (selectedProductIds.includes(productId)) {
       onChange(selectedProductIds.filter((id) => id !== productId))
     } else {

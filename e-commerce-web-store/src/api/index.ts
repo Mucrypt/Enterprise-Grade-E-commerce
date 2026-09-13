@@ -246,6 +246,38 @@ export const homepageSettingsApi = {
 }
 
 // ============================================
+// Hero Slides API -- the admin-managed homepage hero carousel. Each slide
+// is already fully resolved server-side (real product/category/collection
+// data joined in, broken references silently dropped), so ToolsHero.tsx
+// only needs this one call instead of separately fetching featured
+// products + featured collections + homepage_settings.hero and stitching
+// them together itself.
+// ============================================
+export interface HeroSlide {
+  id: string
+  slideType: 'custom' | 'product' | 'category' | 'product_collection' | 'category_collection' | 'product_grid'
+  eyebrow: string | null
+  title: string | null
+  description: string | null
+  imageUrl?: string | null
+  ctaLabel: string | null
+  ctaLink: string | null
+  secondaryCtaLabel: string | null
+  secondaryCtaLink: string | null
+  product?: Product
+  products?: Product[]
+}
+
+export const heroSlidesApi = {
+  async getPublic(): Promise<HeroSlide[]> {
+    const response = await api.get<{ success: boolean; data: HeroSlide[] }>(
+      '/settings/hero-slides/public?platform=web',
+    )
+    return response.data.data
+  },
+}
+
+// ============================================
 // Affiliates API (Refer & Earn)
 // ============================================
 export const affiliatesApi = {

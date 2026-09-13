@@ -58,6 +58,12 @@ export type Permission =
   | 'affiliates.view'
   | 'affiliates.manage'
   | 'affiliates.payouts'
+  // Hero Slides CMS -- the admin-managed homepage hero carousel (which
+  // products/categories/collections appear, ordering, product_grid
+  // slides). Homepage content, not a catalog concern -- see the grant
+  // matrix below (ADMIN + MARKETING_MANAGER, not CATALOG_MANAGER).
+  | 'homepage.view'
+  | 'homepage.manage'
   | 'social.view'
   | 'social.publish'
   | 'social.schedule'
@@ -120,6 +126,8 @@ const ALL_PERMISSIONS: Permission[] = [
   'affiliates.view',
   'affiliates.manage',
   'affiliates.payouts',
+  'homepage.view',
+  'homepage.manage',
   'social.view',
   'social.publish',
   'social.schedule',
@@ -195,6 +203,8 @@ export const STAFF_ROLE_PERMISSIONS: Record<StaffRole, ReadonlySet<Permission>> 
     'affiliates.view',
     'affiliates.manage',
     'affiliates.payouts',
+    'homepage.view',
+    'homepage.manage',
     'social.view',
     'social.publish',
     'social.schedule',
@@ -322,6 +332,10 @@ export const STAFF_ROLE_PERMISSIONS: Record<StaffRole, ReadonlySet<Permission>> 
     // 'orders.manage' -- not needed to run the program day to day.
     'affiliates.view',
     'affiliates.manage',
+    // Hero Slides CMS -- homepage carousel content is exactly the kind of
+    // marketing content this role already manages (campaigns/coupons).
+    'homepage.view',
+    'homepage.manage',
     'social.view',
     'social.publish',
     'social.schedule',

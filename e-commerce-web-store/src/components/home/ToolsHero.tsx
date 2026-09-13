@@ -1,24 +1,30 @@
 // ============================================
 // Tools Hero
 //
-// A real, auto-advancing photo carousel -- matches the mobile app's
-// ToolsHero exactly (same slide types, same real data, same mechanic),
-// kept consistent across both apps rather than web staying a static
-// two-column layout while mobile became a rotating carousel:
+// An admin-managed, auto-advancing photo carousel. Every slide comes from
+// one real, resolved source of truth (Settings > Hero Slides in the admin
+// dashboard) via heroSlidesApi.getPublic() -- no more client-side
+// stitching of separately-fetched featured products + featured
+// collections + static hero copy. An admin picks exactly which
+// products/categories/collections appear, in what order, and can build a
+// "product_grid" slide showing several real products together.
 //
-//  1. "Brand" slide -- always present: real homepageConfig/admin-edited
-//     copy (Settings > Homepage Content) over a real, in-stock featured
-//     product's own photo as the full-bleed background
-//     (productsApi.getFeatured, filtered to is_active && total_stock >
-//     0) -- falls back to a plain gradient only while that's still
-//     loading or none are in stock, never a stock/fabricated photo.
-//  2. "Collection" slide -- only when a real, active is_featured
-//     product_collection with a real banner_url/image_url exists
-//     (collectionsApi.getFeatured), full-bleed with the collection's own
-//     name/description and a link to /collections/:slug.
-//  3. "Product" slides -- one per additional real in-stock featured
-//     product beyond the one used as the brand slide's background, each
-//     full-bleed with its real name/price and a link to /product/:slug.
+// Slide types (see hero-slides.controller.ts for the exact resolution
+// rules -- a slide is only ever dropped from the response for a missing/
+// deactivated reference, never for stock, since an admin-curated pick is
+// a deliberate choice):
+//  - 'custom' -- a plain marketing banner (own image/copy/CTAs).
+//  - 'product' -- one real product; falls back to its own photo when the
+//    admin didn't set an image override.
+//  - 'category' -- one real category.
+//  - 'product_collection' / 'category_collection' -- a real, existing
+//    collection's own banner.
+//  All five render as the same full-bleed banner (blurred backdrop +
+//  object-contain foreground so the real photo is never cropped too
+//  tightly, per earlier founder feedback) with bottom-anchored text.
+//  - 'product_grid' -- several real products shown together in one
+//    slide: a distinct two-column layout (text left, product grid right)
+//    since a collage doesn't suit the banner treatment.
 //
 // Real auto-advance (setInterval, loops back to slide 0) plus manual
 // prev/next arrows and clickable dots -- dots/arrows only render when
@@ -28,23 +34,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react'
-import type { Product, ProductCollection } from '../../types'
-import { productsApi, collectionsApi, homepageSettingsApi } from '../../api'
+import { heroSlidesApi, type HeroSlide } from '../../api'
 import { formatPrice, getProductImage } from '../../utils'
-import { homepageConfig } from '../../config/homepage.config'
 
-const EXTRA_SLIDE_PRODUCT_COUNT = 5
 const AUTO_ADVANCE_MS = 4500
 
-type HeroSlide =
-  | { key: string; type: 'brand' }
-  | { key: string; type: 'product'; product: Product }
-  | { key: string; type: 'collection'; collection: ProductCollection }
-
 export default function ToolsHero() {
-  const [copy, setCopy] = useState(homepageConfig.hero)
-  const [slideProducts, setSlideProducts] = useState<Product[]>([])
-  const [collectionSlide, setCollectionSlide] = useState<ProductCollection | null>(null)
+  const [slides, setSlides] = useState<HeroSlide[]>([])
   const [activeIndex, setActiveIndex] = useState(0)
   const activeIndexRef = useRef(0)
 
@@ -52,83 +48,22 @@ export default function ToolsHero() {
     activeIndexRef.current = activeIndex
   }, [activeIndex])
 
-  // Real, admin-editable copy (Settings > Homepage Content) -- falls back
-  // to the static homepage.config.ts values if the request fails or
-  // hasn't resolved yet, so the hero is never blank.
   useEffect(() => {
     let cancelled = false
 
-    homepageSettingsApi
+    heroSlidesApi
       .getPublic()
-      .then((settings) => {
-        if (cancelled || !settings?.hero) return
-        const { hero } = settings
-        setCopy({
-          eyebrow: hero.eyebrow,
-          headline: hero.headline,
-          description: hero.description,
-          primaryCta: { label: hero.primaryCtaLabel, to: hero.primaryCtaTo },
-          secondaryCta: { label: hero.secondaryCtaLabel, to: hero.secondaryCtaTo },
-        })
+      .then((data) => {
+        if (!cancelled) setSlides(data)
       })
       .catch(() => {
-        // Keep the static homepage.config.ts fallback already in state.
+        if (!cancelled) setSlides([])
       })
 
     return () => {
       cancelled = true
     }
   }, [])
-
-  const { eyebrow, headline, description, primaryCta, secondaryCta } = copy
-
-  useEffect(() => {
-    let cancelled = false
-
-    productsApi
-      .getFeatured(12)
-      .then((data) => {
-        if (cancelled) return
-        const inStock = data.filter((p) => p.is_active && p.total_stock > 0)
-        setSlideProducts(inStock.slice(0, EXTRA_SLIDE_PRODUCT_COUNT))
-      })
-      .catch(() => {
-        if (!cancelled) setSlideProducts([])
-      })
-
-    collectionsApi
-      .getFeatured(4)
-      .then((data) => {
-        if (cancelled) return
-        const withImage = data.find((c) => c.is_active && (c.banner_url || c.image_url))
-        setCollectionSlide(withImage || null)
-      })
-      .catch(() => {
-        if (!cancelled) setCollectionSlide(null)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  // The brand slide's own real background photo -- the first in-stock
-  // featured product, kept distinct from the rest so the same product
-  // isn't shown twice in the carousel.
-  const heroBackgroundProduct = slideProducts[0] || null
-  const remainingSlideProducts = slideProducts.slice(1)
-
-  const slides: HeroSlide[] = [
-    { key: 'brand', type: 'brand' },
-    ...(collectionSlide
-      ? [{ key: `collection-${collectionSlide.id}`, type: 'collection' as const, collection: collectionSlide }]
-      : []),
-    ...remainingSlideProducts.map((product) => ({
-      key: `product-${product.id}`,
-      type: 'product' as const,
-      product,
-    })),
-  ]
 
   // Real auto-advance -- reads activeIndexRef (not activeIndex directly)
   // so it always resumes from wherever the visitor last manually
@@ -147,7 +82,7 @@ export default function ToolsHero() {
     setActiveIndex(((index % slides.length) + slides.length) % slides.length)
   }
 
-  const heroImageUri = heroBackgroundProduct ? getProductImage(heroBackgroundProduct, { w: 1400, h: 700 }) : null
+  if (slides.length === 0) return null
 
   return (
     <section
@@ -159,144 +94,13 @@ export default function ToolsHero() {
           className='flex h-full transition-transform duration-500 ease-out'
           style={{ transform: `translateX(-${activeIndex * 100}%)` }}
         >
-          {slides.map((slide) => {
-            if (slide.type === 'product') {
-              const { product } = slide
-              const productImage = getProductImage(product, { w: 1400, h: 700 })
-              return (
-                <Link
-                  key={slide.key}
-                  to={`/product/${product.slug}`}
-                  className='relative h-full w-full shrink-0 overflow-hidden bg-[#0f1420]'
-                >
-                  <img
-                    src={productImage}
-                    alt=''
-                    aria-hidden='true'
-                    className='absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl'
-                  />
-                  <img
-                    src={productImage}
-                    alt={product.name}
-                    className='absolute inset-0 h-full w-full object-contain p-6 sm:p-10'
-                  />
-                  <div className='absolute inset-0 bg-linear-to-t from-black/85 via-black/10 to-transparent' />
-                  <div className='absolute inset-x-0 bottom-0 p-8 sm:p-12'>
-                    <h3 className='max-w-xl text-2xl font-black text-white sm:text-3xl'>
-                      {product.name}
-                    </h3>
-                    <p className='mt-2 text-xl font-black text-orange-400'>
-                      {formatPrice(product.sale_price ?? product.base_price)}
-                    </p>
-                    <span className='mt-5 inline-flex items-center gap-2 rounded-md bg-orange-500 px-6 py-3 text-sm font-bold uppercase tracking-wide text-white'>
-                      Shop Now
-                      <ArrowRight className='h-4 w-4' aria-hidden='true' />
-                    </span>
-                  </div>
-                </Link>
-              )
-            }
-
-            if (slide.type === 'collection') {
-              const { collection } = slide
-              const image = collection.banner_url || collection.image_url
-              return (
-                <Link
-                  key={slide.key}
-                  to={`/collections/${collection.slug}`}
-                  className='relative h-full w-full shrink-0 overflow-hidden bg-[#0f1420]'
-                >
-                  <img
-                    src={image as string}
-                    alt=''
-                    aria-hidden='true'
-                    className='absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl'
-                  />
-                  <img
-                    src={image as string}
-                    alt={collection.name}
-                    className='absolute inset-0 h-full w-full object-contain p-6 sm:p-10'
-                  />
-                  <div className='absolute inset-0 bg-linear-to-t from-black/85 via-black/10 to-transparent' />
-                  <div className='absolute inset-x-0 bottom-0 p-8 sm:p-12'>
-                    <h3 className='max-w-xl text-2xl font-black text-white sm:text-3xl'>
-                      {collection.name}
-                    </h3>
-                    {!!(collection.short_description || collection.description) && (
-                      <p className='mt-2 max-w-xl text-slate-200'>
-                        {collection.short_description || collection.description}
-                      </p>
-                    )}
-                    <span className='mt-5 inline-flex items-center gap-2 rounded-md bg-orange-500 px-6 py-3 text-sm font-bold uppercase tracking-wide text-white'>
-                      Shop Now
-                      <ArrowRight className='h-4 w-4' aria-hidden='true' />
-                    </span>
-                  </div>
-                </Link>
-              )
-            }
-
-            return (
-              <div key={slide.key} className='relative h-full w-full shrink-0 overflow-hidden bg-[#0f1420]'>
-                {heroImageUri ? (
-                  <>
-                    <img
-                      src={heroImageUri}
-                      alt=''
-                      aria-hidden='true'
-                      className='absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl'
-                    />
-                    <img
-                      src={heroImageUri}
-                      alt=''
-                      aria-hidden='true'
-                      className='absolute inset-0 h-full w-full object-contain p-6 sm:p-10'
-                    />
-                  </>
-                ) : (
-                  <div
-                    aria-hidden='true'
-                    className='absolute inset-0'
-                    style={{
-                      background:
-                        'radial-gradient(circle at 80% 30%, rgba(249,115,22,0.35), transparent 60%), #0f1420',
-                    }}
-                  />
-                )}
-                <div className='absolute inset-0 bg-linear-to-t from-black/80 via-black/20 to-transparent' />
-
-                <div className='absolute inset-x-0 bottom-0 max-w-2xl p-8 sm:p-12'>
-                  <span className='inline-flex items-center rounded-full border border-orange-500/40 bg-orange-500/10 px-4 py-1.5 text-xs font-semibold tracking-wider text-orange-400'>
-                    {eyebrow}
-                  </span>
-
-                  <h1 className='mt-5 text-4xl font-black leading-[1.05] tracking-tight text-white sm:text-5xl'>
-                    {headline}
-                  </h1>
-
-                  <p className='mt-4 max-w-xl text-base leading-relaxed text-slate-300 sm:text-lg'>
-                    {description}
-                  </p>
-
-                  <div className='mt-7 flex flex-col gap-4 sm:flex-row'>
-                    <Link
-                      to={primaryCta.to}
-                      className='inline-flex items-center justify-center gap-2 rounded-md bg-orange-500 px-8 py-4 text-sm font-bold uppercase tracking-wide text-white shadow-lg shadow-orange-500/20 transition-colors hover:bg-orange-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white'
-                    >
-                      {primaryCta.label}
-                      <ArrowRight className='h-4 w-4' aria-hidden='true' />
-                    </Link>
-                    <Link
-                      to={secondaryCta.to}
-                      className='inline-flex items-center justify-center gap-2 rounded-md border border-white/25 px-8 py-4 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white'
-                    >
-                      {secondaryCta.label}
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
+          {slides.map((slide) =>
+            slide.slideType === 'product_grid' ? (
+              <GridSlide key={slide.id} slide={slide} />
+            ) : (
+              <BannerSlide key={slide.id} slide={slide} />
+            ),
+          )}
         </div>
 
         {slides.length > 1 && (
@@ -321,7 +125,7 @@ export default function ToolsHero() {
             <div className='absolute inset-x-0 bottom-4 flex justify-center gap-1.5'>
               {slides.map((slide, index) => (
                 <button
-                  key={slide.key}
+                  key={slide.id}
                   type='button'
                   aria-label={`Go to slide ${index + 1}`}
                   onClick={() => goTo(index)}
@@ -335,5 +139,136 @@ export default function ToolsHero() {
         )}
       </div>
     </section>
+  )
+}
+
+function slideLink(slide: HeroSlide): string {
+  return slide.ctaLink || '/products'
+}
+
+function BannerSlide({ slide }: { slide: HeroSlide }) {
+  const backgroundImage =
+    slide.imageUrl || (slide.product ? getProductImage(slide.product, { w: 1400, h: 700 }) : null)
+
+  const priceLabel =
+    slide.slideType === 'product' && slide.product
+      ? formatPrice(slide.product.sale_price ?? slide.product.base_price)
+      : null
+
+  return (
+    <Link to={slideLink(slide)} className='group relative h-full w-full shrink-0 overflow-hidden bg-[#0f1420]'>
+      {backgroundImage ? (
+        <>
+          <img
+            src={backgroundImage}
+            alt=''
+            aria-hidden='true'
+            className='absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl'
+          />
+          <img
+            src={backgroundImage}
+            alt={slide.title || ''}
+            className='absolute inset-0 h-full w-full object-contain p-6 sm:p-10'
+          />
+        </>
+      ) : (
+        <div
+          aria-hidden='true'
+          className='absolute inset-0'
+          style={{
+            background: 'radial-gradient(circle at 80% 30%, rgba(249,115,22,0.35), transparent 60%), #0f1420',
+          }}
+        />
+      )}
+      <div className='absolute inset-0 bg-linear-to-t from-black/85 via-black/15 to-transparent' />
+
+      <div className='absolute inset-x-0 bottom-0 max-w-2xl p-8 sm:p-12'>
+        {!!slide.eyebrow && (
+          <span className='inline-flex items-center rounded-full border border-orange-500/40 bg-orange-500/10 px-4 py-1.5 text-xs font-semibold tracking-wider text-orange-400'>
+            {slide.eyebrow}
+          </span>
+        )}
+
+        {!!slide.title && (
+          <h1 className='mt-5 max-w-xl text-3xl font-black leading-[1.05] tracking-tight text-white sm:text-4xl'>
+            {slide.title}
+          </h1>
+        )}
+
+        {priceLabel && <p className='mt-2 text-xl font-black text-orange-400'>{priceLabel}</p>}
+
+        {!!slide.description && (
+          <p className='mt-4 max-w-xl text-base leading-relaxed text-slate-300 sm:text-lg'>{slide.description}</p>
+        )}
+
+        <div className='mt-7 flex flex-col gap-4 sm:flex-row'>
+          <span className='inline-flex items-center justify-center gap-2 rounded-md bg-orange-500 px-8 py-4 text-sm font-bold uppercase tracking-wide text-white shadow-lg shadow-orange-500/20 transition-colors group-hover:bg-orange-600'>
+            {slide.ctaLabel || 'Shop Now'}
+            <ArrowRight className='h-4 w-4' aria-hidden='true' />
+          </span>
+          {!!slide.secondaryCtaLabel && !!slide.secondaryCtaLink && (
+            <Link
+              to={slide.secondaryCtaLink}
+              className='inline-flex items-center justify-center gap-2 rounded-md border border-white/25 px-8 py-4 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-white/10'
+            >
+              {slide.secondaryCtaLabel}
+            </Link>
+          )}
+        </div>
+      </div>
+    </Link>
+  )
+}
+
+function GridSlide({ slide }: { slide: HeroSlide }) {
+  const products = (slide.products || []).slice(0, 4)
+
+  return (
+    <div className='relative flex h-full w-full shrink-0 flex-col bg-[#0f1420] sm:flex-row'>
+      <div className='flex flex-col justify-center p-8 sm:w-2/5 sm:p-12'>
+        {!!slide.eyebrow && (
+          <span className='inline-flex w-fit items-center rounded-full border border-orange-500/40 bg-orange-500/10 px-4 py-1.5 text-xs font-semibold tracking-wider text-orange-400'>
+            {slide.eyebrow}
+          </span>
+        )}
+        {!!slide.title && (
+          <h2 className='mt-5 text-3xl font-black leading-[1.05] tracking-tight text-white sm:text-4xl'>
+            {slide.title}
+          </h2>
+        )}
+        {!!slide.description && (
+          <p className='mt-4 text-base leading-relaxed text-slate-300'>{slide.description}</p>
+        )}
+        <Link
+          to={slideLink(slide)}
+          className='mt-7 inline-flex w-fit items-center justify-center gap-2 rounded-md bg-orange-500 px-8 py-4 text-sm font-bold uppercase tracking-wide text-white shadow-lg shadow-orange-500/20 transition-colors hover:bg-orange-600'
+        >
+          {slide.ctaLabel || 'Shop Now'}
+          <ArrowRight className='h-4 w-4' aria-hidden='true' />
+        </Link>
+      </div>
+
+      <div className='grid flex-1 grid-cols-2 gap-2 p-4 sm:gap-3 sm:p-6'>
+        {products.map((product) => (
+          <Link
+            key={product.id}
+            to={`/product/${product.slug}`}
+            className='group relative overflow-hidden rounded-lg bg-black/20'
+          >
+            <img
+              src={getProductImage(product, { w: 500, h: 500 })}
+              alt={product.name}
+              className='h-full w-full object-cover transition-transform duration-300 group-hover:scale-105'
+            />
+            <div className='absolute inset-x-0 bottom-0 bg-linear-to-t from-black/85 to-transparent p-3'>
+              <p className='truncate text-xs font-semibold text-white'>{product.name}</p>
+              <p className='text-sm font-black text-orange-400'>
+                {formatPrice(product.sale_price ?? product.base_price)}
+              </p>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
   )
 }

@@ -16,6 +16,7 @@ import paymentRoutes from './payments/payment.routes'
 import supplierRoutes from './suppliers/supplier.routes'
 import shippingRoutes from './shipping/shipping.routes'
 import homepageSettingsRoutes from './settings/homepage.routes'
+import heroSlidesRoutes from './settings/hero-slides.routes'
 import deliveryEstimateRoutes from './shipping/delivery-estimate.routes'
 import deliveryTemplateRoutes from './shipping/delivery-template.routes'
 import couponRoutes from './coupons/coupon.routes'
@@ -83,6 +84,7 @@ router.use('/shipping/delivery-estimate', deliveryEstimateRoutes)
 router.use('/shipping/delivery-templates', deliveryTemplateRoutes)
 router.use('/shipping', shippingRoutes)
 router.use('/settings/homepage', homepageSettingsRoutes)
+router.use('/settings/hero-slides', heroSlidesRoutes)
 router.use('/coupons', couponRoutes)
 router.use('/affiliates', affiliateRoutes)
 router.use('/reviews', reviewRoutes)
@@ -205,6 +207,21 @@ router.get('/docs', (_req, res) => {
           'Remove category (admin)',
         'PUT /api/v1/collections/categories/:collectionId/categories/reorder':
           'Reorder categories (admin)',
+      },
+      heroSlides: {
+        'GET /api/v1/settings/hero-slides/public':
+          'Get resolved, ready-to-render hero slides for the homepage carousel (public, ?platform=web|mobile)',
+        'GET /api/v1/settings/hero-slides': 'List all hero slides (admin)',
+        'POST /api/v1/settings/hero-slides': 'Create a hero slide (admin)',
+        'PUT /api/v1/settings/hero-slides/:id': 'Update a hero slide (admin)',
+        'DELETE /api/v1/settings/hero-slides/:id': 'Delete a hero slide (admin)',
+        'PUT /api/v1/settings/hero-slides/reorder': 'Reorder hero slides (admin)',
+        'POST /api/v1/settings/hero-slides/:id/items':
+          'Add products to a product_grid slide (admin)',
+        'DELETE /api/v1/settings/hero-slides/:id/items/:productId':
+          'Remove a product from a product_grid slide (admin)',
+        'PUT /api/v1/settings/hero-slides/:id/items/reorder':
+          'Reorder products in a product_grid slide (admin)',
       },
       books: {
         'GET /api/v1/books': 'Get published books list',

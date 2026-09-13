@@ -45,6 +45,7 @@ import {
   Key,
   Users2,
   Wallet,
+  GalleryHorizontal,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useStaffAccess } from '@/contexts/StaffAccessContext'
@@ -315,6 +316,16 @@ const navigation: NavItem[] = [
         // implied by marketing.view or campaigns.manage.
         icon: Link2,
         permission: 'social.accounts.view',
+      },
+      {
+        // Admin-managed homepage hero carousel -- pick which
+        // products/categories/collections appear as slides, including
+        // multi-product grid slides. Homepage content, not a catalog
+        // concern, so it sits here rather than under Products.
+        title: 'Hero Slides',
+        href: '/dashboard/settings/homepage/hero-slides',
+        icon: GalleryHorizontal,
+        permission: 'homepage.view',
       },
     ],
   },

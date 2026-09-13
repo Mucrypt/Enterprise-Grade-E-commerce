@@ -17,12 +17,19 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ArrowLeft, Save, Sparkles, Factory, Building2, Mail } from 'lucide-react'
+import {
+  ArrowLeft,
+  Save,
+  Factory,
+  Building2,
+  Mail,
+  GalleryHorizontal,
+  ArrowRight,
+} from 'lucide-react'
 import { RequirePagePermission } from '@/components/auth/RequirePagePermission'
 import {
   getHomepageSettings,
   updateHomepageSettings,
-  type HeroSection,
   type BannerSection,
   type CtaSection,
   type NewsletterSection,
@@ -60,15 +67,33 @@ function HomepageSettingsContent() {
         </div>
       </div>
 
+      <Link href='/dashboard/settings/homepage/hero-slides'>
+        <Card className='cursor-pointer transition-shadow hover:shadow-md'>
+          <CardHeader>
+            <CardTitle className='flex items-center justify-between gap-2'>
+              <span className='flex items-center gap-2'>
+                <GalleryHorizontal className='h-5 w-5 text-orange-500' />
+                Hero Slides
+              </span>
+              <ArrowRight className='h-4 w-4 text-muted-foreground' />
+            </CardTitle>
+            <CardDescription>
+              Manage the homepage hero carousel -- pick products, categories,
+              collections, or build a multi-product grid slide, shown on web
+              and mobile.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </Link>
+
       {isLoading || !settings ? (
         <div className='grid gap-6 lg:grid-cols-2'>
-          {[...Array(4)].map((_, i) => (
+          {[...Array(3)].map((_, i) => (
             <Skeleton key={i} className='h-80 w-full' />
           ))}
         </div>
       ) : (
         <div className='grid gap-6 lg:grid-cols-2'>
-          <HeroCard initial={settings.hero} />
           <BannerCard
             title='Workshop Equipment Banner'
             icon={<Factory className='h-5 w-5 text-orange-500' />}
@@ -92,73 +117,6 @@ function useSectionForm<T extends object>(initial: T) {
     (key: keyof T) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
       setValues((prev) => ({ ...prev, [key]: e.target.value }))
   return { values, set }
-}
-
-function HeroCard({ initial }: { initial: HeroSection }) {
-  const queryClient = useQueryClient()
-  const { values, set } = useSectionForm<HeroSection>(initial)
-
-  const mutation = useMutation({
-    mutationFn: () => updateHomepageSettings({ hero: values }),
-    onSuccess: () => {
-      toast.success('Hero section updated')
-      queryClient.invalidateQueries({ queryKey: ['homepage-settings'] })
-    },
-    onError: () => toast.error('Failed to update hero section'),
-  })
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className='flex items-center gap-2'>
-          <Sparkles className='h-5 w-5 text-orange-500' />
-          Hero Section
-        </CardTitle>
-        <CardDescription>
-          The first thing visitors see -- headline, description and both
-          call-to-action buttons.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className='space-y-4'>
-        <div className='space-y-2'>
-          <Label>Eyebrow</Label>
-          <Input value={values.eyebrow} onChange={set('eyebrow')} />
-        </div>
-        <div className='space-y-2'>
-          <Label>Headline</Label>
-          <Input value={values.headline} onChange={set('headline')} />
-        </div>
-        <div className='space-y-2'>
-          <Label>Description</Label>
-          <Textarea rows={3} value={values.description} onChange={set('description')} />
-        </div>
-        <div className='grid grid-cols-2 gap-3'>
-          <div className='space-y-2'>
-            <Label>Primary button label</Label>
-            <Input value={values.primaryCtaLabel} onChange={set('primaryCtaLabel')} />
-          </div>
-          <div className='space-y-2'>
-            <Label>Primary button link</Label>
-            <Input value={values.primaryCtaTo} onChange={set('primaryCtaTo')} />
-          </div>
-          <div className='space-y-2'>
-            <Label>Secondary button label</Label>
-            <Input value={values.secondaryCtaLabel} onChange={set('secondaryCtaLabel')} />
-          </div>
-          <div className='space-y-2'>
-            <Label>Secondary button link</Label>
-            <Input value={values.secondaryCtaTo} onChange={set('secondaryCtaTo')} />
-          </div>
-        </div>
-      </CardContent>
-      <CardFooter className='justify-end'>
-        <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
-          <Save className='mr-2 h-4 w-4' />
-          {mutation.isPending ? 'Saving…' : 'Save Hero Section'}
-        </Button>
-      </CardFooter>
-    </Card>
-  )
 }
 
 function BannerCard({

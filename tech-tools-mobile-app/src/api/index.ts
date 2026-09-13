@@ -1450,6 +1450,37 @@ export const homepageSettingsApi = {
 }
 
 // ============================================
+// Hero Slides API -- the admin-managed homepage hero carousel. Each slide
+// is already fully resolved server-side (real product/category/collection
+// data joined in, broken references silently dropped), so ToolsHero.tsx
+// only needs this one call instead of separately fetching featured
+// products + featured collections + homepage_settings.hero and stitching
+// them together itself. Same endpoint/shape as the web storefront's
+// heroSlidesApi, against the same tech-tools-api backend.
+// ============================================
+export interface HeroSlide {
+  id: string
+  slideType: 'custom' | 'product' | 'category' | 'product_collection' | 'category_collection' | 'product_grid'
+  eyebrow: string | null
+  title: string | null
+  description: string | null
+  imageUrl?: string | null
+  ctaLabel: string | null
+  ctaLink: string | null
+  secondaryCtaLabel: string | null
+  secondaryCtaLink: string | null
+  product?: Product
+  products?: Product[]
+}
+
+export const heroSlidesApi = {
+  getPublic: async (): Promise<HeroSlide[]> => {
+    const response = await apiClient.get('/settings/hero-slides/public?platform=mobile')
+    return response.data.data || response.data
+  },
+}
+
+// ============================================
 // Affiliates API (Refer & Earn) -- same endpoints/shapes as the web
 // storefront's affiliatesApi, against the same tech-tools-api backend.
 // ============================================
@@ -2231,4 +2262,5 @@ export const api = {
   affiliates: affiliatesApi,
   shipping: shippingApi,
   homepageSettings: homepageSettingsApi,
+  heroSlides: heroSlidesApi,
 }
