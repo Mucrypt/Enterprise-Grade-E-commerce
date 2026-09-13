@@ -30,6 +30,12 @@ export interface HeroSlide {
   ends_at: string | null
   created_at: string
   updated_at: string
+  // Admin-list-only fields (getAdminHeroSlides only) -- fall back to the
+  // real referenced product/category/collection's own name/photo when
+  // this slide has no local title/image override, same fallback the
+  // public storefront endpoint already applies.
+  display_title?: string | null
+  display_image_url?: string | null
 }
 
 export interface HeroSlideFormData {

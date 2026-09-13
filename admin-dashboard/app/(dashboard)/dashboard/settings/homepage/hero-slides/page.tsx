@@ -39,6 +39,7 @@ import {
   Layers,
 } from 'lucide-react'
 import { RequirePagePermission } from '@/components/auth/RequirePagePermission'
+import { getAbsoluteMediaUrl } from '@/lib/utils'
 import { heroSlideService, HeroSlide, HeroSlideFormData } from '@/services/hero-slide.service'
 import { HeroSlideForm } from '@/components/hero-slides/HeroSlideForm'
 import { HeroSlideItemsManager } from '@/components/hero-slides/HeroSlideItemsManager'
@@ -211,11 +212,14 @@ function HeroSlidesContent() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {slides.map((slide, index) => (
+            {slides.map((slide, index) => {
+              const displayTitle = slide.title || slide.display_title
+              const displayImage = getAbsoluteMediaUrl(slide.image_url || slide.display_image_url)
+              return (
               <TableRow key={slide.id}>
                 <TableCell>
-                  {slide.image_url ? (
-                    <Image src={slide.image_url} alt={slide.title || ''} width={40} height={40} className='rounded object-cover' />
+                  {displayImage ? (
+                    <Image src={displayImage} alt={displayTitle || ''} width={40} height={40} className='rounded object-cover' />
                   ) : (
                     <div className='w-10 h-10 bg-muted rounded flex items-center justify-center'>
                       <ImageIcon className='h-4 w-4 text-muted-foreground' />
@@ -223,7 +227,7 @@ function HeroSlidesContent() {
                   )}
                 </TableCell>
                 <TableCell>
-                  <span className='font-medium'>{slide.title || <span className='text-muted-foreground'>Untitled</span>}</span>
+                  <span className='font-medium'>{displayTitle || <span className='text-muted-foreground'>Untitled</span>}</span>
                 </TableCell>
                 <TableCell>
                   <div className='flex items-center gap-2'>
@@ -293,7 +297,8 @@ function HeroSlidesContent() {
                   </div>
                 </TableCell>
               </TableRow>
-            ))}
+              )
+            })}
           </TableBody>
         </Table>
       )}

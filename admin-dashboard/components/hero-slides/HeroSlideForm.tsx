@@ -29,6 +29,7 @@ import Link from 'next/link'
 import { ProductPicker } from '@/components/promotions/ProductPicker'
 import { categoryService } from '@/services/category.service'
 import { collectionService } from '@/services/collection.service'
+import { getAbsoluteMediaUrl } from '@/lib/utils'
 import type { HeroSlide, HeroSlideFormData, HeroSlideType } from '@/services/hero-slide.service'
 
 interface ImagePreview {
@@ -345,7 +346,7 @@ export function HeroSlideForm({ open, onClose, onSubmit, slide, isLoading = fals
                 ) : formData.imageUrl ? (
                   <div className='relative'>
                     <Image
-                      src={formData.imageUrl}
+                      src={getAbsoluteMediaUrl(formData.imageUrl) || formData.imageUrl}
                       alt='Existing'
                       width={280}
                       height={140}

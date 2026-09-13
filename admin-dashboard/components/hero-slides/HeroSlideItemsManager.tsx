@@ -46,6 +46,7 @@ import {
 } from 'lucide-react'
 import { heroSlideService, HeroSlide } from '@/services/hero-slide.service'
 import { productService } from '@/services/product.service'
+import { getAbsoluteMediaUrl } from '@/lib/utils'
 import { toast } from 'sonner'
 import Image from 'next/image'
 
@@ -244,7 +245,9 @@ export function HeroSlideItemsManager({ open, onClose, slide }: HeroSlideItemsMa
                 </TableHeader>
                 <TableBody>
                   {items.map((item, index) => {
-                    const image = item.images?.find((img) => img.is_primary)?.url || item.images?.[0]?.url
+                    const image = getAbsoluteMediaUrl(
+                      item.images?.find((img) => img.is_primary)?.url || item.images?.[0]?.url,
+                    )
                     return (
                       <TableRow key={item.id}>
                         <TableCell>
@@ -342,7 +345,9 @@ export function HeroSlideItemsManager({ open, onClose, slide }: HeroSlideItemsMa
                 ) : (
                   <div className='space-y-1'>
                     {filteredAvailableItems.map((item: any) => {
-                      const image = item.images?.find((img: any) => img.is_primary)?.url || item.images?.[0]?.url
+                      const image = getAbsoluteMediaUrl(
+                        item.images?.find((img: any) => img.is_primary)?.url || item.images?.[0]?.url,
+                      )
                       return (
                         <div
                           key={item.id}

@@ -103,8 +103,35 @@ const SLIDE_UPDATE_FIELD_MAP: Record<string, string> = {
 
 export const getAdminHeroSlides = async (_req: Request, res: Response) => {
   try {
+    // A plain `SELECT *` leaves display_title/display_image_url null for
+    // any product/category/collection-type slide that has no local
+    // title/image override -- which is most of them, since those types
+    // are meant to fall back to the real entity's own name/photo (see
+    // getPublicHeroSlides). Without these joins the admin list showed
+    // "Untitled" and a broken-image icon for every such slide even though
+    // it renders correctly on the real storefront.
     const result = await dbQuery(
-      `SELECT * FROM hero_slides ORDER BY position ASC, created_at DESC`,
+      `SELECT hs.*,
+        COALESCE(hs.title, p.name, cat.name, pc.name, cc.name) as display_title,
+        COALESCE(
+          hs.image_url,
+          (SELECT pm.url FROM product_media pm
+           WHERE pm.product_id = hs.product_id AND pm.type = 'image'
+           ORDER BY pm.is_primary DESC, pm.position LIMIT 1),
+          cat.image_url,
+          pc.banner_url, pc.image_url,
+          cc.banner_url, cc.image_url,
+          (SELECT pm.url FROM hero_slide_items hsi
+           JOIN product_media pm ON pm.product_id = hsi.product_id AND pm.type = 'image'
+           WHERE hsi.hero_slide_id = hs.id
+           ORDER BY hsi.position, pm.is_primary DESC LIMIT 1)
+        ) as display_image_url
+       FROM hero_slides hs
+       LEFT JOIN products p ON hs.product_id = p.id
+       LEFT JOIN categories cat ON hs.category_id = cat.id
+       LEFT JOIN product_collections pc ON hs.product_collection_id = pc.id
+       LEFT JOIN category_collections cc ON hs.category_collection_id = cc.id
+       ORDER BY hs.position ASC, hs.created_at DESC`,
     )
     res.json({ success: true, data: result.rows })
   } catch (error: any) {
@@ -197,6 +224,21 @@ export const updateHeroSlide = async (req: Request, res: Response) => {
 
     for (const dateField of ['startsAt', 'starts_at', 'endsAt', 'ends_at']) {
       if (updates[dateField] === '') updates[dateField] = null
+    }
+
+    // HeroSlideForm always submits every field regardless of slideType (so
+    // editing a 'custom' slide still sends productId/categoryId/etc as '')
+    // -- an empty string is not a valid UUID, so without this Postgres
+    // rejects the whole UPDATE with a 500. createHeroSlide already avoids
+    // this via `productId || null`; the dynamic field map here needs the
+    // same normalization before it reads these fields.
+    for (const uuidField of [
+      'productId', 'product_id',
+      'categoryId', 'category_id',
+      'productCollectionId', 'product_collection_id',
+      'categoryCollectionId', 'category_collection_id',
+    ]) {
+      if (updates[uuidField] === '') updates[uuidField] = null
     }
 
     const slideCheck = await dbQuery('SELECT id FROM hero_slides WHERE id = $1', [id])
