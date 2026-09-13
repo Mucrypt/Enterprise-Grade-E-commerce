@@ -1,40 +1,38 @@
 // ============================================
-// Hero Grid Slide
+// Hero Collection Grid Slide
 //
-// The 'product_grid' hero slide type -- several real, admin-picked
-// products shown together in one slide. Adapts the same visual language
-// as TrendingCollectionCard.tsx (thumbnail + price-tag overlay), which
-// stays untouched for the trending rail -- this is a new, separate
-// component sized to fill the hero's fixed dimensions instead of
-// TrendingCollectionCard's fixed small rail-card width.
+// The 'collection_grid' hero slide type -- several real, admin-picked
+// collections shown together as tiles in one slide, mirroring
+// HeroGridSlide.tsx's layout (text left, 2x2 tile grid right) one level
+// up: each tile is a whole collection's own banner photo + name, linking
+// to /collections/:slug, instead of a single product + price.
 // ============================================
 
 import React from 'react'
 import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native'
 import { useRouter } from 'expo-router'
 import { AppColors, AppSpacing, AppBorderRadius } from '@/constants/appTheme'
-import { Product } from '@/types'
-import { formatPrice, getProductImage } from '@/utils'
+import { ProductCollection } from '@/types'
 
-interface HeroGridSlideProps {
+interface HeroCollectionGridSlideProps {
   eyebrow?: string | null
   title?: string | null
   ctaLabel?: string | null
   ctaLink: string
-  products: Product[]
+  collections: ProductCollection[]
   style: { width: number; height: number }
 }
 
-export default function HeroGridSlide({
+export default function HeroCollectionGridSlide({
   eyebrow,
   title,
   ctaLabel,
   ctaLink,
-  products,
+  collections,
   style,
-}: HeroGridSlideProps) {
+}: HeroCollectionGridSlideProps) {
   const router = useRouter()
-  const displayProducts = products.slice(0, 4)
+  const displayCollections = collections.slice(0, 4)
 
   return (
     <View style={[styles.slide, style]}>
@@ -61,25 +59,26 @@ export default function HeroGridSlide({
       </View>
 
       <View style={styles.imagesRow}>
-        {displayProducts.map((product) => (
-          <TouchableOpacity
-            key={product.id}
-            style={styles.imageItem}
-            activeOpacity={0.85}
-            onPress={() => router.push(`/product/${product.slug}` as never)}
-          >
-            <Image
-              source={{ uri: getProductImage(product) }}
-              style={styles.image}
-              resizeMode='cover'
-            />
-            <View style={styles.priceTag}>
-              <Text style={styles.priceText}>
-                {formatPrice(product.sale_price || product.base_price)}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        ))}
+        {displayCollections.map((collection) => {
+          const image = collection.banner_url || collection.image_url
+          return (
+            <TouchableOpacity
+              key={collection.id}
+              style={styles.imageItem}
+              activeOpacity={0.85}
+              onPress={() => router.push(`/collections/${collection.slug}` as never)}
+            >
+              {!!image && (
+                <Image source={{ uri: image }} style={styles.image} resizeMode='cover' />
+              )}
+              <View style={styles.nameTag}>
+                <Text style={styles.nameText} numberOfLines={1}>
+                  {collection.name}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )
+        })}
       </View>
     </View>
   )
@@ -141,9 +140,7 @@ const styles = StyleSheet.create({
     gap: 4,
     padding: AppSpacing.xs,
   },
-  // 2 columns x 2 rows (up to 4 products) instead of a single cramped
-  // row of thin strips -- width/height are both percentages of the
-  // imagesRow container so this stays a real grid at any screen size.
+  // 2 columns x 2 rows (up to 4 collections), matching HeroGridSlide's grid.
   imageItem: {
     width: '48%',
     height: '48%',
@@ -155,16 +152,17 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  priceTag: {
+  nameTag: {
     position: 'absolute',
     bottom: 4,
     left: 4,
+    right: 4,
     backgroundColor: 'rgba(0,0,0,0.75)',
     paddingHorizontal: 5,
     paddingVertical: 2,
     borderRadius: AppBorderRadius.sm,
   },
-  priceText: {
+  nameText: {
     fontSize: 9,
     fontWeight: '700',
     color: AppColors.white,

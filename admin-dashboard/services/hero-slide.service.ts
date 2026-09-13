@@ -7,6 +7,7 @@ export type HeroSlideType =
   | 'product_collection'
   | 'category_collection'
   | 'product_grid'
+  | 'collection_grid'
 
 export interface HeroSlide {
   id: string
@@ -36,6 +37,9 @@ export interface HeroSlide {
   // public storefront endpoint already applies.
   display_title?: string | null
   display_image_url?: string | null
+  // getAdminHeroSlideById only -- the slide's current grid contents.
+  products?: Array<Record<string, unknown> & { id: string }>
+  collections?: Array<Record<string, unknown> & { id: string }>
 }
 
 export interface HeroSlideFormData {
@@ -78,6 +82,10 @@ export const heroSlideService = {
     return apiClient.get('/settings/hero-slides')
   },
 
+  async getById(id: string) {
+    return apiClient.get(`/settings/hero-slides/${id}`)
+  },
+
   async create(data: HeroSlideFormData) {
     return apiClient.post('/settings/hero-slides', data)
   },
@@ -114,5 +122,17 @@ export const heroSlideService = {
 
   async reorderItems(slideId: string, items: Array<{ productId: string; position: number }>) {
     return apiClient.put(`/settings/hero-slides/${slideId}/items/reorder`, { items })
+  },
+
+  async addCollections(slideId: string, collectionIds: string[]) {
+    return apiClient.post(`/settings/hero-slides/${slideId}/collections`, { collectionIds })
+  },
+
+  async removeCollection(slideId: string, collectionId: string) {
+    return apiClient.delete(`/settings/hero-slides/${slideId}/collections/${collectionId}`)
+  },
+
+  async reorderCollections(slideId: string, items: Array<{ collectionId: string; position: number }>) {
+    return apiClient.put(`/settings/hero-slides/${slideId}/collections/reorder`, { items })
   },
 }

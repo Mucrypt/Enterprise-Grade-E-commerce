@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import {
   getAdminHeroSlides,
+  getAdminHeroSlideById,
   createHeroSlide,
   updateHeroSlide,
   deleteHeroSlide,
@@ -8,6 +9,9 @@ import {
   addHeroSlideItems,
   removeHeroSlideItem,
   reorderHeroSlideItems,
+  addHeroSlideCollections,
+  removeHeroSlideCollection,
+  reorderHeroSlideCollections,
   getPublicHeroSlides,
 } from './hero-slides.controller'
 import { authenticate, authorize } from '../../../middleware/auth'
@@ -41,6 +45,10 @@ router.post(
 // Reorder -- must be registered before '/:id' so 'reorder' isn't parsed as an id
 router.put('/reorder', authenticate, authorize('admin', 'super_admin'), reorderHeroSlides)
 
+// Get one slide, with its grid items/collections if any (used by the
+// items/collections manager panels)
+router.get('/:id', authenticate, authorize('admin', 'super_admin'), getAdminHeroSlideById)
+
 // Update
 router.put(
   '/:id',
@@ -57,5 +65,10 @@ router.delete('/:id', authenticate, authorize('admin', 'super_admin'), deleteHer
 router.post('/:id/items', authenticate, authorize('admin', 'super_admin'), addHeroSlideItems)
 router.delete('/:id/items/:productId', authenticate, authorize('admin', 'super_admin'), removeHeroSlideItem)
 router.put('/:id/items/reorder', authenticate, authorize('admin', 'super_admin'), reorderHeroSlideItems)
+
+// collection_grid collections
+router.post('/:id/collections', authenticate, authorize('admin', 'super_admin'), addHeroSlideCollections)
+router.delete('/:id/collections/:collectionId', authenticate, authorize('admin', 'super_admin'), removeHeroSlideCollection)
+router.put('/:id/collections/reorder', authenticate, authorize('admin', 'super_admin'), reorderHeroSlideCollections)
 
 export default router

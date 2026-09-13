@@ -36,7 +36,7 @@ import {
 import {
   Plus,
   Trash2,
-  Package,
+  Layers,
   Search,
   CheckCircle2,
   ArrowUp,
@@ -45,30 +45,30 @@ import {
   Image as ImageIcon,
 } from 'lucide-react'
 import { heroSlideService, HeroSlide } from '@/services/hero-slide.service'
-import { productService } from '@/services/product.service'
+import { collectionService } from '@/services/collection.service'
 import { getAbsoluteMediaUrl } from '@/lib/utils'
 import { toast } from 'sonner'
 import Image from 'next/image'
 
 const MAX_ITEMS = 4
 
-interface HeroSlideItemsManagerProps {
+interface HeroSlideCollectionsManagerProps {
   open: boolean
   onClose: () => void
   slide: HeroSlide | null
 }
 
-interface SlideItem {
+interface SlideCollection {
   id: string
   name: string
   slug: string
-  images?: { url: string; is_primary?: boolean }[]
-  sku?: string
-  base_price?: number
+  banner_url?: string | null
+  image_url?: string | null
+  items_count?: number
   item_position: number
 }
 
-export function HeroSlideItemsManager({ open, onClose, slide }: HeroSlideItemsManagerProps) {
+export function HeroSlideCollectionsManager({ open, onClose, slide }: HeroSlideCollectionsManagerProps) {
   const queryClient = useQueryClient()
   const [showAddItems, setShowAddItems] = useState(false)
   const [selectedItems, setSelectedItems] = useState<string[]>([])
@@ -82,75 +82,75 @@ export function HeroSlideItemsManager({ open, onClose, slide }: HeroSlideItemsMa
     isLoading: itemsLoading,
     refetch: refetchItems,
   } = useQuery({
-    queryKey: ['hero-slide-items', slideId],
+    queryKey: ['hero-slide-collections', slideId],
     queryFn: async () => {
       const response = (await heroSlideService.getById(slideId!)) as any
-      return response?.data?.products || []
+      return response?.data?.collections || []
     },
     enabled: !!slideId && open,
   })
 
   const { data: availableItemsData, isLoading: availableLoading } = useQuery({
-    queryKey: ['available-products-for-hero-slide', slideId, searchQuery],
+    queryKey: ['available-collections-for-hero-slide', slideId, searchQuery],
     queryFn: async () => {
-      const response = (await productService.getProducts({ limit: 50, search: searchQuery } as any)) as any
-      return response?.data?.items || response?.data?.products || []
+      const response = (await collectionService.getProductCollections({ limit: 50, search: searchQuery })) as any
+      return response?.data || []
     },
     enabled: showAddItems,
   })
 
-  const items: SlideItem[] = itemsData || []
+  const items: SlideCollection[] = itemsData || []
   const availableItems = availableItemsData || []
   const itemIds = items.map((item) => item.id)
   const filteredAvailableItems = availableItems.filter((item: any) => !itemIds.includes(item.id))
   const remainingSlots = MAX_ITEMS - items.length
 
   const addItemsMutation = useMutation({
-    mutationFn: async (productIds: string[]) => {
+    mutationFn: async (collectionIds: string[]) => {
       if (!slideId) throw new Error('No slide selected')
-      return heroSlideService.addItems(slideId, productIds)
+      return heroSlideService.addCollections(slideId, collectionIds)
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hero-slide-items'] })
+      queryClient.invalidateQueries({ queryKey: ['hero-slide-collections'] })
       queryClient.invalidateQueries({ queryKey: ['hero-slides'] })
       setSelectedItems([])
       setShowAddItems(false)
       refetchItems()
-      toast.success('Products added to slide')
+      toast.success('Collections added to slide')
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to add products')
+      toast.error(error.response?.data?.message || 'Failed to add collections')
     },
   })
 
   const removeItemMutation = useMutation({
-    mutationFn: async (productId: string) => {
+    mutationFn: async (collectionId: string) => {
       if (!slideId) throw new Error('No slide selected')
-      return heroSlideService.removeItem(slideId, productId)
+      return heroSlideService.removeCollection(slideId, collectionId)
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hero-slide-items'] })
+      queryClient.invalidateQueries({ queryKey: ['hero-slide-collections'] })
       queryClient.invalidateQueries({ queryKey: ['hero-slides'] })
       setItemToRemove(null)
       refetchItems()
-      toast.success('Product removed from slide')
+      toast.success('Collection removed from slide')
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to remove product')
+      toast.error(error.response?.data?.message || 'Failed to remove collection')
     },
   })
 
   const reorderMutation = useMutation({
-    mutationFn: async (reordered: Array<{ productId: string; position: number }>) => {
+    mutationFn: async (reordered: Array<{ collectionId: string; position: number }>) => {
       if (!slideId) throw new Error('No slide selected')
-      return heroSlideService.reorderItems(slideId, reordered)
+      return heroSlideService.reorderCollections(slideId, reordered)
     },
     onSuccess: () => {
       refetchItems()
-      toast.success('Products reordered')
+      toast.success('Collections reordered')
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to reorder products')
+      toast.error(error.response?.data?.message || 'Failed to reorder collections')
     },
   })
 
@@ -160,13 +160,13 @@ export function HeroSlideItemsManager({ open, onClose, slide }: HeroSlideItemsMa
     if (targetIndex < 0 || targetIndex >= newItems.length) return
     ;[newItems[index], newItems[targetIndex]] = [newItems[targetIndex], newItems[index]]
 
-    const reordered = newItems.map((item, idx) => ({ productId: item.id, position: idx }))
+    const reordered = newItems.map((item, idx) => ({ collectionId: item.id, position: idx }))
     reorderMutation.mutate(reordered)
   }
 
   const handleAddSelected = () => {
     if (selectedItems.length === 0) {
-      toast.error('Select at least one product to add')
+      toast.error('Select at least one collection to add')
       return
     }
     addItemsMutation.mutate(selectedItems)
@@ -176,7 +176,7 @@ export function HeroSlideItemsManager({ open, onClose, slide }: HeroSlideItemsMa
     setSelectedItems((prev) => {
       if (prev.includes(itemId)) return prev.filter((id) => id !== itemId)
       if (prev.length >= remainingSlots) {
-        toast.error(`A grid slide can hold at most ${MAX_ITEMS} products`)
+        toast.error(`A collection grid slide can hold at most ${MAX_ITEMS} collections`)
         return prev
       }
       return [...prev, itemId]
@@ -188,22 +188,22 @@ export function HeroSlideItemsManager({ open, onClose, slide }: HeroSlideItemsMa
       <SheetContent className='w-full sm:max-w-2xl overflow-hidden flex flex-col'>
         <SheetHeader>
           <SheetTitle className='flex items-center gap-2'>
-            <Package className='h-5 w-5' />
-            Manage Grid Products
+            <Layers className='h-5 w-5' />
+            Manage Grid Collections
           </SheetTitle>
           <SheetDescription>
-            {slide?.title || 'Grid slide'} — {items.length} / {MAX_ITEMS} products
+            {slide?.title || 'Grid slide'} — {items.length} / {MAX_ITEMS} collections
           </SheetDescription>
         </SheetHeader>
 
         <div className='flex-1 overflow-hidden flex flex-col mt-4'>
           <div className='flex items-center justify-between mb-4'>
             <Badge variant='outline' className='text-sm'>
-              {items.length} of {MAX_ITEMS} products
+              {items.length} of {MAX_ITEMS} collections
             </Badge>
             <Button onClick={() => setShowAddItems(true)} size='sm' disabled={remainingSlots <= 0}>
               <Plus className='h-4 w-4 mr-2' />
-              Add Products
+              Add Collections
             </Button>
           </div>
 
@@ -219,15 +219,15 @@ export function HeroSlideItemsManager({ open, onClose, slide }: HeroSlideItemsMa
             ) : items.length === 0 ? (
               <div className='text-center py-12'>
                 <div className='mx-auto h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4'>
-                  <Package className='h-6 w-6 text-muted-foreground' />
+                  <Layers className='h-6 w-6 text-muted-foreground' />
                 </div>
-                <h3 className='text-lg font-medium'>No products in this slide</h3>
+                <h3 className='text-lg font-medium'>No collections in this slide</h3>
                 <p className='text-muted-foreground text-sm mt-1'>
-                  Add up to {MAX_ITEMS} products to show together in this slide
+                  Add up to {MAX_ITEMS} collections to show together as tiles in this slide
                 </p>
                 <Button className='mt-4' onClick={() => setShowAddItems(true)}>
                   <Plus className='h-4 w-4 mr-2' />
-                  Add Products
+                  Add Collections
                 </Button>
               </div>
             ) : (
@@ -236,16 +236,13 @@ export function HeroSlideItemsManager({ open, onClose, slide }: HeroSlideItemsMa
                   <TableRow>
                     <TableHead className='w-16'>Image</TableHead>
                     <TableHead>Name</TableHead>
-                    <TableHead>SKU</TableHead>
                     <TableHead className='text-center'>Position</TableHead>
                     <TableHead className='w-16'></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {items.map((item, index) => {
-                    const image = getAbsoluteMediaUrl(
-                      item.images?.find((img) => img.is_primary)?.url || item.images?.[0]?.url,
-                    )
+                    const image = getAbsoluteMediaUrl(item.banner_url || item.image_url)
                     return (
                       <TableRow key={item.id}>
                         <TableCell>
@@ -263,7 +260,6 @@ export function HeroSlideItemsManager({ open, onClose, slide }: HeroSlideItemsMa
                             <span className='text-xs text-muted-foreground'>{item.slug}</span>
                           </div>
                         </TableCell>
-                        <TableCell className='text-muted-foreground'>{item.sku || '—'}</TableCell>
                         <TableCell className='text-center'>
                           <div className='flex items-center justify-center gap-1'>
                             <Button
@@ -309,9 +305,9 @@ export function HeroSlideItemsManager({ open, onClose, slide }: HeroSlideItemsMa
         <AlertDialog open={showAddItems} onOpenChange={setShowAddItems}>
           <AlertDialogContent className='max-w-2xl max-h-[80vh] flex flex-col'>
             <AlertDialogHeader>
-              <AlertDialogTitle>Add Products to Slide</AlertDialogTitle>
+              <AlertDialogTitle>Add Collections to Slide</AlertDialogTitle>
               <AlertDialogDescription>
-                Select up to {remainingSlots} more product{remainingSlots === 1 ? '' : 's'} for &quot;{slide?.title}&quot;
+                Select up to {remainingSlots} more collection{remainingSlots === 1 ? '' : 's'} for &quot;{slide?.title}&quot;
               </AlertDialogDescription>
             </AlertDialogHeader>
 
@@ -320,7 +316,7 @@ export function HeroSlideItemsManager({ open, onClose, slide }: HeroSlideItemsMa
                 <Search className='absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground' />
                 <input
                   type='text'
-                  placeholder='Search products...'
+                  placeholder='Search collections...'
                   className='w-full pl-10 pr-4 py-2 border rounded-md'
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -337,15 +333,13 @@ export function HeroSlideItemsManager({ open, onClose, slide }: HeroSlideItemsMa
                 ) : filteredAvailableItems.length === 0 ? (
                   <div className='text-center py-8'>
                     <p className='text-muted-foreground'>
-                      {searchQuery ? 'No products found matching your search' : 'All products are already in this slide'}
+                      {searchQuery ? 'No collections found matching your search' : 'All collections are already in this slide'}
                     </p>
                   </div>
                 ) : (
                   <div className='space-y-1'>
                     {filteredAvailableItems.map((item: any) => {
-                      const image = getAbsoluteMediaUrl(
-                        item.images?.find((img: any) => img.is_primary)?.url || item.images?.[0]?.url,
-                      )
+                      const image = getAbsoluteMediaUrl(item.banner_url || item.image_url)
                       return (
                         <div
                           key={item.id}
@@ -361,15 +355,15 @@ export function HeroSlideItemsManager({ open, onClose, slide }: HeroSlideItemsMa
                             <Image src={image} alt={item.name} width={40} height={40} className='rounded object-cover' />
                           ) : (
                             <div className='w-10 h-10 bg-muted rounded flex items-center justify-center'>
-                              <Package className='h-4 w-4 text-muted-foreground' />
+                              <Layers className='h-4 w-4 text-muted-foreground' />
                             </div>
                           )}
                           <div className='flex-1 min-w-0'>
                             <p className='font-medium truncate'>{item.name}</p>
-                            <p className='text-xs text-muted-foreground truncate'>{item.sku}</p>
+                            <p className='text-xs text-muted-foreground truncate'>{item.slug}</p>
                           </div>
-                          {item.base_price && (
-                            <span className='text-sm font-medium'>${Number(item.base_price).toFixed(2)}</span>
+                          {typeof item.items_count === 'number' && (
+                            <span className='text-xs text-muted-foreground'>{item.items_count} items</span>
                           )}
                           {selectedItems.includes(item.id) && <CheckCircle2 className='h-5 w-5 text-primary' />}
                         </div>
@@ -384,7 +378,7 @@ export function HeroSlideItemsManager({ open, onClose, slide }: HeroSlideItemsMa
               <AlertDialogCancel onClick={() => setSelectedItems([])}>Cancel</AlertDialogCancel>
               <Button onClick={handleAddSelected} disabled={selectedItems.length === 0 || addItemsMutation.isPending}>
                 {addItemsMutation.isPending && <Loader2 className='h-4 w-4 mr-2 animate-spin' />}
-                Add {selectedItems.length} {selectedItems.length === 1 ? 'Product' : 'Products'}
+                Add {selectedItems.length} {selectedItems.length === 1 ? 'Collection' : 'Collections'}
               </Button>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -395,7 +389,7 @@ export function HeroSlideItemsManager({ open, onClose, slide }: HeroSlideItemsMa
             <AlertDialogHeader>
               <AlertDialogTitle>Remove from Slide</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to remove this product from the slide? The product itself will not be deleted.
+                Are you sure you want to remove this collection from the slide? The collection itself will not be deleted.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

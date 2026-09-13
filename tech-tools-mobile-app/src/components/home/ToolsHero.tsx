@@ -50,12 +50,16 @@ import { heroSlidesApi, HeroSlide } from '@/api'
 import { formatPrice, getProductImage } from '@/utils'
 import { resolveMobileRoute } from '@/utils/resolveMobileRoute'
 import HeroGridSlide from './HeroGridSlide'
+import HeroCollectionGridSlide from './HeroCollectionGridSlide'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 // A short, wide banner strip (like the reference carousel) instead of a
 // tall block that eats most of the first screen -- every slide shares
-// this one fixed height so paging never jumps.
-const HERO_HEIGHT = 210
+// this one fixed height so paging never jumps. Bumped from 210 -> 240 so
+// HeroGridSlide's 2x2 product grid has real room (near-square cells)
+// instead of being squeezed into thin strips -- banner slides absorb the
+// extra height fine too.
+const HERO_HEIGHT = 240
 const SLIDE_DIMENSIONS = { width: SCREEN_WIDTH, height: HERO_HEIGHT }
 const AUTO_ADVANCE_MS = 4500
 
@@ -124,6 +128,19 @@ export default function ToolsHero() {
           ctaLabel={slide.ctaLabel}
           ctaLink={resolveMobileRoute(slide.ctaLink || '/products')}
           products={slide.products || []}
+          style={SLIDE_DIMENSIONS}
+        />
+      )
+    }
+
+    if (slide.slideType === 'collection_grid') {
+      return (
+        <HeroCollectionGridSlide
+          eyebrow={slide.eyebrow}
+          title={slide.title}
+          ctaLabel={slide.ctaLabel}
+          ctaLink={resolveMobileRoute(slide.ctaLink || '/products')}
+          collections={slide.collections || []}
           style={SLIDE_DIMENSIONS}
         />
       )

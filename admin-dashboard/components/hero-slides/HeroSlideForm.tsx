@@ -52,6 +52,7 @@ const SLIDE_TYPE_OPTIONS: { value: HeroSlideType; label: string; hint: string }[
   { value: 'product_collection', label: 'Product Collection', hint: 'A real, existing product collection banner' },
   { value: 'category_collection', label: 'Category Collection', hint: 'A real, existing category collection banner' },
   { value: 'product_grid', label: 'Multiple Products (Grid)', hint: 'Several real products shown together in one slide' },
+  { value: 'collection_grid', label: 'Multiple Collections (Grid)', hint: 'Several real collections shown together as tiles in one slide' },
 ]
 
 const emptyForm: HeroSlideFormData = {
@@ -146,14 +147,15 @@ export function HeroSlideForm({ open, onClose, onSubmit, slide, isLoading = fals
     await onSubmit(formData, imagePreview?.file)
   }
 
-  const needsCustomCopy = formData.slideType === 'custom' || formData.slideType === 'product_grid'
+  const isGridType = formData.slideType === 'product_grid' || formData.slideType === 'collection_grid'
+  const needsCustomCopy = formData.slideType === 'custom' || isGridType
   const showImageUpload = formData.slideType === 'custom'
   // Grid slides render their own "Shop Now"-style button too (see
   // ToolsHero.tsx's GridSlide), same as custom -- only product/category/
   // collection types auto-derive their CTA from the referenced entity.
   // Grid slides never render a second button, though, so only the
   // primary pair is shown for that type.
-  const showCta = formData.slideType === 'custom' || formData.slideType === 'product_grid'
+  const showCta = formData.slideType === 'custom' || isGridType
   const showSecondaryCta = formData.slideType === 'custom'
 
   return (
@@ -280,10 +282,11 @@ export function HeroSlideForm({ open, onClose, onSubmit, slide, isLoading = fals
             </div>
           )}
 
-          {formData.slideType === 'product_grid' && !isEditing && (
+          {isGridType && !isEditing && (
             <p className='text-xs text-muted-foreground rounded-md border border-dashed p-3'>
-              Create this slide first, then add up to 4 products to it from the
-              slide list.
+              Create this slide first, then add up to 4{' '}
+              {formData.slideType === 'product_grid' ? 'products' : 'collections'} to it
+              from the slide list.
             </p>
           )}
 

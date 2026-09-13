@@ -43,6 +43,7 @@ import { getAbsoluteMediaUrl } from '@/lib/utils'
 import { heroSlideService, HeroSlide, HeroSlideFormData } from '@/services/hero-slide.service'
 import { HeroSlideForm } from '@/components/hero-slides/HeroSlideForm'
 import { HeroSlideItemsManager } from '@/components/hero-slides/HeroSlideItemsManager'
+import { HeroSlideCollectionsManager } from '@/components/hero-slides/HeroSlideCollectionsManager'
 
 const SLIDE_TYPE_LABELS: Record<string, string> = {
   custom: 'Custom Banner',
@@ -51,6 +52,7 @@ const SLIDE_TYPE_LABELS: Record<string, string> = {
   product_collection: 'Product Collection',
   category_collection: 'Category Collection',
   product_grid: 'Product Grid',
+  collection_grid: 'Collection Grid',
 }
 
 export default function HeroSlidesPage() {
@@ -66,6 +68,7 @@ function HeroSlidesContent() {
   const [formOpen, setFormOpen] = useState(false)
   const [editingSlide, setEditingSlide] = useState<HeroSlide | null>(null)
   const [itemsSlide, setItemsSlide] = useState<HeroSlide | null>(null)
+  const [collectionsSlide, setCollectionsSlide] = useState<HeroSlide | null>(null)
   const [slideToDelete, setSlideToDelete] = useState<HeroSlide | null>(null)
 
   const { data, isLoading } = useQuery({
@@ -83,6 +86,8 @@ function HeroSlidesContent() {
       setFormOpen(false)
       if (result?.data?.slide_type === 'product_grid') {
         setItemsSlide(result.data)
+      } else if (result?.data?.slide_type === 'collection_grid') {
+        setCollectionsSlide(result.data)
       }
     },
     onError: (error: any) => toast.error(error.response?.data?.message || 'Failed to create hero slide'),
@@ -237,6 +242,11 @@ function HeroSlidesContent() {
                         Manage products
                       </Button>
                     )}
+                    {slide.slide_type === 'collection_grid' && (
+                      <Button variant='link' size='sm' className='h-auto p-0' onClick={() => setCollectionsSlide(slide)}>
+                        Manage collections
+                      </Button>
+                    )}
                   </div>
                 </TableCell>
                 <TableCell>
@@ -318,6 +328,12 @@ function HeroSlidesContent() {
         open={!!itemsSlide}
         onClose={() => setItemsSlide(null)}
         slide={itemsSlide}
+      />
+
+      <HeroSlideCollectionsManager
+        open={!!collectionsSlide}
+        onClose={() => setCollectionsSlide(null)}
+        slide={collectionsSlide}
       />
 
       <AlertDialog open={!!slideToDelete} onOpenChange={() => setSlideToDelete(null)}>

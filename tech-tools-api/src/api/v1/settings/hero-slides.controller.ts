@@ -124,7 +124,12 @@ export const getAdminHeroSlides = async (_req: Request, res: Response) => {
           (SELECT pm.url FROM hero_slide_items hsi
            JOIN product_media pm ON pm.product_id = hsi.product_id AND pm.type = 'image'
            WHERE hsi.hero_slide_id = hs.id
-           ORDER BY hsi.position, pm.is_primary DESC LIMIT 1)
+           ORDER BY hsi.position, pm.is_primary DESC LIMIT 1),
+          (SELECT COALESCE(grid_pc.banner_url, grid_pc.image_url)
+           FROM hero_slide_collections hsc
+           JOIN product_collections grid_pc ON grid_pc.id = hsc.product_collection_id
+           WHERE hsc.hero_slide_id = hs.id
+           ORDER BY hsc.position LIMIT 1)
         ) as display_image_url
        FROM hero_slides hs
        LEFT JOIN products p ON hs.product_id = p.id
@@ -137,6 +142,55 @@ export const getAdminHeroSlides = async (_req: Request, res: Response) => {
   } catch (error: any) {
     logger.error('Error fetching hero slides:', error)
     res.status(500).json({ success: false, message: 'Failed to fetch hero slides', error: error.message })
+  }
+}
+
+// =====================================================
+// ADMIN: GET ONE HERO SLIDE (with its grid items, if any)
+// getAdminHeroSlides intentionally omits nested items/collections
+// (keeping the list query cheap) -- the items/collections manager panels
+// need the real current list, so they call this instead of scanning
+// through getAll().
+// =====================================================
+
+export const getAdminHeroSlideById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+    const slideResult = await dbQuery('SELECT * FROM hero_slides WHERE id = $1', [id])
+    if (slideResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Hero slide not found' })
+    }
+    const slide = slideResult.rows[0]
+
+    if (slide.slide_type === 'product_grid') {
+      const itemsResult = await dbQuery(
+        `SELECT ${PRODUCT_SELECT_FIELDS}, hsi.position as item_position
+         FROM products p
+         LEFT JOIN categories c ON p.category_id = c.id
+         JOIN hero_slide_items hsi ON p.id = hsi.product_id
+         WHERE hsi.hero_slide_id = $1
+         ORDER BY hsi.position ASC`,
+        [id],
+      )
+      slide.products = itemsResult.rows
+    }
+
+    if (slide.slide_type === 'collection_grid') {
+      const collectionsResult = await dbQuery(
+        `SELECT pc.*, hsc.position as item_position
+         FROM product_collections pc
+         JOIN hero_slide_collections hsc ON pc.id = hsc.product_collection_id
+         WHERE hsc.hero_slide_id = $1
+         ORDER BY hsc.position ASC`,
+        [id],
+      )
+      slide.collections = collectionsResult.rows
+    }
+
+    res.json({ success: true, data: slide })
+  } catch (error: any) {
+    logger.error('Error fetching hero slide:', error)
+    res.status(500).json({ success: false, message: 'Failed to fetch hero slide', error: error.message })
   }
 }
 
@@ -477,6 +531,146 @@ export const reorderHeroSlideItems = async (req: Request, res: Response) => {
 }
 
 // =====================================================
+// COLLECTION_GRID COLLECTIONS: ADD / REMOVE / REORDER
+// Mirrors addHeroSlideItems/removeHeroSlideItem/reorderHeroSlideItems
+// exactly, scoped to hero_slide_collections + product_collection_id
+// instead of hero_slide_items + product_id.
+// =====================================================
+
+export const addHeroSlideCollections = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+    const { collectionIds } = req.body
+
+    if (!Array.isArray(collectionIds) || collectionIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'Collection IDs array is required' })
+    }
+
+    const slideCheck = await dbQuery('SELECT id FROM hero_slides WHERE id = $1', [id])
+    if (slideCheck.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Hero slide not found' })
+    }
+
+    const existingCountResult = await dbQuery(
+      'SELECT COUNT(*) as count FROM hero_slide_collections WHERE hero_slide_id = $1',
+      [id],
+    )
+    const existingCount = parseInt(existingCountResult.rows[0].count)
+    if (existingCount + collectionIds.length > MAX_GRID_ITEMS) {
+      return res.status(400).json({
+        success: false,
+        message: `A collection_grid slide can hold at most ${MAX_GRID_ITEMS} collections`,
+      })
+    }
+
+    const client = await getClient()
+    try {
+      await client.query('BEGIN')
+
+      const maxPosResult = await client.query(
+        'SELECT COALESCE(MAX(position), -1) as max_pos FROM hero_slide_collections WHERE hero_slide_id = $1',
+        [id],
+      )
+      let currentPosition = maxPosResult.rows[0].max_pos + 1
+
+      for (const collectionId of collectionIds) {
+        const collectionCheck = await client.query('SELECT id FROM product_collections WHERE id = $1', [collectionId])
+        if (collectionCheck.rows.length === 0) {
+          throw new Error(`Collection ${collectionId} not found`)
+        }
+
+        await client.query(
+          `INSERT INTO hero_slide_collections (hero_slide_id, product_collection_id, position)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (hero_slide_id, product_collection_id) DO NOTHING`,
+          [id, collectionId, currentPosition++],
+        )
+      }
+
+      await client.query('COMMIT')
+
+      const result = await dbQuery(
+        `SELECT pc.*, hsc.position as item_position
+         FROM product_collections pc
+         JOIN hero_slide_collections hsc ON pc.id = hsc.product_collection_id
+         WHERE hsc.hero_slide_id = $1
+         ORDER BY hsc.position ASC`,
+        [id],
+      )
+
+      res.json({ success: true, message: 'Collections added to hero slide successfully', data: result.rows })
+    } catch (error) {
+      await client.query('ROLLBACK')
+      throw error
+    } finally {
+      client.release()
+    }
+  } catch (error: any) {
+    logger.error('Error adding collections to hero slide:', error)
+    res.status(500).json({ success: false, message: 'Failed to add collections to hero slide', error: error.message })
+  }
+}
+
+export const removeHeroSlideCollection = async (req: Request, res: Response) => {
+  try {
+    const { id, collectionId } = req.params
+    const result = await dbQuery(
+      'DELETE FROM hero_slide_collections WHERE hero_slide_id = $1 AND product_collection_id = $2 RETURNING *',
+      [id, collectionId],
+    )
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Collection not found in hero slide' })
+    }
+    res.json({ success: true, message: 'Collection removed from hero slide successfully' })
+  } catch (error: any) {
+    logger.error('Error removing hero slide collection:', error)
+    res.status(500).json({ success: false, message: 'Failed to remove collection from hero slide', error: error.message })
+  }
+}
+
+export const reorderHeroSlideCollections = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+    const collectionOrder = req.body.collectionOrder || req.body.items
+
+    if (!Array.isArray(collectionOrder) || collectionOrder.length === 0) {
+      return res.status(400).json({ success: false, message: 'Invalid collection order data' })
+    }
+
+    const client = await getClient()
+    try {
+      await client.query('BEGIN')
+      for (const item of collectionOrder) {
+        await client.query(
+          'UPDATE hero_slide_collections SET position = $1 WHERE hero_slide_id = $2 AND product_collection_id = $3',
+          [item.position, id, item.collectionId],
+        )
+      }
+      await client.query('COMMIT')
+
+      const result = await dbQuery(
+        `SELECT pc.*, hsc.position as item_position
+         FROM product_collections pc
+         JOIN hero_slide_collections hsc ON pc.id = hsc.product_collection_id
+         WHERE hsc.hero_slide_id = $1
+         ORDER BY hsc.position ASC`,
+        [id],
+      )
+
+      res.json({ success: true, message: 'Collections reordered successfully', data: result.rows })
+    } catch (error) {
+      await client.query('ROLLBACK')
+      throw error
+    } finally {
+      client.release()
+    }
+  } catch (error: any) {
+    logger.error('Error reordering hero slide collections:', error)
+    res.status(500).json({ success: false, message: 'Failed to reorder collections', error: error.message })
+  }
+}
+
+// =====================================================
 // PUBLIC: RESOLVED HERO SLIDES
 // The one endpoint both storefronts call -- returns a flat, fully
 // resolved array (real product/category/collection data already joined
@@ -652,6 +846,39 @@ export const getPublicHeroSlides = async (req: Request, res: Response) => {
           secondaryCtaLabel: slide.secondary_cta_label,
           secondaryCtaLink: slide.secondary_cta_link,
           products: itemsResult.rows,
+        })
+        continue
+      }
+
+      if (slide.slide_type === 'collection_grid') {
+        // Same public-visibility predicate as the 'product_collection'
+        // branch above -- a hidden/private/unscheduled collection must
+        // never appear here just because an admin picked it for a grid.
+        const collectionsResult = await dbQuery(
+          `SELECT pc.*
+           FROM product_collections pc
+           JOIN hero_slide_collections hsc ON pc.id = hsc.product_collection_id
+           WHERE hsc.hero_slide_id = $1
+             AND pc.visibility = 'public' AND pc.is_active = TRUE
+             AND (pc.starts_at IS NULL OR pc.starts_at <= CURRENT_TIMESTAMP)
+             AND (pc.ends_at IS NULL OR pc.ends_at > CURRENT_TIMESTAMP)
+           ORDER BY hsc.position ASC
+           LIMIT ${MAX_GRID_ITEMS}`,
+          [slide.id],
+        )
+        if (collectionsResult.rows.length === 0) continue
+
+        resolved.push({
+          id: slide.id,
+          slideType: 'collection_grid',
+          eyebrow: slide.eyebrow,
+          title: slide.title,
+          description: slide.description,
+          ctaLabel: slide.cta_label,
+          ctaLink: slide.cta_link,
+          secondaryCtaLabel: slide.secondary_cta_label,
+          secondaryCtaLink: slide.secondary_cta_link,
+          collections: collectionsResult.rows,
         })
       }
     }

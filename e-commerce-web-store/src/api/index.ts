@@ -255,7 +255,14 @@ export const homepageSettingsApi = {
 // ============================================
 export interface HeroSlide {
   id: string
-  slideType: 'custom' | 'product' | 'category' | 'product_collection' | 'category_collection' | 'product_grid'
+  slideType:
+    | 'custom'
+    | 'product'
+    | 'category'
+    | 'product_collection'
+    | 'category_collection'
+    | 'product_grid'
+    | 'collection_grid'
   eyebrow: string | null
   title: string | null
   description: string | null
@@ -266,6 +273,7 @@ export interface HeroSlide {
   secondaryCtaLink: string | null
   product?: Product
   products?: Product[]
+  collections?: ProductCollection[]
 }
 
 export const heroSlidesApi = {
