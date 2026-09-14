@@ -171,6 +171,52 @@ interface EnhancedProductFormProps {
   mode: 'create' | 'edit'
 }
 
+// GET /products/:id returns the raw DB row (snake_case: category_id,
+// stock_quantity, base_price, ...) -- it's never transformed to
+// camelCase anywhere in the request chain (productService.getProduct is
+// a plain passthrough). The `Products` type above claims camelCase
+// fields, but that's a compile-time-only assertion; at runtime every
+// multi-word field below was silently undefined, so defaultValues fell
+// back to '' / 0 / false for ALL of them on every edit -- category and
+// stock are just the two an admin doesn't always retype (whatever field
+// they're actively editing gets a real value typed over the wrong
+// default, masking the bug for that field). Single-word fields (name,
+// slug, sku, description, weight, length/width/height) were never
+// affected, since snake_case and camelCase are identical for one word.
+// Same normalize-both-cases pattern already used for exactly this reason
+// in tech-tools-mobile-app/src/api/index.ts's normalizeAuthUser.
+// Same `as any` escape hatch this file already uses elsewhere (.media,
+// .attribute_values) for reading fields the generated Products type
+// doesn't actually describe.
+function normalizeProductForForm(product?: Products): Record<string, any> {
+  const raw = (product as Record<string, any>) || {}
+  const pick = (camel: string, snake: string) =>
+    raw[camel] !== undefined ? raw[camel] : raw[snake]
+
+  return {
+    ...raw,
+    shortDescription: pick('shortDescription', 'short_description'),
+    categoryId: pick('categoryId', 'category_id'),
+    brandId: pick('brandId', 'brand_id'),
+    basePrice: pick('basePrice', 'base_price'),
+    salePrice: pick('salePrice', 'sale_price'),
+    costPrice: pick('costPrice', 'cost_price'),
+    taxRate: pick('taxRate', 'tax_rate'),
+    stockQuantity: pick('stockQuantity', 'stock_quantity'),
+    minOrderQuantity: pick('minOrderQuantity', 'min_order_quantity'),
+    maxOrderQuantity: pick('maxOrderQuantity', 'max_order_quantity'),
+    isBackorderAllowed: pick('isBackorderAllowed', 'is_backorder_allowed'),
+    weightUnit: pick('weightUnit', 'weight_unit'),
+    dimensionsUnit: pick('dimensionsUnit', 'dimensions_unit'),
+    isDigital: pick('isDigital', 'is_digital'),
+    deliveryTemplateId: pick('deliveryTemplateId', 'delivery_template_id'),
+    metaTitle: pick('metaTitle', 'meta_title'),
+    metaDescription: pick('metaDescription', 'meta_description'),
+    isActive: pick('isActive', 'is_active'),
+    isFeatured: pick('isFeatured', 'is_featured'),
+  }
+}
+
 // Helper to generate slug from name
 function generateSlug(name: string): string {
   return name
@@ -230,6 +276,9 @@ export function EnhancedProductForm({
   product,
   mode,
 }: EnhancedProductFormProps) {
+  // See normalizeProductForForm's comment -- GET /products/:id returns
+  // snake_case, this form is built on camelCase field names.
+  const normalizedProduct = normalizeProductForForm(product)
   const router = useRouter()
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState('basic')
@@ -375,33 +424,33 @@ export function EnhancedProductForm({
   } = useForm<ProductFormData>({
     resolver: zodResolver(productSchema),
     defaultValues: {
-      name: product?.name || '',
-      slug: product?.slug || '',
-      description: product?.description || '',
-      shortDescription: product?.shortDescription || '',
-      categoryId: product?.categoryId || '',
-      brandId: product?.brandId || '',
-      basePrice: parseNumber(product?.basePrice, 0),
-      salePrice: parseNumber(product?.salePrice, null),
-      costPrice: parseNumber(product?.costPrice, null),
-      taxRate: parseNumber(product?.taxRate, null),
-      sku: product?.sku || '',
-      stockQuantity: parseNumber(product?.stockQuantity, 0),
-      minOrderQuantity: parseNumber(product?.minOrderQuantity, 1),
-      maxOrderQuantity: parseNumber(product?.maxOrderQuantity, null),
-      isBackorderAllowed: product?.isBackorderAllowed || false,
-      weight: parseNumber(product?.weight, null),
-      weightUnit: (product?.weightUnit as 'kg' | 'g' | 'lb' | 'oz') || 'kg',
-      length: parseNumber(product?.length, null),
-      width: parseNumber(product?.width, null),
-      height: parseNumber(product?.height, null),
-      dimensionsUnit: (product?.dimensionsUnit as 'cm' | 'in' | 'm') || 'cm',
-      isDigital: product?.isDigital || false,
-      deliveryTemplateId: product?.deliveryTemplateId || null,
-      metaTitle: product?.metaTitle || '',
-      metaDescription: product?.metaDescription || '',
-      isActive: product?.isActive ?? true,
-      isFeatured: product?.isFeatured || false,
+      name: normalizedProduct.name || '',
+      slug: normalizedProduct.slug || '',
+      description: normalizedProduct.description || '',
+      shortDescription: normalizedProduct.shortDescription || '',
+      categoryId: normalizedProduct.categoryId || '',
+      brandId: normalizedProduct.brandId || '',
+      basePrice: parseNumber(normalizedProduct.basePrice, 0),
+      salePrice: parseNumber(normalizedProduct.salePrice, null),
+      costPrice: parseNumber(normalizedProduct.costPrice, null),
+      taxRate: parseNumber(normalizedProduct.taxRate, null),
+      sku: normalizedProduct.sku || '',
+      stockQuantity: parseNumber(normalizedProduct.stockQuantity, 0),
+      minOrderQuantity: parseNumber(normalizedProduct.minOrderQuantity, 1),
+      maxOrderQuantity: parseNumber(normalizedProduct.maxOrderQuantity, null),
+      isBackorderAllowed: normalizedProduct.isBackorderAllowed || false,
+      weight: parseNumber(normalizedProduct.weight, null),
+      weightUnit: (normalizedProduct.weightUnit as 'kg' | 'g' | 'lb' | 'oz') || 'kg',
+      length: parseNumber(normalizedProduct.length, null),
+      width: parseNumber(normalizedProduct.width, null),
+      height: parseNumber(normalizedProduct.height, null),
+      dimensionsUnit: (normalizedProduct.dimensionsUnit as 'cm' | 'in' | 'm') || 'cm',
+      isDigital: normalizedProduct.isDigital || false,
+      deliveryTemplateId: normalizedProduct.deliveryTemplateId || null,
+      metaTitle: normalizedProduct.metaTitle || '',
+      metaDescription: normalizedProduct.metaDescription || '',
+      isActive: normalizedProduct.isActive ?? true,
+      isFeatured: normalizedProduct.isFeatured || false,
     },
     mode: 'onChange',
   })
