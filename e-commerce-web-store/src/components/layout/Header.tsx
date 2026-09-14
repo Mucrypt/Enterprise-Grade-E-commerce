@@ -18,6 +18,7 @@ import {
   Gift,
   Percent,
   Headphones,
+  Smartphone,
 } from 'lucide-react'
 import {
   useCartStore,
@@ -215,6 +216,13 @@ export default function Header() {
             </Link>
           </div>
           <div className='flex items-center gap-6'>
+            <Link
+              to='/download-app'
+              className='hidden sm:flex items-center gap-1 hover:text-white transition-colors'
+            >
+              <Smartphone className='w-3.5 h-3.5' />
+              Get the App
+            </Link>
             <Link
               to='/deals'
               className='flex items-center gap-1 hover:text-white transition-colors'

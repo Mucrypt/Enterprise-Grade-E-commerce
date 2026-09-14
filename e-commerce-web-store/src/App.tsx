@@ -52,6 +52,7 @@ const AffiliatePage = lazy(() => import('./pages/AffiliatePage'))
 const BlogPage = lazy(() => import('./pages/BlogPage'))
 const BlogPostPage = lazy(() => import('./pages/BlogPostPage'))
 const TrendingPage = lazy(() => import('./pages/TrendingPage'))
+const DownloadAppPage = lazy(() => import('./pages/DownloadAppPage'))
 
 // Create React Query client
 const queryClient = new QueryClient({
@@ -134,6 +135,7 @@ function App() {
                   element={<PaymentMethodsPage />}
                 />
                 <Route path='settings' element={<SettingsPage />} />
+                <Route path='download-app' element={<DownloadAppPage />} />
 
                 {/* Legal Pages */}
                 <Route path='privacy' element={<PrivacyPolicyPage />} />

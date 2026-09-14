@@ -55,6 +55,7 @@ const footerLinks = {
       { label: 'Press', href: '/press' },
       { label: 'Affiliate Program', href: '/affiliates' },
       { label: 'Blog', href: '/blog' },
+      { label: 'Get the App', href: '/download-app' },
     ],
   },
 }
