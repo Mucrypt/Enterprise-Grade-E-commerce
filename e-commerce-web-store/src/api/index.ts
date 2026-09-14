@@ -1221,36 +1221,43 @@ export const blogApi = {
 // ============================================
 // Wishlist API
 // ============================================
+// Real, server-synced wishlist -- previously dead code pointed at
+// /user/wishlist (singular, wrong -- real per-user routes are mounted at
+// /users, matching /users/addresses) with a body shape (`product_id`) the
+// backend never actually implemented. Only ever called for a signed-in
+// user; a logged-out guest's wishlist stays local-only in
+// wishlistStore.ts, which is why every method here is meant to be called
+// best-effort (a 401 for a guest is expected and safely ignored by the
+// store, not surfaced as an error).
 export const wishlistApi = {
-  // Get wishlist
-  async get() {
+  async getAll() {
     const response = await api.get<{
       success: boolean
-      data: { product_id: string; product: Product }[]
-    }>('/user/wishlist')
-    return response.data.data
+      data: { items: Product[] }
+    }>('/users/wishlist')
+    return response.data.data.items
   },
 
-  // Add to wishlist
   async add(productId: string) {
-    const response = await api.post<ApiResponse<{ message: string }>>(
-      '/user/wishlist',
-      { product_id: productId },
-    )
-    return response.data
+    await api.post('/users/wishlist', { productId })
   },
 
-  // Remove from wishlist
   async remove(productId: string) {
-    await api.delete(`/user/wishlist/${productId}`)
+    await api.delete(`/users/wishlist/${productId}`)
   },
 
-  // Check if in wishlist
-  async check(productId: string) {
-    const response = await api.get<ApiResponse<{ in_wishlist: boolean }>>(
-      `/user/wishlist/check/${productId}`,
-    )
-    return response.data.data.in_wishlist
+  async clear() {
+    await api.delete('/users/wishlist')
+  },
+
+  // Guest -> account merge, called once right after a successful
+  // login/register with whatever was in the local wishlist store.
+  async sync(productIds: string[]) {
+    const response = await api.post<{
+      success: boolean
+      data: { items: Product[] }
+    }>('/users/wishlist/sync', { productIds })
+    return response.data.data.items
   },
 }
 

@@ -9,6 +9,13 @@ import {
   deleteUserAddress,
 } from './user.controller'
 import { registerPushToken, unregisterPushToken } from './push-token.controller'
+import {
+  getWishlist,
+  addToWishlist,
+  removeFromWishlist,
+  clearWishlist,
+  syncWishlist,
+} from './wishlist.controller'
 import { authenticate, authorize } from '../../../middleware/auth'
 import { validate } from '../../../middleware/validation'
 import { userSchemas } from '../../../middleware/validation'
@@ -43,6 +50,16 @@ router.post(
 // Push notification device registration
 router.post('/push-token', registerPushToken)
 router.delete('/push-token', unregisterPushToken)
+
+// Wishlist routes -- the real, server-synced wishlist (guests stay
+// local-only client-side; these are only ever called for a signed-in
+// user). /sync must come before /:productId so 'sync' is never parsed
+// as a product id.
+router.get('/wishlist', getWishlist)
+router.post('/wishlist/sync', syncWishlist)
+router.post('/wishlist', addToWishlist)
+router.delete('/wishlist/:productId', removeFromWishlist)
+router.delete('/wishlist', clearWishlist)
 
 // Address routes
 router.get('/addresses', getUserAddresses)

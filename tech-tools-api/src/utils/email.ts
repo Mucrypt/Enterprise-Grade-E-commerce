@@ -507,6 +507,114 @@ export const sendOrderStatusUpdateEmail = async (
 }
 
 // ============================================
+// Wishlist Alerts -- Back in Stock / Price Drop
+// ============================================
+
+export interface WishlistAlertDetails {
+  productName: string
+  productSlug: string
+  productImage?: string | null
+  price: number
+}
+
+export const sendBackInStockEmail = async (
+  email: string,
+  details: WishlistAlertDetails,
+): Promise<boolean> => {
+  const formatCurrency = (amount: number) => `$${amount.toFixed(2)}`
+  const productUrl = `${COMPANY_WEBSITE}/product/${details.productSlug}`
+
+  const content = `
+    <div style="text-align: center; margin-bottom: 30px;">
+      <h2 style="color: #1f2937; margin: 0 0 10px 0;">It's back!</h2>
+      <p style="color: #6b7280; margin: 0;">
+        Good news -- an item on your wishlist is back in stock.
+      </p>
+    </div>
+
+    ${
+      details.productImage
+        ? `<div style="text-align: center; margin-bottom: 20px;">
+             <img src="${details.productImage}" alt="${details.productName}" style="max-width: 240px; border-radius: 8px;" />
+           </div>`
+        : ''
+    }
+
+    <div style="text-align: center;">
+      <h3 style="color: #1f2937; margin: 0 0 8px 0;">${details.productName}</h3>
+      <p style="color: #f97316; font-weight: bold; font-size: 20px; margin: 0 0 25px 0;">
+        ${formatCurrency(details.price)}
+      </p>
+      <a href="${productUrl}" style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); color: white; padding: 14px 30px; text-decoration: none; border-radius: 8px; font-weight: 600; display: inline-block;">
+        Shop Now
+      </a>
+    </div>
+  `
+
+  return await sendEmail(
+    email,
+    `${details.productName} is back in stock -- ${COMPANY_NAME}`,
+    getBaseTemplate(content),
+    'back_in_stock',
+  )
+}
+
+export interface PriceDropDetails extends WishlistAlertDetails {
+  oldPrice: number
+}
+
+export const sendPriceDropEmail = async (
+  email: string,
+  details: PriceDropDetails,
+): Promise<boolean> => {
+  const formatCurrency = (amount: number) => `$${amount.toFixed(2)}`
+  const productUrl = `${COMPANY_WEBSITE}/product/${details.productSlug}`
+  const percentOff = Math.round((1 - details.price / details.oldPrice) * 100)
+
+  const content = `
+    <div style="text-align: center; margin-bottom: 30px;">
+      <h2 style="color: #1f2937; margin: 0 0 10px 0;">Price drop alert!</h2>
+      <p style="color: #6b7280; margin: 0;">
+        An item on your wishlist just got cheaper.
+      </p>
+    </div>
+
+    ${
+      details.productImage
+        ? `<div style="text-align: center; margin-bottom: 20px;">
+             <img src="${details.productImage}" alt="${details.productName}" style="max-width: 240px; border-radius: 8px;" />
+           </div>`
+        : ''
+    }
+
+    <div style="text-align: center;">
+      <h3 style="color: #1f2937; margin: 0 0 8px 0;">${details.productName}</h3>
+      <p style="margin: 0 0 25px 0;">
+        <span style="color: #9ca3af; text-decoration: line-through; font-size: 15px; margin-right: 8px;">
+          ${formatCurrency(details.oldPrice)}
+        </span>
+        <span style="color: #f97316; font-weight: bold; font-size: 20px;">
+          ${formatCurrency(details.price)}
+        </span>
+        <span style="color: #16a34a; font-weight: 600; font-size: 14px; margin-left: 8px;">
+          ${percentOff}% off
+        </span>
+      </p>
+      <a href="${productUrl}" style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); color: white; padding: 14px 30px; text-decoration: none; border-radius: 8px; font-weight: 600; display: inline-block;">
+        Shop Now
+      </a>
+    </div>
+  `
+
+  return await sendEmail(
+    email,
+    `Price drop: ${details.productName} is now ${formatCurrency(details.price)} -- ${COMPANY_NAME}`,
+    getBaseTemplate(content),
+    'price_drop',
+  )
+}
+
+// ============================================
 // Export email service
 // ============================================
 

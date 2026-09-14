@@ -6,8 +6,34 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { User } from '../types'
-import { authApi, clearTokens } from '../api'
+import { authApi, clearTokens, wishlistApi } from '../api'
 import { MobileNotificationService } from '../services/notification.service'
+import { useWishlistStore } from './wishlistStore'
+
+// Guest -> account merge: whatever was favorited locally before this
+// account existed (or before this login) gets folded into the real
+// server-side wishlist in one request, then the store becomes the
+// authoritative server list. One-directional import only (authStore ->
+// wishlistStore) -- wishlistStore never imports authStore, so this can't
+// create a cycle.
+async function syncWishlistAfterAuth(): Promise<void> {
+  try {
+    const localItems = useWishlistStore.getState().items
+    const merged = await wishlistApi.sync(localItems.map((item) => item.id))
+    useWishlistStore.getState().hydrateFromServer(merged)
+  } catch {
+    // Best-effort -- never block a successful login/register on this.
+  }
+}
+
+// Already-logged-in cold boot -- refresh from server in case the
+// wishlist changed on another device.
+function refreshWishlistFromServer(): void {
+  wishlistApi
+    .getAll()
+    .then((items) => useWishlistStore.getState().hydrateFromServer(items))
+    .catch(() => {})
+}
 
 interface AuthState {
   user: User | null
@@ -48,6 +74,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           const { user } = await authApi.login(email, password)
           set({ user, isAuthenticated: true, isLoading: false })
+          void syncWishlistAfterAuth()
         } catch (error: any) {
           const message =
             error.response?.data?.message || error.message || 'Login failed'
@@ -61,6 +88,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           const { user } = await authApi.register(data)
           set({ user, isAuthenticated: true, isLoading: false })
+          void syncWishlistAfterAuth()
         } catch (error: any) {
           const message =
             error.response?.data?.message ||
@@ -115,6 +143,7 @@ export const useAuthStore = create<AuthState>()(
           try {
             const isAuth = await authApi.isAuthenticated()
             if (isAuth) {
+              refreshWishlistFromServer()
               // Optionally refresh user data, but don't fail if it errors
               try {
                 const user = await authApi.getCurrentUser()
@@ -141,6 +170,7 @@ export const useAuthStore = create<AuthState>()(
           if (isAuth) {
             const user = await authApi.getCurrentUser()
             set({ user, isAuthenticated: true, isLoading: false })
+            refreshWishlistFromServer()
           } else {
             set({ user: null, isAuthenticated: false, isLoading: false })
           }

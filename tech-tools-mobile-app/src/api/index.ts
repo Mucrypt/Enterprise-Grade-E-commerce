@@ -1249,28 +1249,38 @@ export const reviewsApi = {
 // ============================================
 // Wishlist API
 // ============================================
+// Real, server-synced wishlist -- previously dead code pointed at
+// `/wishlist` (top-level), a route that never existed on the backend
+// (real per-user routes are mounted at /users, matching /users/push-token
+// and /users/addresses). Only ever called for a signed-in user; a
+// logged-out guest's wishlist stays local-only in wishlistStore.ts, so
+// every method here is meant to be called best-effort -- a 401 for a
+// guest is expected and safely ignored by the store, not surfaced.
 export const wishlistApi = {
   getAll: async (): Promise<Product[]> => {
-    const response = await apiClient.get('/wishlist')
+    const response = await apiClient.get('/users/wishlist')
     const data = response.data.data || response.data
-    return data.items || data.products || data
+    return data.items || []
   },
 
   add: async (productId: string): Promise<void> => {
-    await apiClient.post('/wishlist', { productId })
+    await apiClient.post('/users/wishlist', { productId })
   },
 
   remove: async (productId: string): Promise<void> => {
-    await apiClient.delete(`/wishlist/${productId}`)
+    await apiClient.delete(`/users/wishlist/${productId}`)
   },
 
-  isInWishlist: async (productId: string): Promise<boolean> => {
-    try {
-      const items = await wishlistApi.getAll()
-      return items.some((item) => item.id === productId)
-    } catch {
-      return false
-    }
+  clear: async (): Promise<void> => {
+    await apiClient.delete('/users/wishlist')
+  },
+
+  // Guest -> account merge, called once right after a successful
+  // login/register with whatever was in the local wishlist store.
+  sync: async (productIds: string[]): Promise<Product[]> => {
+    const response = await apiClient.post('/users/wishlist/sync', { productIds })
+    const data = response.data.data || response.data
+    return data.items || []
   },
 }
 

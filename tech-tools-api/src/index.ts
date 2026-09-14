@@ -59,6 +59,10 @@ import {
   startAbandonedCheckoutQueueWorker,
   stopAbandonedCheckoutQueueWorker,
 } from './services/abandoned-checkout.queue'
+import {
+  startWishlistAlertsQueueWorker,
+  stopWishlistAlertsQueueWorker,
+} from './services/wishlist-alerts.queue'
 import { webSocketService } from './services/websocket.service'
 import { notificationDispatcher } from './services/notification-dispatcher.service'
 import shippingService from './services/shipping'
@@ -159,6 +163,7 @@ if (cluster.isPrimary && numWorkers > 1) {
         startChannelOrderImportWorker()
         startSourcingRewriteWorker()
         startAbandonedCheckoutQueueWorker()
+        startWishlistAlertsQueueWorker()
       }
 
       // Start server
@@ -192,6 +197,7 @@ if (cluster.isPrimary && numWorkers > 1) {
       stopChannelOrderImportWorker()
       stopSourcingRewriteWorker()
       stopAbandonedCheckoutQueueWorker()
+      stopWishlistAlertsQueueWorker()
     }
     httpServer.close(() => {
       logger.info('Server closed')
