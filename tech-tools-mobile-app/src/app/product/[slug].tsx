@@ -30,6 +30,7 @@ import {
   formatPrice,
   calculateDiscount,
   getProductMedia,
+  getProductImage,
   generateStarRating,
 } from '@/utils'
 import { useCartStore, useWishlistStore, useRecentlyViewedStore } from '@/stores'
@@ -43,6 +44,8 @@ export default function ProductDetailScreen() {
   const router = useRouter()
   const [product, setProduct] = useState<Product | null>(null)
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([])
+  const [frequentlyBoughtTogether, setFrequentlyBoughtTogether] = useState<Product[]>([])
+  const [selectedFbtIds, setSelectedFbtIds] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [activeImageIndex, setActiveImageIndex] = useState(0)
   const [quantity, setQuantity] = useState(1)
@@ -76,6 +79,12 @@ export default function ProductDetailScreen() {
         // Fetch related products
         const related = await productsApi.getRelated(productData.id, 6)
         setRelatedProducts(related)
+
+        // Real cross-sell from actual co-purchase history -- honestly
+        // empty (never a fabricated fallback) with no paid-order history.
+        const fbt = await productsApi.getFrequentlyBoughtTogether(productData.id, 4)
+        setFrequentlyBoughtTogether(fbt)
+        setSelectedFbtIds(fbt.map((p) => p.id))
       } catch (error) {
         console.error('Error fetching product:', error)
       } finally {
@@ -175,6 +184,24 @@ export default function ProductDetailScreen() {
       quantity,
     )
     // Show toast or feedback
+  }
+
+  const toggleFbtSelection = (productId: string) => {
+    setSelectedFbtIds((prev) =>
+      prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId],
+    )
+  }
+
+  const handleAddFrequentlyBoughtTogetherToCart = () => {
+    if (!product) return
+    addToCart(product, 1)
+    trackAddToCart(product.id, product.name, product.sku || '', Number(product.sale_price || product.base_price), 1)
+
+    for (const item of frequentlyBoughtTogether) {
+      if (!selectedFbtIds.includes(item.id)) continue
+      addToCart(item, 1)
+      trackAddToCart(item.id, item.name, item.sku || '', Number(item.sale_price || item.base_price), 1)
+    }
   }
 
   const handleBuyNow = () => {
@@ -427,6 +454,69 @@ export default function ProductDetailScreen() {
               </View>
             )}
           </View>
+
+          {/* Frequently Bought Together -- real cross-sell from actual
+              co-purchase history, distinct from the same-category "Related
+              Products" rail below. */}
+          {frequentlyBoughtTogether.length > 0 && (
+            <View style={styles.fbtSection}>
+              <Text style={styles.relatedTitle}>Frequently Bought Together</Text>
+              <View style={styles.fbtRow}>
+                <View style={styles.fbtTile}>
+                  <Image source={{ uri: getProductImage(product) }} style={styles.fbtImage} />
+                  <Text style={styles.fbtName} numberOfLines={2}>
+                    {product.name}
+                  </Text>
+                </View>
+                {frequentlyBoughtTogether.map((item) => (
+                  <React.Fragment key={item.id}>
+                    <Ionicons name='add' size={18} color={AppColors.gray400} />
+                    <TouchableOpacity
+                      style={styles.fbtTile}
+                      activeOpacity={0.8}
+                      onPress={() => toggleFbtSelection(item.id)}
+                    >
+                      <View style={styles.fbtCheckbox}>
+                        <Ionicons
+                          name={selectedFbtIds.includes(item.id) ? 'checkbox' : 'square-outline'}
+                          size={18}
+                          color={AppColors.primary}
+                        />
+                      </View>
+                      <Image source={{ uri: getProductImage(item) }} style={styles.fbtImage} />
+                      <Text style={styles.fbtName} numberOfLines={2}>
+                        {item.name}
+                      </Text>
+                      <Text style={styles.fbtPrice}>
+                        {formatPrice(item.sale_price || item.base_price)}
+                      </Text>
+                    </TouchableOpacity>
+                  </React.Fragment>
+                ))}
+              </View>
+
+              <View style={styles.fbtFooter}>
+                <Text style={styles.fbtTotalLabel}>
+                  Total for {1 + selectedFbtIds.length} item{selectedFbtIds.length === 0 ? '' : 's'}:{' '}
+                  <Text style={styles.fbtTotalValue}>
+                    {formatPrice(
+                      Number(product.sale_price || product.base_price) +
+                        frequentlyBoughtTogether
+                          .filter((item) => selectedFbtIds.includes(item.id))
+                          .reduce((sum, item) => sum + Number(item.sale_price || item.base_price), 0),
+                    )}
+                  </Text>
+                </Text>
+                <TouchableOpacity
+                  style={styles.fbtAddButton}
+                  activeOpacity={0.85}
+                  onPress={handleAddFrequentlyBoughtTogetherToCart}
+                >
+                  <Text style={styles.fbtAddButtonText}>Add Selected to Cart</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
           {/* Related Products */}
           {relatedProducts.length > 0 && (
@@ -767,6 +857,71 @@ const styles = StyleSheet.create({
   },
   relatedCard: {
     marginRight: AppSpacing.md,
+  },
+  fbtSection: {
+    marginTop: AppSpacing.md,
+    padding: AppSpacing.base,
+    backgroundColor: AppColors.white,
+  },
+  fbtRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+    gap: AppSpacing.sm,
+  },
+  fbtTile: {
+    width: 88,
+    alignItems: 'center',
+  },
+  fbtCheckbox: {
+    marginBottom: 4,
+  },
+  fbtImage: {
+    width: 72,
+    height: 72,
+    borderRadius: AppBorderRadius.md,
+    backgroundColor: AppColors.gray100,
+  },
+  fbtName: {
+    marginTop: AppSpacing.xs,
+    fontSize: 11,
+    color: AppColors.gray700,
+    textAlign: 'center',
+  },
+  fbtPrice: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: AppColors.primary,
+    marginTop: 2,
+  },
+  fbtFooter: {
+    marginTop: AppSpacing.md,
+    padding: AppSpacing.md,
+    borderRadius: AppBorderRadius.md,
+    backgroundColor: AppColors.gray50,
+  },
+  fbtTotalLabel: {
+    fontSize: 13,
+    color: AppColors.gray600,
+  },
+  fbtTotalValue: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: AppColors.gray900,
+  },
+  fbtAddButton: {
+    marginTop: AppSpacing.sm,
+    backgroundColor: AppColors.primary,
+    borderRadius: AppBorderRadius.md,
+    paddingVertical: AppSpacing.sm,
+    alignItems: 'center',
+  },
+  fbtAddButtonText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: AppColors.white,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   actionBar: {
     flexDirection: 'row',

@@ -4,12 +4,12 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Heart, Share2, Shield, RotateCcw, Package, Award, MessageSquare, Users } from 'lucide-react'
+import { Heart, Share2, Shield, RotateCcw, Package, Award, MessageSquare, Users, Plus } from 'lucide-react'
 import DOMPurify from 'dompurify'
 import type { Product, ProductMedia, ProductVariant } from '../types'
 import { productsApi } from '../api'
 import { useCartStore, useWishlistStore } from '../stores'
-import { cn, getProductImage } from '../utils'
+import { cn, getProductImage, formatPrice } from '../utils'
 import { getDisplayPricing } from '../utils/pricing'
 import ProductCard from '../components/common/ProductCard'
 import DeliveryEstimate from '../components/product/DeliveryEstimate'
@@ -28,6 +28,8 @@ export default function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>()
   const [product, setProduct] = useState<Product | null>(null)
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([])
+  const [frequentlyBoughtTogether, setFrequentlyBoughtTogether] = useState<Product[]>([])
+  const [selectedFbtIds, setSelectedFbtIds] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [quantity, setQuantity] = useState(1)
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null)
@@ -84,6 +86,18 @@ export default function ProductDetailPage() {
           setRelatedProducts([])
         }
       }
+
+      // Real cross-sell from actual co-purchase history -- honestly empty
+      // (never a fabricated fallback) for a product with no paid-order
+      // history yet.
+      try {
+        const fbt = await productsApi.getFrequentlyBoughtTogether(data.id, 4)
+        setFrequentlyBoughtTogether(fbt)
+        setSelectedFbtIds(fbt.map((p) => p.id))
+      } catch {
+        setFrequentlyBoughtTogether([])
+        setSelectedFbtIds([])
+      }
     } catch (error) {
       console.error('Failed to load product:', error)
     } finally {
@@ -96,6 +110,26 @@ export default function ProductDetailPage() {
     addItem(product, quantity, selectedVariant || undefined)
     const pricing = getDisplayPricing(product.base_price, product.sale_price)
     trackAddToCart(product.id, product.name, product.sku || '', pricing.sellingPrice, quantity)
+  }
+
+  const toggleFbtSelection = (productId: string) => {
+    setSelectedFbtIds((prev) =>
+      prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId],
+    )
+  }
+
+  const handleAddFrequentlyBoughtTogetherToCart = () => {
+    if (!product) return
+    addItem(product, 1)
+    const pricing = getDisplayPricing(product.base_price, product.sale_price)
+    trackAddToCart(product.id, product.name, product.sku || '', pricing.sellingPrice, 1)
+
+    for (const item of frequentlyBoughtTogether) {
+      if (!selectedFbtIds.includes(item.id)) continue
+      addItem(item, 1)
+      const itemPricing = getDisplayPricing(item.base_price, item.sale_price)
+      trackAddToCart(item.id, item.name, item.sku || '', itemPricing.sellingPrice, 1)
+    }
   }
 
   const handleBuyNow = () => {
@@ -351,15 +385,64 @@ export default function ProductDetailPage() {
           </div>
         )}
 
-        {relatedProducts.length > 4 && (
+        {product && frequentlyBoughtTogether.length > 0 && (
           <div className='mt-12'>
             <h2 className='mb-6 flex items-center gap-2 text-2xl font-bold text-gray-900'>
               <Users className='h-6 w-6 text-orange-500' /> Frequently Bought Together
             </h2>
-            <div className='grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4'>
-              {relatedProducts.slice(4, 8).map((relatedProduct) => (
-                <ProductCard key={relatedProduct.id} product={relatedProduct} />
+            <div className='flex flex-wrap items-center gap-3'>
+              <div className='flex w-24 flex-col items-center text-center'>
+                <img
+                  src={getProductImage(product, { w: 200, h: 200 })}
+                  alt={product.name}
+                  className='h-20 w-20 rounded-lg border border-gray-200 object-cover'
+                />
+                <p className='mt-2 line-clamp-2 text-xs text-gray-700'>{product.name}</p>
+              </div>
+
+              {frequentlyBoughtTogether.map((item) => (
+                <div key={item.id} className='flex items-center gap-3'>
+                  <Plus className='h-4 w-4 shrink-0 text-gray-400' aria-hidden='true' />
+                  <label className='flex w-24 cursor-pointer flex-col items-center text-center'>
+                    <input
+                      type='checkbox'
+                      checked={selectedFbtIds.includes(item.id)}
+                      onChange={() => toggleFbtSelection(item.id)}
+                      className='mb-1.5 h-4 w-4 accent-orange-500'
+                    />
+                    <img
+                      src={getProductImage(item, { w: 200, h: 200 })}
+                      alt={item.name}
+                      className='h-20 w-20 rounded-lg border border-gray-200 object-cover'
+                    />
+                    <p className='mt-2 line-clamp-2 text-xs text-gray-700'>{item.name}</p>
+                    <p className='text-xs font-bold text-orange-600'>
+                      {formatPrice(item.sale_price ?? item.base_price)}
+                    </p>
+                  </label>
+                </div>
               ))}
+            </div>
+
+            <div className='mt-5 flex flex-wrap items-center justify-between gap-4 rounded-lg bg-gray-50 p-4'>
+              <p className='text-sm text-gray-600'>
+                Total for {1 + selectedFbtIds.length} item{selectedFbtIds.length === 0 ? '' : 's'}:{' '}
+                <span className='text-lg font-bold text-gray-900'>
+                  {formatPrice(
+                    Number(product.sale_price ?? product.base_price) +
+                      frequentlyBoughtTogether
+                        .filter((item) => selectedFbtIds.includes(item.id))
+                        .reduce((sum, item) => sum + Number(item.sale_price ?? item.base_price), 0),
+                  )}
+                </span>
+              </p>
+              <button
+                type='button'
+                onClick={handleAddFrequentlyBoughtTogetherToCart}
+                className='rounded-md bg-orange-500 px-6 py-3 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-orange-600'
+              >
+                Add Selected to Cart
+              </button>
             </div>
           </div>
         )}

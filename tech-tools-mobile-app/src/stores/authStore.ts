@@ -7,6 +7,7 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { User } from '../types'
 import { authApi, clearTokens } from '../api'
+import { MobileNotificationService } from '../services/notification.service'
 
 interface AuthState {
   user: User | null
@@ -73,6 +74,11 @@ export const useAuthStore = create<AuthState>()(
       logout: async () => {
         set({ isLoading: true })
         try {
+          // Best-effort, and must run before clearTokens() below -- it
+          // needs the still-valid session to authenticate the unregister
+          // call, so a signed-out device stops receiving pushes meant for
+          // the account that just signed out of it.
+          await MobileNotificationService.unregisterPushToken()
           await authApi.logout()
         } catch {
           // Ignore logout errors

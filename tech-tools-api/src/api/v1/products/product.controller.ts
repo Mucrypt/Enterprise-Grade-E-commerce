@@ -937,6 +937,74 @@ export const getRelatedProducts = async (req: Request, res: Response) => {
   }
 }
 
+/**
+ * Real cross-sell, computed from actual co-purchase history in
+ * order_items -- not the same-category/brand heuristic getRelatedProducts
+ * above uses. Only counts PAID orders (real completed sales, never
+ * fabricated), so a brand-new product with no sales history yet honestly
+ * returns an empty array rather than a guessed fallback list.
+ */
+export const getFrequentlyBoughtTogether = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+    const { limit = 4 } = req.query
+
+    const result = await query(
+      `SELECT
+        p.id, p.name, p.slug, p.base_price, p.sale_price, p.is_active,
+        c.name as category_name,
+        c.slug as category_slug,
+        (
+          SELECT COALESCE(json_agg(
+            json_build_object(
+              'id', pm.id, 'url', pm.url, 'image_url', pm.url,
+              'alt_text', pm.alt_text, 'is_primary', pm.is_primary
+            ) ORDER BY pm.is_primary DESC, pm.position
+          ), '[]'::json)
+          FROM (
+            SELECT id, url, alt_text, is_primary, position
+            FROM product_media
+            WHERE product_id = p.id AND type = 'image'
+            ORDER BY is_primary DESC, position
+            LIMIT 3
+          ) pm
+        ) as images,
+        (
+          SELECT COALESCE(SUM(i.available_stock), 0)
+          FROM inventory i
+          WHERE i.product_id = p.id
+        ) as total_stock,
+        co.co_purchase_count
+      FROM (
+        SELECT oi2.product_id, COUNT(DISTINCT oi1.order_id) as co_purchase_count
+        FROM order_items oi1
+        JOIN order_items oi2 ON oi1.order_id = oi2.order_id AND oi2.product_id != oi1.product_id
+        JOIN orders o ON o.id = oi1.order_id
+        WHERE oi1.product_id = $1 AND o.payment_status = 'paid'
+        GROUP BY oi2.product_id
+        ORDER BY co_purchase_count DESC
+        LIMIT $2
+      ) co
+      JOIN products p ON p.id = co.product_id
+      LEFT JOIN categories c ON p.category_id = c.id
+      WHERE p.is_active = true AND p.deleted_at IS NULL
+      ORDER BY co.co_purchase_count DESC`,
+      [id, limit],
+    )
+
+    res.json({
+      success: true,
+      data: { products: result.rows },
+    })
+  } catch (error) {
+    logger.error('Get frequently bought together error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch frequently bought together products',
+    })
+  }
+}
+
 export const updateProduct = async (req: AuthRequest, res: Response) => {
   try {
     const productId = req.params.productId

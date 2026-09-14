@@ -1,8 +1,8 @@
 import * as Notifications from 'expo-notifications'
 import * as Device from 'expo-device'
 import Constants from 'expo-constants'
-import axios from 'axios'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { authApi, pushNotificationApi } from '@/api'
 
 type NavigateHandler = (path: string) => void
 
@@ -128,32 +128,46 @@ export class MobileNotificationService {
   }
 
   /**
-   * Register push token with backend
+   * Register push token with backend. Requires a real signed-in session --
+   * guests have no account for the backend to attach a device to (the
+   * endpoint requires auth). Previously this checked AsyncStorage for
+   * 'userId'/'accessToken', keys the real auth flow never wrote (the app's
+   * actual session lives in SecureStore via useAuthStore/apiClient), so
+   * this always silently no-opped even when the endpoint existed.
    */
   static async registerPushToken(token: string) {
     try {
-      const userId = await AsyncStorage.getItem('userId')
-      const accessToken = await AsyncStorage.getItem('accessToken')
+      const signedIn = await authApi.isAuthenticated()
+      if (!signedIn) return
 
-      if (!userId || !accessToken) return
-
-      // Save to backend
-      await axios.post(
-        '/api/v1/users/push-token',
-        { pushToken: token, deviceId: Device.osName },
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        },
-      )
+      const deviceId = Device.osName || 'unknown-device'
+      await pushNotificationApi.register(token, deviceId)
 
       // Cache token locally
       await AsyncStorage.setItem('pushToken', token)
+      await AsyncStorage.setItem('pushDeviceId', deviceId)
 
       console.log('Push token registered with backend')
     } catch (error) {
       console.error('Error registering push token:', error)
+    }
+  }
+
+  /**
+   * Unregister this device's push token -- call on sign-out so a
+   * logged-out device stops receiving pushes meant for the account that
+   * just signed out of it. Best-effort: never blocks or throws into the
+   * caller's sign-out flow.
+   */
+  static async unregisterPushToken() {
+    try {
+      const deviceId = await AsyncStorage.getItem('pushDeviceId')
+      if (!deviceId) return
+      await pushNotificationApi.unregister(deviceId)
+      await AsyncStorage.removeItem('pushToken')
+      await AsyncStorage.removeItem('pushDeviceId')
+    } catch (error) {
+      console.error('Error unregistering push token:', error)
     }
   }
 
@@ -257,6 +271,9 @@ export class MobileNotificationService {
           return `/blog/${productSlug}`
         }
         return '/blog/index'
+
+      case 'abandoned_checkout':
+        return '/(tabs)/cart'
 
       default:
         return '/(tabs)/index'

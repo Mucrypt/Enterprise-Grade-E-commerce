@@ -8,6 +8,7 @@ import {
   updateUserAddress,
   deleteUserAddress,
 } from './user.controller'
+import { registerPushToken, unregisterPushToken } from './push-token.controller'
 import { authenticate, authorize } from '../../../middleware/auth'
 import { validate } from '../../../middleware/validation'
 import { userSchemas } from '../../../middleware/validation'
@@ -38,6 +39,10 @@ router.post(
   validate(userSchemas.activateBusinessMode),
   activateBusinessMode,
 )
+
+// Push notification device registration
+router.post('/push-token', registerPushToken)
+router.delete('/push-token', unregisterPushToken)
 
 // Address routes
 router.get('/addresses', getUserAddresses)

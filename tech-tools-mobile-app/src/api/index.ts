@@ -947,6 +947,21 @@ export const productsApi = {
     }
   },
 
+  // Real cross-sell computed from actual co-purchase history (paid
+  // orders only) -- returns [] for a product with no purchase history
+  // yet, never a fabricated fallback list.
+  getFrequentlyBoughtTogether: async (productId: string, limit = 4): Promise<Product[]> => {
+    try {
+      const response = await apiClient.get(
+        `/products/${productId}/frequently-bought-together?limit=${limit}`,
+      )
+      const data = response.data.data || response.data
+      return data.products || []
+    } catch {
+      return []
+    }
+  },
+
   search: async (
     query: string,
     filters?: ProductFilters,
@@ -1485,6 +1500,23 @@ export const heroSlidesApi = {
   getPublic: async (): Promise<HeroSlide[]> => {
     const response = await apiClient.get('/settings/hero-slides/public?platform=mobile')
     return response.data.data || response.data
+  },
+}
+
+// ============================================
+// Push Notifications API -- device/token registration. Uses this file's
+// real, configured `apiClient` (baseURL + auth header interceptor already
+// wired up), unlike the plain `axios.post(...)` MobileNotificationService
+// used before, which had no base URL and silently never reached the
+// backend.
+// ============================================
+export const pushNotificationApi = {
+  register: async (pushToken: string, deviceId: string): Promise<void> => {
+    await apiClient.post('/users/push-token', { pushToken, deviceId })
+  },
+
+  unregister: async (deviceId: string): Promise<void> => {
+    await apiClient.delete('/users/push-token', { data: { deviceId } })
   },
 }
 
@@ -2271,4 +2303,5 @@ export const api = {
   shipping: shippingApi,
   homepageSettings: homepageSettingsApi,
   heroSlides: heroSlidesApi,
+  pushNotifications: pushNotificationApi,
 }

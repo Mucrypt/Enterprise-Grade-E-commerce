@@ -55,6 +55,10 @@ import {
   startSourcingRewriteWorker,
   stopSourcingRewriteWorker,
 } from './services/sourcing/sourcing-rewrite.worker'
+import {
+  startAbandonedCheckoutQueueWorker,
+  stopAbandonedCheckoutQueueWorker,
+} from './services/abandoned-checkout.queue'
 import { webSocketService } from './services/websocket.service'
 import { notificationDispatcher } from './services/notification-dispatcher.service'
 import shippingService from './services/shipping'
@@ -154,6 +158,7 @@ if (cluster.isPrimary && numWorkers > 1) {
         startChannelInventoryDiffWorker()
         startChannelOrderImportWorker()
         startSourcingRewriteWorker()
+        startAbandonedCheckoutQueueWorker()
       }
 
       // Start server
@@ -186,6 +191,7 @@ if (cluster.isPrimary && numWorkers > 1) {
       stopChannelInventoryDiffWorker()
       stopChannelOrderImportWorker()
       stopSourcingRewriteWorker()
+      stopAbandonedCheckoutQueueWorker()
     }
     httpServer.close(() => {
       logger.info('Server closed')

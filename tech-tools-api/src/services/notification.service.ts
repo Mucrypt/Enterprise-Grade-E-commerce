@@ -182,7 +182,11 @@ export class NotificationService {
   }
 
   /**
-   * Send push notification (FCM, APNs, etc.)
+   * Send push notification via Expo's push service -- the mobile app
+   * registers real Expo push tokens (see MobileNotificationService /
+   * POST /users/push-token), so this calls Expo's HTTP push API
+   * directly (no SDK dependency needed -- it's a plain JSON POST) rather
+   * than talking to FCM/APNs directly, which Expo already fans out to.
    */
   private static async sendPushNotification(
     notificationId: string,
@@ -193,22 +197,39 @@ export class NotificationService {
 
       // Get push tokens for user (from mobile app)
       const tokensResult = await dbQuery(
-        `SELECT push_token FROM user_devices 
+        `SELECT push_token FROM user_devices
          WHERE user_id = $1 AND push_token IS NOT NULL`,
         [payload.userId],
       )
 
       if (tokensResult.rows.length === 0) return
 
-      // TODO: Implement Firebase Cloud Messaging or similar
-      // For now, just log as sent
-      logger.info(
-        `Push notification queued for ${tokensResult.rows.length} devices`,
-      )
+      const messages = tokensResult.rows.map((row) => ({
+        to: row.push_token,
+        title: payload.title,
+        body: payload.message,
+        data: { type: payload.type, actionUrl: payload.actionUrl, ...(payload.data || {}) },
+      }))
+
+      const response = await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Accept-Encoding': 'gzip, deflate',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(messages),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Expo push API responded ${response.status}`)
+      }
+
+      logger.info(`Push notification sent to ${messages.length} device(s)`)
 
       // Mark as push sent
       await dbQuery(
-        `UPDATE notifications SET push_sent = TRUE, push_sent_at = CURRENT_TIMESTAMP 
+        `UPDATE notifications SET push_sent = TRUE, push_sent_at = CURRENT_TIMESTAMP
          WHERE id = $1`,
         [notificationId],
       )

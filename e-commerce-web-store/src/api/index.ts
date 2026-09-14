@@ -153,6 +153,17 @@ export const productsApi = {
     return response.data.data
   },
 
+  // Real cross-sell computed from actual co-purchase history (paid orders
+  // only) -- returns [] for a product with no purchase history yet,
+  // never a fabricated fallback list.
+  async getFrequentlyBoughtTogether(productId: string, limit = 4) {
+    const response = await api.get<{
+      success: boolean
+      data: { products: Product[] }
+    }>(`/products/${productId}/frequently-bought-together?limit=${limit}`)
+    return response.data.data.products
+  },
+
   // Get the admin-configured delivery date-range estimate for one product,
   // optionally narrowed by an explicit ISO country code (defaults to the
   // server's own IP-based guess when omitted).

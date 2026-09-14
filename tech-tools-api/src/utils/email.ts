@@ -297,6 +297,82 @@ export const sendOrderConfirmationEmail = async (
   )
 }
 
+// ============================================
+// Abandoned Checkout Recovery Email
+// ============================================
+
+export interface AbandonedCheckoutDetails {
+  orderNumber: string
+  customerName: string
+  items: OrderItem[]
+  grandTotal: number
+}
+
+export const sendAbandonedCheckoutEmail = async (
+  email: string,
+  details: AbandonedCheckoutDetails,
+): Promise<boolean> => {
+  const formatCurrency = (amount: number) => `$${amount.toFixed(2)}`
+
+  const itemsHtml = details.items
+    .map(
+      (item) => `
+      <tr>
+        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">
+          <span style="color: #1f2937; font-weight: 500;">${item.productName}</span>
+        </td>
+        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: center; color: #6b7280;">
+          x${item.quantity}
+        </td>
+        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right; color: #1f2937; font-weight: 500;">
+          ${formatCurrency(item.totalPrice)}
+        </td>
+      </tr>
+    `,
+    )
+    .join('')
+
+  const content = `
+    <div style="text-align: center; margin-bottom: 30px;">
+      <h2 style="color: #1f2937; margin: 0 0 10px 0;">You left something behind!</h2>
+      <p style="color: #6b7280; margin: 0;">
+        Hi ${details.customerName}, your order is still waiting -- complete it before your items sell out.
+      </p>
+    </div>
+
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+      <thead>
+        <tr style="background: #f3f4f6;">
+          <th style="padding: 12px; text-align: left; color: #6b7280; font-size: 12px; text-transform: uppercase;">Item</th>
+          <th style="padding: 12px; text-align: center; color: #6b7280; font-size: 12px; text-transform: uppercase;">Qty</th>
+          <th style="padding: 12px; text-align: right; color: #6b7280; font-size: 12px; text-transform: uppercase;">Price</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${itemsHtml}
+      </tbody>
+    </table>
+
+    <div style="border-top: 2px solid #e5e7eb; padding-top: 15px; display: flex; justify-content: space-between;">
+      <span style="color: #1f2937; font-weight: bold; font-size: 18px;">Total</span>
+      <span style="color: #f97316; font-weight: bold; font-size: 18px;">${formatCurrency(details.grandTotal)}</span>
+    </div>
+
+    <div style="text-align: center; margin-top: 30px;">
+      <a href="${COMPANY_WEBSITE}/cart" style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); color: white; padding: 14px 30px; text-decoration: none; border-radius: 8px; font-weight: 600; display: inline-block;">
+        Complete Your Order
+      </a>
+    </div>
+  `
+
+  return await sendEmail(
+    email,
+    `Still want these? Your ${COMPANY_NAME} order is waiting`,
+    getBaseTemplate(content),
+    'abandoned_checkout',
+  )
+}
+
 export const sendWelcomeEmail = async (
   email: string,
   name: string,

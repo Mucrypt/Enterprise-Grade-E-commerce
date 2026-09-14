@@ -3,6 +3,7 @@ import {
   getProducts,
   getProductById,
   getRelatedProducts,
+  getFrequentlyBoughtTogether,
   createProduct,
   updateProduct,
   deleteProduct,
@@ -27,6 +28,7 @@ router.get('/', getProducts)
 router.get('/search', searchProducts)
 router.get('/:id', getProductById)
 router.get('/:id/related', getRelatedProducts)
+router.get('/:id/frequently-bought-together', getFrequentlyBoughtTogether)
 router.get('/:id/variations', getProductVariations)
 
 // Protected routes (admin only)
