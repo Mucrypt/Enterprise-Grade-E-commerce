@@ -31,7 +31,14 @@ export function ProductPicker({ selectedProductIds, onChange, multiple = true }:
     queryFn: () => productService.getProducts({ search: search || undefined, limit: 25 }),
   })
 
-  const products = data?.data?.items || []
+  // GET /products actually returns { data: { products, pagination } }, not
+  // { data: { items, pagination } } -- PaginatedResponse<T>'s `items` field
+  // doesn't match this endpoint's real shape (confirmed against
+  // product.controller.ts's getProducts). Reading only `.items` meant this
+  // picker returned zero results for every search, silently -- selecting a
+  // single product for a hero slide was completely broken end to end.
+  const responseData = data?.data as { items?: Product[]; products?: Product[] } | undefined
+  const products: Product[] = responseData?.products ?? responseData?.items ?? []
 
   const toggle = (productId: string) => {
     if (!multiple) {

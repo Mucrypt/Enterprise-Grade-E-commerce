@@ -72,6 +72,47 @@ async function resolveHeroSlideImage(
   return processed.optimized.large?.url || processed.original.url
 }
 
+// Mirrors the DB's valid_slide_reference CHECK constraint (see
+// 061_hero_slide_collection_grid.sql) so a slide missing its required
+// reference is rejected with a clear message at the API layer instead of
+// reaching Postgres and surfacing as an opaque 500. null = no reference
+// required (custom/product_grid/collection_grid); undefined = not a real
+// slide type at all.
+const REQUIRED_REFERENCE_FIELD: Record<string, { field: string; label: string } | null> = {
+  custom: null,
+  product_grid: null,
+  collection_grid: null,
+  product: { field: 'productId', label: 'a product' },
+  category: { field: 'categoryId', label: 'a category' },
+  product_collection: { field: 'productCollectionId', label: 'a product collection' },
+  category_collection: { field: 'categoryCollectionId', label: 'a category collection' },
+}
+
+// Postgres check_violation (23514) is what valid_slide_reference throws --
+// translated into a clean 400 as a catch-all for any combination the
+// proactive check above didn't already reject (e.g. a partial update that
+// clears a reference field without changing slideType). 23503 is a
+// foreign-key violation, e.g. a productId that doesn't exist.
+function respondHeroSlideError(res: Response, error: any, fallbackMessage: string): void {
+  if (/^Image:/.test(error.message)) {
+    res.status(400).json({ success: false, message: 'Failed to save hero slide', error: error.message })
+    return
+  }
+  if (error.code === '23514') {
+    res.status(400).json({
+      success: false,
+      message: 'This slide type requires its matching reference (product/category/collection) to be selected, with no others set.',
+    })
+    return
+  }
+  if (error.code === '23503') {
+    res.status(400).json({ success: false, message: 'The selected product/category/collection no longer exists.' })
+    return
+  }
+  logger.error(fallbackMessage, error)
+  res.status(500).json({ success: false, message: fallbackMessage, error: error.message })
+}
+
 const SLIDE_UPDATE_FIELD_MAP: Record<string, string> = {
   slideType: 'slide_type',
   slide_type: 'slide_type',
@@ -240,6 +281,17 @@ export const createHeroSlide = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'slideType is required' })
     }
 
+    const requirement = REQUIRED_REFERENCE_FIELD[slideType]
+    if (requirement === undefined) {
+      return res.status(400).json({ success: false, message: `Unknown slideType "${slideType}"` })
+    }
+    if (requirement && !req.body[requirement.field]) {
+      return res.status(400).json({
+        success: false,
+        message: `This slide type requires ${requirement.label} to be selected.`,
+      })
+    }
+
     const resolvedImageUrl = await resolveHeroSlideImage(req, imageUrl)
     const userId = (req as AuthRequest).user?.id
 
@@ -277,9 +329,7 @@ export const createHeroSlide = async (req: Request, res: Response) => {
 
     res.status(201).json({ success: true, message: 'Hero slide created successfully', data: result.rows[0] })
   } catch (error: any) {
-    logger.error('Error creating hero slide:', error)
-    const status = /^Image:/.test(error.message) ? 400 : 500
-    res.status(status).json({ success: false, message: 'Failed to create hero slide', error: error.message })
+    respondHeroSlideError(res, error, 'Failed to create hero slide')
   }
 }
 
@@ -346,9 +396,7 @@ export const updateHeroSlide = async (req: Request, res: Response) => {
 
     res.json({ success: true, message: 'Hero slide updated successfully', data: result.rows[0] })
   } catch (error: any) {
-    logger.error('Error updating hero slide:', error)
-    const status = /^Image:/.test(error.message) ? 400 : 500
-    res.status(status).json({ success: false, message: 'Failed to update hero slide', error: error.message })
+    respondHeroSlideError(res, error, 'Failed to update hero slide')
   }
 }
 
