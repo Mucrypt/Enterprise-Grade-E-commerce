@@ -38,9 +38,15 @@ import {
   Loader2,
   Layers,
 } from 'lucide-react'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { RequirePagePermission } from '@/components/auth/RequirePagePermission'
 import { getAbsoluteMediaUrl } from '@/lib/utils'
-import { heroSlideService, HeroSlide, HeroSlideFormData } from '@/services/hero-slide.service'
+import {
+  heroSlideService,
+  HeroSlide,
+  HeroSlideFormData,
+  HeroSlidePlacement,
+} from '@/services/hero-slide.service'
 import { HeroSlideForm } from '@/components/hero-slides/HeroSlideForm'
 import { HeroSlideItemsManager } from '@/components/hero-slides/HeroSlideItemsManager'
 import { HeroSlideCollectionsManager } from '@/components/hero-slides/HeroSlideCollectionsManager'
@@ -55,6 +61,19 @@ const SLIDE_TYPE_LABELS: Record<string, string> = {
   collection_grid: 'Collection Grid',
 }
 
+const PLACEMENT_LABELS: Record<HeroSlidePlacement, { label: string; description: string }> = {
+  homepage: {
+    label: 'Homepage',
+    description:
+      'Manage the homepage hero carousel shown on web and mobile -- pick products, categories, collections, or build a multi-product grid slide. Changes go live immediately.',
+  },
+  trending: {
+    label: 'Trending',
+    description:
+      'Manage the Trending page hero carousel shown on web and mobile -- the exact same slide types as the homepage, curated for what\'s trending. Changes go live immediately.',
+  },
+}
+
 export default function HeroSlidesPage() {
   return (
     <RequirePagePermission permission='homepage.view'>
@@ -65,6 +84,7 @@ export default function HeroSlidesPage() {
 
 function HeroSlidesContent() {
   const queryClient = useQueryClient()
+  const [placement, setPlacement] = useState<HeroSlidePlacement>('homepage')
   const [formOpen, setFormOpen] = useState(false)
   const [editingSlide, setEditingSlide] = useState<HeroSlide | null>(null)
   const [itemsSlide, setItemsSlide] = useState<HeroSlide | null>(null)
@@ -72,14 +92,19 @@ function HeroSlidesContent() {
   const [slideToDelete, setSlideToDelete] = useState<HeroSlide | null>(null)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['hero-slides'],
-    queryFn: () => heroSlideService.getAll(),
+    queryKey: ['hero-slides', placement],
+    queryFn: () => heroSlideService.getAll(placement),
   })
   const slides: HeroSlide[] = (data as any)?.data || []
 
   const createMutation = useMutation({
-    mutationFn: ({ formData, file }: { formData: HeroSlideFormData; file?: File }) =>
-      file ? heroSlideService.createWithMedia(formData, file) : heroSlideService.create(formData),
+    mutationFn: ({ formData, file }: { formData: HeroSlideFormData; file?: File }) => {
+      // Whichever tab is active when "Add Slide" is clicked determines the
+      // new slide's placement -- not a form field, so switching tabs is
+      // the only way to choose which page a slide belongs to.
+      const payload = { ...formData, placement }
+      return file ? heroSlideService.createWithMedia(payload, file) : heroSlideService.create(payload)
+    },
     onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ['hero-slides'] })
       toast.success('Hero slide created')
@@ -161,9 +186,7 @@ function HeroSlidesContent() {
         <div className='flex-1'>
           <h1 className='text-2xl font-bold tracking-tight'>Hero Slides</h1>
           <p className='text-sm text-muted-foreground'>
-            Manage the homepage hero carousel shown on web and mobile -- pick
-            products, categories, collections, or build a multi-product grid
-            slide. Changes go live immediately.
+            {PLACEMENT_LABELS[placement].description}
           </p>
         </div>
         <Button
@@ -177,6 +200,13 @@ function HeroSlidesContent() {
         </Button>
       </div>
 
+      <Tabs value={placement} onValueChange={(v: string) => setPlacement(v as HeroSlidePlacement)}>
+        <TabsList>
+          <TabsTrigger value='homepage'>Homepage</TabsTrigger>
+          <TabsTrigger value='trending'>Trending</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
       {isLoading ? (
         <div className='space-y-3'>
           {[...Array(4)].map((_, i) => (
@@ -188,9 +218,9 @@ function HeroSlidesContent() {
           <div className='mx-auto h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4'>
             <Layers className='h-6 w-6 text-muted-foreground' />
           </div>
-          <h3 className='text-lg font-medium'>No hero slides yet</h3>
+          <h3 className='text-lg font-medium'>No {PLACEMENT_LABELS[placement].label.toLowerCase()} slides yet</h3>
           <p className='text-muted-foreground text-sm mt-1'>
-            Add your first slide to start managing the homepage hero carousel.
+            Add your first slide to start managing the {PLACEMENT_LABELS[placement].label.toLowerCase()} hero carousel.
           </p>
           <Button
             className='mt-4'

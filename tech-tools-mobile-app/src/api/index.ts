@@ -1530,8 +1530,13 @@ export interface HeroSlide {
 }
 
 export const heroSlidesApi = {
-  getPublic: async (): Promise<HeroSlide[]> => {
-    const response = await apiClient.get('/settings/hero-slides/public?platform=mobile')
+  // 'placement' reuses the exact same hero_slides CMS for more than one
+  // screen's carousel -- 'homepage' (default) or 'trending' -- an admin
+  // picks which screen a slide belongs to in Settings > Hero Slides.
+  getPublic: async (placement: 'homepage' | 'trending' = 'homepage'): Promise<HeroSlide[]> => {
+    const response = await apiClient.get(
+      `/settings/hero-slides/public?platform=mobile&placement=${placement}`,
+    )
     return response.data.data || response.data
   },
 }

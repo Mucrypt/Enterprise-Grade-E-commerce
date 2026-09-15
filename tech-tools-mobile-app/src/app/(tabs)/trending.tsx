@@ -21,6 +21,7 @@ import {
   TrendingCategoryFilter,
   SectionHeader,
 } from '@/components'
+import { ToolsHero } from '@/components/home'
 import { AppColors, AppSpacing } from '@/constants/appTheme'
 import { trendingApi, collectionsApi, categoriesApi, brandsApi, productsApi } from '@/api'
 import { ProductCollection, Category, Brand, Product } from '@/types'
@@ -198,6 +199,9 @@ export default function TrendingTabScreen() {
         }
         contentContainerStyle={styles.scrollContent}
       >
+        {/* Hero -- admin-managed, same CMS as the homepage */}
+        <ToolsHero placement='trending' />
+
         {/* Trending Collections Section */}
         {collections.length > 0 && (
           <View style={styles.section}>

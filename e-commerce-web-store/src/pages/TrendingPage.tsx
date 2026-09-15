@@ -1,12 +1,14 @@
 // ============================================
 // Trending Page - TechTools E-Commerce Store
 // ============================================
-// The header stat pills below are real, derived numbers (total featured
-// products, active brand count) -- not the old hardcoded "1000+ Trending
-// Items" / "Updated Daily" claims, which weren't backed by anything.
+// The hero is the exact same admin-managed carousel as the homepage
+// (Settings > Hero Slides, 'trending' placement) -- ToolsHero, not a
+// bespoke banner. The stat strip beneath it is real, derived numbers
+// (total featured products, active brand count), not a hardcoded claim.
 
 import { useEffect, useState } from 'react'
-import { TrendingUp, Sparkles, Store } from 'lucide-react'
+import { Sparkles, Store } from 'lucide-react'
+import { ToolsHero } from '../components/home'
 import {
   TrendingCollections,
   TrendingStores,
@@ -31,70 +33,38 @@ export default function TrendingPage() {
       .catch(() => setActiveStoreCount(null))
   }, [])
 
+  const hasStats =
+    (trendingProductCount !== null && trendingProductCount > 0) ||
+    (activeStoreCount !== null && activeStoreCount > 0)
+
   return (
     <div className='min-h-screen bg-gray-50'>
-      {/* Hero Header */}
-      <div className='relative bg-linear-to-br from-gray-950 via-gray-900 to-orange-950 overflow-hidden'>
-        {/* Background Pattern */}
-        <div className='absolute inset-0 opacity-[0.07]'>
-          <svg className='w-full h-full' xmlns='http://www.w3.org/2000/svg'>
-            <defs>
-              <pattern
-                id='trending-pattern'
-                x='0'
-                y='0'
-                width='40'
-                height='40'
-                patternUnits='userSpaceOnUse'
-              >
-                <circle cx='20' cy='20' r='1.5' fill='currentColor' />
-              </pattern>
-            </defs>
-            <rect width='100%' height='100%' fill='url(#trending-pattern)' />
-          </svg>
-        </div>
-        <div className='absolute -top-24 -right-24 w-96 h-96 bg-orange-500/20 rounded-full blur-3xl' />
-        <div className='absolute -bottom-24 -left-24 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl' />
+      {/* Hero -- admin-managed, same CMS as the homepage */}
+      <ToolsHero placement='trending' />
 
-        <div className='relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 md:py-20'>
-          <div className='flex items-center gap-4 mb-5'>
-            <div className='p-3 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/10'>
-              <TrendingUp className='w-8 h-8 text-orange-400' />
-            </div>
-            <span className='inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-orange-300 border border-white/10'>
-              <Sparkles className='w-3.5 h-3.5' /> Live catalog data
-            </span>
-          </div>
-
-          <h1 className='text-4xl md:text-6xl font-black text-white tracking-tight leading-none'>
-            Trending Now
-          </h1>
-          <p className='text-gray-400 text-base md:text-lg mt-3 max-w-xl'>
-            Real bestsellers, real stores, updated straight from what's
-            actually selling.
-          </p>
-
-          {/* Stats Pills -- real, derived numbers only */}
-          <div className='flex flex-wrap gap-3 mt-8'>
+      {/* Stat strip -- real, derived numbers only */}
+      {hasStats && (
+        <div className='bg-gray-950 py-3'>
+          <div className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-wrap justify-center gap-3'>
             {trendingProductCount !== null && trendingProductCount > 0 && (
-              <div className='inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-full border border-white/10'>
-                <Sparkles className='w-4 h-4 text-orange-400' />
-                <span className='text-white text-sm font-medium'>
+              <div className='inline-flex items-center gap-2 bg-white/10 px-4 py-1.5 rounded-full border border-white/10'>
+                <Sparkles className='w-3.5 h-3.5 text-orange-400' />
+                <span className='text-white text-xs font-medium'>
                   {trendingProductCount}+ Trending Items
                 </span>
               </div>
             )}
             {activeStoreCount !== null && activeStoreCount > 0 && (
-              <div className='inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-full border border-white/10'>
-                <Store className='w-4 h-4 text-orange-400' />
-                <span className='text-white text-sm font-medium'>
+              <div className='inline-flex items-center gap-2 bg-white/10 px-4 py-1.5 rounded-full border border-white/10'>
+                <Store className='w-3.5 h-3.5 text-orange-400' />
+                <span className='text-white text-xs font-medium'>
                   {activeStoreCount} Featured Stores
                 </span>
               </div>
             )}
           </div>
         </div>
-      </div>
+      )}
 
       {/* Category Filters */}
       <TrendingFilters

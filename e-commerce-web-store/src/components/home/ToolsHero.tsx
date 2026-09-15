@@ -39,7 +39,13 @@ import { formatPrice, getProductImage } from '../../utils'
 
 const AUTO_ADVANCE_MS = 4500
 
-export default function ToolsHero() {
+interface ToolsHeroProps {
+  // Which admin-managed slide set to show -- 'homepage' (default) or
+  // 'trending'. Same component, same CMS, different curated list.
+  placement?: 'homepage' | 'trending'
+}
+
+export default function ToolsHero({ placement = 'homepage' }: ToolsHeroProps) {
   const [slides, setSlides] = useState<HeroSlide[]>([])
   const [activeIndex, setActiveIndex] = useState(0)
   const activeIndexRef = useRef(0)
@@ -52,7 +58,7 @@ export default function ToolsHero() {
     let cancelled = false
 
     heroSlidesApi
-      .getPublic()
+      .getPublic(placement)
       .then((data) => {
         if (!cancelled) setSlides(data)
       })
@@ -63,7 +69,7 @@ export default function ToolsHero() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [placement])
 
   // Real auto-advance -- reads activeIndexRef (not activeIndex directly)
   // so it always resumes from wherever the visitor last manually

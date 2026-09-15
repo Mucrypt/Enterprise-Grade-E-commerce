@@ -45,6 +45,15 @@ const PRODUCT_SELECT_FIELDS = `
 const MAX_PUBLIC_HERO_SLIDES = 10
 const MAX_GRID_ITEMS = 4
 
+// The same hero_slides table now powers more than one page's carousel --
+// an admin picks which page a slide belongs to instead of duplicating the
+// whole CMS per page. Unknown values fall back to 'homepage' rather than
+// erroring, so a stale/missing query param never breaks the page.
+type HeroSlidePlacement = 'homepage' | 'trending'
+function resolvePlacement(value: unknown): HeroSlidePlacement {
+  return value === 'trending' ? 'trending' : 'homepage'
+}
+
 async function resolveHeroSlideImage(
   req: Request,
   bodyImageUrl?: string,
@@ -91,6 +100,7 @@ const SLIDE_UPDATE_FIELD_MAP: Record<string, string> = {
   is_active: 'is_active',
   position: 'position',
   platform: 'platform',
+  placement: 'placement',
   startsAt: 'starts_at',
   starts_at: 'starts_at',
   endsAt: 'ends_at',
@@ -101,8 +111,10 @@ const SLIDE_UPDATE_FIELD_MAP: Record<string, string> = {
 // ADMIN: GET ALL HERO SLIDES
 // =====================================================
 
-export const getAdminHeroSlides = async (_req: Request, res: Response) => {
+export const getAdminHeroSlides = async (req: Request, res: Response) => {
   try {
+    const placement = resolvePlacement(req.query.placement)
+
     // A plain `SELECT *` leaves display_title/display_image_url null for
     // any product/category/collection-type slide that has no local
     // title/image override -- which is most of them, since those types
@@ -136,7 +148,9 @@ export const getAdminHeroSlides = async (_req: Request, res: Response) => {
        LEFT JOIN categories cat ON hs.category_id = cat.id
        LEFT JOIN product_collections pc ON hs.product_collection_id = pc.id
        LEFT JOIN category_collections cc ON hs.category_collection_id = cc.id
+       WHERE hs.placement = $1
        ORDER BY hs.position ASC, hs.created_at DESC`,
+      [placement],
     )
     res.json({ success: true, data: result.rows })
   } catch (error: any) {
@@ -220,6 +234,7 @@ export const createHeroSlide = async (req: Request, res: Response) => {
       startsAt,
       endsAt,
     } = req.body
+    const placement = resolvePlacement(req.body.placement)
 
     if (!slideType) {
       return res.status(400).json({ success: false, message: 'slideType is required' })
@@ -233,8 +248,8 @@ export const createHeroSlide = async (req: Request, res: Response) => {
        (slide_type, eyebrow, title, description, image_url, cta_label, cta_link,
         secondary_cta_label, secondary_cta_link, product_id, category_id,
         product_collection_id, category_collection_id, is_active, position,
-        platform, starts_at, ends_at, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+        platform, starts_at, ends_at, created_by, placement)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
        RETURNING *`,
       [
         slideType,
@@ -256,6 +271,7 @@ export const createHeroSlide = async (req: Request, res: Response) => {
         startsAt || null,
         endsAt || null,
         userId || null,
+        placement,
       ],
     )
 
@@ -681,16 +697,18 @@ export const reorderHeroSlideCollections = async (req: Request, res: Response) =
 export const getPublicHeroSlides = async (req: Request, res: Response) => {
   try {
     const platform = req.query.platform === 'mobile' ? 'mobile' : req.query.platform === 'web' ? 'web' : 'both'
+    const placement = resolvePlacement(req.query.placement)
 
     const slidesResult = await dbQuery(
       `SELECT * FROM hero_slides
        WHERE is_active = TRUE
-         AND platform IN ('both', $1)
+         AND placement = $1
+         AND platform IN ('both', $2)
          AND (starts_at IS NULL OR starts_at <= CURRENT_TIMESTAMP)
          AND (ends_at IS NULL OR ends_at > CURRENT_TIMESTAMP)
        ORDER BY position ASC
-       LIMIT $2`,
-      [platform, MAX_PUBLIC_HERO_SLIDES],
+       LIMIT $3`,
+      [placement, platform, MAX_PUBLIC_HERO_SLIDES],
     )
 
     const resolved: any[] = []

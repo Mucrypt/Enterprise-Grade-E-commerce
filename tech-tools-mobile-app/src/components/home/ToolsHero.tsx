@@ -63,7 +63,13 @@ const HERO_HEIGHT = 240
 const SLIDE_DIMENSIONS = { width: SCREEN_WIDTH, height: HERO_HEIGHT }
 const AUTO_ADVANCE_MS = 4500
 
-export default function ToolsHero() {
+interface ToolsHeroProps {
+  // Which admin-managed slide set to show -- 'homepage' (default) or
+  // 'trending'. Same component, same CMS, different curated list.
+  placement?: 'homepage' | 'trending'
+}
+
+export default function ToolsHero({ placement = 'homepage' }: ToolsHeroProps) {
   const router = useRouter()
   const [slides, setSlides] = useState<HeroSlide[]>([])
   const [activeIndex, setActiveIndex] = useState(0)
@@ -78,7 +84,7 @@ export default function ToolsHero() {
     let cancelled = false
 
     heroSlidesApi
-      .getPublic()
+      .getPublic(placement)
       .then((data) => {
         if (!cancelled) setSlides(data)
       })
@@ -89,7 +95,7 @@ export default function ToolsHero() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [placement])
 
   const handleMomentumScrollEnd = (
     event: NativeSyntheticEvent<NativeScrollEvent>,

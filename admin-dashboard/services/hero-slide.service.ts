@@ -9,6 +9,8 @@ export type HeroSlideType =
   | 'product_grid'
   | 'collection_grid'
 
+export type HeroSlidePlacement = 'homepage' | 'trending'
+
 export interface HeroSlide {
   id: string
   slide_type: HeroSlideType
@@ -27,6 +29,7 @@ export interface HeroSlide {
   is_active: boolean
   position: number
   platform: 'both' | 'web' | 'mobile'
+  placement: HeroSlidePlacement
   starts_at: string | null
   ends_at: string | null
   created_at: string
@@ -59,6 +62,7 @@ export interface HeroSlideFormData {
   isActive?: boolean
   position?: number
   platform?: 'both' | 'web' | 'mobile'
+  placement?: HeroSlidePlacement
   startsAt?: string
   endsAt?: string
 }
@@ -78,8 +82,10 @@ function buildHeroSlideFormData(
 }
 
 export const heroSlideService = {
-  async getAll() {
-    return apiClient.get('/settings/hero-slides')
+  // 'placement' reuses this exact CMS for more than one page's carousel
+  // -- 'homepage' (default) or 'trending'.
+  async getAll(placement: HeroSlidePlacement = 'homepage') {
+    return apiClient.get('/settings/hero-slides', { params: { placement } })
   },
 
   async getById(id: string) {

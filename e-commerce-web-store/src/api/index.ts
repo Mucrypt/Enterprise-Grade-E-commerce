@@ -288,9 +288,12 @@ export interface HeroSlide {
 }
 
 export const heroSlidesApi = {
-  async getPublic(): Promise<HeroSlide[]> {
+  // 'placement' reuses the exact same hero_slides CMS for more than one
+  // page's carousel -- 'homepage' (default) or 'trending' -- an admin
+  // picks which page a slide belongs to in Settings > Hero Slides.
+  async getPublic(placement: 'homepage' | 'trending' = 'homepage'): Promise<HeroSlide[]> {
     const response = await api.get<{ success: boolean; data: HeroSlide[] }>(
-      '/settings/hero-slides/public?platform=web',
+      `/settings/hero-slides/public?platform=web&placement=${placement}`,
     )
     return response.data.data
   },
