@@ -17,6 +17,7 @@ import supplierRoutes from './suppliers/supplier.routes'
 import shippingRoutes from './shipping/shipping.routes'
 import homepageSettingsRoutes from './settings/homepage.routes'
 import heroSlidesRoutes from './settings/hero-slides.routes'
+import discoverRoutes from './discover/discover.routes'
 import deliveryEstimateRoutes from './shipping/delivery-estimate.routes'
 import deliveryTemplateRoutes from './shipping/delivery-template.routes'
 import couponRoutes from './coupons/coupon.routes'
@@ -85,6 +86,7 @@ router.use('/shipping/delivery-templates', deliveryTemplateRoutes)
 router.use('/shipping', shippingRoutes)
 router.use('/settings/homepage', homepageSettingsRoutes)
 router.use('/settings/hero-slides', heroSlidesRoutes)
+router.use('/discover', discoverRoutes)
 router.use('/coupons', couponRoutes)
 router.use('/affiliates', affiliateRoutes)
 router.use('/reviews', reviewRoutes)

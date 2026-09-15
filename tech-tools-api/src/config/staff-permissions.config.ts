@@ -64,6 +64,11 @@ export type Permission =
   // matrix below (ADMIN + MARKETING_MANAGER, not CATALOG_MANAGER).
   | 'homepage.view'
   | 'homepage.manage'
+  // Discover Feed -- the admin-managed shoppable video/image feed (Phase
+  // 1: admin/staff-only content, no creator accounts yet). Same
+  // editorial/marketing rationale as homepage.* above.
+  | 'discover.view'
+  | 'discover.manage'
   | 'social.view'
   | 'social.publish'
   | 'social.schedule'
@@ -128,6 +133,8 @@ const ALL_PERMISSIONS: Permission[] = [
   'affiliates.payouts',
   'homepage.view',
   'homepage.manage',
+  'discover.view',
+  'discover.manage',
   'social.view',
   'social.publish',
   'social.schedule',
@@ -205,6 +212,8 @@ export const STAFF_ROLE_PERMISSIONS: Record<StaffRole, ReadonlySet<Permission>> 
     'affiliates.payouts',
     'homepage.view',
     'homepage.manage',
+    'discover.view',
+    'discover.manage',
     'social.view',
     'social.publish',
     'social.schedule',
@@ -336,6 +345,9 @@ export const STAFF_ROLE_PERMISSIONS: Record<StaffRole, ReadonlySet<Permission>> 
     // marketing content this role already manages (campaigns/coupons).
     'homepage.view',
     'homepage.manage',
+    // Discover Feed -- same rationale as homepage.* above.
+    'discover.view',
+    'discover.manage',
     'social.view',
     'social.publish',
     'social.schedule',

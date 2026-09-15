@@ -88,6 +88,9 @@ export async function ensureUploadDirectories() {
     `${UPLOAD_DIR}/books/assets/sample`,
     `${UPLOAD_DIR}/books/assets/cover`,
     `${UPLOAD_DIR}/books/assets/audio`,
+    `${UPLOAD_DIR}/discover`,
+    `${UPLOAD_DIR}/discover/videos`,
+    `${UPLOAD_DIR}/discover/images`,
     `${UPLOAD_DIR}/temp`,
   ]
 
@@ -386,6 +389,60 @@ export async function processHeroSlideImage(file: Express.Multer.File) {
   await fs.unlink(file.path)
 
   return result
+}
+
+/**
+ * Process a Discover feed post image -- same shape as processHeroSlideImage
+ * (only the 'large' variant is ever read), used both for a video post's
+ * admin-supplied poster and for each image in an image-carousel post.
+ */
+export async function processDiscoverImage(file: Express.Multer.File) {
+  const filename = `${uuidv4()}.webp`
+  const destinationFolder = `${UPLOAD_DIR}/discover/images`
+
+  const result = await optimizeImage(file.path, destinationFolder, filename, {
+    large: IMAGE_SIZES.large,
+  })
+
+  // Delete temp file
+  await fs.unlink(file.path)
+
+  return result
+}
+
+/**
+ * Process a Discover feed post video upload -- same shape as
+ * processBlogVideo. No thumbnailUrl here (unlike processBlogVideo/
+ * processVideo's unused placeholder field): Discover posts require an
+ * admin-supplied poster image instead, since no ffmpeg thumbnail
+ * extraction exists in this codebase -- see processDiscoverImage above.
+ */
+export async function processDiscoverVideo(file: Express.Multer.File): Promise<{
+  url: string
+  fileName: string
+  fileSize: number
+  format: string
+}> {
+  const videoId = uuidv4()
+  const ext = path.extname(file.originalname)
+  const fileName = `${videoId}${ext}`
+  const stats = await fs.stat(file.path)
+  const uploadedVideo = await storeMediaFile({
+    localPath: file.path,
+    key: `discover/videos/${fileName}`,
+    contentType: file.mimetype,
+    cacheControl: 'public, max-age=31536000, immutable',
+    resourceType: 'video',
+  })
+
+  await fs.unlink(file.path).catch(() => undefined)
+
+  return {
+    url: uploadedVideo.url,
+    fileName,
+    fileSize: stats.size,
+    format: mime.extension(file.mimetype) || ext.replace('.', ''),
+  }
 }
 
 /**
