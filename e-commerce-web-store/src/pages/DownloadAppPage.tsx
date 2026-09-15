@@ -12,7 +12,7 @@
 // today (push alerts for back-in-stock/price-drop, server-synced
 // wishlist, order tracking, refer & earn) -- no aspirational copy.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import {
@@ -26,6 +26,8 @@ import {
   Check,
   Copy,
   Apple,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react'
 import { cn } from '../utils'
 
@@ -36,8 +38,45 @@ const PAGE_TITLE = 'Get the TechTools App | Faster Shopping, Real-Time Alerts'
 const PAGE_DESCRIPTION =
   'Download the TechTools app on Google Play for faster checkout, order tracking, and instant back-in-stock & price-drop alerts on your wishlist.'
 
+// Real screens from the app, not mockups.
+const SCREENSHOTS = [
+  {
+    src: '/app-screenshot-home.webp',
+    alt: 'TechTools app home screen showing categories and featured tools',
+    caption: 'Everything you need, in one app',
+  },
+  {
+    src: '/app-screenshot-search.webp',
+    alt: 'TechTools app search results with sort and filter options',
+    caption: 'Find the right tool, fast',
+  },
+  {
+    src: '/app-screenshot-product.webp',
+    alt: 'TechTools app product page with pricing and stock',
+    caption: 'Clear pricing and details before you buy',
+  },
+  {
+    src: '/app-screenshot-collection.webp',
+    alt: 'TechTools app best sellers collection',
+    caption: 'Discover customer favorites',
+  },
+  {
+    src: '/app-screenshot-checkout.webp',
+    alt: 'TechTools app checkout screen with delivery and returns info',
+    caption: 'Secure checkout, easy returns',
+  },
+]
+
 export default function DownloadAppPage() {
   const [copied, setCopied] = useState(false)
+  const galleryRef = useRef<HTMLDivElement>(null)
+
+  const scrollGallery = (direction: 'left' | 'right') => {
+    const el = galleryRef.current
+    if (!el) return
+    const amount = el.clientWidth * 0.8 * (direction === 'left' ? -1 : 1)
+    el.scrollBy({ left: amount, behavior: 'smooth' })
+  }
 
   useEffect(() => {
     const previousTitle = document.title
@@ -124,7 +163,7 @@ export default function DownloadAppPage() {
           <div className="flex justify-center lg:justify-end">
             <div className="w-full max-w-xs rounded-2xl bg-white p-6 text-center text-gray-900 shadow-lg">
               <img
-                src="/app-icon.png"
+                src="/app-icon.webp"
                 alt="TechTools app icon"
                 className="mx-auto h-16 w-16 rounded-2xl shadow-sm"
               />
@@ -143,6 +182,55 @@ export default function DownloadAppPage() {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Screenshots -- real screens from the app, not mockups */}
+      <div className="mt-12">
+        <h2 className="text-center text-2xl font-bold text-gray-900">
+          See TechTools in action
+        </h2>
+        <p className="mt-2 text-center text-sm text-gray-500">
+          Real screens from the app -- no staged mockups.
+        </p>
+        <div className="relative mt-6">
+          <div
+            ref={galleryRef}
+            className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth px-4 pb-4 sm:mx-0 sm:justify-center sm:px-0"
+          >
+            {SCREENSHOTS.map((shot) => (
+              <figure
+                key={shot.src}
+                className="w-55 shrink-0 snap-center sm:w-60"
+              >
+                <img
+                  src={shot.src}
+                  alt={shot.alt}
+                  loading="lazy"
+                  className="w-full rounded-2xl shadow-lg"
+                />
+                <figcaption className="mt-3 text-center text-sm text-gray-600">
+                  {shot.caption}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => scrollGallery('left')}
+            aria-label="Scroll screenshots left"
+            className="absolute left-0 top-1/3 hidden -translate-x-1/2 items-center justify-center rounded-full border border-gray-200 bg-white p-2 text-gray-600 shadow-md transition hover:bg-gray-50 sm:flex"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => scrollGallery('right')}
+            aria-label="Scroll screenshots right"
+            className="absolute right-0 top-1/3 hidden translate-x-1/2 items-center justify-center rounded-full border border-gray-200 bg-white p-2 text-gray-600 shadow-md transition hover:bg-gray-50 sm:flex"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
         </div>
       </div>
 
