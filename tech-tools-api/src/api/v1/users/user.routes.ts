@@ -16,6 +16,7 @@ import {
   clearWishlist,
   syncWishlist,
 } from './wishlist.controller'
+import { getFollowedBrands, followBrand, unfollowBrand } from './brand-follow.controller'
 import { authenticate, authorize } from '../../../middleware/auth'
 import { validate } from '../../../middleware/validation'
 import { userSchemas } from '../../../middleware/validation'
@@ -60,6 +61,13 @@ router.post('/wishlist/sync', syncWishlist)
 router.post('/wishlist', addToWishlist)
 router.delete('/wishlist/:productId', removeFromWishlist)
 router.delete('/wishlist', clearWishlist)
+
+// Brand-follow routes -- the real, server-backed "Follow" on the
+// Trending pages (web + mobile), replacing a client-only toggle that
+// reset on every refresh.
+router.get('/followed-brands', getFollowedBrands)
+router.post('/followed-brands', followBrand)
+router.delete('/followed-brands/:brandId', unfollowBrand)
 
 // Address routes
 router.get('/addresses', getUserAddresses)

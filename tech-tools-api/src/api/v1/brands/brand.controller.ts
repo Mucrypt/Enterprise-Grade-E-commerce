@@ -76,11 +76,12 @@ export const getBrands = async (req: Request, res: Response) => {
 
 /**
  * Real, per-brand engagement numbers -- units sold and revenue from
- * actual paid orders, and product counts from the real catalog. Added to
- * replace the Trending pages' (admin dashboard + mobile app) previous use
- * of Math.random() for "sold count," "total sales," and "followers" --
- * this endpoint intentionally has no follower-count field, since no real
- * follow/subscribe feature exists yet; a fabricated number is worse than
+ * actual paid orders, product counts from the real catalog, real follower
+ * counts from brand_follows (see 064_brand_follows.sql), and a real
+ * testimonial pulled from an actual approved review, if one exists.
+ * Replaces the Trending pages' (admin dashboard + mobile app) previous use
+ * of Math.random() for "sold count," "total sales," "followers," and a
+ * hardcoded testimonials array -- a fabricated number/quote is worse than
  * an absent one. Public (no auth) to match getBrands/getBrandById above --
  * this is the same class of read-only, non-sensitive storefront data.
  */
@@ -93,45 +94,77 @@ export const getBrandStats = async (req: Request, res: Response) => {
       .filter((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
 
     if (ids.length === 0) {
-      return res.json({ success: true, data: { stats: {} } })
+      return res.json({ success: true, data: { stats: {}, topReviews: {} } })
     }
 
-    const [productCountsResult, salesResult, newProductsResult] = await Promise.all([
-      query(
-        `SELECT brand_id, COUNT(*) AS product_count
-         FROM products
-         WHERE brand_id = ANY($1) AND is_active = true
-         GROUP BY brand_id`,
-        [ids],
-      ),
-      // Only orders that actually collected payment count as real sales --
-      // a pending/failed/cancelled order was never a genuine sale.
-      query(
-        `SELECT p.brand_id,
-                COALESCE(SUM(oi.quantity), 0) AS units_sold,
-                COALESCE(SUM(oi.total_price), 0) AS revenue_total
-         FROM order_items oi
-         JOIN products p ON p.id = oi.product_id
-         JOIN orders o ON o.id = oi.order_id
-         WHERE p.brand_id = ANY($1) AND o.payment_status = 'paid'
-         GROUP BY p.brand_id`,
-        [ids],
-      ),
-      query(
-        `SELECT brand_id, COUNT(*) AS new_products_count
-         FROM products
-         WHERE brand_id = ANY($1) AND is_active = true AND created_at > now() - interval '30 days'
-         GROUP BY brand_id`,
-        [ids],
-      ),
-    ])
+    const [productCountsResult, salesResult, newProductsResult, followerCountsResult, topReviewsResult] =
+      await Promise.all([
+        query(
+          `SELECT brand_id, COUNT(*) AS product_count
+           FROM products
+           WHERE brand_id = ANY($1) AND is_active = true
+           GROUP BY brand_id`,
+          [ids],
+        ),
+        // Only orders that actually collected payment count as real sales --
+        // a pending/failed/cancelled order was never a genuine sale.
+        query(
+          `SELECT p.brand_id,
+                  COALESCE(SUM(oi.quantity), 0) AS units_sold,
+                  COALESCE(SUM(oi.total_price), 0) AS revenue_total
+           FROM order_items oi
+           JOIN products p ON p.id = oi.product_id
+           JOIN orders o ON o.id = oi.order_id
+           WHERE p.brand_id = ANY($1) AND o.payment_status = 'paid'
+           GROUP BY p.brand_id`,
+          [ids],
+        ),
+        query(
+          `SELECT brand_id, COUNT(*) AS new_products_count
+           FROM products
+           WHERE brand_id = ANY($1) AND is_active = true AND created_at > now() - interval '30 days'
+           GROUP BY brand_id`,
+          [ids],
+        ),
+        query(
+          `SELECT brand_id, COUNT(*) AS follower_count
+           FROM brand_follows
+           WHERE brand_id = ANY($1)
+           GROUP BY brand_id`,
+          [ids],
+        ),
+        // One real, genuine review per brand -- the best-rated, most
+        // recent approved review left on any of that brand's products.
+        // Never a placeholder quote: a brand with no qualifying review
+        // simply has no entry here.
+        query(
+          `SELECT DISTINCT ON (p.brand_id)
+                  p.brand_id, r.rating, r.comment, u.first_name, u.last_name
+           FROM reviews r
+           JOIN products p ON p.id = r.product_id
+           JOIN users u ON u.id = r.user_id
+           WHERE p.brand_id = ANY($1)
+             AND r.is_approved = true
+             AND r.rating >= 4
+             AND r.comment IS NOT NULL
+             AND r.comment <> ''
+           ORDER BY p.brand_id, r.rating DESC, r.created_at DESC`,
+          [ids],
+        ),
+      ])
 
     const stats: Record<
       string,
-      { productCount: number; unitsSold: number; revenueTotal: number; newProductsCount: number }
+      {
+        productCount: number
+        unitsSold: number
+        revenueTotal: number
+        newProductsCount: number
+        followerCount: number
+      }
     > = {}
     for (const id of ids) {
-      stats[id] = { productCount: 0, unitsSold: 0, revenueTotal: 0, newProductsCount: 0 }
+      stats[id] = { productCount: 0, unitsSold: 0, revenueTotal: 0, newProductsCount: 0, followerCount: 0 }
     }
     for (const row of productCountsResult.rows) {
       stats[row.brand_id].productCount = parseInt(row.product_count, 10)
@@ -143,8 +176,20 @@ export const getBrandStats = async (req: Request, res: Response) => {
     for (const row of newProductsResult.rows) {
       stats[row.brand_id].newProductsCount = parseInt(row.new_products_count, 10)
     }
+    for (const row of followerCountsResult.rows) {
+      stats[row.brand_id].followerCount = parseInt(row.follower_count, 10)
+    }
 
-    res.json({ success: true, data: { stats } })
+    const topReviews: Record<string, { rating: number; comment: string; authorName: string }> = {}
+    for (const row of topReviewsResult.rows) {
+      topReviews[row.brand_id] = {
+        rating: row.rating,
+        comment: row.comment,
+        authorName: `${row.first_name || ''} ${row.last_name || ''}`.trim() || 'Verified buyer',
+      }
+    }
+
+    res.json({ success: true, data: { stats, topReviews } })
   } catch (error) {
     logger.error('Get brand stats error:', error)
     res.status(500).json({

@@ -11,12 +11,19 @@ import { LinearGradient } from 'expo-linear-gradient'
 
 interface TrendingHeaderProps {
   title?: string
+  // Real, derived numbers only (see trending.tsx) -- omitted entirely
+  // while loading rather than showing a placeholder/fabricated count.
+  trendingItemCount?: number
+  featuredStoreCount?: number
 }
 
 export default function TrendingHeader({
   title = 'Trending',
+  trendingItemCount,
+  featuredStoreCount,
 }: TrendingHeaderProps) {
   const router = useRouter()
+  const hasStats = !!trendingItemCount || !!featuredStoreCount
 
   return (
     <LinearGradient
@@ -50,6 +57,23 @@ export default function TrendingHeader({
           </TouchableOpacity>
         </View>
       </View>
+
+      {hasStats && (
+        <View style={styles.statsRow}>
+          {!!trendingItemCount && (
+            <View style={styles.statPill}>
+              <Ionicons name='sparkles' size={12} color={AppColors.white} />
+              <Text style={styles.statPillText}>{trendingItemCount}+ Trending Items</Text>
+            </View>
+          )}
+          {!!featuredStoreCount && (
+            <View style={styles.statPill}>
+              <Ionicons name='storefront' size={12} color={AppColors.white} />
+              <Text style={styles.statPillText}>{featuredStoreCount} Featured Stores</Text>
+            </View>
+          )}
+        </View>
+      )}
     </LinearGradient>
   )
 }
@@ -88,5 +112,24 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: AppSpacing.sm,
+    marginTop: AppSpacing.sm,
+  },
+  statPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  statPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: AppColors.white,
   },
 })

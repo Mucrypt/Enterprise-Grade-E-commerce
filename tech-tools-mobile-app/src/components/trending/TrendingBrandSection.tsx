@@ -2,7 +2,7 @@
 // TechTools Mobile App - Trending Brand Section
 // ============================================
 
-import React, { useState } from 'react'
+import React from 'react'
 import {
   View,
   Text,
@@ -29,23 +29,29 @@ const PRODUCT_WIDTH = (width - AppSpacing.base * 2 - AppSpacing.sm * 3) / 4
 interface TrendingBrandSectionProps {
   brand: Brand
   products: Product[]
-  // Real numbers only -- soldCount/newProductsCount come from actual
-  // orders/catalog data (see brandsApi.getStats). There is deliberately no
-  // followerCount here: no real follow/subscribe feature exists yet, and a
-  // fabricated number is worse than an absent one.
+  // Real numbers only -- soldCount/newProductsCount/followerCount all come
+  // from actual orders/catalog/brand_follows data (see brandsApi.getStats).
   stats?: {
     soldCount?: number
     newProductsCount?: number
+    followerCount?: number
   }
+  // A real review pulled from an actual approved order/product review --
+  // undefined when the brand has none yet, never a placeholder quote.
+  review?: { rating: number; comment: string; authorName: string }
+  isFollowing: boolean
+  onToggleFollow: () => void
 }
 
 export default function TrendingBrandSection({
   brand,
   products,
   stats,
+  review,
+  isFollowing,
+  onToggleFollow,
 }: TrendingBrandSectionProps) {
   const router = useRouter()
-  const [isFollowing, setIsFollowing] = useState(false)
 
   const handleBrandPress = () => {
     router.push(`/products?brand=${brand.slug}`)
@@ -53,11 +59,6 @@ export default function TrendingBrandSection({
 
   const handleProductPress = (product: Product) => {
     router.push(`/product/${product.slug}`)
-  }
-
-  const handleFollow = () => {
-    setIsFollowing(!isFollowing)
-    // TODO: Implement actual follow API call
   }
 
   const formatCount = (num: number | undefined): string => {
@@ -119,6 +120,14 @@ export default function TrendingBrandSection({
                   </Text>
                 </View>
               )}
+              {!!stats?.followerCount && (
+                <View style={styles.statItem}>
+                  <Ionicons name='people' size={12} color={AppColors.gray500} />
+                  <Text style={styles.statText}>
+                    {formatCount(stats.followerCount)} followers
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
         </View>
@@ -126,7 +135,7 @@ export default function TrendingBrandSection({
         {/* Follow Button */}
         <TouchableOpacity
           style={[styles.followButton, isFollowing && styles.followingButton]}
-          onPress={handleFollow}
+          onPress={onToggleFollow}
           activeOpacity={0.8}
         >
           <Ionicons
@@ -186,6 +195,27 @@ export default function TrendingBrandSection({
           )
         })}
       </View>
+
+      {/* Real testimonial -- absent when the brand has no qualifying review yet */}
+      {review && (
+        <View style={styles.reviewContainer}>
+          <Ionicons name='chatbubble-ellipses' size={14} color={AppColors.primary} />
+          <Text style={styles.reviewText} numberOfLines={2}>
+            <Text style={styles.reviewAuthor}>{review.authorName}: </Text>
+            <Text style={styles.reviewComment}>&ldquo;{review.comment}&rdquo;</Text>
+          </Text>
+          <View style={styles.reviewStars}>
+            {[...Array(5)].map((_, i) => (
+              <Ionicons
+                key={i}
+                name={i < review.rating ? 'star' : 'star-outline'}
+                size={11}
+                color={i < review.rating ? '#FBBF24' : AppColors.gray300}
+              />
+            ))}
+          </View>
+        </View>
+      )}
 
       {/* View All */}
       <TouchableOpacity
@@ -352,6 +382,32 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: AppColors.gray400,
     textDecorationLine: 'line-through',
+  },
+  reviewContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    backgroundColor: AppColors.gray100,
+    borderRadius: AppBorderRadius.md,
+    padding: AppSpacing.sm,
+    marginBottom: AppSpacing.md,
+  },
+  reviewText: {
+    flex: 1,
+    fontSize: 12,
+    color: AppColors.gray500,
+    lineHeight: 16,
+  },
+  reviewAuthor: {
+    fontWeight: '600',
+    color: AppColors.gray900,
+  },
+  reviewComment: {
+    fontStyle: 'italic',
+  },
+  reviewStars: {
+    flexDirection: 'row',
+    gap: 1,
   },
   viewAllButton: {
     flexDirection: 'row',

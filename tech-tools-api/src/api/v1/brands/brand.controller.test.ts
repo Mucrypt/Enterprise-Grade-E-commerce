@@ -29,7 +29,7 @@ describe('getBrandStats -- real per-brand numbers, no fabricated fields', () => 
     await getBrandStats(req, res)
 
     expect(mockQuery).not.toHaveBeenCalled()
-    expect(res.json).toHaveBeenCalledWith({ success: true, data: { stats: {} } })
+    expect(res.json).toHaveBeenCalledWith({ success: true, data: { stats: {}, topReviews: {} } })
   })
 
   it('filters out non-UUID values from a comma-separated ids list rather than passing them to SQL', async () => {
@@ -42,11 +42,23 @@ describe('getBrandStats -- real per-brand numbers, no fabricated fields', () => 
     expect(mockQuery.mock.calls[0][1]).toEqual([[BRAND_A]])
   })
 
-  it('merges product count, real paid-order sales, and new-product count per brand, defaulting untouched brands to zero', async () => {
+  it('merges product count, real paid-order sales, new-product count and follower count per brand, defaulting untouched brands to zero', async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ brand_id: BRAND_A, product_count: '12' }] })
       .mockResolvedValueOnce({ rows: [{ brand_id: BRAND_A, units_sold: '340', revenue_total: '15234.50' }] })
       .mockResolvedValueOnce({ rows: [{ brand_id: BRAND_A, new_products_count: '3' }] })
+      .mockResolvedValueOnce({ rows: [{ brand_id: BRAND_A, follower_count: '27' }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            brand_id: BRAND_A,
+            rating: 5,
+            comment: 'Great quality!',
+            first_name: 'Sam',
+            last_name: 'Diaz',
+          },
+        ],
+      })
 
     const req: any = { query: { ids: `${BRAND_A},${BRAND_B}` } }
     const res = makeRes()
@@ -59,15 +71,24 @@ describe('getBrandStats -- real per-brand numbers, no fabricated fields', () => 
       unitsSold: 340,
       revenueTotal: 15234.5,
       newProductsCount: 3,
+      followerCount: 27,
     })
-    // BRAND_B had no matching rows in any of the three queries -- real
-    // zeros, not omitted and not fabricated.
+    // BRAND_B had no matching rows in any of the queries -- real zeros,
+    // not omitted and not fabricated.
     expect(payload.data.stats[BRAND_B]).toEqual({
       productCount: 0,
       unitsSold: 0,
       revenueTotal: 0,
       newProductsCount: 0,
+      followerCount: 0,
     })
+    // BRAND_B has no qualifying review -- absent, never a placeholder quote.
+    expect(payload.data.topReviews[BRAND_A]).toEqual({
+      rating: 5,
+      comment: 'Great quality!',
+      authorName: 'Sam Diaz',
+    })
+    expect(payload.data.topReviews[BRAND_B]).toBeUndefined()
   })
 
   it('only counts orders with payment_status = paid as real sales', async () => {

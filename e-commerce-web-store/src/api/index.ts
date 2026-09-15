@@ -455,6 +455,49 @@ export const brandsApi = {
     const response = await api.get<ApiResponse<Brand>>(`/brands/${slug}`)
     return response.data.data
   },
+
+  // Real per-brand numbers (units sold, product count, real follower
+  // count from brand_follows) plus a real testimonial pulled from an
+  // actual approved review, if one exists. Never fabricated: a brand
+  // with no real sales/followers/reviews yet just comes back at
+  // zero/absent. See tech-tools-api's brand.controller.ts getBrandStats.
+  async getStats(ids: string[]) {
+    if (ids.length === 0) return { stats: {}, topReviews: {} }
+    const response = await api.get<{
+      success: boolean
+      data: {
+        stats: Record<
+          string,
+          {
+            productCount: number
+            unitsSold: number
+            revenueTotal: number
+            newProductsCount: number
+            followerCount: number
+          }
+        >
+        topReviews: Record<string, { rating: number; comment: string; authorName: string }>
+      }
+    }>('/brands/stats', { params: { ids: ids.join(',') } })
+    return response.data.data
+  },
+
+  // Real, server-backed brand follow -- replaces a client-only toggle
+  // that reset on every page refresh.
+  async getFollowed(): Promise<string[]> {
+    const response = await api.get<{ success: boolean; data: { brandIds: string[] } }>(
+      '/users/followed-brands',
+    )
+    return response.data.data.brandIds
+  },
+
+  async follow(brandId: string): Promise<void> {
+    await api.post('/users/followed-brands', { brandId })
+  },
+
+  async unfollow(brandId: string): Promise<void> {
+    await api.delete(`/users/followed-brands/${brandId}`)
+  },
 }
 
 // ============================================
