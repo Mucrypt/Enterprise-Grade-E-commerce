@@ -58,6 +58,25 @@ export function DriftChat({ enabled = false, supportProfile }: DriftChatProps) {
       return
     }
 
+    // Tawk_API must exist (with customStyle set) BEFORE the embed script
+    // loads -- the widget reads it once on init, not on every render.
+    // This is the one piece of the widget's look actually controllable
+    // from code: a sane size/position/stacking order instead of Tawk's
+    // oversized default. The greeting bubble, quick-reply shortcuts, and
+    // proactive triggers (e.g. an abandoned-cart nudge) are configured on
+    // the tawk.to dashboard itself (Administration -> Chat Widget ->
+    // Widget Content / Shortcuts / Triggers) -- there's no public JS API
+    // to reach those from here.
+    window.Tawk_API = window.Tawk_API || {}
+    window.Tawk_API.customStyle = {
+      zIndex: 30,
+      visibility: {
+        desktop: { position: 'br', xOffset: 20, yOffset: 20 },
+        mobile: { position: 'br', xOffset: 10, yOffset: 20 },
+      },
+    }
+    window.Tawk_LoadStart = new Date()
+
     // Load Tawk.to script
     const script = document.createElement('script')
     script.id = TAWK_SCRIPT_ID
