@@ -111,6 +111,10 @@ export function DriftChat({ enabled = false, supportProfile }: DriftChatProps) {
     }
     window.Tawk_API.onChatMinimized = () => {
       setIsOpen(false)
+      // Re-hide Tawk's own launcher bubble every time the panel closes --
+      // covers minimizing via Tawk's own in-panel controls too, not just
+      // our handleToggle button below.
+      window.Tawk_API?.hideWidget?.()
     }
     window.Tawk_API.onChatMessageAgent = () => {
       if (!isOpenRef.current) {
@@ -204,6 +208,15 @@ export function DriftChat({ enabled = false, supportProfile }: DriftChatProps) {
     if (isOpen) {
       window.Tawk_API.minimize?.()
     } else {
+      // Leaving the widget permanently hidden (hideWidget() once, forever)
+      // corrupted the maximized panel's own internal layout -- confirmed
+      // live: opening showed a mostly-empty white panel with the input
+      // box floating oddly at the bottom, no header or message area.
+      // showWidget() right before maximize() gives the panel back its
+      // real container/size before Tawk renders the full chat UI into
+      // it; onChatMinimized above re-hides the launcher bubble the
+      // instant it closes again, so the default bubble never reappears.
+      window.Tawk_API.showWidget?.()
       window.Tawk_API.maximize?.()
     }
   }
