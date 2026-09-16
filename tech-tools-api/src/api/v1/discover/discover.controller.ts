@@ -1,6 +1,7 @@
-import { NextFunction, Request, Response } from 'express'
+import { Request, Response } from 'express'
 import { query as dbQuery, getClient } from '../../../database/connection'
 import { AuthRequest } from '../../../middleware/auth'
+import { SellerAuthRequest } from '../../../middleware/seller-auth'
 import {
   processDiscoverAudio,
   processDiscoverImage,
@@ -132,51 +133,9 @@ function respondDiscoverError(res: Response, error: any, fallbackMessage: string
   res.status(500).json({ success: false, message: fallbackMessage, error: error.message })
 }
 
-// =====================================================
-// AUTHORIZATION -- lets an approved, active, non-suspended seller manage
-// their OWN Discover posts alongside admin/staff, without a blanket
-// `authorize('seller')` role check (verification_status can change, so
-// this is a real DB read every request, not a cached JWT claim).
-// `sellerProfileId` is attached to the request when the caller reached
-// this via seller approval rather than an admin/staff role, and is what
-// every handler below uses to scope ownership and force the
-// pending-review gate on create.
-// =====================================================
-
-export interface DiscoverAuthRequest extends AuthRequest {
-  sellerProfileId?: string
-}
-
-export async function requireAdminOrApprovedSeller(req: Request, res: Response, next: NextFunction) {
-  const authReq = req as DiscoverAuthRequest
-  if (!authReq.user) {
-    return res.status(401).json({ success: false, message: 'Authentication required' })
-  }
-
-  if (authReq.user.userType === 'admin' || authReq.user.userType === 'super_admin') {
-    return next()
-  }
-
-  try {
-    const sellerResult = await dbQuery(
-      `SELECT id FROM seller_profiles
-       WHERE user_id = $1 AND verification_status = 'approved' AND is_active = TRUE AND is_suspended = FALSE
-       LIMIT 1`,
-      [authReq.user.id],
-    )
-    if (sellerResult.rows.length === 0) {
-      return res.status(403).json({
-        success: false,
-        message: 'Only admins or approved sellers can manage Discover posts',
-      })
-    }
-    authReq.sellerProfileId = sellerResult.rows[0].id
-    next()
-  } catch (error: any) {
-    logger.error('Error checking seller approval for Discover post:', error)
-    res.status(500).json({ success: false, message: 'Failed to verify seller status', error: error.message })
-  }
-}
+// requireAdminOrApprovedSeller / SellerAuthRequest now live in
+// middleware/seller-auth.ts -- shared with seller-product.controller.ts,
+// which needs the exact same "admin, or a real approved seller" check.
 
 // Sellers may only touch posts they authored; admins are unrestricted.
 // Returns null on success, or the {status, message} to respond with on
@@ -184,7 +143,7 @@ export async function requireAdminOrApprovedSeller(req: Request, res: Response, 
 // since this codebase runs with strictNullChecks off (tsconfig.json),
 // which makes `if (!result.ok)`-style narrowing unreliable.
 async function assertOwnsPostOrIsAdmin(
-  req: DiscoverAuthRequest,
+  req: SellerAuthRequest,
   postId: string,
 ): Promise<{ status: number; message: string } | null> {
   const result = await dbQuery('SELECT created_by FROM discover_posts WHERE id = $1', [postId])
@@ -207,7 +166,7 @@ async function assertOwnsPostOrIsAdmin(
 // filtered to the pending-review queue via ?status=pending.
 export const getAdminDiscoverPosts = async (req: Request, res: Response) => {
   try {
-    const authReq = req as DiscoverAuthRequest
+    const authReq = req as SellerAuthRequest
     const conditions: string[] = []
     const params: any[] = []
 
@@ -244,7 +203,7 @@ export const getAdminDiscoverPosts = async (req: Request, res: Response) => {
 export const getAdminDiscoverPostById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params
-    const authReq = req as DiscoverAuthRequest
+    const authReq = req as SellerAuthRequest
     const ownershipError = await assertOwnsPostOrIsAdmin(authReq, id)
     if (ownershipError) {
       return res.status(ownershipError.status).json({ success: false, message: ownershipError.message })
@@ -291,7 +250,7 @@ export const getAdminDiscoverPostById = async (req: Request, res: Response) => {
 export const createDiscoverPost = async (req: Request, res: Response) => {
   try {
     const { mediaType, caption, categoryId, position = 0, audioLabel } = req.body
-    const authReq = req as DiscoverAuthRequest
+    const authReq = req as SellerAuthRequest
 
     if (mediaType !== 'video' && mediaType !== 'image') {
       return res.status(400).json({ success: false, message: 'mediaType must be "video" or "image"' })
@@ -372,7 +331,7 @@ export const updateDiscoverPost = async (req: Request, res: Response) => {
   try {
     const { id } = req.params
     const updates = req.body
-    const authReq = req as DiscoverAuthRequest
+    const authReq = req as SellerAuthRequest
 
     if (updates.categoryId === '') updates.categoryId = null
     if (updates.category_id === '') updates.category_id = null
@@ -437,7 +396,7 @@ export const updateDiscoverPost = async (req: Request, res: Response) => {
 export const deleteDiscoverPost = async (req: Request, res: Response) => {
   try {
     const { id } = req.params
-    const ownershipError = await assertOwnsPostOrIsAdmin(req as DiscoverAuthRequest, id)
+    const ownershipError = await assertOwnsPostOrIsAdmin(req as SellerAuthRequest, id)
     if (ownershipError) {
       return res.status(ownershipError.status).json({ success: false, message: ownershipError.message })
     }
@@ -525,7 +484,7 @@ export const addPostProducts = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Product IDs array is required' })
     }
 
-    const ownershipError = await assertOwnsPostOrIsAdmin(req as DiscoverAuthRequest, id)
+    const ownershipError = await assertOwnsPostOrIsAdmin(req as SellerAuthRequest, id)
     if (ownershipError) {
       return res.status(ownershipError.status).json({ success: false, message: ownershipError.message })
     }
@@ -595,7 +554,7 @@ export const addPostProducts = async (req: Request, res: Response) => {
 export const removePostProduct = async (req: Request, res: Response) => {
   try {
     const { id, productId } = req.params
-    const ownershipError = await assertOwnsPostOrIsAdmin(req as DiscoverAuthRequest, id)
+    const ownershipError = await assertOwnsPostOrIsAdmin(req as SellerAuthRequest, id)
     if (ownershipError) {
       return res.status(ownershipError.status).json({ success: false, message: ownershipError.message })
     }
@@ -623,7 +582,7 @@ export const reorderPostProducts = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Invalid product order data' })
     }
 
-    const ownershipError = await assertOwnsPostOrIsAdmin(req as DiscoverAuthRequest, id)
+    const ownershipError = await assertOwnsPostOrIsAdmin(req as SellerAuthRequest, id)
     if (ownershipError) {
       return res.status(ownershipError.status).json({ success: false, message: ownershipError.message })
     }

@@ -3,10 +3,10 @@ import {
   updateDiscoverPost,
   deleteDiscoverPost,
   reviewDiscoverPost,
-  requireAdminOrApprovedSeller,
   likePost,
   unlikePost,
 } from './discover.controller'
+import { requireAdminOrApprovedSeller } from '../../../middleware/seller-auth'
 import { query, getClient } from '../../../database/connection'
 
 jest.mock('../../../database/connection', () => ({

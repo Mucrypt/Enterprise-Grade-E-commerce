@@ -17,9 +17,9 @@ import {
   unsavePost,
   trackShare,
   trackAddToCart,
-  requireAdminOrApprovedSeller,
 } from './discover.controller'
 import { authenticate, authenticateIfPresent, authorize } from '../../../middleware/auth'
+import { requireAdminOrApprovedSeller } from '../../../middleware/seller-auth'
 import { upload, handleUploadErrors } from '../../../utils/media'
 
 const router = Router()
