@@ -1,4 +1,6 @@
-import * as Notifications from 'expo-notifications'
+// Type-only import -- evaluates to nothing at runtime, so this alone
+// can never trigger expo-notifications' own module-init crash below.
+import type * as ExpoNotifications from 'expo-notifications'
 import * as Device from 'expo-device'
 import Constants from 'expo-constants'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -9,6 +11,32 @@ type NavigateHandler = (path: string) => void
 // =====================================================
 // PUSH NOTIFICATION SETUP FOR MOBILE APP
 // =====================================================
+//
+// expo-notifications throws DURING ITS OWN MODULE EVALUATION on Android
+// under Expo Go on SDK 53+ (Android push was removed from Expo Go, and
+// the package's native-event-emitter setup runs at import time, not on
+// first use). A plain top-level `import * as Notifications from
+// 'expo-notifications'` therefore crashed the instant this file was
+// loaded -- and since this file is imported (via authStore ->
+// stores/index -> ProductCard -> components/index) by nearly every
+// screen in the app, that one throw was cascading through the whole
+// module graph and taking down every route, not just push notifications
+// (confirmed live: "missing default export" warnings on ~20 unrelated
+// routes were a symptom of this crash aborting their module graphs, not
+// real export bugs). Loading the module lazily, only inside the async
+// methods below and wrapped in try/catch, contains the failure to
+// "push notifications don't work in Expo Go" (the real, unavoidable
+// limitation) instead of "the app doesn't work".
+let notificationsModulePromise: Promise<typeof ExpoNotifications> | null = null
+function loadNotifications(): Promise<typeof ExpoNotifications> {
+  if (!notificationsModulePromise) {
+    notificationsModulePromise = import('expo-notifications').catch((error) => {
+      notificationsModulePromise = null
+      throw error
+    })
+  }
+  return notificationsModulePromise
+}
 
 export class MobileNotificationService {
   /**
@@ -16,6 +44,8 @@ export class MobileNotificationService {
    */
   static async init(onNavigate?: NavigateHandler) {
     try {
+      const Notifications = await loadNotifications()
+
       // Set notification handler
       Notifications.setNotificationHandler({
         handleNotification: async () => ({
@@ -28,16 +58,16 @@ export class MobileNotificationService {
       })
 
       // Request permissions
-      await this.requestPermissions()
+      await this.requestPermissions(Notifications)
 
       // Get push token
-      const token = await this.getPushToken()
+      const token = await this.getPushToken(Notifications)
       if (token) {
         await this.registerPushToken(token)
       }
 
       // Listen for notifications
-      const cleanup = this.setupListeners(onNavigate)
+      const cleanup = this.setupListeners(Notifications, onNavigate)
 
       // Handle case where app is opened from a killed/background state by tap.
       const lastResponse =
@@ -57,7 +87,7 @@ export class MobileNotificationService {
   /**
    * Request push notification permissions
    */
-  static async requestPermissions() {
+  static async requestPermissions(Notifications: typeof ExpoNotifications) {
     if (!Device.isDevice) {
       console.log('Must use physical device for push notifications')
       return false
@@ -65,11 +95,11 @@ export class MobileNotificationService {
 
     let permissions = await Notifications.getPermissionsAsync()
 
-    if (!this.isPermissionGranted(permissions)) {
+    if (!this.isPermissionGranted(Notifications, permissions)) {
       permissions = await Notifications.requestPermissionsAsync()
     }
 
-    if (!this.isPermissionGranted(permissions)) {
+    if (!this.isPermissionGranted(Notifications, permissions)) {
       console.log('Failed to get push notification permission.')
       return false
     }
@@ -81,7 +111,8 @@ export class MobileNotificationService {
    * Normalize notification permission checks across expo-notifications versions.
    */
   private static isPermissionGranted(
-    permissions: Notifications.NotificationPermissionsStatus,
+    Notifications: typeof ExpoNotifications,
+    permissions: ExpoNotifications.NotificationPermissionsStatus,
   ): boolean {
     const permissionAny = permissions as any
 
@@ -108,7 +139,7 @@ export class MobileNotificationService {
   /**
    * Get push token from Expo
    */
-  static async getPushToken() {
+  static async getPushToken(Notifications: typeof ExpoNotifications) {
     try {
       const projectId = Constants.expoConfig?.extra?.eas?.projectId
       if (!projectId) {
@@ -174,7 +205,7 @@ export class MobileNotificationService {
   /**
    * Setup notification listeners
    */
-  static setupListeners(onNavigate?: NavigateHandler) {
+  static setupListeners(Notifications: typeof ExpoNotifications, onNavigate?: NavigateHandler) {
     // Listen for notifications in foreground
     const foregroundSubscription =
       Notifications.addNotificationReceivedListener((notification) => {
@@ -200,7 +231,7 @@ export class MobileNotificationService {
   /**
    * Handle foreground notification
    */
-  static handleNotification(notification: Notifications.Notification) {
+  static handleNotification(notification: ExpoNotifications.Notification) {
     const { title, body, data } = notification.request.content
     console.log(`[${title}] ${body}`, data)
   }
@@ -209,7 +240,7 @@ export class MobileNotificationService {
    * Handle notification tap - navigate to relevant screen
    */
   static handleNotificationTap(
-    notification: Notifications.Notification,
+    notification: ExpoNotifications.Notification,
     onNavigate?: NavigateHandler,
   ) {
     const data = notification.request.content.data
@@ -291,6 +322,7 @@ export class MobileNotificationService {
     data: Record<string, any> = {},
   ) {
     try {
+      const Notifications = await loadNotifications()
       await Notifications.scheduleNotificationAsync({
         content: {
           title,
