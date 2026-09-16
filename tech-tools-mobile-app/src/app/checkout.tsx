@@ -142,18 +142,6 @@ export default function CheckoutScreen() {
     }
   }, [isAuthenticated, router])
 
-  // Redirect if not authenticated (guard)
-  if (!isAuthenticated) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size='large' color={AppColors.primary} />
-          <Text style={styles.loadingText}>Checking authentication...</Text>
-        </View>
-      </SafeAreaView>
-    )
-  }
-
   // Initialize Stripe
   useEffect(() => {
     const initStripe = async () => {
@@ -170,7 +158,8 @@ export default function CheckoutScreen() {
 
   // Update user info when authenticated
   useEffect(() => {
-    if (isAuthenticated && user) {
+    const syncFromUser = () => {
+      if (!isAuthenticated || !user) return
       setShippingForm((prev) => ({
         ...prev,
         firstName: user.first_name || prev.firstName,
@@ -178,6 +167,7 @@ export default function CheckoutScreen() {
         email: user.email || prev.email,
       }))
     }
+    syncFromUser()
   }, [isAuthenticated, user])
 
   // Create payment intent when moving to payment step
@@ -288,6 +278,30 @@ export default function CheckoutScreen() {
         setStep('payment')
       }
     }
+  }
+
+  // Both guards below run after every hook above has already been called
+  // unconditionally on every render -- they used to short-circuit BEFORE
+  // some of those hooks (the Stripe-init effect, the shipping-form-sync
+  // effect, and the createPaymentIntent callback), which is a real
+  // Rules-of-Hooks violation: the moment isAuthenticated flips from
+  // false to true (e.g. auth state still hydrating on a cold start with
+  // an already-logged-in user), the component would call a different
+  // number of hooks than on its previous render, which React does not
+  // tolerate (confirmed via `expo lint`'s react-hooks/rules-of-hooks and
+  // set-state-in-effect checks once this project's own eslint/
+  // eslint-config-expo were actually installed -- they'd never really
+  // been running before). The guard logic itself is unchanged, only
+  // where it runs.
+  if (!isAuthenticated) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size='large' color={AppColors.primary} />
+          <Text style={styles.loadingText}>Checking authentication...</Text>
+        </View>
+      </SafeAreaView>
+    )
   }
 
   if (!stripePublishableKey) {

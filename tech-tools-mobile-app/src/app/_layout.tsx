@@ -192,6 +192,20 @@ export default function RootLayout() {
                 }}
               />
               <Stack.Screen
+                name='profile/seller-products'
+                options={{
+                  headerShown: false,
+                  animation: 'slide_from_right',
+                }}
+              />
+              <Stack.Screen
+                name='seller/[handle]'
+                options={{
+                  headerShown: false,
+                  animation: 'slide_from_right',
+                }}
+              />
+              <Stack.Screen
                 name='refer-earn'
                 options={{
                   headerShown: false,

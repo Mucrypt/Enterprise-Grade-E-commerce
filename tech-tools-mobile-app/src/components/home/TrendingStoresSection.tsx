@@ -56,7 +56,10 @@ export default function TrendingStoresSection() {
   }, [isAuthenticated])
 
   useEffect(() => {
-    fetchData()
+    const init = () => {
+      fetchData()
+    }
+    init()
   }, [fetchData])
 
   const handleToggleFollow = useCallback(

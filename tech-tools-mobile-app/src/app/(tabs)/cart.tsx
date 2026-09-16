@@ -105,7 +105,7 @@ export default function CartTabScreen() {
           </View>
           <Text style={styles.emptyTitle}>Your cart is empty</Text>
           <Text style={styles.emptyText}>
-            Looks like you haven't added any items to your cart yet.
+            Looks like you haven&apos;t added any items to your cart yet.
           </Text>
           <Button
             title='Start Shopping'

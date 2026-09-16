@@ -816,6 +816,73 @@ export const sellerApi = {
 
     return (data?.requests || []) as SellerVerificationRequest[]
   },
+
+  // Public storefront profile -- real follower/post counts, mirrors the
+  // web version exactly. Works for guests too (isFollowing just comes
+  // back false).
+  getPublicProfile: async (handle: string): Promise<PublicSellerProfile> => {
+    const response = await apiClient.get(`/seller/profile/${handle}`)
+    return (response.data?.data || response.data) as PublicSellerProfile
+  },
+
+  follow: async (sellerId: string): Promise<void> => {
+    await apiClient.post(`/seller/profile/${sellerId}/follow`)
+  },
+
+  unfollow: async (sellerId: string): Promise<void> => {
+    await apiClient.delete(`/seller/profile/${sellerId}/follow`)
+  },
+}
+
+export interface PublicSellerProfile {
+  id: string
+  display_name: string | null
+  handle: string
+  bio: string | null
+  avatar_url: string | null
+  banner_url: string | null
+  created_at: string
+  followerCount: number
+  postCount: number
+  isFollowing: boolean
+}
+
+export interface SellerProduct {
+  id: string
+  name: string
+  sku: string
+  slug: string
+  description: string | null
+  base_price: string | number
+  sale_price: string | number | null
+  category_id: string | null
+  category_name?: string | null
+  is_active: boolean
+  total_stock?: number
+  images?: { url: string; is_primary?: boolean }[]
+  created_at: string
+}
+
+// A seller's own real product catalog -- same /seller/products endpoints
+// the web dashboard's sellerProductsApi calls. Every create/edit lands
+// pending review until an admin approves it; the backend enforces the
+// seller's real tier limits (listing count, price cap).
+export const sellerProductsApi = {
+  getMine: async (): Promise<SellerProduct[]> => {
+    const response = await apiClient.get('/seller/products')
+    return (response.data?.data || response.data || []) as SellerProduct[]
+  },
+
+  createMine: async (formData: FormData): Promise<SellerProduct> => {
+    const response = await apiClient.post('/seller/products', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return (response.data?.data || response.data) as SellerProduct
+  },
+
+  deleteMine: async (productId: string): Promise<void> => {
+    await apiClient.delete(`/seller/products/${productId}`)
+  },
 }
 
 export const creatorApi = {
@@ -1586,8 +1653,13 @@ export interface DiscoverPost {
 }
 
 export const discoverApi = {
-  getFeed: async (page = 1, limit = 10): Promise<{ posts: DiscoverPost[]; page: number; hasMore: boolean }> => {
-    const response = await apiClient.get(`/discover/feed?page=${page}&limit=${limit}`)
+  getFeed: async (
+    page = 1,
+    limit = 10,
+    sellerId?: string,
+  ): Promise<{ posts: DiscoverPost[]; page: number; hasMore: boolean }> => {
+    const sellerParam = sellerId ? `&sellerId=${sellerId}` : ''
+    const response = await apiClient.get(`/discover/feed?page=${page}&limit=${limit}${sellerParam}`)
     return response.data.data || response.data
   },
 

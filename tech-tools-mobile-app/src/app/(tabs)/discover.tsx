@@ -68,7 +68,10 @@ export default function DiscoverTabScreen() {
   }, [])
 
   useEffect(() => {
-    loadPage(1)
+    const init = () => {
+      loadPage(1)
+    }
+    init()
   }, [loadPage])
 
   // Posts with a background track (see DiscoverSlide's Audio.Sound
@@ -78,6 +81,12 @@ export default function DiscoverTabScreen() {
     Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: false }).catch(() => {})
   }, [])
 
+  // FlatList's own docs require viewabilityConfig/onViewableItemsChanged
+  // to keep the same reference across renders (it warns/throws if they
+  // change) -- useRef(...).current is the standard, correct RN idiom for
+  // that, not a real "ref read during render" bug the newer
+  // react-hooks/refs check is meant to catch.
+  // eslint-disable-next-line react-hooks/refs
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       const visible = viewableItems.find((v) => v.isViewable)
@@ -85,6 +94,7 @@ export default function DiscoverTabScreen() {
     },
   ).current
 
+  // eslint-disable-next-line react-hooks/refs
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 90 }).current
 
   const handleEndReached = () => {

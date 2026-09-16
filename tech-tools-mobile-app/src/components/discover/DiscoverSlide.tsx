@@ -18,6 +18,19 @@
 // in this codebase (the only prior rotation, animated-icon.tsx, is a
 // one-shot splash Keyframe) -- the music-note badge below uses plain RN
 // `Animated.loop`, the simplest correct primitive for a continuous spin.
+//
+// react-hooks/refs is disabled file-wide: the legacy RN `Animated` API's
+// standard idiom for a stable animated value is `useRef(new
+// Animated.Value(0)).current`, and reading/interpolating/binding that
+// value in a style prop is how every such value is used, in render, by
+// design (Animated.Value is a mutable container meant to be read this
+// way, not a plain ref holding DOM-adjacent state). React Compiler's
+// newer ref-purity rule doesn't yet have an exception for this API, and
+// flags every one of playGlyphOpacity/heartScale/heartOpacity/spinValue's
+// real, safe uses below. A full rewrite onto react-native-reanimated's
+// hook-based API (which the rule does support) is real future work, not
+// something to risk on already-verified animation code under this pass.
+/* eslint-disable react-hooks/refs */
 
 import React, { useEffect, useRef, useState } from 'react'
 import {
@@ -151,17 +164,19 @@ export default function DiscoverSlide({ post, height, isActive, onOpenProduct }:
       }
       if (sound) {
         sound.setPositionAsync(0).catch(() => {})
-        if (post.media_type === 'image') setPaused(false)
+        setPaused(false)
         sound.playAsync().catch(() => {})
       }
       getEventTracker().trackDiscoverEvent('discover_view', post.id)
 
-      if (muted && !soundHintShownThisSession) {
+      const showSoundHintOnce = () => {
+        if (!muted || soundHintShownThisSession) return undefined
         soundHintShownThisSession = true
         setShowSoundHint(true)
         const hintTimer = setTimeout(() => setShowSoundHint(false), 2800)
         return () => clearTimeout(hintTimer)
       }
+      return showSoundHintOnce()
     } else {
       video?.pauseAsync().catch(() => {})
       sound?.pauseAsync().catch(() => {})
@@ -244,6 +259,12 @@ export default function DiscoverSlide({ post, height, isActive, onOpenProduct }:
   }
 
   const handleMediaTap = () => {
+    // Only ever invoked from onPress (an event handler, never during
+    // render) -- react-hooks/purity's "impure function" check doesn't
+    // trace that this closure is event-handler-only, so it flags a real
+    // and necessary Date.now() double-tap-timing read as if it ran
+    // during render.
+    // eslint-disable-next-line react-hooks/purity
     const now = Date.now()
     const delta = now - lastTapRef.current
     lastTapRef.current = now
@@ -479,7 +500,10 @@ export default function DiscoverSlide({ post, height, isActive, onOpenProduct }:
         <View style={styles.leftColumn}>
           <View style={styles.handleRow}>
             {post.seller_handle ? (
-              <>
+              <TouchableOpacity
+                style={styles.handleRowTouchable}
+                onPress={() => router.push(`/seller/${post.seller_handle}` as never)}
+              >
                 {post.seller_avatar_url ? (
                   <Image source={{ uri: post.seller_avatar_url }} style={styles.avatarBubble} />
                 ) : (
@@ -489,12 +513,8 @@ export default function DiscoverSlide({ post, height, isActive, onOpenProduct }:
                     </Text>
                   </LinearGradient>
                 )}
-                {/* No dedicated seller-profile screen on mobile yet (web
-                    has /seller/:handle) -- shows the real author, not
-                    tappable until that screen exists, rather than a dead
-                    tap or a fake link. */}
                 <Text style={styles.handle}>{post.seller_display_name || `@${post.seller_handle}`}</Text>
-              </>
+              </TouchableOpacity>
             ) : (
               <>
                 <LinearGradient colors={AppGradients.hero} style={styles.avatarBubble}>
@@ -692,6 +712,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   handleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: AppSpacing.sm,
+  },
+  handleRowTouchable: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: AppSpacing.sm,

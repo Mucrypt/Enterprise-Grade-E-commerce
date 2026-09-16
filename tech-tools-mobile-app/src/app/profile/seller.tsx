@@ -338,6 +338,16 @@ export default function SellerHubScreen() {
           ))}
         </View>
 
+        {creatorDashboardReady && (
+          <TouchableOpacity
+            style={styles.manageProductsButton}
+            onPress={() => router.push('/profile/seller-products' as never)}
+          >
+            <Ionicons name="storefront-outline" size={18} color={AppColors.white} />
+            <Text style={styles.manageProductsButtonText}>Manage My Products</Text>
+          </TouchableOpacity>
+        )}
+
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
             <Text style={styles.statLabel}>Business mode</Text>
@@ -599,6 +609,21 @@ const styles = StyleSheet.create({
     color: '#9A3412',
     padding: AppSpacing.md,
     lineHeight: 20,
+  },
+  manageProductsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: AppSpacing.sm,
+    backgroundColor: AppColors.primary,
+    borderRadius: AppBorderRadius.md,
+    paddingVertical: AppSpacing.sm + 4,
+    marginBottom: AppSpacing.md,
+  },
+  manageProductsButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: AppColors.white,
   },
   statsRow: {
     flexDirection: 'row',
