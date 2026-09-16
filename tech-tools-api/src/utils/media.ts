@@ -3,6 +3,7 @@ import type { Request, Response, NextFunction, RequestHandler } from 'express'
 import sharp from 'sharp'
 import path from 'path'
 import fs from 'fs/promises'
+import { spawn } from 'child_process'
 import { v4 as uuidv4 } from 'uuid'
 import mime from 'mime-types'
 import {
@@ -410,12 +411,80 @@ export async function processDiscoverImage(file: Express.Multer.File) {
   return result
 }
 
+const TRANSCODE_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes -- generous for a short feed clip, bounded so a corrupt/huge upload can't hang the request forever
+
+/**
+ * Normalize any admin-uploaded video to broadly-playable H.264/AAC MP4.
+ * Real necessity, not gold-plating: admin phones commonly produce
+ * HEVC-in-.mov (iPhone default), which most non-Safari browsers can't
+ * decode at all -- passing that through unmodified (the old behavior)
+ * meant the <video> element silently never played, no error, just a
+ * frozen poster frame forever. `-movflags +faststart` also moves the
+ * moov atom to the front so playback can start before the whole file
+ * downloads, which matters for a feed you scroll through quickly.
+ */
+function transcodeToH264Mp4(inputPath: string, outputPath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    // Shells out to the system ffmpeg binary directly (installed via
+    // apt/apk, see Dockerfile/Dockerfile.dev) rather than through a
+    // wrapper library -- fluent-ffmpeg, the usual choice for this, is
+    // flagged deprecated/unmaintained on npm, and the call here is simple
+    // enough (one input, a fixed arg list, wait for exit) that spawning
+    // ffmpeg directly avoids that dependency for no real loss of clarity.
+    const args = [
+      '-y',
+      '-i', inputPath,
+      '-c:v', 'libx264',
+      '-profile:v', 'main',
+      '-preset', 'veryfast',
+      '-crf', '23',
+      '-pix_fmt', 'yuv420p',
+      // Cap both dimensions at 1080 without upscaling smaller clips
+      // (force_original_aspect_ratio=decrease keeps whichever edge is
+      // the real constraint); force_divisible_by=2 rounds to an even
+      // number, which yuv420p/libx264 require.
+      '-vf', "scale='min(1080,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2",
+      '-c:a', 'aac',
+      '-b:a', '128k',
+      // Moves the moov atom to the front so playback can start before the
+      // whole file downloads -- matters for a feed you scroll through fast.
+      '-movflags', '+faststart',
+      outputPath,
+    ]
+
+    const proc = spawn('ffmpeg', args)
+    let stderr = ''
+    proc.stderr.on('data', (chunk) => {
+      stderr += chunk.toString()
+    })
+
+    const timeout = setTimeout(() => {
+      proc.kill('SIGKILL')
+      reject(new Error('Video processing timed out'))
+    }, TRANSCODE_TIMEOUT_MS)
+
+    proc.on('error', (err) => {
+      clearTimeout(timeout)
+      reject(err)
+    })
+
+    proc.on('close', (code) => {
+      clearTimeout(timeout)
+      if (code === 0) resolve()
+      else reject(new Error(`ffmpeg exited with code ${code}: ${stderr.slice(-500)}`))
+    })
+  })
+}
+
 /**
  * Process a Discover feed post video upload -- same shape as
- * processBlogVideo. No thumbnailUrl here (unlike processBlogVideo/
- * processVideo's unused placeholder field): Discover posts require an
- * admin-supplied poster image instead, since no ffmpeg thumbnail
- * extraction exists in this codebase -- see processDiscoverImage above.
+ * processBlogVideo, plus a real transcode step (see transcodeToH264Mp4)
+ * so whatever container/codec the admin's device produced always ends up
+ * as playable H.264/AAC MP4. No thumbnailUrl here (unlike
+ * processBlogVideo/processVideo's unused placeholder field): Discover
+ * posts require an admin-supplied poster image instead, since no ffmpeg
+ * thumbnail extraction exists in this codebase -- see processDiscoverImage
+ * above.
  */
 export async function processDiscoverVideo(file: Express.Multer.File): Promise<{
   url: string
@@ -424,24 +493,36 @@ export async function processDiscoverVideo(file: Express.Multer.File): Promise<{
   format: string
 }> {
   const videoId = uuidv4()
-  const ext = path.extname(file.originalname)
-  const fileName = `${videoId}${ext}`
-  const stats = await fs.stat(file.path)
+  const fileName = `${videoId}.mp4`
+  const transcodedPath = `${UPLOAD_DIR}/temp/${videoId}-transcoded.mp4`
+
+  try {
+    await transcodeToH264Mp4(file.path, transcodedPath)
+  } catch (err) {
+    await fs.unlink(file.path).catch(() => undefined)
+    await fs.unlink(transcodedPath).catch(() => undefined)
+    throw new Error(
+      'Video: could not process this file -- it may be corrupted or in an unsupported format. Please upload a standard MP4 or MOV video.',
+    )
+  }
+
+  const stats = await fs.stat(transcodedPath)
   const uploadedVideo = await storeMediaFile({
-    localPath: file.path,
+    localPath: transcodedPath,
     key: `discover/videos/${fileName}`,
-    contentType: file.mimetype,
+    contentType: 'video/mp4',
     cacheControl: 'public, max-age=31536000, immutable',
     resourceType: 'video',
   })
 
   await fs.unlink(file.path).catch(() => undefined)
+  await fs.unlink(transcodedPath).catch(() => undefined)
 
   return {
     url: uploadedVideo.url,
     fileName,
     fileSize: stats.size,
-    format: mime.extension(file.mimetype) || ext.replace('.', ''),
+    format: 'mp4',
   }
 }
 

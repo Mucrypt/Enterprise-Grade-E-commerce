@@ -2,12 +2,16 @@
 // Discover Feed Slide -- one full-screen post
 // ============================================
 // Video autoplays muted (browser requirement) when this slide is the
-// active one, tap toggles sound. Image posts get the same hand-rolled
-// touch-swipe carousel pattern already used on the product page
-// (ImageGallery.tsx). Like/save are real, server-synced, optimistic with
-// rollback on failure -- same pattern established for brand-follow this
-// session. A guest tapping like/save is sent to log in, since these are
-// account-tied actions (not a local-first concept like the cart).
+// active one. Tap toggles play/pause (with a brief center glyph, like
+// TikTok/Reels); double-tap likes with a heart-burst animation; the
+// speaker button top-right is the only way to unmute, kept separate from
+// play/pause on purpose so a curious tap never silently kills playback.
+// Image posts get the same hand-rolled touch-swipe carousel pattern
+// already used on the product page (ImageGallery.tsx). Like/save are
+// real, server-synced, optimistic with rollback on failure -- same
+// pattern established for brand-follow this session. A guest tapping
+// like/save is sent to log in, since these are account-tied actions (not
+// a local-first concept like the cart).
 
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
@@ -19,14 +23,20 @@ import {
   VolumeX,
   ShoppingBag,
   Layers,
+  Play,
+  Pause,
+  Loader2,
+  VideoOff,
 } from 'lucide-react'
 import type { DiscoverPost } from '../../api'
 import { discoverApi } from '../../api'
 import { useAuthStore, useCartStore } from '../../stores'
 import { getEventTracker } from '../../services/event-tracking'
-import { formatPrice, getProductImage, cn } from '../../utils'
+import { formatPrice, formatCompactNumber, getProductImage, cn } from '../../utils'
 
 const SWIPE_THRESHOLD_PX = 40
+const DOUBLE_TAP_WINDOW_MS = 300
+const SOUND_HINT_KEY = 'discover_sound_hint_seen'
 
 interface DiscoverSlideProps {
   post: DiscoverPost
@@ -40,6 +50,10 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
   const addItem = useCartStore((s) => s.addItem)
   const videoRef = useRef<HTMLVideoElement>(null)
   const touchStartX = useRef<number | null>(null)
+  const lastTapRef = useRef(0)
+  const tapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const playIconTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const heartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [muted, setMuted] = useState(true)
   const [imageIndex, setImageIndex] = useState(0)
@@ -48,21 +62,42 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
   const [isSaved, setIsSaved] = useState(post.isSaved)
   const [saveCount, setSaveCount] = useState(post.save_count)
   const [watchedComplete, setWatchedComplete] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [paused, setPaused] = useState(false)
+  const [buffering, setBuffering] = useState(false)
+  const [videoFailed, setVideoFailed] = useState(false)
+  const [showPlayGlyph, setShowPlayGlyph] = useState(false)
+  const [showHeartBurst, setShowHeartBurst] = useState(false)
+  const [showSoundHint, setShowSoundHint] = useState(false)
 
   const products = post.products || []
   const primaryProduct = products[0]
 
   useEffect(() => {
     const video = videoRef.current
-    if (!video) return
+    if (!video || videoFailed) return
     if (isActive) {
       video.currentTime = 0
+      setProgress(0)
+      setPaused(false)
       video.play().catch(() => {})
       getEventTracker().trackDiscoverEvent('discover_view', post.id)
+
+      try {
+        if (muted && !sessionStorage.getItem(SOUND_HINT_KEY)) {
+          setShowSoundHint(true)
+          sessionStorage.setItem(SOUND_HINT_KEY, '1')
+          const hintTimer = setTimeout(() => setShowSoundHint(false), 2800)
+          return () => clearTimeout(hintTimer)
+        }
+      } catch {
+        // sessionStorage unavailable (private mode etc.) -- hint just doesn't show
+      }
     } else {
       video.pause()
     }
-  }, [isActive, post.id])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive, post.id, videoFailed])
 
   const handleVideoEnded = () => {
     if (!watchedComplete) {
@@ -73,11 +108,66 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
     }
   }
 
+  const handleTimeUpdate = () => {
+    const video = videoRef.current
+    if (!video || !video.duration) return
+    setProgress(video.currentTime / video.duration)
+  }
+
   const toggleMute = () => {
     setMuted((prev) => {
       if (videoRef.current) videoRef.current.muted = !prev
       return !prev
     })
+    setShowSoundHint(false)
+  }
+
+  const flashPlayGlyph = () => {
+    setShowPlayGlyph(true)
+    if (playIconTimeoutRef.current) clearTimeout(playIconTimeoutRef.current)
+    playIconTimeoutRef.current = setTimeout(() => setShowPlayGlyph(false), 500)
+  }
+
+  const togglePlayPause = () => {
+    const video = videoRef.current
+    if (!video || videoFailed) return
+    if (video.paused) {
+      video.play().catch(() => {})
+      setPaused(false)
+    } else {
+      video.pause()
+      setPaused(true)
+    }
+    flashPlayGlyph()
+  }
+
+  const triggerHeartBurst = () => {
+    setShowHeartBurst(false)
+    // Re-trigger the CSS animation even if it's already mid-run.
+    requestAnimationFrame(() => setShowHeartBurst(true))
+    if (heartTimeoutRef.current) clearTimeout(heartTimeoutRef.current)
+    heartTimeoutRef.current = setTimeout(() => setShowHeartBurst(false), 800)
+    if (!isLiked) handleToggleLike()
+  }
+
+  const handleMediaTap = () => {
+    const now = Date.now()
+    const delta = now - lastTapRef.current
+    lastTapRef.current = now
+
+    if (delta < DOUBLE_TAP_WINDOW_MS) {
+      if (tapTimeoutRef.current) {
+        clearTimeout(tapTimeoutRef.current)
+        tapTimeoutRef.current = null
+      }
+      triggerHeartBurst()
+      return
+    }
+
+    tapTimeoutRef.current = setTimeout(() => {
+      if (post.media_type === 'video') togglePlayPause()
+      tapTimeoutRef.current = null
+    }, DOUBLE_TAP_WINDOW_MS)
   }
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -158,21 +248,74 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
 
   return (
     <section className="relative h-screen w-full snap-start overflow-hidden bg-black">
+      {post.media_type === 'video' && !videoFailed && (
+        <div className="absolute inset-x-0 top-0 z-20 h-0.5 bg-white/25">
+          <div
+            className="h-full bg-white transition-[width] duration-100 ease-linear"
+            style={{ width: `${Math.min(100, Math.max(0, progress * 100))}%` }}
+          />
+        </div>
+      )}
+
       {post.media_type === 'video' ? (
-        <video
-          ref={videoRef}
-          src={post.video_url || undefined}
-          poster={post.video_poster_url || undefined}
-          muted={muted}
-          playsInline
-          loop={false}
-          onEnded={handleVideoEnded}
-          onClick={toggleMute}
-          className="h-full w-full object-contain"
-        />
+        videoFailed ? (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-gray-950 px-6 text-center text-white/70">
+            <VideoOff className="h-10 w-10" />
+            <p className="text-sm">This video couldn't be played.</p>
+          </div>
+        ) : (
+          <div className="relative h-full w-full" onClick={handleMediaTap}>
+            <video
+              ref={videoRef}
+              src={post.video_url || undefined}
+              poster={post.video_poster_url || undefined}
+              muted={muted}
+              playsInline
+              loop={false}
+              onEnded={handleVideoEnded}
+              onTimeUpdate={handleTimeUpdate}
+              onWaiting={() => setBuffering(true)}
+              onPlaying={() => setBuffering(false)}
+              onCanPlay={() => setBuffering(false)}
+              onError={() => setVideoFailed(true)}
+              className="h-full w-full object-contain"
+            />
+
+            {buffering && isActive && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <Loader2 className="h-9 w-9 animate-spin text-white/80" />
+              </div>
+            )}
+
+            {showPlayGlyph && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <div className="animate-play-pulse rounded-full bg-black/40 p-5">
+                  {paused ? (
+                    <Play className="h-10 w-10 fill-white text-white" />
+                  ) : (
+                    <Pause className="h-10 w-10 fill-white text-white" />
+                  )}
+                </div>
+              </div>
+            )}
+
+            {showHeartBurst && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <Heart className="h-24 w-24 animate-heart-burst fill-red-500 text-red-500 drop-shadow-lg" />
+              </div>
+            )}
+
+            {showSoundHint && (
+              <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 animate-fadeIn rounded-full bg-black/60 px-4 py-2 text-xs font-medium text-white">
+                Tap the speaker for sound
+              </div>
+            )}
+          </div>
+        )
       ) : (
         <div
           className="relative h-full w-full"
+          onClick={handleMediaTap}
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
         >
@@ -188,7 +331,7 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
             />
           ))}
           {(post.images?.length || 0) > 1 && (
-            <div className="absolute inset-x-0 top-4 flex justify-center gap-1.5">
+            <div className="pointer-events-none absolute inset-x-0 top-4 flex justify-center gap-1.5">
               {post.images!.map((_, idx) => (
                 <div
                   key={idx}
@@ -200,15 +343,20 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
               ))}
             </div>
           )}
+          {showHeartBurst && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <Heart className="h-24 w-24 animate-heart-burst fill-red-500 text-red-500 drop-shadow-lg" />
+            </div>
+          )}
         </div>
       )}
 
-      {post.media_type === 'video' && (
+      {post.media_type === 'video' && !videoFailed && (
         <button
           type="button"
           onClick={toggleMute}
           aria-label={muted ? 'Unmute' : 'Mute'}
-          className="absolute right-4 top-4 rounded-full bg-black/40 p-2 text-white"
+          className="absolute right-4 top-6 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm"
         >
           {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
         </button>
@@ -219,8 +367,13 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
 
       <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4 pb-6">
         <div className="min-w-0 flex-1 text-white">
-          <p className="font-bold">@TechTools</p>
-          {!!post.caption && <p className="mt-1 line-clamp-2 text-sm text-white/90">{post.caption}</p>}
+          <div className="flex items-center gap-2">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-orange-500 to-red-600 ring-2 ring-white/80">
+              <span className="text-sm font-bold text-white">T</span>
+            </div>
+            <p className="font-bold">@TechTools</p>
+          </div>
+          {!!post.caption && <p className="mt-2 line-clamp-2 text-sm text-white/90">{post.caption}</p>}
           {!!post.category_name && (
             <Link
               to={`/category/${post.category_slug}`}
@@ -234,7 +387,7 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
             <button
               type="button"
               onClick={() => onOpenProduct(products.length > 1 ? undefined : primaryProduct.id)}
-              className="mt-3 flex items-center gap-3 rounded-xl bg-white/95 p-2 pr-4 text-left shadow-lg backdrop-blur"
+              className="mt-3 flex animate-slideUp items-center gap-3 rounded-xl bg-white/95 p-2 pr-4 text-left shadow-lg backdrop-blur"
             >
               <img
                 src={getProductImage(primaryProduct, { w: 96, h: 96 })}
@@ -262,22 +415,40 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
         </div>
 
         {/* Right rail */}
-        <div className="flex shrink-0 flex-col items-center gap-4 text-white">
+        <div className="flex shrink-0 flex-col items-center gap-3 text-white">
           <button type="button" onClick={handleToggleLike} className="flex flex-col items-center gap-1">
-            <Heart className={cn('h-7 w-7', isLiked ? 'fill-red-500 text-red-500' : 'text-white')} />
-            <span className="text-xs font-medium">{likeCount}</span>
+            <span
+              className={cn(
+                'flex h-11 w-11 items-center justify-center rounded-full backdrop-blur-sm transition-colors',
+                isLiked ? 'bg-red-500/25' : 'bg-white/10',
+              )}
+            >
+              <Heart className={cn('h-6 w-6', isLiked ? 'fill-red-500 text-red-500' : 'text-white')} />
+            </span>
+            <span className="text-xs font-semibold tabular-nums">{formatCompactNumber(likeCount)}</span>
           </button>
           <button type="button" onClick={handleToggleSave} className="flex flex-col items-center gap-1">
-            <Bookmark className={cn('h-7 w-7', isSaved ? 'fill-orange-400 text-orange-400' : 'text-white')} />
-            <span className="text-xs font-medium">{saveCount}</span>
+            <span
+              className={cn(
+                'flex h-11 w-11 items-center justify-center rounded-full backdrop-blur-sm transition-colors',
+                isSaved ? 'bg-orange-400/25' : 'bg-white/10',
+              )}
+            >
+              <Bookmark className={cn('h-6 w-6', isSaved ? 'fill-orange-400 text-orange-400' : 'text-white')} />
+            </span>
+            <span className="text-xs font-semibold tabular-nums">{formatCompactNumber(saveCount)}</span>
           </button>
           <button type="button" onClick={handleShare} className="flex flex-col items-center gap-1">
-            <Share2 className="h-7 w-7" />
-            <span className="text-xs font-medium">{post.share_count}</span>
+            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 backdrop-blur-sm">
+              <Share2 className="h-6 w-6 text-white" />
+            </span>
+            <span className="text-xs font-semibold tabular-nums">{formatCompactNumber(post.share_count)}</span>
           </button>
           {primaryProduct && products.length === 1 && (
             <button type="button" onClick={handleQuickAdd} aria-label="Quick add to cart" className="flex flex-col items-center gap-1">
-              <ShoppingBag className="h-7 w-7" />
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 backdrop-blur-sm">
+                <ShoppingBag className="h-6 w-6 text-white" />
+              </span>
             </button>
           )}
         </div>

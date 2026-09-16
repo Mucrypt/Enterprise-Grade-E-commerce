@@ -21,8 +21,12 @@ FROM node:22-bookworm-slim
 
 WORKDIR /app
 
-# Install dumb-init for proper signal handling
-RUN apt-get update && apt-get install -y --no-install-recommends dumb-init && \
+# dumb-init for proper signal handling; ffmpeg is a real runtime dependency
+# now, not a dev tool -- Discover feed video uploads get transcoded to
+# H.264/AAC MP4 on upload (see processDiscoverVideo in utils/media.ts),
+# since arbitrary admin-uploaded video (e.g. iPhone .mov/HEVC) otherwise
+# fails to play in most browsers with no visible error.
+RUN apt-get update && apt-get install -y --no-install-recommends dumb-init ffmpeg && \
     rm -rf /var/lib/apt/lists/*
 
 # Create non-root user

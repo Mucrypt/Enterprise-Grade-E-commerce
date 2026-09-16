@@ -2,11 +2,13 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install dependencies for development
+# Install dependencies for development. ffmpeg is real -- processDiscoverVideo
+# (utils/media.ts) shells out to it to transcode uploads to H.264/AAC MP4.
 RUN apk add --no-cache \
     python3 \
     make \
-    g++
+    g++ \
+    ffmpeg
 
 # Copy package files
 COPY package*.json ./
