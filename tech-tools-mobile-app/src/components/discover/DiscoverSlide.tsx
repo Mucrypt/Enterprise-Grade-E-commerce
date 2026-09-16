@@ -58,12 +58,14 @@ import { useAudioPlayer } from 'expo-audio'
 import { Ionicons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import { LinearGradient } from 'expo-linear-gradient'
+import { BlurView } from 'expo-blur'
+import * as Haptics from 'expo-haptics'
 import type { DiscoverPost } from '@/api'
 import { discoverApi } from '@/api'
 import { useAuthStore, useCartStore } from '@/stores'
 import { getEventTracker } from '@/services/event-tracking'
 import { formatPrice, formatCompactNumber, getProductImage } from '@/utils'
-import { AppColors, AppSpacing, AppBorderRadius, AppGradients } from '@/constants/appTheme'
+import { AppColors, AppSpacing, AppBorderRadius, AppGradients, AppShadows } from '@/constants/appTheme'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const DOUBLE_TAP_WINDOW_MS = 300
@@ -110,11 +112,52 @@ export default function DiscoverSlide({ post, height, isActive, onOpenProduct }:
   const [useFallbackSource, setUseFallbackSource] = useState(false)
   const [showPlayGlyphIcon, setShowPlayGlyphIcon] = useState(false)
   const [showSoundHint, setShowSoundHint] = useState(false)
+  // Brief "Added" confirmation on the product card's quick-add button --
+  // real state change (item is genuinely in the cart by the time this
+  // shows), not a decorative-only animation.
+  const [justAdded, setJustAdded] = useState(false)
+  const productCardOpacity = useRef(new Animated.Value(0)).current
+  const productCardTranslateY = useRef(new Animated.Value(16)).current
+  const likeScale = useRef(new Animated.Value(1)).current
 
   const products = post.products || []
   const primaryProduct = products[0]
   const hasCustomAudio = !!post.audio_url
   const isVideoPost = post.media_type === 'video'
+  // Only a real markdown, never a fabricated "was" price -- base_price is
+  // frequently 0 (no list price set) with sale_price as the actual
+  // selling price, so a strikethrough only makes sense when base_price is
+  // a real, higher number.
+  const originalPrice = primaryProduct ? Number(primaryProduct.base_price) : 0
+  const currentPrice = primaryProduct
+    ? Number(primaryProduct.sale_price ?? primaryProduct.base_price)
+    : 0
+  const hasRealDiscount = originalPrice > 0 && currentPrice > 0 && originalPrice > currentPrice
+  const discountPercent = hasRealDiscount
+    ? Math.round(((originalPrice - currentPrice) / originalPrice) * 100)
+    : 0
+
+  useEffect(() => {
+    if (!primaryProduct) return
+    productCardOpacity.setValue(0)
+    productCardTranslateY.setValue(16)
+    const timer = setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(productCardOpacity, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.spring(productCardTranslateY, {
+          toValue: 0,
+          useNativeDriver: true,
+          friction: 8,
+        }),
+      ]).start()
+    }, 350)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [post.id])
 
   // Adaptive-bitrate HLS when available -- expo-video's native player
   // (ExoPlayer on Android, AVPlayer on iOS) handles .m3u8 quality-
@@ -265,7 +308,13 @@ export default function DiscoverSlide({ post, height, isActive, onOpenProduct }:
         useNativeDriver: true,
       }),
     ]).start()
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {})
     if (!isLiked) handleToggleLike()
+  }
+
+  const bounceLikeIcon = () => {
+    likeScale.setValue(0.7)
+    Animated.spring(likeScale, { toValue: 1, useNativeDriver: true, friction: 4 }).start()
   }
 
   const togglePlayPause = () => {
@@ -319,6 +368,8 @@ export default function DiscoverSlide({ post, height, isActive, onOpenProduct }:
       return
     }
     const wasLiked = isLiked
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
+    if (!wasLiked) bounceLikeIcon()
     setIsLiked(!wasLiked)
     setLikeCount((c) => c + (wasLiked ? -1 : 1))
     try {
@@ -336,6 +387,7 @@ export default function DiscoverSlide({ post, height, isActive, onOpenProduct }:
       return
     }
     const wasSaved = isSaved
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
     setIsSaved(!wasSaved)
     setSaveCount((c) => c + (wasSaved ? -1 : 1))
     try {
@@ -368,6 +420,9 @@ export default function DiscoverSlide({ post, height, isActive, onOpenProduct }:
       1,
     )
     discoverApi.trackAddToCart(post.id).catch(() => {})
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
+    setJustAdded(true)
+    setTimeout(() => setJustAdded(false), 1600)
   }
 
   const handleImageSwipe = (direction: 'left' | 'right') => {
@@ -556,31 +611,57 @@ export default function DiscoverSlide({ post, height, isActive, onOpenProduct }:
           )}
 
           {primaryProduct && (
-            <TouchableOpacity
-              style={styles.productCard}
-              onPress={() => onOpenProduct(products.length > 1 ? undefined : primaryProduct.id)}
-              activeOpacity={0.9}
+            <Animated.View
+              style={{
+                opacity: productCardOpacity,
+                transform: [{ translateY: productCardTranslateY }],
+              }}
             >
-              <Image source={{ uri: getProductImage(primaryProduct) }} style={styles.productImage} />
-              <View style={styles.productInfo}>
-                <Text style={styles.productName} numberOfLines={1}>
-                  {primaryProduct.name}
-                </Text>
-                <Text style={styles.productPrice}>
-                  {formatPrice(primaryProduct.sale_price ?? primaryProduct.base_price)}
-                </Text>
-              </View>
-              {products.length > 1 ? (
-                <View style={styles.multiProductBadge}>
-                  <Ionicons name="layers" size={12} color={AppColors.white} />
-                  <Text style={styles.multiProductText}>{products.length} products</Text>
-                </View>
-              ) : (
-                <View style={styles.viewProductBadge}>
-                  <Text style={styles.viewProductText}>View Product</Text>
-                </View>
-              )}
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.productCardTouchable}
+                onPress={() => onOpenProduct(products.length > 1 ? undefined : primaryProduct.id)}
+                activeOpacity={0.92}
+              >
+                <BlurView intensity={45} tint="dark" style={styles.productCard}>
+                  <Image source={{ uri: getProductImage(primaryProduct) }} style={styles.productImage} />
+                  <View style={styles.productInfo}>
+                    <Text style={styles.productName} numberOfLines={1}>
+                      {primaryProduct.name}
+                    </Text>
+                    <View style={styles.priceRow}>
+                      <Text style={styles.productPrice}>{formatPrice(currentPrice)}</Text>
+                      {hasRealDiscount && (
+                        <>
+                          <Text style={styles.productOriginalPrice}>{formatPrice(originalPrice)}</Text>
+                          <View style={styles.discountBadge}>
+                            <Text style={styles.discountBadgeText}>-{discountPercent}%</Text>
+                          </View>
+                        </>
+                      )}
+                    </View>
+                  </View>
+
+                  {products.length > 1 ? (
+                    <View style={styles.multiProductBadge}>
+                      <Ionicons name="layers" size={12} color={AppColors.white} />
+                      <Text style={styles.multiProductText}>{products.length}</Text>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={[styles.quickAddButton, justAdded && styles.quickAddButtonSuccess]}
+                      onPress={handleQuickAdd}
+                      activeOpacity={0.85}
+                    >
+                      {justAdded ? (
+                        <Ionicons name="checkmark" size={18} color={AppColors.white} />
+                      ) : (
+                        <Ionicons name="bag-add" size={16} color={AppColors.white} />
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </BlurView>
+              </TouchableOpacity>
+            </Animated.View>
           )}
 
           {hasCustomAudio && (
@@ -597,38 +678,41 @@ export default function DiscoverSlide({ post, height, isActive, onOpenProduct }:
 
         <View style={styles.rightColumn}>
           <TouchableOpacity style={styles.actionButton} onPress={handleToggleLike}>
-            <View style={[styles.actionIconBubble, isLiked && styles.actionIconBubbleLiked]}>
-              <Ionicons
-                name={isLiked ? 'heart' : 'heart-outline'}
-                size={24}
-                color={isLiked ? AppColors.error : AppColors.white}
-              />
-            </View>
+            <BlurView
+              intensity={30}
+              tint="dark"
+              style={[styles.actionIconBubble, isLiked && styles.actionIconBubbleLiked]}
+            >
+              <Animated.View style={{ transform: [{ scale: likeScale }] }}>
+                <Ionicons
+                  name={isLiked ? 'heart' : 'heart-outline'}
+                  size={24}
+                  color={isLiked ? AppColors.error : AppColors.white}
+                />
+              </Animated.View>
+            </BlurView>
             <Text style={styles.actionCount}>{formatCompactNumber(likeCount)}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionButton} onPress={handleToggleSave}>
-            <View style={[styles.actionIconBubble, isSaved && styles.actionIconBubbleSaved]}>
+            <BlurView
+              intensity={30}
+              tint="dark"
+              style={[styles.actionIconBubble, isSaved && styles.actionIconBubbleSaved]}
+            >
               <Ionicons
                 name={isSaved ? 'bookmark' : 'bookmark-outline'}
                 size={24}
                 color={isSaved ? AppColors.accent : AppColors.white}
               />
-            </View>
+            </BlurView>
             <Text style={styles.actionCount}>{formatCompactNumber(saveCount)}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
-            <View style={styles.actionIconBubble}>
+            <BlurView intensity={30} tint="dark" style={styles.actionIconBubble}>
               <Ionicons name="share-social-outline" size={24} color={AppColors.white} />
-            </View>
+            </BlurView>
             <Text style={styles.actionCount}>{formatCompactNumber(post.share_count)}</Text>
           </TouchableOpacity>
-          {primaryProduct && products.length === 1 && (
-            <TouchableOpacity style={styles.actionButton} onPress={handleQuickAdd}>
-              <View style={styles.actionIconBubble}>
-                <Ionicons name="bag-add-outline" size={24} color={AppColors.white} />
-              </View>
-            </TouchableOpacity>
-          )}
         </View>
       </View>
     </View>
@@ -773,19 +857,28 @@ const styles = StyleSheet.create({
     color: AppColors.accent,
     marginTop: AppSpacing.sm,
   },
+  productCardTouchable: {
+    marginTop: AppSpacing.md,
+    borderRadius: AppBorderRadius.xl,
+    overflow: 'hidden',
+    ...AppShadows.lg,
+  },
   productCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: AppSpacing.sm,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    borderRadius: AppBorderRadius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+    borderRadius: AppBorderRadius.xl,
     padding: AppSpacing.sm,
-    marginTop: AppSpacing.md,
+    overflow: 'hidden',
   },
   productImage: {
-    width: 44,
-    height: 44,
-    borderRadius: AppBorderRadius.md,
+    width: 52,
+    height: 52,
+    borderRadius: AppBorderRadius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
   },
   productInfo: {
     flex: 1,
@@ -793,38 +886,61 @@ const styles = StyleSheet.create({
   },
   productName: {
     fontSize: 13,
-    fontWeight: '600',
-    color: AppColors.gray900,
+    fontWeight: '700',
+    color: AppColors.white,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
   },
   productPrice: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '800',
-    color: AppColors.primary,
+    color: AppColors.primaryLight,
+  },
+  productOriginalPrice: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.5)',
+    textDecorationLine: 'line-through',
+  },
+  discountBadge: {
+    backgroundColor: AppColors.badgeHot,
+    borderRadius: AppBorderRadius.sm,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  discountBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: AppColors.white,
   },
   multiProductBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: AppColors.gray900,
+    backgroundColor: AppColors.primary,
     borderRadius: AppBorderRadius.full,
     paddingHorizontal: AppSpacing.sm,
     paddingVertical: 6,
   },
   multiProductText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     color: AppColors.white,
   },
-  viewProductBadge: {
-    backgroundColor: AppColors.primary,
+  quickAddButton: {
+    width: 36,
+    height: 36,
     borderRadius: AppBorderRadius.full,
-    paddingHorizontal: AppSpacing.md,
-    paddingVertical: 6,
+    backgroundColor: AppColors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  viewProductText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: AppColors.white,
+  quickAddButtonSuccess: {
+    backgroundColor: AppColors.success,
   },
   soundRow: {
     flexDirection: 'row',
@@ -849,15 +965,20 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: AppBorderRadius.full,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   actionIconBubbleLiked: {
-    backgroundColor: 'rgba(239,68,68,0.25)',
+    backgroundColor: 'rgba(239,68,68,0.3)',
+    borderColor: 'rgba(239,68,68,0.4)',
   },
   actionIconBubbleSaved: {
-    backgroundColor: 'rgba(16,185,129,0.25)',
+    backgroundColor: 'rgba(16,185,129,0.3)',
+    borderColor: 'rgba(16,185,129,0.4)',
   },
   actionCount: {
     fontSize: 11,
