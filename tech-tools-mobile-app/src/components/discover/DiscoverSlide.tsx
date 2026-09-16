@@ -7,17 +7,25 @@
 // buffering spinner, an honest "couldn't be played" fallback on video
 // error (never a silent frozen frame), a one-time "tap for sound" hint,
 // and a real optional background audio track (admin's own upload, not a
-// licensed music catalog) played through a separate expo-av Audio.Sound
-// -- the video's own audio is muted whenever a custom track is attached,
-// matching TikTok's "sound replaces original audio" behavior.
+// licensed music catalog) played through expo-audio -- the video's own
+// audio is muted whenever a custom track is attached, matching TikTok's
+// "sound replaces original audio" behavior.
 //
-// `expo-av`'s Video is already installed and used this exact way on the
-// product detail screen (product/[slug].tsx). `Audio` is new to this
-// app (nothing used it before this), added specifically for the
-// background-track feature. No spin-loop animation convention existed
-// in this codebase (the only prior rotation, animated-icon.tsx, is a
-// one-shot splash Keyframe) -- the music-note badge below uses plain RN
-// `Animated.loop`, the simplest correct primitive for a continuous spin.
+// Built on expo-video/expo-audio, not expo-av -- expo-av was fully
+// removed in Expo SDK 55 (this app's SDK), so the original expo-av-based
+// implementation stopped working entirely (both in Expo Go and in a
+// real build, since the native module itself is gone, not just
+// restricted). expo-video/expo-audio's hook-based players
+// (useVideoPlayer/useAudioPlayer) replace the old ref + async-imperative-
+// call model (videoRef.current.playAsync() etc.) with a stable player
+// object whose methods are synchronous, and status/progress come from
+// useEvent/useEventListener (from the `expo` package) instead of a single
+// onPlaybackStatusUpdate callback prop.
+//
+// No spin-loop animation convention existed in this codebase (the only
+// prior rotation, animated-icon.tsx, is a one-shot splash Keyframe) --
+// the music-note badge below uses plain RN `Animated.loop`, the simplest
+// correct primitive for a continuous spin.
 //
 // react-hooks/refs is disabled file-wide: the legacy RN `Animated` API's
 // standard idiom for a stable animated value is `useRef(new
@@ -44,7 +52,9 @@ import {
   Animated,
   ActivityIndicator,
 } from 'react-native'
-import { Video, ResizeMode, AVPlaybackStatus, Audio } from 'expo-av'
+import { useEvent, useEventListener } from 'expo'
+import { useVideoPlayer, VideoView, VideoSource } from 'expo-video'
+import { useAudioPlayer } from 'expo-audio'
 import { Ionicons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -75,8 +85,6 @@ export default function DiscoverSlide({ post, height, isActive, onOpenProduct }:
   const router = useRouter()
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const addItem = useCartStore((s) => s.addItem)
-  const videoRef = useRef<Video>(null)
-  const soundRef = useRef<Audio.Sound | null>(null)
   const lastTapRef = useRef(0)
   const tapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const playGlyphOpacity = useRef(new Animated.Value(0)).current
@@ -93,7 +101,7 @@ export default function DiscoverSlide({ post, height, isActive, onOpenProduct }:
   const watchedComplete = useRef(false)
   const [progress, setProgress] = useState(0)
   const [paused, setPaused] = useState(false)
-  const [buffering, setBuffering] = useState(false)
+  const [hasStartedPlaying, setHasStartedPlaying] = useState(false)
   const [videoFailed, setVideoFailed] = useState(false)
   // If the HLS variant fails (e.g. streaming profiles not enabled on the
   // live Cloudinary plan), retry once with the plain MP4 before giving
@@ -106,10 +114,85 @@ export default function DiscoverSlide({ post, height, isActive, onOpenProduct }:
   const products = post.products || []
   const primaryProduct = products[0]
   const hasCustomAudio = !!post.audio_url
-  const videoSource =
-    !useFallbackSource && post.video_streaming_url ? post.video_streaming_url : post.video_url || ''
-  const showSoundControls =
-    (post.media_type === 'video' && !videoFailed) || (post.media_type === 'image' && hasCustomAudio)
+  const isVideoPost = post.media_type === 'video'
+
+  // Adaptive-bitrate HLS when available -- expo-video's native player
+  // (ExoPlayer on Android, AVPlayer on iOS) handles .m3u8 quality-
+  // switching with zero extra code, unlike web which needs hls.js.
+  // Falls back to the plain MP4 (useFallbackSource) when no streaming
+  // variant exists or the streaming one fails to load. useVideoPlayer
+  // is always called (even for image posts, with a null source) --
+  // hooks can't be called conditionally, and expo-video explicitly
+  // supports a null initial source for exactly this case.
+  const initialVideoSource: VideoSource | null = isVideoPost
+    ? (!useFallbackSource && post.video_streaming_url) || post.video_url || null
+    : null
+  const player = useVideoPlayer(initialVideoSource, (p) => {
+    p.loop = false
+  })
+
+  // Real optional background track -- admin's own upload, not a
+  // licensed music catalog. Always called (source null when absent);
+  // the hook auto-releases the native player on unmount.
+  const audioPlayer = useAudioPlayer(hasCustomAudio ? post.audio_url : null)
+
+  // "Primary" decides play/pause/status for whichever media actually
+  // carries meaning for this post -- the video for a video post, the
+  // audio track for an image post with one attached, or nothing for a
+  // plain image.
+  const primaryPlayer = isVideoPost ? player : hasCustomAudio ? audioPlayer : null
+
+  const { status: videoStatus } = useEvent(player, 'statusChange', {
+    status: player.status,
+    error: undefined as { message: string } | undefined,
+  })
+  const buffering = isVideoPost && videoStatus === 'loading'
+
+  useEventListener(player, 'statusChange', ({ status }) => {
+    if (status !== 'error') return
+    if (!useFallbackSource && post.video_streaming_url && post.video_url) {
+      setUseFallbackSource(true)
+      player.replaceAsync(post.video_url).catch(() => setVideoFailed(true))
+    } else {
+      setVideoFailed(true)
+    }
+  })
+
+  useEventListener(player, 'timeUpdate', ({ currentTime }) => {
+    if (player.duration) setProgress(currentTime / player.duration)
+  })
+
+  useEventListener(player, 'playingChange', ({ isPlaying }) => {
+    if (isPlaying) setHasStartedPlaying(true)
+  })
+
+  useEventListener(player, 'playToEnd', () => {
+    if (!watchedComplete.current) {
+      watchedComplete.current = true
+      getEventTracker().trackDiscoverEvent('discover_watch_complete', post.id)
+    } else {
+      getEventTracker().trackDiscoverEvent('discover_replay', post.id)
+    }
+  })
+
+  // Video's own audio is always muted once a custom track exists -- the
+  // separate audio player becomes the single sound source instead of
+  // mixing both. expo-video's player object is a native-bridge handle,
+  // not React state -- setting its properties directly (player.muted =
+  // ...) is the API's own documented usage, not a purity violation the
+  // newer react-hooks/immutability check has an exception for yet.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/immutability
+    player.muted = hasCustomAudio ? true : muted
+  }, [player, muted, hasCustomAudio])
+
+  useEffect(() => {
+    if (!hasCustomAudio) return
+    /* eslint-disable react-hooks/immutability */
+    audioPlayer.loop = true
+    audioPlayer.muted = muted
+    /* eslint-enable react-hooks/immutability */
+  }, [audioPlayer, hasCustomAudio, muted])
 
   // Continuous spin for the "sound" badge, matching web's animate-spin.
   useEffect(() => {
@@ -126,47 +209,20 @@ export default function DiscoverSlide({ post, height, isActive, onOpenProduct }:
   }, [hasCustomAudio, spinValue])
   const spinDeg = spinValue.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] })
 
-  // Loads the optional background track once per post. Unloaded on
-  // unmount/post change -- Audio.Sound holds a real native resource.
   useEffect(() => {
-    if (!post.audio_url) return
-    let cancelled = false
-    Audio.Sound.createAsync(
-      { uri: post.audio_url },
-      { isLooping: true, isMuted: muted, shouldPlay: isActive },
-    )
-      .then(({ sound }) => {
-        if (cancelled) {
-          sound.unloadAsync().catch(() => {})
-          return
-        }
-        soundRef.current = sound
-      })
-      .catch(() => {})
-
-    return () => {
-      cancelled = true
-      soundRef.current?.unloadAsync().catch(() => {})
-      soundRef.current = null
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [post.audio_url])
-
-  useEffect(() => {
-    const video = videoRef.current
-    const sound = soundRef.current
     if (isActive) {
-      if (video && !videoFailed) {
-        video.setPositionAsync(0).catch(() => {})
+      if (isVideoPost && !videoFailed) {
+        // eslint-disable-next-line react-hooks/immutability -- native player handle, see above
+        player.currentTime = 0
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting the progress bar to match the player seek above, not derived render state
         setProgress(0)
-        setPaused(false)
-        video.playAsync().catch(() => {})
+        player.play()
       }
-      if (sound) {
-        sound.setPositionAsync(0).catch(() => {})
-        setPaused(false)
-        sound.playAsync().catch(() => {})
+      if (hasCustomAudio) {
+        audioPlayer.seekTo(0).catch(() => {})
+        audioPlayer.play()
       }
+      setPaused(false)
       getEventTracker().trackDiscoverEvent('discover_view', post.id)
 
       const showSoundHintOnce = () => {
@@ -178,27 +234,11 @@ export default function DiscoverSlide({ post, height, isActive, onOpenProduct }:
       }
       return showSoundHintOnce()
     } else {
-      video?.pauseAsync().catch(() => {})
-      sound?.pauseAsync().catch(() => {})
+      player.pause()
+      if (hasCustomAudio) audioPlayer.pause()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive, post.id, videoFailed])
-
-  const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
-    if (!status.isLoaded) return
-    setBuffering(!!status.isBuffering)
-    if (status.durationMillis) {
-      setProgress(status.positionMillis / status.durationMillis)
-    }
-    if (status.didJustFinish) {
-      if (!watchedComplete.current) {
-        watchedComplete.current = true
-        getEventTracker().trackDiscoverEvent('discover_watch_complete', post.id)
-      } else {
-        getEventTracker().trackDiscoverEvent('discover_replay', post.id)
-      }
-    }
-  }
 
   const flashPlayGlyph = () => {
     setShowPlayGlyphIcon(true)
@@ -228,33 +268,22 @@ export default function DiscoverSlide({ post, height, isActive, onOpenProduct }:
     if (!isLiked) handleToggleLike()
   }
 
-  const togglePlayPause = async () => {
-    const video = videoRef.current
-    const sound = soundRef.current
-    const primaryStatus =
-      post.media_type === 'video' ? await video?.getStatusAsync() : await sound?.getStatusAsync()
-    if (!primaryStatus || !primaryStatus.isLoaded) return
-
-    if (!primaryStatus.isPlaying) {
-      video?.playAsync().catch(() => {})
-      sound?.playAsync().catch(() => {})
+  const togglePlayPause = () => {
+    if (!primaryPlayer) return
+    if (!primaryPlayer.playing) {
+      if (isVideoPost) player.play()
+      if (hasCustomAudio) audioPlayer.play()
       setPaused(false)
     } else {
-      video?.pauseAsync().catch(() => {})
-      sound?.pauseAsync().catch(() => {})
+      if (isVideoPost) player.pause()
+      if (hasCustomAudio) audioPlayer.pause()
       setPaused(true)
     }
     flashPlayGlyph()
   }
 
   const toggleMute = () => {
-    setMuted((prev) => {
-      const next = !prev
-      if (hasCustomAudio) {
-        soundRef.current?.setIsMutedAsync(next).catch(() => {})
-      }
-      return next
-    })
+    setMuted((prev) => !prev)
     setShowSoundHint(false)
   }
 
@@ -347,15 +376,17 @@ export default function DiscoverSlide({ post, height, isActive, onOpenProduct }:
     setImageIndex((i) => (direction === 'left' ? (i + 1) % count : (i - 1 + count) % count))
   }
 
+  const showSoundControls = (isVideoPost && !videoFailed) || (post.media_type === 'image' && hasCustomAudio)
+
   return (
     <View style={[styles.container, { height }]}>
-      {post.media_type === 'video' && !videoFailed && (
+      {isVideoPost && !videoFailed && (
         <View style={styles.progressTrack}>
           <View style={[styles.progressFill, { width: `${Math.min(100, Math.max(0, progress * 100))}%` }]} />
         </View>
       )}
 
-      {post.media_type === 'video' ? (
+      {isVideoPost ? (
         videoFailed ? (
           <View style={[StyleSheet.absoluteFill, styles.errorState]}>
             <Ionicons name="videocam-off-outline" size={40} color="rgba(255,255,255,0.6)" />
@@ -363,31 +394,22 @@ export default function DiscoverSlide({ post, height, isActive, onOpenProduct }:
           </View>
         ) : (
           <TouchableOpacity activeOpacity={1} onPress={handleMediaTap} style={StyleSheet.absoluteFill}>
-            <Video
-              ref={videoRef}
-              // Adaptive-bitrate HLS when available -- expo-av's native
-              // player (ExoPlayer on Android, AVPlayer on iOS) handles
-              // .m3u8 quality-switching with zero extra code, unlike web
-              // which needs hls.js. Falls back to the plain MP4 (see
-              // useFallbackSource above) when no streaming variant exists
-              // or the streaming one fails to load.
-              source={{ uri: videoSource }}
-              posterSource={post.video_poster_url ? { uri: post.video_poster_url } : undefined}
-              usePoster={!!post.video_poster_url}
+            <VideoView
+              player={player}
               style={StyleSheet.absoluteFill}
-              resizeMode={ResizeMode.CONTAIN}
-              isMuted={hasCustomAudio ? true : muted}
-              isLooping={false}
-              useNativeControls={false}
-              onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-              onError={() => {
-                if (!useFallbackSource && post.video_streaming_url) {
-                  setUseFallbackSource(true)
-                } else {
-                  setVideoFailed(true)
-                }
-              }}
+              contentFit="contain"
+              nativeControls={false}
             />
+
+            {!!post.video_poster_url && !hasStartedPlaying && (
+              <View style={StyleSheet.absoluteFill} pointerEvents="none">
+                <Image
+                  source={{ uri: post.video_poster_url }}
+                  style={StyleSheet.absoluteFill}
+                  resizeMode="contain"
+                />
+              </View>
+            )}
 
             {buffering && isActive && (
               <View style={StyleSheet.absoluteFill} pointerEvents="none">

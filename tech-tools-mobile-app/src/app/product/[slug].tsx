@@ -14,7 +14,7 @@ import {
   Dimensions,
   FlatList,
 } from 'react-native'
-import { Video, ResizeMode } from 'expo-av'
+import { useVideoPlayer, VideoView } from 'expo-video'
 import { Ionicons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -38,6 +38,17 @@ import { ProductCard, DeliveryEstimate } from '@/components'
 import { useEventTracking } from '@/hooks/useEventTracking'
 
 const { width } = Dimensions.get('window')
+
+// useVideoPlayer is a hook -- it can't be called inside renderMediaItem
+// (a plain callback invoked per FlatList row, not a component), so each
+// video gallery item gets its own real component instance instead.
+function ProductVideoItem({ item, style }: { item: ProductMedia; style: object }) {
+  const player = useVideoPlayer(item.url, (p) => {
+    p.loop = false
+  })
+
+  return <VideoView player={player} style={style} nativeControls contentFit="contain" />
+}
 
 export default function ProductDetailScreen() {
   const { slug } = useLocalSearchParams()
@@ -153,15 +164,7 @@ export default function ProductDetailScreen() {
     if (item.type === 'video') {
       return (
         <View style={styles.mediaContainer}>
-          <Video
-            source={{ uri: item.url }}
-            style={styles.mainImage}
-            useNativeControls
-            resizeMode={ResizeMode.CONTAIN}
-            isLooping={false}
-            posterSource={{ uri: item.thumbnail_url || '' }}
-            usePoster={!!item.thumbnail_url}
-          />
+          <ProductVideoItem item={item} style={styles.mainImage} />
         </View>
       )
     }

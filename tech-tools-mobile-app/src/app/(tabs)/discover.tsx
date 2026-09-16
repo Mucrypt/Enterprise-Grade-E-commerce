@@ -22,7 +22,7 @@ import {
   ViewToken,
 } from 'react-native'
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs'
-import { Audio } from 'expo-av'
+import { setAudioModeAsync } from 'expo-audio'
 import { discoverApi, DiscoverPost } from '@/api'
 import DiscoverSlide from '@/components/discover/DiscoverSlide'
 import ProductBottomSheet from '@/components/discover/ProductBottomSheet'
@@ -74,11 +74,11 @@ export default function DiscoverTabScreen() {
     init()
   }, [loadPage])
 
-  // Posts with a background track (see DiscoverSlide's Audio.Sound
+  // Posts with a background track (see DiscoverSlide's expo-audio
   // usage) should play like TikTok/Reels -- audible even when the
   // device's silent switch is on, not swallowed like a system sound.
   useEffect(() => {
-    Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: false }).catch(() => {})
+    setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: false }).catch(() => {})
   }, [])
 
   // FlatList's own docs require viewabilityConfig/onViewableItemsChanged
