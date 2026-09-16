@@ -478,10 +478,31 @@ export default function DiscoverSlide({ post, height, isActive, onOpenProduct }:
       <View style={styles.bottomRow}>
         <View style={styles.leftColumn}>
           <View style={styles.handleRow}>
-            <LinearGradient colors={AppGradients.hero} style={styles.avatarBubble}>
-              <Text style={styles.avatarLetter}>T</Text>
-            </LinearGradient>
-            <Text style={styles.handle}>@TechTools</Text>
+            {post.seller_handle ? (
+              <>
+                {post.seller_avatar_url ? (
+                  <Image source={{ uri: post.seller_avatar_url }} style={styles.avatarBubble} />
+                ) : (
+                  <LinearGradient colors={AppGradients.hero} style={styles.avatarBubble}>
+                    <Text style={styles.avatarLetter}>
+                      {(post.seller_display_name || post.seller_handle).charAt(0).toUpperCase()}
+                    </Text>
+                  </LinearGradient>
+                )}
+                {/* No dedicated seller-profile screen on mobile yet (web
+                    has /seller/:handle) -- shows the real author, not
+                    tappable until that screen exists, rather than a dead
+                    tap or a fake link. */}
+                <Text style={styles.handle}>{post.seller_display_name || `@${post.seller_handle}`}</Text>
+              </>
+            ) : (
+              <>
+                <LinearGradient colors={AppGradients.hero} style={styles.avatarBubble}>
+                  <Text style={styles.avatarLetter}>T</Text>
+                </LinearGradient>
+                <Text style={styles.handle}>@TechTools</Text>
+              </>
+            )}
           </View>
           {!!post.caption && (
             <Text style={styles.caption} numberOfLines={2}>

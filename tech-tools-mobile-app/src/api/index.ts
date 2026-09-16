@@ -1577,6 +1577,12 @@ export interface DiscoverPost {
   images?: { id: string; image_url: string; position: number }[]
   isLiked: boolean
   isSaved: boolean
+  // Real per-post author -- an approved seller's own brand, or absent
+  // for platform/admin content (the UI falls back to "@TechTools").
+  seller_profile_id?: string | null
+  seller_display_name?: string | null
+  seller_handle?: string | null
+  seller_avatar_url?: string | null
 }
 
 export const discoverApi = {

@@ -29,6 +29,7 @@ const RegisterPage = lazy(() => import('./pages/RegisterPage'))
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const SellerHubPage = lazy(() => import('./pages/SellerHubPage'))
 const CreatorDashboardPage = lazy(() => import('./pages/CreatorDashboardPage'))
+const SellerProfilePage = lazy(() => import('./pages/SellerProfilePage'))
 const OrdersPage = lazy(() => import('./pages/OrdersPage'))
 const WishlistPage = lazy(() => import('./pages/WishlistPage'))
 const ComparePage = lazy(() => import('./pages/ComparePage'))
@@ -100,6 +101,7 @@ function App() {
                 <Route path='product/:slug' element={<ProductDetailPage />} />
                 <Route path='category/:slug' element={<ProductsPage />} />
                 <Route path='brand/:slug' element={<ProductsPage />} />
+                <Route path='seller/:handle' element={<SellerProfilePage />} />
                 <Route path='books' element={<BooksPage />} />
                 <Route path='books/:id' element={<BookDetailPage />} />
                 <Route path='sale' element={<ProductsPage />} />

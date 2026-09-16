@@ -469,12 +469,27 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
 
       <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4 pb-6">
         <div className="min-w-0 flex-1 text-white">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-orange-500 to-red-600 ring-2 ring-white/80">
-              <span className="text-sm font-bold text-white">T</span>
+          {post.seller_handle ? (
+            <Link to={`/seller/${post.seller_handle}`} className="flex items-center gap-2">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-linear-to-br from-orange-500 to-red-600 ring-2 ring-white/80">
+                {post.seller_avatar_url ? (
+                  <img src={post.seller_avatar_url} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-sm font-bold text-white">
+                    {(post.seller_display_name || post.seller_handle).charAt(0).toUpperCase()}
+                  </span>
+                )}
+              </div>
+              <p className="font-bold">{post.seller_display_name || `@${post.seller_handle}`}</p>
+            </Link>
+          ) : (
+            <div className="flex items-center gap-2">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-orange-500 to-red-600 ring-2 ring-white/80">
+                <span className="text-sm font-bold text-white">T</span>
+              </div>
+              <p className="font-bold">@TechTools</p>
             </div>
-            <p className="font-bold">@TechTools</p>
-          </div>
+          )}
           {!!post.caption && <p className="mt-2 line-clamp-2 text-sm text-white/90">{post.caption}</p>}
           {!!post.category_name && (
             <Link

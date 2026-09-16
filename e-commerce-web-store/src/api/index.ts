@@ -348,9 +348,14 @@ export interface DiscoverPost {
 }
 
 export const discoverApi = {
-  async getFeed(page = 1, limit = 10): Promise<{ posts: DiscoverPost[]; page: number; hasMore: boolean }> {
+  async getFeed(
+    page = 1,
+    limit = 10,
+    sellerId?: string,
+  ): Promise<{ posts: DiscoverPost[]; page: number; hasMore: boolean }> {
+    const sellerParam = sellerId ? `&sellerId=${sellerId}` : ''
     const response = await api.get<{ success: boolean; data: { posts: DiscoverPost[]; page: number; hasMore: boolean } }>(
-      `/discover/feed?page=${page}&limit=${limit}`,
+      `/discover/feed?page=${page}&limit=${limit}${sellerParam}`,
     )
     return response.data.data
   },
@@ -1046,6 +1051,37 @@ export const sellerApi = {
 
     return response.data.data.requests
   },
+
+  // Public storefront profile -- real follower/post counts, no fabricated
+  // numbers. authenticateIfPresent backend-side, so this works for guests
+  // too (isFollowing just comes back false/absent).
+  async getPublicProfile(handle: string): Promise<PublicSellerProfile> {
+    const response = await api.get<{ success: boolean; data: PublicSellerProfile }>(
+      `/seller/profile/${handle}`,
+    )
+    return response.data.data
+  },
+
+  async follow(sellerId: string): Promise<void> {
+    await api.post(`/seller/profile/${sellerId}/follow`)
+  },
+
+  async unfollow(sellerId: string): Promise<void> {
+    await api.delete(`/seller/profile/${sellerId}/follow`)
+  },
+}
+
+export interface PublicSellerProfile {
+  id: string
+  display_name: string | null
+  handle: string
+  bio: string | null
+  avatar_url: string | null
+  banner_url: string | null
+  created_at: string
+  followerCount: number
+  postCount: number
+  isFollowing: boolean
 }
 
 export const creatorApi = {
