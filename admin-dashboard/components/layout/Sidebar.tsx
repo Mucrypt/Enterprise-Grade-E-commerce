@@ -151,6 +151,19 @@ const navigation: NavItem[] = [
         icon: Truck,
         permission: 'suppliers.view',
       },
+      {
+        // Products a seller listed themselves (real inventory, real
+        // seller_profile_id), pending admin approval before they're
+        // purchasable -- a dedicated queue rather than a filter on the
+        // main list, since the public product listing endpoint always
+        // excludes inactive rows and was too heavily-relied-on to
+        // safely change for this.
+        title: 'Seller Products',
+        href: '/products/seller-review',
+        icon: Package,
+        permission: 'catalog.view',
+        badge: 'New',
+      },
     ],
   },
   {

@@ -103,4 +103,36 @@ export const sellerService = {
       payload,
     )
   },
+
+  // Products a seller listed themselves, pending approval -- real
+  // inventory/pricing, gated the same way seller-authored Discover
+  // posts are (is_active=false until an admin approves).
+  async getPendingProducts() {
+    return await apiClient.get<{ success: boolean; data: SellerPendingProduct[] }>(
+      '/seller/products/pending',
+    )
+  },
+
+  async approveProduct(productId: string) {
+    return await apiClient.patch(`/seller/products/${productId}/review`, {})
+  },
+
+  async rejectProduct(productId: string) {
+    return await apiClient.delete(`/seller/products/${productId}`)
+  },
+}
+
+export interface SellerPendingProduct {
+  id: string
+  name: string
+  sku: string
+  slug: string
+  base_price: string | number
+  sale_price: string | number | null
+  category_name?: string | null
+  seller_display_name?: string | null
+  seller_handle?: string | null
+  images?: { url: string; is_primary?: boolean }[]
+  total_stock?: number
+  created_at: string
 }
