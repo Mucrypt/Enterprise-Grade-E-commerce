@@ -58,6 +58,17 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
   const playIconTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const heartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isActiveRef = useRef(isActive)
+  // True whenever hls.js is actively attached and managing the <video>
+  // element's playback. hls.js drives the element through MediaSource
+  // Extensions internally (attach/detach/destroy), and that lifecycle can
+  // itself fire a native 'error' event on the element that has nothing to
+  // do with the actual media being unplayable -- observed live: hls.js
+  // fetches the manifest and a quality-level playlist successfully (real,
+  // working Cloudinary URLs, confirmed independently), yet the plain
+  // <video onError> handler still fired and showed "couldn't be played".
+  // While this is true, only hls.js's own Hls.Events.ERROR (with a real
+  // `fatal` flag) is trusted to decide the video has actually failed.
+  const hlsActiveRef = useRef(false)
 
   const [muted, setMuted] = useState(true)
   const [imageIndex, setImageIndex] = useState(0)
@@ -105,8 +116,10 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
     let hls: Hls | null = null
 
     if (streamingUrl && video.canPlayType('application/vnd.apple.mpegurl')) {
+      hlsActiveRef.current = false
       video.src = streamingUrl
     } else if (streamingUrl && Hls.isSupported()) {
+      hlsActiveRef.current = true
       hls = new Hls({ maxBufferLength: 15 })
       hls.loadSource(streamingUrl)
       hls.attachMedia(video)
@@ -114,18 +127,24 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
         if (isActiveRef.current) video.play().catch(() => {})
       })
       hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (data.fatal) {
-          hls?.destroy()
-          hls = null
-          video.src = fallbackUrl
-          if (isActiveRef.current) video.play().catch(() => {})
-        }
+        if (!data.fatal) return
+        console.error('[Discover] hls.js fatal error, falling back to MP4:', data.type, data.details)
+        hls?.destroy()
+        hls = null
+        // Falling back to a plain src -- from here on a real <video>
+        // error means the fallback itself failed, so native error
+        // handling should be trusted again.
+        hlsActiveRef.current = false
+        video.src = fallbackUrl
+        if (isActiveRef.current) video.play().catch(() => {})
       })
     } else {
+      hlsActiveRef.current = false
       video.src = fallbackUrl
     }
 
     return () => {
+      hlsActiveRef.current = false
       hls?.destroy()
     }
   }, [post.id, post.video_streaming_url, post.video_url, post.media_type])
@@ -357,7 +376,15 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
               onWaiting={() => setBuffering(true)}
               onPlaying={() => setBuffering(false)}
               onCanPlay={() => setBuffering(false)}
-              onError={() => setVideoFailed(true)}
+              onError={(e) => {
+                // While hls.js owns this element, it alone decides what's
+                // fatal (see the effect above) -- its own attach/detach/
+                // destroy lifecycle can otherwise trigger a native error
+                // event that looks identical to a real playback failure.
+                if (hlsActiveRef.current) return
+                console.error('[Discover] native video error:', e.currentTarget.error?.code, e.currentTarget.error?.message)
+                setVideoFailed(true)
+              }}
               className="h-full w-full object-contain"
             />
 
