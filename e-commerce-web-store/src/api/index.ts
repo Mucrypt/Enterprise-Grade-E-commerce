@@ -1084,6 +1084,48 @@ export interface PublicSellerProfile {
   isFollowing: boolean
 }
 
+export interface SellerProduct {
+  id: string
+  name: string
+  sku: string
+  slug: string
+  description: string | null
+  base_price: string | number
+  sale_price: string | number | null
+  category_id: string | null
+  category_name?: string | null
+  is_active: boolean
+  total_stock?: number
+  images?: { url: string; is_primary?: boolean }[]
+  created_at: string
+}
+
+// A seller's own real product catalog -- same /seller/products endpoints
+// admin-owned discoverApi.*Mine calls mirror for Discover posts. Every
+// create/edit lands pending review (is_active=false) until an admin
+// approves it, and the backend enforces the seller's real tier limits
+// (listing count, price cap) before the transaction ever runs.
+export const sellerProductsApi = {
+  async getMine(): Promise<SellerProduct[]> {
+    const response = await api.get<{ success: boolean; data: SellerProduct[] }>('/seller/products')
+    return response.data.data
+  },
+
+  async createMine(formData: FormData): Promise<SellerProduct> {
+    const response = await api.post<{ success: boolean; data: SellerProduct }>('/seller/products', formData)
+    return response.data.data
+  },
+
+  async updateMine(productId: string, payload: Record<string, unknown>): Promise<SellerProduct> {
+    const response = await api.put<{ success: boolean; data: SellerProduct }>(`/seller/products/${productId}`, payload)
+    return response.data.data
+  },
+
+  async deleteMine(productId: string): Promise<void> {
+    await api.delete(`/seller/products/${productId}`)
+  },
+}
+
 export const creatorApi = {
   normalizeProduct(raw: any): CreatorProduct {
     return {

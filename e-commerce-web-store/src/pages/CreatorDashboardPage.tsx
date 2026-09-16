@@ -24,9 +24,10 @@ import {
   X,
   Tag,
 } from 'lucide-react'
-import { creatorApi, discoverApi, productsApi, sellerApi, userApi } from '../api'
-import type { DiscoverPost } from '../api'
+import { categoriesApi, creatorApi, discoverApi, productsApi, sellerApi, sellerProductsApi, userApi } from '../api'
+import type { DiscoverPost, SellerProduct } from '../api'
 import type {
+  Category,
   CreatorBookDraftInput,
   CreatorActivityItem,
   CreatorDashboardMetrics,
@@ -133,6 +134,23 @@ export default function CreatorDashboardPage() {
   const [productSearchResults, setProductSearchResults] = useState<Product[]>([])
   const [isSearchingProducts, setIsSearchingProducts] = useState(false)
   const [taggingProductId, setTaggingProductId] = useState<string | null>(null)
+
+  // "My Store Products" -- a seller's own real product catalog (distinct
+  // from "Product studio" above, which is digital books via
+  // creator_profile_id/ENABLE_BOOKS_WEB3, a genuinely different system).
+  // Same pending-review gate as Discover posts, plus real tier limits
+  // (listing count, price cap) enforced server-side.
+  const [storeProducts, setStoreProducts] = useState<SellerProduct[]>([])
+  const [storeProductsLoading, setStoreProductsLoading] = useState(false)
+  const [storeCategories, setStoreCategories] = useState<Category[]>([])
+  const [storeProductName, setStoreProductName] = useState('')
+  const [storeProductDescription, setStoreProductDescription] = useState('')
+  const [storeProductPrice, setStoreProductPrice] = useState('')
+  const [storeProductStock, setStoreProductStock] = useState('0')
+  const [storeProductCategoryId, setStoreProductCategoryId] = useState('')
+  const [storeProductImages, setStoreProductImages] = useState<File[]>([])
+  const [isSavingStoreProduct, setIsSavingStoreProduct] = useState(false)
+  const [storeProductFormError, setStoreProductFormError] = useState('')
 
   useEffect(() => {
     if (hasHydrated && !isAuthenticated && !authLoading) {
@@ -377,6 +395,93 @@ export default function CreatorDashboardPage() {
     }
   }
 
+  const loadStoreProducts = async () => {
+    setStoreProductsLoading(true)
+    try {
+      const products = await sellerProductsApi.getMine()
+      setStoreProducts(products)
+    } catch {
+      // Soft failure -- the rest of the dashboard still works.
+    } finally {
+      setStoreProductsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!creatorDashboardReady) return
+    loadStoreProducts()
+    categoriesApi.getAll().then(setStoreCategories).catch(() => setStoreCategories([]))
+  }, [creatorDashboardReady])
+
+  const resetStoreProductForm = () => {
+    setStoreProductName('')
+    setStoreProductDescription('')
+    setStoreProductPrice('')
+    setStoreProductStock('0')
+    setStoreProductCategoryId('')
+    setStoreProductImages([])
+    setStoreProductFormError('')
+  }
+
+  const handleCreateStoreProduct = async () => {
+    setStoreProductFormError('')
+
+    if (!storeProductName.trim()) {
+      setStoreProductFormError('Give the product a name.')
+      return
+    }
+    if (!storeProductCategoryId) {
+      setStoreProductFormError('Choose a category.')
+      return
+    }
+    const price = Number(storeProductPrice)
+    if (!price || price <= 0) {
+      setStoreProductFormError('Enter a real price.')
+      return
+    }
+
+    setIsSavingStoreProduct(true)
+    try {
+      const slug = storeProductName
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9\s-]/g, '')
+        .replace(/\s+/g, '-')
+        .replace(/-+/g, '-')
+      const sku = `SLR-${Date.now().toString(36).toUpperCase()}`
+
+      const formData = new FormData()
+      formData.append('sku', sku)
+      formData.append('name', storeProductName)
+      formData.append('slug', slug)
+      formData.append('description', storeProductDescription)
+      formData.append('categoryId', storeProductCategoryId)
+      formData.append('basePrice', String(price))
+      formData.append('stockQuantity', String(Number(storeProductStock) || 0))
+      storeProductImages.forEach((file) => formData.append('images', file))
+
+      await sellerProductsApi.createMine(formData)
+      resetStoreProductForm()
+      await loadStoreProducts()
+      setSuccess('Product submitted -- it will be visible to shoppers once an admin approves it.')
+    } catch (createError: any) {
+      setStoreProductFormError(
+        createError?.response?.data?.message || 'Could not create the product right now.',
+      )
+    } finally {
+      setIsSavingStoreProduct(false)
+    }
+  }
+
+  const handleDeleteStoreProduct = async (productId: string) => {
+    try {
+      await sellerProductsApi.deleteMine(productId)
+      setStoreProducts((current) => current.filter((p) => p.id !== productId))
+    } catch (deleteError: any) {
+      setError(deleteError?.response?.data?.message || 'Could not delete the product right now.')
+    }
+  }
+
   const totalBooks = metrics?.activation.totalBooks ?? 0
   const publishedBooks = metrics?.activation.publishedBooks ?? 0
   const pendingReviewBooks = metrics?.activation.pendingReviewBooks ?? 0
@@ -419,6 +524,7 @@ export default function CreatorDashboardPage() {
     { id: 'creator-overview', label: 'Overview', icon: BarChart3 },
     { id: 'product-studio', label: 'Product studio', icon: Package },
     { id: 'discover-posts', label: 'My Discover Posts', icon: Clapperboard },
+    { id: 'store-products', label: 'My Store Products', icon: Store },
     { id: 'creator-activity', label: 'Activity feed', icon: ListTodo },
     { id: 'catalog-ops', label: 'Catalog ops', icon: FolderKanban },
     { id: 'creator-settings', label: 'Creator settings', icon: Settings2 },
@@ -1851,6 +1957,153 @@ export default function CreatorDashboardPage() {
                             )}
                           </div>
                         )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div id='store-products' className='space-y-6'>
+              <div className='rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5'>
+                <h2 className='flex items-center gap-2 text-xl font-bold text-slate-900'>
+                  <Store className='h-5 w-5 text-orange-600' /> List a product
+                </h2>
+                <p className='mt-1 text-sm text-gray-500'>
+                  Your own real product -- every listing goes pending an admin&apos;s approval
+                  before it&apos;s visible or purchasable. Your seller tier caps how many active
+                  listings you can have and the maximum price -- you&apos;ll see a clear message
+                  here if you hit either limit.
+                </p>
+
+                <div className='mt-5 grid gap-3 md:grid-cols-2'>
+                  <input
+                    value={storeProductName}
+                    onChange={(e) => setStoreProductName(e.target.value)}
+                    placeholder='Product name'
+                    className='w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-orange-300 focus:ring-2 focus:ring-orange-100'
+                  />
+                  <select
+                    value={storeProductCategoryId}
+                    onChange={(e) => setStoreProductCategoryId(e.target.value)}
+                    className='w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-orange-300 focus:ring-2 focus:ring-orange-100'
+                  >
+                    <option value=''>Choose a category</option>
+                    {storeCategories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    value={storeProductPrice}
+                    onChange={(e) => setStoreProductPrice(e.target.value)}
+                    type='number'
+                    min='0'
+                    step='0.01'
+                    placeholder='Price'
+                    className='w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-orange-300 focus:ring-2 focus:ring-orange-100'
+                  />
+                  <input
+                    value={storeProductStock}
+                    onChange={(e) => setStoreProductStock(e.target.value)}
+                    type='number'
+                    min='0'
+                    step='1'
+                    placeholder='Stock quantity'
+                    className='w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-orange-300 focus:ring-2 focus:ring-orange-100'
+                  />
+                </div>
+
+                <textarea
+                  value={storeProductDescription}
+                  onChange={(e) => setStoreProductDescription(e.target.value)}
+                  rows={3}
+                  placeholder='Description'
+                  className='mt-3 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-orange-300 focus:ring-2 focus:ring-orange-100'
+                />
+
+                <label className='mt-3 flex flex-col gap-1 text-xs font-medium text-gray-500'>
+                  Images
+                  <input
+                    type='file'
+                    accept='image/*'
+                    multiple
+                    onChange={(e) => setStoreProductImages(Array.from(e.target.files || []).slice(0, 10))}
+                    className='rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none transition file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white'
+                  />
+                </label>
+
+                {storeProductFormError && (
+                  <p className='mt-3 text-sm font-medium text-red-600'>{storeProductFormError}</p>
+                )}
+
+                <button
+                  type='button'
+                  onClick={handleCreateStoreProduct}
+                  disabled={isSavingStoreProduct}
+                  className='mt-4 inline-flex items-center justify-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60'
+                >
+                  {isSavingStoreProduct ? (
+                    <>
+                      <Loader2 className='h-4 w-4 animate-spin' /> Submitting...
+                    </>
+                  ) : (
+                    'Submit for review'
+                  )}
+                </button>
+              </div>
+
+              <div className='rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5'>
+                <div className='flex items-center justify-between gap-4'>
+                  <h2 className='flex items-center gap-2 text-xl font-bold text-slate-900'>
+                    <Package className='h-5 w-5 text-orange-600' /> Your products
+                  </h2>
+                  <span className='rounded-xl bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-gray-500 ring-1 ring-slate-100'>
+                    {storeProducts.length} total
+                  </span>
+                </div>
+
+                <div className='mt-5 space-y-4'>
+                  {storeProductsLoading ? (
+                    <div className='flex items-center gap-2 text-sm text-gray-500'>
+                      <Loader2 className='h-4 w-4 animate-spin' /> Loading your products...
+                    </div>
+                  ) : storeProducts.length === 0 ? (
+                    <div className='rounded-2xl border border-dashed border-gray-200 bg-slate-50 px-4 py-6 text-sm text-gray-500'>
+                      No products yet -- list your first one above.
+                    </div>
+                  ) : (
+                    storeProducts.map((product) => (
+                      <div key={product.id} className='rounded-2xl border border-gray-100 bg-slate-50 p-4'>
+                        <div className='flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between'>
+                          <div>
+                            <p className='font-semibold text-slate-900'>{product.name}</p>
+                            <p className='text-xs text-gray-500'>
+                              /{product.slug} -- {formatMoney(Number(product.sale_price ?? product.base_price))} --
+                              stock: {product.total_stock ?? 0}
+                            </p>
+                          </div>
+                          <div className='flex items-center gap-2'>
+                            <span
+                              className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${
+                                product.is_active
+                                  ? 'bg-emerald-100 text-emerald-700'
+                                  : 'bg-amber-100 text-amber-700'
+                              }`}
+                            >
+                              {product.is_active ? 'Live' : 'Pending review'}
+                            </span>
+                            <button
+                              type='button'
+                              onClick={() => handleDeleteStoreProduct(product.id)}
+                              className='inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-red-600 ring-1 ring-slate-200 transition hover:bg-red-50'
+                            >
+                              <Trash2 className='h-3.5 w-3.5' />
+                              Delete
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     ))
                   )}
