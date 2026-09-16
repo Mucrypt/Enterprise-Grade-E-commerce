@@ -9,6 +9,7 @@ import {
   validateImageFile,
   validateVideoFile,
 } from '../../../utils/media'
+import { getCloudinaryStreamingUrl } from '../../../services/media-storage.service'
 import logger from '../../../utils/logger'
 
 // Same shape/formulas used throughout the app (wishlist.controller.ts,
@@ -161,6 +162,7 @@ export const getAdminDiscoverPostById = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: 'Discover post not found' })
     }
     const post = postResult.rows[0]
+    post.video_streaming_url = getCloudinaryStreamingUrl(post.video_url)
 
     const productsResult = await dbQuery(
       `SELECT ${PRODUCT_SELECT_FIELDS}, dpp.position as item_position
@@ -600,6 +602,10 @@ export const getDiscoverFeed = async (req: Request, res: Response) => {
 
     const resolved = posts.map((post) => ({
       ...post,
+      // Adaptive-bitrate HLS variant, derived at read time (no re-upload,
+      // no stored column) -- null when the video isn't Cloudinary-hosted
+      // (local/R2 storage), in which case the client just plays video_url.
+      video_streaming_url: getCloudinaryStreamingUrl(post.video_url),
       products: productsByPost.get(post.id) || [],
       images: post.media_type === 'image' ? imagesByPost.get(post.id) || [] : undefined,
       isLiked: likedSet.has(post.id),

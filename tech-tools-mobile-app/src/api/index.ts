@@ -1550,6 +1550,10 @@ export interface DiscoverPost {
   id: string
   media_type: 'video' | 'image'
   video_url: string | null
+  // Adaptive-bitrate HLS manifest derived from video_url at read time
+  // (Cloudinary streaming-profile URL transform) -- null when the video
+  // isn't Cloudinary-hosted (local/R2 storage) or has none uploaded.
+  video_streaming_url: string | null
   video_poster_url: string | null
   // Admin's own uploaded background track -- not a licensed music
   // catalog. audio_label is free text the admin can type; falls back to

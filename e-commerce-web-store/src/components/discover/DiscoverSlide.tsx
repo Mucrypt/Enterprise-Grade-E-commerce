@@ -15,6 +15,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import Hls from 'hls.js'
 import {
   Heart,
   Bookmark,
@@ -56,6 +57,7 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
   const tapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const playIconTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const heartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isActiveRef = useRef(isActive)
 
   const [muted, setMuted] = useState(true)
   const [imageIndex, setImageIndex] = useState(0)
@@ -82,6 +84,51 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
   // audio sources under one mute toggle.
   const showSoundControls =
     (post.media_type === 'video' && !videoFailed) || (post.media_type === 'image' && hasCustomAudio)
+
+  useEffect(() => {
+    isActiveRef.current = isActive
+  }, [isActive])
+
+  // Adaptive-bitrate playback (real infra, not a video-tag src swap):
+  // Safari plays an HLS manifest natively via a plain src; every other
+  // browser needs hls.js to feed it through MediaSource Extensions.
+  // Falls back to the plain progressive MP4 on any fatal HLS error or
+  // when no streaming variant exists (local/R2 storage) -- the existing
+  // onError -> "couldn't be played" state below remains the last resort,
+  // this never leaves a slide silently stuck.
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video || post.media_type !== 'video') return
+
+    const streamingUrl = post.video_streaming_url
+    const fallbackUrl = post.video_url || ''
+    let hls: Hls | null = null
+
+    if (streamingUrl && video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = streamingUrl
+    } else if (streamingUrl && Hls.isSupported()) {
+      hls = new Hls({ maxBufferLength: 15 })
+      hls.loadSource(streamingUrl)
+      hls.attachMedia(video)
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        if (isActiveRef.current) video.play().catch(() => {})
+      })
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (data.fatal) {
+          hls?.destroy()
+          hls = null
+          video.src = fallbackUrl
+          if (isActiveRef.current) video.play().catch(() => {})
+        }
+      })
+    } else {
+      video.src = fallbackUrl
+    }
+
+    return () => {
+      hls?.destroy()
+    }
+  }, [post.id, post.video_streaming_url, post.video_url, post.media_type])
 
   useEffect(() => {
     const video = videoRef.current
@@ -298,7 +345,9 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
           <div className="relative h-full w-full" onClick={handleMediaTap}>
             <video
               ref={videoRef}
-              src={post.video_url || undefined}
+              // No static src -- the HLS/fallback effect above owns
+              // video.src imperatively (hls.js needs attachMedia, not a
+              // plain src attribute, when a streaming variant exists).
               poster={post.video_poster_url || undefined}
               muted={hasCustomAudio ? true : muted}
               playsInline

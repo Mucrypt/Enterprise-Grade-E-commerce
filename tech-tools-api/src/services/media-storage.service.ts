@@ -207,6 +207,39 @@ async function deleteR2Media(url: string): Promise<void> {
   )
 }
 
+/**
+ * Derives an adaptive-bitrate HLS manifest URL from an already-uploaded
+ * Cloudinary video, via URL transformation only -- no re-upload, no new
+ * storage infra. `sp_auto` tells Cloudinary to generate (and cache) a
+ * multi-bitrate streaming profile on first request; the extension swap
+ * to .m3u8 is what actually requests the manifest instead of the raw
+ * file. Returns null for anything that isn't a Cloudinary delivery URL
+ * (local/R2 storage, or a malformed URL) -- callers should treat that as
+ * "no streaming variant available" and fall back to the plain video URL,
+ * never throw.
+ */
+export function getCloudinaryStreamingUrl(videoUrl: string | null | undefined): string | null {
+  if (!videoUrl) return null
+
+  try {
+    const parsed = new URL(videoUrl)
+    if (!parsed.hostname.endsWith('res.cloudinary.com')) return null
+
+    const uploadMarker = '/upload/'
+    const uploadIndex = parsed.pathname.indexOf(uploadMarker)
+    if (uploadIndex === -1) return null
+
+    const before = parsed.pathname.slice(0, uploadIndex + uploadMarker.length)
+    const after = parsed.pathname.slice(uploadIndex + uploadMarker.length)
+    if (!after) return null
+
+    const asManifest = after.replace(/\.[^./]+$/, '.m3u8')
+    return `${parsed.origin}${before}sp_auto/${asManifest}`
+  } catch {
+    return null
+  }
+}
+
 function inferCloudinaryResourceType(url: string): MediaResourceType {
   if (url.includes('/video/upload/')) {
     return 'video'

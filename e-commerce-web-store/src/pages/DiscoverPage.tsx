@@ -76,6 +76,30 @@ export default function DiscoverPage() {
     return () => observer.disconnect()
   }, [posts])
 
+  // Warms the next slide before the viewer swipes to it, matching how
+  // TikTok/YouTube prefetch ahead of scroll -- cheap on purpose: only the
+  // poster image and the (tiny, text) HLS manifest, never the full video
+  // file, so a fast scroll-past doesn't waste bandwidth on unwatched
+  // videos. `mode: 'no-cors'` lets this warm the browser/CDN cache for a
+  // cross-origin Cloudinary URL without needing CORS headers configured
+  // there -- the response itself is opaque and intentionally unused.
+  useEffect(() => {
+    if (!activeId) return
+    const index = posts.findIndex((p) => p.id === activeId)
+    const next = index >= 0 ? posts[index + 1] : undefined
+    if (!next) return
+
+    const urls = [
+      next.video_poster_url,
+      next.video_streaming_url,
+      next.images?.[0]?.image_url,
+    ].filter((url): url is string => !!url)
+
+    for (const url of urls) {
+      fetch(url, { mode: 'no-cors' }).catch(() => {})
+    }
+  }, [activeId, posts])
+
   const handleScroll = () => {
     const root = containerRef.current
     if (!root || loadingRef.current || !hasMore) return

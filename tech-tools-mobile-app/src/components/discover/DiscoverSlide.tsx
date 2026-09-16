@@ -82,12 +82,19 @@ export default function DiscoverSlide({ post, height, isActive, onOpenProduct }:
   const [paused, setPaused] = useState(false)
   const [buffering, setBuffering] = useState(false)
   const [videoFailed, setVideoFailed] = useState(false)
+  // If the HLS variant fails (e.g. streaming profiles not enabled on the
+  // live Cloudinary plan), retry once with the plain MP4 before giving
+  // up -- mirrors the web player's fatal-HLS-error fallback so a
+  // Cloudinary-side gap never regresses the "video actually plays" fix.
+  const [useFallbackSource, setUseFallbackSource] = useState(false)
   const [showPlayGlyphIcon, setShowPlayGlyphIcon] = useState(false)
   const [showSoundHint, setShowSoundHint] = useState(false)
 
   const products = post.products || []
   const primaryProduct = products[0]
   const hasCustomAudio = !!post.audio_url
+  const videoSource =
+    !useFallbackSource && post.video_streaming_url ? post.video_streaming_url : post.video_url || ''
   const showSoundControls =
     (post.media_type === 'video' && !videoFailed) || (post.media_type === 'image' && hasCustomAudio)
 
@@ -337,7 +344,13 @@ export default function DiscoverSlide({ post, height, isActive, onOpenProduct }:
           <TouchableOpacity activeOpacity={1} onPress={handleMediaTap} style={StyleSheet.absoluteFill}>
             <Video
               ref={videoRef}
-              source={{ uri: post.video_url || '' }}
+              // Adaptive-bitrate HLS when available -- expo-av's native
+              // player (ExoPlayer on Android, AVPlayer on iOS) handles
+              // .m3u8 quality-switching with zero extra code, unlike web
+              // which needs hls.js. Falls back to the plain MP4 (see
+              // useFallbackSource above) when no streaming variant exists
+              // or the streaming one fails to load.
+              source={{ uri: videoSource }}
               posterSource={post.video_poster_url ? { uri: post.video_poster_url } : undefined}
               usePoster={!!post.video_poster_url}
               style={StyleSheet.absoluteFill}
@@ -346,7 +359,13 @@ export default function DiscoverSlide({ post, height, isActive, onOpenProduct }:
               isLooping={false}
               useNativeControls={false}
               onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-              onError={() => setVideoFailed(true)}
+              onError={() => {
+                if (!useFallbackSource && post.video_streaming_url) {
+                  setUseFallbackSource(true)
+                } else {
+                  setVideoFailed(true)
+                }
+              }}
             />
 
             {buffering && isActive && (
