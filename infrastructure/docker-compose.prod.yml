@@ -258,8 +258,17 @@ services:
       - '80:80'
       - '443:443'
     volumes:
-      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/prod.conf:/etc/nginx/conf.d/default.conf:ro
+      # Whole-directory mount, not per-file. A single-file bind mount pins to
+      # the host file's inode at container-create time; `git pull` replaces
+      # files rather than editing them in place, so the old per-file mounts
+      # (nginx.prod.conf -> nginx.conf, prod.conf -> conf.d/default.conf)
+      # went stale after every config-changing pull -- `nginx -s reload`
+      # (and this container's own 6-hourly reload loop, see `command:` below)
+      # kept re-reading the ORIGINAL file forever, with no error, because the
+      # mount itself never re-resolved. A directory mount re-resolves paths
+      # live, so a plain reload is enough again. nginx.prod.conf's own
+      # `include` now points at prod.conf's path inside this same directory.
+      - ./nginx:/etc/nginx/conf-src:ro
       - ../tech-tools-api/nginx/ssl:/etc/nginx/ssl:ro
       - nginx_logs:/var/log/nginx
       - certbot_conf:/etc/letsencrypt
@@ -289,7 +298,7 @@ services:
             -subj "/CN=techtoolstore.com";
         fi;
         while :; do sleep 6h & wait $${!}; nginx -s reload; done &
-        nginx -g "daemon off;"'
+        nginx -c /etc/nginx/conf-src/nginx.prod.conf -g "daemon off;"'
 
   pgadmin:
     image: dpage/pgadmin4:latest

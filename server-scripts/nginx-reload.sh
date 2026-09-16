@@ -15,10 +15,16 @@ log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+# -c must match the path nginx was actually started with (see
+# docker-compose.prod.yml's nginx `command:`) -- without it, `nginx -t` tests
+# the image's stock built-in /etc/nginx/nginx.conf instead of our mounted
+# one, which trivially passes and validates nothing.
+NGINX_CONF=/etc/nginx/conf-src/nginx.prod.conf
+
 log_info "Testing nginx configuration..."
-if docker exec techtools-nginx-prod nginx -t 2>&1; then
+if docker exec techtools-nginx-prod nginx -c "$NGINX_CONF" -t 2>&1; then
     log_success "Configuration is valid"
-    
+
     log_info "Reloading nginx..."
     docker exec techtools-nginx-prod nginx -s reload
     
