@@ -2,8 +2,10 @@ import { Request, Response } from 'express'
 import { query as dbQuery, getClient } from '../../../database/connection'
 import { AuthRequest } from '../../../middleware/auth'
 import {
+  processDiscoverAudio,
   processDiscoverImage,
   processDiscoverVideo,
+  validateAudioFile,
   validateImageFile,
   validateVideoFile,
 } from '../../../utils/media'
@@ -58,12 +60,13 @@ async function resolvePostMedia(
   videoUrl?: string
   videoPosterUrl?: string
   imageUrls?: string[]
+  audioUrl?: string
 }> {
   const files = req.files as
     | { [fieldname: string]: Express.Multer.File[] }
     | undefined
 
-  const result: { videoUrl?: string; videoPosterUrl?: string; imageUrls?: string[] } = {}
+  const result: { videoUrl?: string; videoPosterUrl?: string; imageUrls?: string[]; audioUrl?: string } = {}
 
   const videoFile = files?.video?.[0]
   if (videoFile) {
@@ -93,6 +96,14 @@ async function resolvePostMedia(
     result.imageUrls = urls
   }
 
+  const audioFile = files?.audio?.[0]
+  if (audioFile) {
+    const validation = validateAudioFile(audioFile)
+    if (!validation.valid) throw new Error(`Audio: ${validation.error}`)
+    const processed = await processDiscoverAudio(audioFile)
+    result.audioUrl = processed.url
+  }
+
   return result
 }
 
@@ -101,7 +112,7 @@ async function resolvePostMedia(
 // reaching Postgres and surfacing as an opaque 500 -- same pattern as
 // hero-slides.controller.ts's REQUIRED_REFERENCE_FIELD/respondHeroSlideError.
 function respondDiscoverError(res: Response, error: any, fallbackMessage: string): void {
-  if (/^(Video|Poster|Image):/.test(error.message)) {
+  if (/^(Video|Poster|Image|Audio):/.test(error.message)) {
     res.status(400).json({ success: false, message: 'Failed to save discover post', error: error.message })
     return
   }
@@ -184,7 +195,7 @@ export const getAdminDiscoverPostById = async (req: Request, res: Response) => {
 
 export const createDiscoverPost = async (req: Request, res: Response) => {
   try {
-    const { mediaType, caption, categoryId, isActive = true, position = 0 } = req.body
+    const { mediaType, caption, categoryId, isActive = true, position = 0, audioLabel } = req.body
 
     if (mediaType !== 'video' && mediaType !== 'image') {
       return res.status(400).json({ success: false, message: 'mediaType must be "video" or "image"' })
@@ -203,8 +214,8 @@ export const createDiscoverPost = async (req: Request, res: Response) => {
 
     const result = await dbQuery(
       `INSERT INTO discover_posts
-       (media_type, video_url, video_poster_url, caption, category_id, is_active, position, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       (media_type, video_url, video_poster_url, caption, category_id, is_active, position, created_by, audio_url, audio_label)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [
         mediaType,
@@ -215,6 +226,8 @@ export const createDiscoverPost = async (req: Request, res: Response) => {
         isActive,
         position,
         userId || null,
+        media.audioUrl || null,
+        audioLabel || null,
       ],
     )
     const post = result.rows[0]
@@ -246,6 +259,10 @@ const POST_UPDATE_FIELD_MAP: Record<string, string> = {
   video_url: 'video_url',
   videoPosterUrl: 'video_poster_url',
   video_poster_url: 'video_poster_url',
+  audioUrl: 'audio_url',
+  audio_url: 'audio_url',
+  audioLabel: 'audio_label',
+  audio_label: 'audio_label',
 }
 
 export const updateDiscoverPost = async (req: Request, res: Response) => {
@@ -255,6 +272,11 @@ export const updateDiscoverPost = async (req: Request, res: Response) => {
 
     if (updates.categoryId === '') updates.categoryId = null
     if (updates.category_id === '') updates.category_id = null
+    // Empty string is how the admin form signals "remove the existing
+    // track" (no new file chosen, but the clear button was pressed) --
+    // same convention as categoryId above.
+    if (updates.audioUrl === '') updates.audioUrl = null
+    if (updates.audio_url === '') updates.audio_url = null
 
     const postCheck = await dbQuery('SELECT id FROM discover_posts WHERE id = $1', [id])
     if (postCheck.rows.length === 0) {
@@ -264,6 +286,7 @@ export const updateDiscoverPost = async (req: Request, res: Response) => {
     const media = await resolvePostMedia(req)
     if (media.videoUrl) updates.videoUrl = media.videoUrl
     if (media.videoPosterUrl) updates.videoPosterUrl = media.videoPosterUrl
+    if (media.audioUrl) updates.audioUrl = media.audioUrl
 
     const fields: string[] = []
     const values: any[] = []

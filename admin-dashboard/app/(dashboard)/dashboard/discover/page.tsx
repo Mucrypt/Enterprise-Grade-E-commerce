@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import Image from 'next/image'
@@ -60,10 +61,29 @@ export default function DiscoverFeedPage() {
 
 function DiscoverFeedContent() {
   const queryClient = useQueryClient()
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [formOpen, setFormOpen] = useState(false)
   const [editingPost, setEditingPost] = useState<DiscoverPost | null>(null)
   const [productsPost, setProductsPost] = useState<DiscoverPost | null>(null)
   const [postToDelete, setPostToDelete] = useState<DiscoverPost | null>(null)
+  // Arrived here via the "Create Discover Post" shortcut on a product's
+  // edit page -- pre-opens the create form and, once the post is saved,
+  // auto-tags this product so the admin doesn't have to search for it
+  // again in the separate product-tagging step.
+  const [pendingProductId, setPendingProductId] = useState<string | null>(null)
+  const [pendingProductName, setPendingProductName] = useState<string | null>(null)
+
+  useEffect(() => {
+    const productId = searchParams.get('createFromProductId')
+    if (!productId) return
+    setPendingProductId(productId)
+    setPendingProductName(searchParams.get('createFromProductName'))
+    setEditingPost(null)
+    setFormOpen(true)
+    router.replace('/dashboard/discover')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const { data, isLoading } = useQuery({
     queryKey: ['discover-posts'],
@@ -73,23 +93,37 @@ function DiscoverFeedContent() {
 
   const createMutation = useMutation({
     mutationFn: ({ formData, files }: { formData: DiscoverPostFormData; files: DiscoverPostFiles }) => {
-      const hasFiles = !!(files.video || files.poster || (files.images && files.images.length > 0))
+      const hasFiles = !!(files.video || files.poster || files.audio || (files.images && files.images.length > 0))
       return hasFiles ? discoverService.createWithMedia(formData, files) : discoverService.create(formData)
     },
-    onSuccess: (result: any) => {
+    onSuccess: async (result: any) => {
       queryClient.invalidateQueries({ queryKey: ['discover-posts'] })
       toast.success('Discover post created')
       setFormOpen(false)
+
+      const newPost = result?.data
+      if (newPost && pendingProductId) {
+        try {
+          await discoverService.addProducts(newPost.id, [pendingProductId])
+          toast.success(pendingProductName ? `Tagged "${pendingProductName}"` : 'Product tagged')
+        } catch (error: any) {
+          toast.error(error.response?.data?.message || 'Post created, but tagging the product failed -- add it manually below')
+        } finally {
+          setPendingProductId(null)
+          setPendingProductName(null)
+        }
+      }
+
       // Jump straight into product tagging -- a post with nothing tagged
       // isn't useful yet, and this is the natural next step.
-      if (result?.data) setProductsPost(result.data)
+      if (newPost) setProductsPost(newPost)
     },
     onError: (error: any) => toast.error(error.response?.data?.message || 'Failed to create discover post'),
   })
 
   const updateMutation = useMutation({
     mutationFn: ({ id, formData, files }: { id: string; formData: Partial<DiscoverPostFormData>; files: DiscoverPostFiles }) => {
-      const hasFiles = !!(files.video || files.poster || (files.images && files.images.length > 0))
+      const hasFiles = !!(files.video || files.poster || files.audio || (files.images && files.images.length > 0))
       return hasFiles ? discoverService.updateWithMedia(id, formData, files) : discoverService.update(id, formData)
     },
     onSuccess: () => {
@@ -150,6 +184,16 @@ function DiscoverFeedContent() {
 
   return (
     <div className='space-y-6'>
+      {pendingProductId && (
+        <div className='flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm'>
+          <Tag className='h-4 w-4 shrink-0 text-primary' />
+          <span>
+            Creating a Discover post for{' '}
+            <strong>{pendingProductName || 'this product'}</strong> -- it&apos;ll be tagged
+            automatically once you save.
+          </span>
+        </div>
+      )}
       <div className='flex items-center gap-3'>
         <div className='flex-1'>
           <h1 className='text-2xl font-bold tracking-tight flex items-center gap-2'>

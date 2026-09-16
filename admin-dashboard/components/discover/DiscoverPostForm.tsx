@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { X, Video, Image as ImageIcon, Loader2 } from 'lucide-react'
+import { X, Video, Image as ImageIcon, Loader2, Music } from 'lucide-react'
 import { categoryService } from '@/services/category.service'
 import { getAbsoluteMediaUrl } from '@/lib/utils'
 import type {
@@ -53,6 +53,8 @@ const emptyForm: DiscoverPostFormData = {
   isActive: true,
   videoUrl: '',
   videoPosterUrl: '',
+  audioUrl: '',
+  audioLabel: '',
 }
 
 export function DiscoverPostForm({ open, onClose, onSubmit, post, isLoading = false }: DiscoverPostFormProps) {
@@ -60,6 +62,7 @@ export function DiscoverPostForm({ open, onClose, onSubmit, post, isLoading = fa
   const [videoPreview, setVideoPreview] = useState<FilePreview | null>(null)
   const [posterPreview, setPosterPreview] = useState<FilePreview | null>(null)
   const [imagePreviews, setImagePreviews] = useState<FilePreview[]>([])
+  const [audioPreview, setAudioPreview] = useState<FilePreview | null>(null)
   const isEditing = !!post
 
   const { data: categoriesData } = useQuery({
@@ -105,6 +108,19 @@ export function DiscoverPostForm({ open, onClose, onSubmit, post, isLoading = fa
     },
   })
 
+  // Admin's own background track -- not a licensed music catalog (this
+  // store has no rights to one, unlike TikTok's actual sound picker).
+  const audioDropzone = useDropzone({
+    accept: { 'audio/*': ['.mp3', '.wav', '.m4a', '.ogg'] },
+    maxFiles: 1,
+    maxSize: 20 * 1024 * 1024,
+    onDrop: (accepted) => {
+      if (accepted.length > 0) {
+        setAudioPreview({ file: accepted[0], preview: URL.createObjectURL(accepted[0]) })
+      }
+    },
+  })
+
   useEffect(() => {
     if (post) {
       setFormData({
@@ -114,6 +130,8 @@ export function DiscoverPostForm({ open, onClose, onSubmit, post, isLoading = fa
         isActive: post.is_active,
         videoUrl: post.video_url || '',
         videoPosterUrl: post.video_poster_url || '',
+        audioUrl: post.audio_url || '',
+        audioLabel: post.audio_label || '',
       })
     } else {
       setFormData(emptyForm)
@@ -121,6 +139,7 @@ export function DiscoverPostForm({ open, onClose, onSubmit, post, isLoading = fa
     setVideoPreview(null)
     setPosterPreview(null)
     setImagePreviews([])
+    setAudioPreview(null)
   }, [post, open])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -129,6 +148,7 @@ export function DiscoverPostForm({ open, onClose, onSubmit, post, isLoading = fa
       video: videoPreview?.file,
       poster: posterPreview?.file,
       images: imagePreviews.length > 0 ? imagePreviews.map((p) => p.file) : undefined,
+      audio: audioPreview?.file,
     })
   }
 
@@ -301,6 +321,76 @@ export function DiscoverPostForm({ open, onClose, onSubmit, post, isLoading = fa
               </div>
             </div>
           )}
+
+          <div className='space-y-2'>
+            <Label>Background audio (optional)</Label>
+            <p className='text-xs text-muted-foreground'>
+              Your own recording or a track you have rights to use -- this is not a licensed
+              music library, so only upload audio you have the rights to use.
+            </p>
+            <div
+              {...audioDropzone.getRootProps()}
+              className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${
+                audioDropzone.isDragActive
+                  ? 'border-primary bg-primary/5'
+                  : 'border-muted-foreground/25 hover:border-primary/50'
+              }`}
+            >
+              <input {...audioDropzone.getInputProps()} />
+              {audioPreview ? (
+                <div className='flex items-center gap-3'>
+                  <audio src={audioPreview.preview} controls className='h-9 flex-1' onClick={(e) => e.stopPropagation()} />
+                  <Button
+                    type='button'
+                    variant='destructive'
+                    size='icon'
+                    className='h-6 w-6 shrink-0'
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setAudioPreview(null)
+                    }}
+                  >
+                    <X className='h-3 w-3' />
+                  </Button>
+                </div>
+              ) : formData.audioUrl ? (
+                <div className='flex items-center gap-3'>
+                  <audio
+                    src={getAbsoluteMediaUrl(formData.audioUrl) || formData.audioUrl}
+                    controls
+                    className='h-9 flex-1'
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <Button
+                    type='button'
+                    variant='destructive'
+                    size='icon'
+                    className='h-6 w-6 shrink-0'
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setFormData((prev) => ({ ...prev, audioUrl: '' }))
+                    }}
+                  >
+                    <X className='h-3 w-3' />
+                  </Button>
+                </div>
+              ) : (
+                <div className='py-4'>
+                  <Music className='mx-auto h-8 w-8 text-muted-foreground mb-2' />
+                  <p className='text-xs text-muted-foreground'>Drop an MP3/WAV/M4A or click to upload</p>
+                </div>
+              )}
+            </div>
+            {(audioPreview || formData.audioUrl) && (
+              <input
+                type='text'
+                value={formData.audioLabel || ''}
+                onChange={(e) => setFormData((prev) => ({ ...prev, audioLabel: e.target.value }))}
+                placeholder='Sound label shown on the post (e.g. "Workshop Ambience") -- optional'
+                className='w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs'
+              />
+            )}
+          </div>
 
           <div className='space-y-2'>
             <Label>Caption</Label>

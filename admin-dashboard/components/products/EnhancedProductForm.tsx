@@ -65,6 +65,7 @@ import {
   CheckCircle2,
   Circle,
   ListFilter,
+  Clapperboard,
 } from 'lucide-react'
 import { MediaManager, type MediaFile } from './MediaManager'
 import { BrandForm } from '@/components/brands/BrandForm'
@@ -776,6 +777,21 @@ export function EnhancedProductForm({
             </div>
           </div>
           <div className='flex items-center gap-3'>
+            {mode === 'edit' && product?.id && (
+              <Button
+                type='button'
+                variant='outline'
+                onClick={() =>
+                  router.push(
+                    `/dashboard/discover?createFromProductId=${product.id}&createFromProductName=${encodeURIComponent(product.name || '')}`,
+                  )
+                }
+                disabled={isPending}
+              >
+                <Clapperboard className='h-4 w-4 mr-2' />
+                Create Discover Post
+              </Button>
+            )}
             <Button
               type='button'
               variant='outline'

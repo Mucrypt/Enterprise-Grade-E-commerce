@@ -23,6 +23,7 @@ const MAX_VIDEO_SIZE = parseInt(process.env.MAX_VIDEO_SIZE || '104857600') // 10
 const MAX_BOOK_ASSET_SIZE = parseInt(
   process.env.MAX_BOOK_ASSET_SIZE || '52428800',
 ) // 50MB default
+const MAX_AUDIO_SIZE = parseInt(process.env.MAX_AUDIO_SIZE || '20971520') // 20MB default -- a Discover post's background track, not a full album
 
 // Image sizes for optimization
 const IMAGE_SIZES = {
@@ -45,6 +46,15 @@ const ALLOWED_VIDEO_TYPES = [
   'video/mpeg',
   'video/quicktime',
   'video/x-msvideo',
+]
+const ALLOWED_AUDIO_TYPES = [
+  'audio/mpeg',
+  'audio/mp4',
+  'audio/x-m4a',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/ogg',
+  'audio/webm',
 ]
 const ALLOWED_BOOK_ASSET_TYPES = [
   'application/pdf',
@@ -92,6 +102,7 @@ export async function ensureUploadDirectories() {
     `${UPLOAD_DIR}/discover`,
     `${UPLOAD_DIR}/discover/videos`,
     `${UPLOAD_DIR}/discover/images`,
+    `${UPLOAD_DIR}/discover/audio`,
     `${UPLOAD_DIR}/temp`,
   ]
 
@@ -129,8 +140,9 @@ const fileFilter = (
 ) => {
   const isImage = ALLOWED_IMAGE_TYPES.includes(file.mimetype)
   const isVideo = ALLOWED_VIDEO_TYPES.includes(file.mimetype)
+  const isAudio = ALLOWED_AUDIO_TYPES.includes(file.mimetype)
 
-  if (isImage || isVideo) {
+  if (isImage || isVideo || isAudio) {
     cb(null, true)
   } else {
     cb(
@@ -138,6 +150,7 @@ const fileFilter = (
         `Invalid file type. Allowed types: ${[
           ...ALLOWED_IMAGE_TYPES,
           ...ALLOWED_VIDEO_TYPES,
+          ...ALLOWED_AUDIO_TYPES,
         ].join(', ')}`,
       ),
     )
@@ -423,15 +436,42 @@ const TRANSCODE_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes -- generous for a short 
  * moov atom to the front so playback can start before the whole file
  * downloads, which matters for a feed you scroll through quickly.
  */
-function transcodeToH264Mp4(inputPath: string, outputPath: string): Promise<void> {
+// Shells out to the system ffmpeg binary directly (installed via apt/apk,
+// see Dockerfile/Dockerfile.dev) rather than through a wrapper library --
+// fluent-ffmpeg, the usual choice for this, is flagged deprecated/
+// unmaintained on npm, and these calls are simple enough (one input, a
+// fixed arg list, wait for exit) that spawning ffmpeg directly avoids
+// that dependency for no real loss of clarity. Shared by both the video
+// and audio transcode paths below.
+function runFfmpeg(args: string[], timeoutMs: number, timeoutMessage: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    // Shells out to the system ffmpeg binary directly (installed via
-    // apt/apk, see Dockerfile/Dockerfile.dev) rather than through a
-    // wrapper library -- fluent-ffmpeg, the usual choice for this, is
-    // flagged deprecated/unmaintained on npm, and the call here is simple
-    // enough (one input, a fixed arg list, wait for exit) that spawning
-    // ffmpeg directly avoids that dependency for no real loss of clarity.
-    const args = [
+    const proc = spawn('ffmpeg', args)
+    let stderr = ''
+    proc.stderr.on('data', (chunk) => {
+      stderr += chunk.toString()
+    })
+
+    const timeout = setTimeout(() => {
+      proc.kill('SIGKILL')
+      reject(new Error(timeoutMessage))
+    }, timeoutMs)
+
+    proc.on('error', (err) => {
+      clearTimeout(timeout)
+      reject(err)
+    })
+
+    proc.on('close', (code) => {
+      clearTimeout(timeout)
+      if (code === 0) resolve()
+      else reject(new Error(`ffmpeg exited with code ${code}: ${stderr.slice(-500)}`))
+    })
+  })
+}
+
+function transcodeToH264Mp4(inputPath: string, outputPath: string): Promise<void> {
+  return runFfmpeg(
+    [
       '-y',
       '-i', inputPath,
       '-c:v', 'libx264',
@@ -450,30 +490,26 @@ function transcodeToH264Mp4(inputPath: string, outputPath: string): Promise<void
       // whole file downloads -- matters for a feed you scroll through fast.
       '-movflags', '+faststart',
       outputPath,
-    ]
+    ],
+    TRANSCODE_TIMEOUT_MS,
+    'Video processing timed out',
+  )
+}
 
-    const proc = spawn('ffmpeg', args)
-    let stderr = ''
-    proc.stderr.on('data', (chunk) => {
-      stderr += chunk.toString()
-    })
-
-    const timeout = setTimeout(() => {
-      proc.kill('SIGKILL')
-      reject(new Error('Video processing timed out'))
-    }, TRANSCODE_TIMEOUT_MS)
-
-    proc.on('error', (err) => {
-      clearTimeout(timeout)
-      reject(err)
-    })
-
-    proc.on('close', (code) => {
-      clearTimeout(timeout)
-      if (code === 0) resolve()
-      else reject(new Error(`ffmpeg exited with code ${code}: ${stderr.slice(-500)}`))
-    })
-  })
+function transcodeToAacM4a(inputPath: string, outputPath: string): Promise<void> {
+  return runFfmpeg(
+    [
+      '-y',
+      '-i', inputPath,
+      '-vn', // strip any video/cover-art stream -- audio only
+      '-c:a', 'aac',
+      '-b:a', '192k',
+      '-movflags', '+faststart',
+      outputPath,
+    ],
+    TRANSCODE_TIMEOUT_MS,
+    'Audio processing timed out',
+  )
 }
 
 /**
@@ -523,6 +559,54 @@ export async function processDiscoverVideo(file: Express.Multer.File): Promise<{
     fileName,
     fileSize: stats.size,
     format: 'mp4',
+  }
+}
+
+/**
+ * Process a Discover feed post's optional background audio upload --
+ * admin's own track, not a licensed music catalog (this store has no
+ * rights to one). Same reasoning as processDiscoverVideo: normalize
+ * whatever container the admin uploaded (mp3/wav/ogg/webm/etc.) to AAC
+ * in an .m4a container, so playback support isn't a lottery across
+ * browsers/devices.
+ */
+export async function processDiscoverAudio(file: Express.Multer.File): Promise<{
+  url: string
+  fileName: string
+  fileSize: number
+  format: string
+}> {
+  const audioId = uuidv4()
+  const fileName = `${audioId}.m4a`
+  const transcodedPath = `${UPLOAD_DIR}/temp/${audioId}-transcoded.m4a`
+
+  try {
+    await transcodeToAacM4a(file.path, transcodedPath)
+  } catch (err) {
+    await fs.unlink(file.path).catch(() => undefined)
+    await fs.unlink(transcodedPath).catch(() => undefined)
+    throw new Error(
+      'Audio: could not process this file -- it may be corrupted or in an unsupported format. Please upload a standard MP3 or WAV file.',
+    )
+  }
+
+  const stats = await fs.stat(transcodedPath)
+  const uploadedAudio = await storeMediaFile({
+    localPath: transcodedPath,
+    key: `discover/audio/${fileName}`,
+    contentType: 'audio/mp4',
+    cacheControl: 'public, max-age=31536000, immutable',
+    resourceType: 'video', // Cloudinary has no distinct "audio" resource type -- audio-only files upload through its video endpoint by design; local storage ignores this field entirely
+  })
+
+  await fs.unlink(file.path).catch(() => undefined)
+  await fs.unlink(transcodedPath).catch(() => undefined)
+
+  return {
+    url: uploadedAudio.url,
+    fileName,
+    fileSize: stats.size,
+    format: 'm4a',
   }
 }
 
@@ -732,6 +816,34 @@ export function validateVideoFile(file: Express.Multer.File): {
       valid: false,
       error: `Video size exceeds maximum allowed size of ${
         MAX_VIDEO_SIZE / 1024 / 1024
+      }MB`,
+    }
+  }
+
+  return { valid: true }
+}
+
+/**
+ * Validate audio file (Discover post background track)
+ */
+export function validateAudioFile(file: Express.Multer.File): {
+  valid: boolean
+  error?: string
+} {
+  if (!ALLOWED_AUDIO_TYPES.includes(file.mimetype)) {
+    return {
+      valid: false,
+      error: `Invalid audio type. Allowed types: ${ALLOWED_AUDIO_TYPES.join(
+        ', ',
+      )}`,
+    }
+  }
+
+  if (file.size > MAX_AUDIO_SIZE) {
+    return {
+      valid: false,
+      error: `Audio size exceeds maximum allowed size of ${
+        MAX_AUDIO_SIZE / 1024 / 1024
       }MB`,
     }
   }

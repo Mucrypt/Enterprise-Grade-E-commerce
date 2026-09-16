@@ -27,6 +27,7 @@ const uploadPostMedia = handleUploadErrors(
     { name: 'video', maxCount: 1 },
     { name: 'poster', maxCount: 1 },
     { name: 'images', maxCount: 10 },
+    { name: 'audio', maxCount: 1 },
   ]),
 )
 

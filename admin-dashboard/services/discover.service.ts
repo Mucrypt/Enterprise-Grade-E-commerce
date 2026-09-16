@@ -7,6 +7,11 @@ export interface DiscoverPost {
   media_type: DiscoverMediaType
   video_url: string | null
   video_poster_url: string | null
+  // Admin's own uploaded background track -- not a licensed music
+  // catalog. audio_label is free text the admin can type (e.g. "Workshop
+  // Ambience"); the feed shows it in place of a generic "Original sound".
+  audio_url: string | null
+  audio_label: string | null
   caption: string | null
   category_id: string | null
   category_name?: string
@@ -36,12 +41,15 @@ export interface DiscoverPostFormData {
   isActive?: boolean
   videoUrl?: string
   videoPosterUrl?: string
+  audioUrl?: string
+  audioLabel?: string
 }
 
 export interface DiscoverPostFiles {
   video?: File
   poster?: File
   images?: File[]
+  audio?: File
 }
 
 function buildDiscoverPostFormData(
@@ -59,6 +67,7 @@ function buildDiscoverPostFormData(
   if (files?.images) {
     files.images.forEach((file) => formData.append('images', file))
   }
+  if (files?.audio) formData.append('audio', files.audio)
   return formData
 }
 

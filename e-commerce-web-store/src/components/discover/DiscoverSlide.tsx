@@ -27,6 +27,7 @@ import {
   Pause,
   Loader2,
   VideoOff,
+  Music,
 } from 'lucide-react'
 import type { DiscoverPost } from '../../api'
 import { discoverApi } from '../../api'
@@ -49,6 +50,7 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const addItem = useCartStore((s) => s.addItem)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const audioRef = useRef<HTMLAudioElement>(null)
   const touchStartX = useRef<number | null>(null)
   const lastTapRef = useRef(0)
   const tapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -72,15 +74,30 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
 
   const products = post.products || []
   const primaryProduct = products[0]
+  const hasCustomAudio = !!post.audio_url
+  // Video's own audio is always muted once a custom track exists -- the
+  // separate <audio> element becomes the single sound source instead of
+  // mixing both. Mirrors TikTok's "adding a sound replaces the original
+  // audio" behavior, and is simpler/more controllable than layering two
+  // audio sources under one mute toggle.
+  const showSoundControls =
+    (post.media_type === 'video' && !videoFailed) || (post.media_type === 'image' && hasCustomAudio)
 
   useEffect(() => {
     const video = videoRef.current
-    if (!video || videoFailed) return
+    const audio = audioRef.current
     if (isActive) {
-      video.currentTime = 0
-      setProgress(0)
-      setPaused(false)
-      video.play().catch(() => {})
+      if (video && !videoFailed) {
+        video.currentTime = 0
+        setProgress(0)
+        setPaused(false)
+        video.play().catch(() => {})
+      }
+      if (audio) {
+        audio.currentTime = 0
+        if (post.media_type === 'image') setPaused(false)
+        audio.play().catch(() => {})
+      }
       getEventTracker().trackDiscoverEvent('discover_view', post.id)
 
       try {
@@ -94,7 +111,8 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
         // sessionStorage unavailable (private mode etc.) -- hint just doesn't show
       }
     } else {
-      video.pause()
+      video?.pause()
+      audio?.pause()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive, post.id, videoFailed])
@@ -116,8 +134,13 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
 
   const toggleMute = () => {
     setMuted((prev) => {
-      if (videoRef.current) videoRef.current.muted = !prev
-      return !prev
+      const next = !prev
+      if (hasCustomAudio) {
+        if (audioRef.current) audioRef.current.muted = next
+      } else if (videoRef.current) {
+        videoRef.current.muted = next
+      }
+      return next
     })
     setShowSoundHint(false)
   }
@@ -130,12 +153,20 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
 
   const togglePlayPause = () => {
     const video = videoRef.current
-    if (!video || videoFailed) return
-    if (video.paused) {
-      video.play().catch(() => {})
+    const audio = audioRef.current
+    // "Primary" decides play direction: the video for a video post, the
+    // audio track for an image post with one attached -- a plain image
+    // with no audio has nothing to play/pause, so this is a no-op then.
+    const primary = post.media_type === 'video' ? video : audio
+    if (!primary || (post.media_type === 'video' && videoFailed)) return
+
+    if (primary.paused) {
+      video?.play().catch(() => {})
+      audio?.play().catch(() => {})
       setPaused(false)
     } else {
-      video.pause()
+      video?.pause()
+      audio?.pause()
       setPaused(true)
     }
     flashPlayGlyph()
@@ -165,7 +196,7 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
     }
 
     tapTimeoutRef.current = setTimeout(() => {
-      if (post.media_type === 'video') togglePlayPause()
+      togglePlayPause()
       tapTimeoutRef.current = null
     }, DOUBLE_TAP_WINDOW_MS)
   }
@@ -269,7 +300,7 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
               ref={videoRef}
               src={post.video_url || undefined}
               poster={post.video_poster_url || undefined}
-              muted={muted}
+              muted={hasCustomAudio ? true : muted}
               playsInline
               loop={false}
               onEnded={handleVideoEnded}
@@ -343,15 +374,37 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
               ))}
             </div>
           )}
+          {showPlayGlyph && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div className="animate-play-pulse rounded-full bg-black/40 p-5">
+                {paused ? (
+                  <Play className="h-10 w-10 fill-white text-white" />
+                ) : (
+                  <Pause className="h-10 w-10 fill-white text-white" />
+                )}
+              </div>
+            </div>
+          )}
+
           {showHeartBurst && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <Heart className="h-24 w-24 animate-heart-burst fill-red-500 text-red-500 drop-shadow-lg" />
             </div>
           )}
+
+          {showSoundHint && (
+            <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 animate-fadeIn rounded-full bg-black/60 px-4 py-2 text-xs font-medium text-white">
+              Tap the speaker for sound
+            </div>
+          )}
         </div>
       )}
 
-      {post.media_type === 'video' && !videoFailed && (
+      {hasCustomAudio && (
+        <audio ref={audioRef} src={post.audio_url || undefined} muted={muted} loop className="hidden" />
+      )}
+
+      {showSoundControls && (
         <button
           type="button"
           onClick={toggleMute}
@@ -411,6 +464,13 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
                 </span>
               )}
             </button>
+          )}
+
+          {hasCustomAudio && (
+            <div className="mt-3 flex min-w-0 items-center gap-1.5 text-xs text-white/90">
+              <Music className="h-3.5 w-3.5 shrink-0 animate-spin [animation-duration:3s]" />
+              <span className="truncate">{post.audio_label || 'Original sound'}</span>
+            </div>
           )}
         </div>
 
