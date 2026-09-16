@@ -69,6 +69,11 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
   // While this is true, only hls.js's own Hls.Events.ERROR (with a real
   // `fatal` flag) is trusted to decide the video has actually failed.
   const hlsActiveRef = useRef(false)
+  // True once we've committed to the plain progressive-MP4 fallback for
+  // the current post -- lets onError distinguish "the streaming attempt
+  // failed, try the fallback" from "even the fallback failed, this is
+  // genuinely broken" instead of retrying the same failing source forever.
+  const usingFallbackRef = useRef(false)
 
   const [muted, setMuted] = useState(true)
   const [imageIndex, setImageIndex] = useState(0)
@@ -101,12 +106,20 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
   }, [isActive])
 
   // Adaptive-bitrate playback (real infra, not a video-tag src swap):
-  // Safari plays an HLS manifest natively via a plain src; every other
-  // browser needs hls.js to feed it through MediaSource Extensions.
-  // Falls back to the plain progressive MP4 on any fatal HLS error or
-  // when no streaming variant exists (local/R2 storage) -- the existing
-  // onError -> "couldn't be played" state below remains the last resort,
-  // this never leaves a slide silently stuck.
+  // hls.js (MediaSource Extensions) is the primary path -- checked via
+  // Hls.isSupported() first, matching hls.js's own recommended order.
+  // Native HLS (video.canPlayType(...)) is only a fallback for browsers
+  // without usable MSE, chiefly older Safari -- checking it FIRST used to
+  // cause real failures: some Chromium-based browsers report a truthy
+  // canPlayType for HLS's MIME type without actually being able to
+  // decode an .m3u8 manifest as a native <video> source, which fails
+  // immediately with MEDIA_ERR_SRC_NOT_SUPPORTED (confirmed live) since
+  // there's no hls.js in the loop to do the real demuxing. Falls back to
+  // the plain progressive MP4 on any fatal hls.js error, OR if the
+  // native-HLS branch itself errors, OR when no streaming variant exists
+  // (local/R2 storage) -- usingFallbackRef tracks whether we've already
+  // committed to that fallback, so the onError handler below only gives
+  // up for real once even the plain MP4 has failed.
   useEffect(() => {
     const video = videoRef.current
     if (!video || post.media_type !== 'video') return
@@ -114,11 +127,17 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
     const streamingUrl = post.video_streaming_url
     const fallbackUrl = post.video_url || ''
     let hls: Hls | null = null
+    usingFallbackRef.current = false
 
-    if (streamingUrl && video.canPlayType('application/vnd.apple.mpegurl')) {
+    const switchToFallback = () => {
       hlsActiveRef.current = false
-      video.src = streamingUrl
-    } else if (streamingUrl && Hls.isSupported()) {
+      usingFallbackRef.current = true
+      video.src = fallbackUrl
+      video.load()
+      if (isActiveRef.current) video.play().catch(() => {})
+    }
+
+    if (streamingUrl && Hls.isSupported()) {
       hlsActiveRef.current = true
       hls = new Hls({ maxBufferLength: 15 })
       hls.loadSource(streamingUrl)
@@ -131,16 +150,15 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
         console.error('[Discover] hls.js fatal error, falling back to MP4:', data.type, data.details)
         hls?.destroy()
         hls = null
-        // Falling back to a plain src -- from here on a real <video>
-        // error means the fallback itself failed, so native error
-        // handling should be trusted again.
-        hlsActiveRef.current = false
-        video.src = fallbackUrl
-        if (isActiveRef.current) video.play().catch(() => {})
+        // From here on a real <video> error means the fallback itself
+        // failed, so native error handling should be trusted again.
+        switchToFallback()
       })
-    } else {
+    } else if (streamingUrl && video.canPlayType('application/vnd.apple.mpegurl')) {
       hlsActiveRef.current = false
-      video.src = fallbackUrl
+      video.src = streamingUrl
+    } else {
+      switchToFallback()
     }
 
     return () => {
@@ -383,6 +401,17 @@ export default function DiscoverSlide({ post, isActive, onOpenProduct }: Discove
                 // event that looks identical to a real playback failure.
                 if (hlsActiveRef.current) return
                 console.error('[Discover] native video error:', e.currentTarget.error?.code, e.currentTarget.error?.message)
+                if (!usingFallbackRef.current && post.video_url) {
+                  // Native-HLS branch (or a same-URL retry) failed --
+                  // give the plain progressive MP4 one real shot before
+                  // giving up, same safety net the hls.js path already has.
+                  usingFallbackRef.current = true
+                  const video = e.currentTarget
+                  video.src = post.video_url
+                  video.load()
+                  if (isActiveRef.current) video.play().catch(() => {})
+                  return
+                }
                 setVideoFailed(true)
               }}
               className="h-full w-full object-contain"
