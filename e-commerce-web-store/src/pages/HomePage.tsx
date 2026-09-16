@@ -16,6 +16,10 @@ import {
   ProfessionalBrands,
   ToolKnowledgeSection,
 } from '../components/home'
+// The old Trending page's real content (not the fake stats/testimonials
+// that were already fixed) folded into Home now that /trending's nav slot
+// belongs to the Discover feed -- nothing lost, no orphaned content.
+import { TrendingCollections, TrendingStores } from '../components/trending'
 
 export default function HomePage() {
   useEffect(() => {
@@ -58,6 +62,10 @@ export default function HomePage() {
       {/* Spotlight banner for the top admin-featured category collection */}
       <CategoryShowcaseBanner />
 
+      {/* Trending Collections -- real, admin-curated (formerly the
+          standalone Trending page) */}
+      <TrendingCollections />
+
       {/* Featured Professional Tools */}
       <FeaturedProfessionalTools />
 
@@ -69,6 +77,10 @@ export default function HomePage() {
 
       {/* Professional Brands */}
       <ProfessionalBrands />
+
+      {/* Featured Stores -- real per-brand stats, real follow, real
+          testimonials (formerly the standalone Trending page) */}
+      <TrendingStores />
 
       {/* Tool Guides & Workshop Knowledge */}
       <ToolKnowledgeSection />

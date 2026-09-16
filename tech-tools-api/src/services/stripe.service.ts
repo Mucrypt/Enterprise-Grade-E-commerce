@@ -515,6 +515,19 @@ class StripeService {
         )
       }
 
+      // Real purchase attribution for the Discover feed's ranking formula
+      // -- only counted once payment actually succeeded, never at
+      // checkout-session creation time (an abandoned/failed PaymentIntent
+      // must never inflate a post's purchase_count).
+      try {
+        await this.recordDiscoverAttributionForOrder(orderId)
+      } catch (discoverError) {
+        logger.error(
+          'Failed to record discover attribution after payment succeeded:',
+          discoverError,
+        )
+      }
+
       logger.info(`Payment succeeded for order ${orderId}`)
     } catch (error) {
       logger.error('Error handling payment succeeded:', error)
@@ -579,6 +592,44 @@ class StripeService {
          )`,
         [userId, -storeCreditApplied, orderId],
       )
+    }
+  }
+
+  /**
+   * Real purchase attribution for the Discover feed's ranking formula.
+   * Increments discover_posts.purchase_count once per (order,
+   * discover_post_id) pair, ever -- discover_purchase_attributions'
+   * PRIMARY KEY(order_id, discover_post_id) plus this INSERT ... ON
+   * CONFLICT DO NOTHING is the exact same idempotency shape
+   * recordAffiliateEffectsForOrder above uses (a NOT EXISTS/ON CONFLICT
+   * guard), covering Stripe webhook retries so a re-delivered
+   * payment_intent.succeeded event never double-counts. A single order
+   * can tag the same post from more than one item (rare but possible) --
+   * DISTINCT collapses that to one increment per post per order, matching
+   * add_to_cart_count/share_count's per-post-per-action semantics.
+   */
+  private async recordDiscoverAttributionForOrder(orderId: string): Promise<void> {
+    const taggedResult = await query(
+      `SELECT DISTINCT discover_post_id
+       FROM order_items
+       WHERE order_id = $1 AND discover_post_id IS NOT NULL`,
+      [orderId],
+    )
+
+    for (const row of taggedResult.rows) {
+      const attribution = await query(
+        `INSERT INTO discover_purchase_attributions (order_id, discover_post_id)
+         VALUES ($1, $2)
+         ON CONFLICT DO NOTHING
+         RETURNING order_id`,
+        [orderId, row.discover_post_id],
+      )
+      if (attribution.rows.length > 0) {
+        await query(
+          'UPDATE discover_posts SET purchase_count = purchase_count + 1 WHERE id = $1',
+          [row.discover_post_id],
+        )
+      }
     }
   }
 

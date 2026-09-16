@@ -24,7 +24,14 @@ export type EventType =
   | 'review_submitted'
   | 'supplier_interaction'
   | 'page_view'
-  | 'error';
+  | 'error'
+  // Discover feed ranking signals (see 066_discover_feed.sql's
+  // event_type_enum additions) -- must stay in lockstep with that enum.
+  | 'discover_view'
+  | 'discover_watch_complete'
+  | 'discover_replay'
+  | 'discover_product_card_open'
+  | 'discover_skip';
 
 export type EventSource = 'web_store' | 'mobile_app' | 'api' | 'admin_dashboard' | 'internal';
 export type DeviceType = 'desktop' | 'tablet' | 'mobile' | 'unknown';

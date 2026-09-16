@@ -49,7 +49,7 @@ function CenterTabIcon({ focused }: { focused: boolean }) {
           style={styles.centerTabGradient}
         >
           <Ionicons
-            name={focused ? 'stats-chart' : 'stats-chart-outline'}
+            name={focused ? 'play-circle' : 'play-circle-outline'}
             size={20}
             color={focused ? AppColors.white : AppColors.primary}
           />
@@ -115,10 +115,13 @@ export default function TabsLayout() {
           href: null, // Keep route, remove from bottom tabs (5-tab layout)
         }}
       />
+      {/* Trending's real content (collections/stores) has been folded into
+          Home, and the trending.tsx screen itself removed -- Discover now
+          occupies this raised center slot instead. */}
       <Tabs.Screen
-        name='trending'
+        name='discover'
         options={{
-          title: 'Trending',
+          title: 'Discover',
           tabBarLabel: ({ focused }) => (
             <Text
               style={[
@@ -126,7 +129,7 @@ export default function TabsLayout() {
                 focused && styles.centerTabLabelActive,
               ]}
             >
-              Trending
+              Discover
             </Text>
           ),
           tabBarIcon: ({ focused }) => <CenterTabIcon focused={focused} />,

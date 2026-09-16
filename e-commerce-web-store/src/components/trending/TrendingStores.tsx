@@ -296,7 +296,8 @@ export default function TrendingStores({
 
   const handleToggleFollow = async (brandId: string) => {
     if (!isAuthenticated) {
-      navigate('/login', { state: { from: { pathname: '/trending' } } })
+      // Lives on Home now (the old standalone Trending page is gone).
+      navigate('/login', { state: { from: { pathname: '/' } } })
       return
     }
 

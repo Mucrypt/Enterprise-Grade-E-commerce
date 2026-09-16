@@ -177,6 +177,23 @@
   50% { opacity: 0.5; }
 }
 
+/* Bottom-sheet slide-up (Discover feed's ProductBottomSheet) -- tailwind.
+   config.js's `theme.extend.animation`/`keyframes` are NOT actually loaded
+   by this project's Tailwind v4 setup (index.css only does
+   `@import "tailwindcss"`, no `@config` directive), which is also why
+   CartDrawer.tsx's `animate-slide-in-right` silently does nothing. Real,
+   working custom animations in this codebase are plain CSS classes like
+   .animate-slideUp/.animate-fadeIn below -- this follows that same
+   pattern rather than the dead config-based one. */
+@keyframes slideUpSheet {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.animate-slide-up-sheet {
+  animation: slideUpSheet 0.25s ease-out;
+}
+
 .animate-fadeIn {
   animation: fadeIn 0.3s ease-out;
 }

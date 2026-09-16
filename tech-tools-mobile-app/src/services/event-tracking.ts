@@ -304,6 +304,33 @@ export class MobileEventTrackingService {
     });
   }
 
+  /**
+   * Track a Discover feed ranking signal (watch completion, replay,
+   * product-card open, skip) or an impression. One consolidated method
+   * for all five 'discover_*' event types (see 066_discover_feed.sql's
+   * event_type_enum additions) rather than five near-identical wrappers.
+   */
+  trackDiscoverEvent(
+    eventType:
+      | 'discover_view'
+      | 'discover_watch_complete'
+      | 'discover_replay'
+      | 'discover_product_card_open'
+      | 'discover_skip',
+    postId: string,
+    extra?: Record<string, unknown>,
+  ): void {
+    this.trackEvent({
+      eventType,
+      source: 'mobile_app',
+      timestamp: new Date(),
+      payload: {
+        discoverPostId: postId,
+        ...extra,
+      },
+    });
+  }
+
   // Private helpers
 
   private async initializeDeviceInfo(): Promise<void> {

@@ -46,6 +46,7 @@ import {
   Users2,
   Wallet,
   GalleryHorizontal,
+  Clapperboard,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useStaffAccess } from '@/contexts/StaffAccessContext'
@@ -454,6 +455,16 @@ const navigation: NavItem[] = [
         permission: 'affiliates.manage',
       },
     ],
+  },
+  {
+    // The shoppable video/image feed (Phase 1: admin/staff-only content).
+    // Its own top-level group, not nested under Marketing, since it's a
+    // distinct content domain like Affiliates above -- same rationale.
+    title: 'Discover Feed',
+    href: '/dashboard/discover',
+    icon: Clapperboard,
+    permission: 'discover.view',
+    badge: 'New',
   },
   {
     // ADMIN-2B: transformed into the Analytics 2.0 workspace, whose

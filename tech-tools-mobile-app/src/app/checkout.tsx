@@ -196,6 +196,9 @@ export default function CheckoutScreen() {
       const orderItems = items.map((item) => ({
         productId: item.product.id,
         quantity: item.quantity,
+        // Real purchase attribution -- present only for items added via a
+        // Discover feed post's bottom sheet.
+        discoverPostId: item.sourceDiscoverPostId,
       }))
 
       const referralCode = (await getReferralCode()) || undefined

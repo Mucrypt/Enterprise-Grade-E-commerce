@@ -51,8 +51,8 @@ const PressPage = lazy(() => import('./pages/PressPage'))
 const AffiliatePage = lazy(() => import('./pages/AffiliatePage'))
 const BlogPage = lazy(() => import('./pages/BlogPage'))
 const BlogPostPage = lazy(() => import('./pages/BlogPostPage'))
-const TrendingPage = lazy(() => import('./pages/TrendingPage'))
 const DownloadAppPage = lazy(() => import('./pages/DownloadAppPage'))
+const DiscoverPage = lazy(() => import('./pages/DiscoverPage'))
 
 // Create React Query client
 const queryClient = new QueryClient({
@@ -86,6 +86,11 @@ function App() {
           <CookieConsentBanner />
           <Suspense fallback={routeFallback}>
             <Routes>
+              {/* Discover -- deliberately outside Layout, a full-screen
+                  immersive feed with no site header/footer chrome, same
+                  as how a TikTok/Reels-style takeover should behave. */}
+              <Route path='discover' element={<DiscoverPage />} />
+
               <Route path='/' element={<Layout />}>
                 {/* Home */}
                 <Route index element={<HomePage />} />
@@ -99,7 +104,6 @@ function App() {
                 <Route path='books/:id' element={<BookDetailPage />} />
                 <Route path='sale' element={<ProductsPage />} />
                 <Route path='new-arrivals' element={<ProductsPage />} />
-                <Route path='trending' element={<TrendingPage />} />
                 <Route path='search' element={<ProductsPage />} />
 
                 {/* Cart & Checkout */}

@@ -34,7 +34,8 @@ function CartItem({ item }: { item: CartItemType }) {
   const { updateQuantity, removeItem } = useCartStore()
   const price =
     Number(item.product.sale_price) || Number(item.product.base_price)
-  const totalPrice = price * item.quantity
+  const variantAdjustment = Number(item.variant?.price_adjustment || 0)
+  const totalPrice = (price + variantAdjustment) * item.quantity
 
   return (
     <View style={styles.cartItem}>
@@ -47,20 +48,23 @@ function CartItem({ item }: { item: CartItemType }) {
         <Text style={styles.itemName} numberOfLines={2}>
           {item.product.name}
         </Text>
+        {!!item.variant && (
+          <Text style={styles.itemVariant}>{item.variant.name}</Text>
+        )}
         <Text style={styles.itemPrice}>{formatPrice(totalPrice)}</Text>
 
         <View style={styles.quantityRow}>
           <View style={styles.quantityControls}>
             <TouchableOpacity
               style={styles.quantityButton}
-              onPress={() => updateQuantity(item.product.id, item.quantity - 1)}
+              onPress={() => updateQuantity(item.product.id, item.quantity - 1, item.variant?.id)}
             >
               <Ionicons name='remove' size={16} color={AppColors.gray700} />
             </TouchableOpacity>
             <Text style={styles.quantityText}>{item.quantity}</Text>
             <TouchableOpacity
               style={styles.quantityButton}
-              onPress={() => updateQuantity(item.product.id, item.quantity + 1)}
+              onPress={() => updateQuantity(item.product.id, item.quantity + 1, item.variant?.id)}
             >
               <Ionicons name='add' size={16} color={AppColors.gray700} />
             </TouchableOpacity>
@@ -68,7 +72,7 @@ function CartItem({ item }: { item: CartItemType }) {
 
           <TouchableOpacity
             style={styles.removeButton}
-            onPress={() => removeItem(item.product.id)}
+            onPress={() => removeItem(item.product.id, item.variant?.id)}
           >
             <Ionicons name='trash-outline' size={18} color={AppColors.error} />
           </TouchableOpacity>
@@ -277,6 +281,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: AppColors.gray800,
     lineHeight: 20,
+  },
+  itemVariant: {
+    fontSize: 12,
+    color: AppColors.gray500,
+    marginTop: 2,
   },
   itemPrice: {
     fontSize: 16,

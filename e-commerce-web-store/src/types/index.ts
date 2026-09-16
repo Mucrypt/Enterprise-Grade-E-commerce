@@ -253,6 +253,10 @@ export interface CartItem {
   quantity: number
   variant?: ProductVariant
   selectedOptions?: Record<string, string>
+  // Real purchase attribution -- set when added via a Discover feed post's
+  // bottom sheet, threaded through to order_items.discover_post_id at
+  // checkout. Absent for every other add-to-cart path.
+  sourceDiscoverPostId?: string
 }
 
 export interface Cart {

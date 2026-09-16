@@ -15,6 +15,7 @@ interface CartStore {
     product: Product,
     quantity?: number,
     variant?: ProductVariant,
+    sourceDiscoverPostId?: string,
   ) => void
   removeItem: (itemId: string) => void
   updateQuantity: (itemId: string, quantity: number) => void
@@ -35,7 +36,7 @@ export const useCartStore = create<CartStore>()(
       items: [],
       isOpen: false,
 
-      addItem: (product, quantity = 1, variant) => {
+      addItem: (product, quantity = 1, variant, sourceDiscoverPostId) => {
         const items = get().items
         const existingItem = items.find(
           (item) =>
@@ -43,6 +44,8 @@ export const useCartStore = create<CartStore>()(
         )
 
         if (existingItem) {
+          // First-touch attribution -- merging more of an already-in-cart
+          // item never overwrites whatever source originally added it.
           set({
             items: items.map((item) =>
               item.id === existingItem.id
@@ -56,6 +59,7 @@ export const useCartStore = create<CartStore>()(
             product,
             quantity,
             variant,
+            sourceDiscoverPostId,
           }
           set({ items: [...items, newItem] })
         }

@@ -35,6 +35,10 @@ import {
   ToolKnowledgeSection,
   HomepageNewsletter,
 } from '@/components/home'
+// Folded in from the old standalone Trending tab now that its nav slot
+// belongs to the Discover feed -- same real data, just living on Home.
+import TrendingCollectionsSection from '@/components/home/TrendingCollectionsSection'
+import TrendingStoresSection from '@/components/home/TrendingStoresSection'
 
 export default function HomeTabScreen() {
   const [refreshing, setRefreshing] = useState(false)
@@ -85,6 +89,10 @@ export default function HomeTabScreen() {
               Arrivals-style rows), real products only */}
           <FeaturedCollectionsShowcase />
 
+          {/* Trending Collections -- real, admin-curated (formerly the
+              standalone Trending tab) */}
+          <TrendingCollectionsSection />
+
           {/* Featured Professional Tools */}
           <FeaturedProfessionalTools />
 
@@ -96,6 +104,10 @@ export default function HomeTabScreen() {
 
           {/* Professional Brands */}
           <ProfessionalBrands />
+
+          {/* Featured Stores -- real per-brand stats, real follow, real
+              testimonials (formerly the standalone Trending tab) */}
+          <TrendingStoresSection />
 
           {/* Tool Guides & Workshop Knowledge */}
           <ToolKnowledgeSection />

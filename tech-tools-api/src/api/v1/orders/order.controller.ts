@@ -1207,6 +1207,13 @@ type PricedItem = {
   quantity: number
   unitPrice: number
   totalPrice: number
+  // Real purchase attribution -- set when the cart item was added via a
+  // Discover feed post's bottom sheet. Threaded through to
+  // order_items.discover_post_id; see stripe.service.ts's
+  // handlePaymentSucceeded for where discover_posts.purchase_count
+  // actually gets incremented (only once payment is confirmed, never at
+  // checkout-session creation time).
+  discoverPostId?: string
 }
 
 /** Thrown by validateAndPriceOrderItems for a client-facing validation failure. */
@@ -1225,7 +1232,7 @@ class OrderValidationError extends Error {
  */
 async function validateAndPriceOrderItems(
   client: { query: (text: string, params?: any[]) => Promise<any> },
-  items: Array<{ productId: string; quantity: number }>,
+  items: Array<{ productId: string; quantity: number; discoverPostId?: string }>,
 ): Promise<{ orderItems: PricedItem[]; totalAmount: number }> {
   let totalAmount = 0
   const orderItems: PricedItem[] = []
@@ -1263,6 +1270,7 @@ async function validateAndPriceOrderItems(
       quantity: item.quantity,
       unitPrice: effectivePrice,
       totalPrice: itemTotal,
+      discoverPostId: item.discoverPostId,
     })
   }
 
@@ -1299,8 +1307,8 @@ async function insertOrderItemsAndReserveStock(
     await client.query(
       `INSERT INTO order_items (
         order_id, product_id, sku, product_name,
-        quantity, unit_price, supplier_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        quantity, unit_price, supplier_id, discover_post_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         orderId,
         item.productId,
@@ -1309,6 +1317,7 @@ async function insertOrderItemsAndReserveStock(
         item.quantity,
         item.unitPrice,
         supplierId,
+        item.discoverPostId || null,
       ],
     )
     await client.query(

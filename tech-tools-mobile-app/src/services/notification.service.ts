@@ -254,7 +254,9 @@ export class MobileNotificationService {
       case 'collection_trending':
       case 'trending_update':
       case 'campaign_launch':
-        return '/(tabs)/trending'
+        // The old Trending tab is gone -- its real content (collections,
+        // featured stores) now lives on Home.
+        return '/(tabs)'
 
       case 'order_placed':
       case 'order_confirmed':

@@ -300,6 +300,74 @@ export const heroSlidesApi = {
 }
 
 // ============================================
+// Discover Feed API -- Phase 1, admin/staff-only content. Real
+// products/images/variants resolved server-side (see discover.controller.ts's
+// getDiscoverFeed), never fabricated engagement numbers.
+// ============================================
+export interface DiscoverPost {
+  id: string
+  media_type: 'video' | 'image'
+  video_url: string | null
+  video_poster_url: string | null
+  caption: string | null
+  category_id: string | null
+  category_name: string | null
+  category_slug: string | null
+  is_active: boolean
+  position: number
+  view_count: number
+  like_count: number
+  save_count: number
+  share_count: number
+  add_to_cart_count: number
+  purchase_count: number
+  created_at: string
+  products: Product[]
+  images?: { id: string; image_url: string; position: number }[]
+  isLiked: boolean
+  isSaved: boolean
+}
+
+export const discoverApi = {
+  async getFeed(page = 1, limit = 10): Promise<{ posts: DiscoverPost[]; page: number; hasMore: boolean }> {
+    const response = await api.get<{ success: boolean; data: { posts: DiscoverPost[]; page: number; hasMore: boolean } }>(
+      `/discover/feed?page=${page}&limit=${limit}`,
+    )
+    return response.data.data
+  },
+
+  async like(postId: string): Promise<number> {
+    const response = await api.post<{ success: boolean; data: { count: number } }>(`/discover/posts/${postId}/like`)
+    return response.data.data.count
+  },
+
+  async unlike(postId: string): Promise<number> {
+    const response = await api.delete<{ success: boolean; data: { count: number } }>(`/discover/posts/${postId}/like`)
+    return response.data.data.count
+  },
+
+  async save(postId: string): Promise<number> {
+    const response = await api.post<{ success: boolean; data: { count: number } }>(`/discover/posts/${postId}/save`)
+    return response.data.data.count
+  },
+
+  async unsave(postId: string): Promise<number> {
+    const response = await api.delete<{ success: boolean; data: { count: number } }>(`/discover/posts/${postId}/save`)
+    return response.data.data.count
+  },
+
+  // Best-effort, fire-and-forget -- never blocks the share/add-to-cart
+  // action they back.
+  async trackShare(postId: string): Promise<void> {
+    await api.post(`/discover/posts/${postId}/share`)
+  },
+
+  async trackAddToCart(postId: string): Promise<void> {
+    await api.post(`/discover/posts/${postId}/add-to-cart`)
+  },
+}
+
+// ============================================
 // Affiliates API (Refer & Earn)
 // ============================================
 export const affiliatesApi = {
@@ -1546,7 +1614,7 @@ export const ordersApiNew = {
   // Create an order draft + Stripe PaymentIntent together, BEFORE payment is
   // confirmed -- the order always exists before any money can be captured.
   async checkoutSession(data: {
-    items: { productId: string; quantity: number }[]
+    items: { productId: string; quantity: number; discoverPostId?: string }[]
     shippingAddress: {
       firstName: string
       lastName: string
@@ -1594,7 +1662,7 @@ export const ordersApiNew = {
 
   // Guest equivalent of checkoutSession (no authentication required)
   async guestCheckoutSession(data: {
-    items: { productId: string; quantity: number }[]
+    items: { productId: string; quantity: number; discoverPostId?: string }[]
     shippingAddress: any
     guestEmail: string
     guestPhone?: string

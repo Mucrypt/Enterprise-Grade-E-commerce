@@ -72,11 +72,14 @@ const navigationCategories: NavItem[] = [
     color: 'text-red-600 font-bold',
   },
   {
-    id: 'trending',
-    label: 'Trending',
-    href: '/trending',
+    // The shoppable video/image feed -- replaces the old standalone
+    // Trending page, whose real content (collections/stores) now lives
+    // on Home.
+    id: 'discover',
+    label: 'Discover',
+    href: '/discover',
     featured: true,
-    color: 'text-orange-500 font-semibold',
+    color: 'text-purple-600 font-bold',
   },
   {
     id: 'brands',

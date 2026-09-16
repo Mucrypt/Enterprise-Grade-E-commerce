@@ -41,6 +41,7 @@ export interface Product {
   views_7d?: number | string
   is_eu_warehouse?: boolean
   attribute_values?: ProductAttributeValue[] | null
+  variations?: ProductVariant[]
   created_at: string
   updated_at: string
 }
@@ -275,6 +276,10 @@ export interface CartItem {
   product: Product
   quantity: number
   variant?: ProductVariant
+  // Real purchase attribution -- set when added via a Discover feed
+  // post's bottom sheet, threaded through to order_items.discover_post_id
+  // at checkout. Absent for every other add-to-cart path.
+  sourceDiscoverPostId?: string
 }
 
 export interface ProductVariant {

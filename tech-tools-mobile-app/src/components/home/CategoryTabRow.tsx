@@ -11,14 +11,17 @@
 // it. Always visible now regardless of scroll position.
 //
 // Marketing pills intentionally deviate from a literal copy of the web
-// storefront's navigationCategories ("New In" / "Sale" / "Trending"):
-// only "New In" and "Trending" have a real destination in this app --
+// storefront's navigationCategories ("New In" / "Sale" / "Discover"):
+// only "New In" and "Discover" have a real destination in this app --
 // /products' default sort is newest-first (a real, wired behavior) and
-// /trending is a real existing tab screen. There is no onSale filter
-// anywhere in this app's ProductFilters type or the tech-tools-api
-// products endpoint, so a "Sale" pill would be a dead tap with no real
-// feature behind it -- the same rule that keeps a camera/visual-search
-// icon out of HomeHeader. It is dropped rather than faked.
+// /discover is a real existing tab screen (the shoppable video/image
+// feed; the old /trending tab was removed once its real content -- the
+// collections/stores now shown here -- moved to Home). There is no
+// onSale filter anywhere in this app's ProductFilters type or the
+// tech-tools-api products endpoint, so a "Sale" pill would be a dead tap
+// with no real feature behind it -- the same rule that keeps a
+// camera/visual-search icon out of HomeHeader. It is dropped rather than
+// faked.
 // ============================================
 
 import React, { useEffect, useState } from 'react'
@@ -38,7 +41,7 @@ import CategoryNavDrawer from './CategoryNavDrawer'
 
 const MARKETING_PILLS: { key: string; label: string; to: string }[] = [
   { key: 'new-in', label: 'New In', to: '/products' },
-  { key: 'trending', label: 'Trending', to: '/trending' },
+  { key: 'discover', label: 'Discover', to: '/discover' },
 ]
 
 const TOP_LEVEL_DISPLAY_LIMIT = 12

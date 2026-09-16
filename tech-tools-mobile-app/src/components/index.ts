@@ -19,10 +19,5 @@ export { default as FilterSheet } from './product/FilterSheet'
 export type { ProductFilterState } from './product/FilterSheet'
 export { default as ActiveFilterChips } from './product/ActiveFilterChips'
 
-// Trending Components
-export {
-  TrendingHeader,
-  TrendingCollectionCard,
-  TrendingBrandSection,
-  TrendingCategoryFilter,
-} from './trending'
+// Trending Components (now used only by Home's folded-in sections)
+export { TrendingCollectionCard, TrendingBrandSection } from './trending'
