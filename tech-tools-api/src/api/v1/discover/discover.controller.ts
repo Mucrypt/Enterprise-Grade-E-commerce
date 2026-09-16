@@ -1,4 +1,4 @@
-import { Request, Response } from 'express'
+import { NextFunction, Request, Response } from 'express'
 import { query as dbQuery, getClient } from '../../../database/connection'
 import { AuthRequest } from '../../../middleware/auth'
 import {
@@ -133,19 +133,106 @@ function respondDiscoverError(res: Response, error: any, fallbackMessage: string
 }
 
 // =====================================================
+// AUTHORIZATION -- lets an approved, active, non-suspended seller manage
+// their OWN Discover posts alongside admin/staff, without a blanket
+// `authorize('seller')` role check (verification_status can change, so
+// this is a real DB read every request, not a cached JWT claim).
+// `sellerProfileId` is attached to the request when the caller reached
+// this via seller approval rather than an admin/staff role, and is what
+// every handler below uses to scope ownership and force the
+// pending-review gate on create.
+// =====================================================
+
+export interface DiscoverAuthRequest extends AuthRequest {
+  sellerProfileId?: string
+}
+
+export async function requireAdminOrApprovedSeller(req: Request, res: Response, next: NextFunction) {
+  const authReq = req as DiscoverAuthRequest
+  if (!authReq.user) {
+    return res.status(401).json({ success: false, message: 'Authentication required' })
+  }
+
+  if (authReq.user.userType === 'admin' || authReq.user.userType === 'super_admin') {
+    return next()
+  }
+
+  try {
+    const sellerResult = await dbQuery(
+      `SELECT id FROM seller_profiles
+       WHERE user_id = $1 AND verification_status = 'approved' AND is_active = TRUE AND is_suspended = FALSE
+       LIMIT 1`,
+      [authReq.user.id],
+    )
+    if (sellerResult.rows.length === 0) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only admins or approved sellers can manage Discover posts',
+      })
+    }
+    authReq.sellerProfileId = sellerResult.rows[0].id
+    next()
+  } catch (error: any) {
+    logger.error('Error checking seller approval for Discover post:', error)
+    res.status(500).json({ success: false, message: 'Failed to verify seller status', error: error.message })
+  }
+}
+
+// Sellers may only touch posts they authored; admins are unrestricted.
+// Returns null on success, or the {status, message} to respond with on
+// failure -- a plain nullable return rather than a discriminated union,
+// since this codebase runs with strictNullChecks off (tsconfig.json),
+// which makes `if (!result.ok)`-style narrowing unreliable.
+async function assertOwnsPostOrIsAdmin(
+  req: DiscoverAuthRequest,
+  postId: string,
+): Promise<{ status: number; message: string } | null> {
+  const result = await dbQuery('SELECT created_by FROM discover_posts WHERE id = $1', [postId])
+  if (result.rows.length === 0) {
+    return { status: 404, message: 'Discover post not found' }
+  }
+  const createdBy = result.rows[0].created_by as string | null
+  if (req.sellerProfileId && createdBy !== req.user?.id) {
+    return { status: 403, message: 'You can only manage your own Discover posts' }
+  }
+  return null
+}
+
+// =====================================================
 // ADMIN: LIST / GET ONE
 // =====================================================
 
-export const getAdminDiscoverPosts = async (_req: Request, res: Response) => {
+// A seller only ever sees their own posts here (used for their "My
+// Discover Posts" dashboard); admin/staff see everything, optionally
+// filtered to the pending-review queue via ?status=pending.
+export const getAdminDiscoverPosts = async (req: Request, res: Response) => {
   try {
+    const authReq = req as DiscoverAuthRequest
+    const conditions: string[] = []
+    const params: any[] = []
+
+    if (authReq.sellerProfileId) {
+      params.push(authReq.user?.id)
+      conditions.push(`dp.created_by = $${params.length}`)
+    } else if (req.query.status === 'pending') {
+      conditions.push(`dp.is_active = FALSE AND dp.seller_profile_id IS NOT NULL`)
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+
     const result = await dbQuery(
       `SELECT dp.*,
               cat.name as category_name,
               cat.slug as category_slug,
+              sp.display_name as seller_display_name,
+              sp.handle as seller_handle,
               (SELECT COUNT(*) FROM discover_post_products WHERE discover_post_id = dp.id) as product_count
        FROM discover_posts dp
        LEFT JOIN categories cat ON dp.category_id = cat.id
+       LEFT JOIN seller_profiles sp ON dp.seller_profile_id = sp.id
+       ${whereClause}
        ORDER BY dp.position DESC, dp.created_at DESC`,
+      params,
     )
     res.json({ success: true, data: result.rows })
   } catch (error: any) {
@@ -157,6 +244,12 @@ export const getAdminDiscoverPosts = async (_req: Request, res: Response) => {
 export const getAdminDiscoverPostById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params
+    const authReq = req as DiscoverAuthRequest
+    const ownershipError = await assertOwnsPostOrIsAdmin(authReq, id)
+    if (ownershipError) {
+      return res.status(ownershipError.status).json({ success: false, message: ownershipError.message })
+    }
+
     const postResult = await dbQuery('SELECT * FROM discover_posts WHERE id = $1', [id])
     if (postResult.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Discover post not found' })
@@ -197,7 +290,8 @@ export const getAdminDiscoverPostById = async (req: Request, res: Response) => {
 
 export const createDiscoverPost = async (req: Request, res: Response) => {
   try {
-    const { mediaType, caption, categoryId, isActive = true, position = 0, audioLabel } = req.body
+    const { mediaType, caption, categoryId, position = 0, audioLabel } = req.body
+    const authReq = req as DiscoverAuthRequest
 
     if (mediaType !== 'video' && mediaType !== 'image') {
       return res.status(400).json({ success: false, message: 'mediaType must be "video" or "image"' })
@@ -212,12 +306,18 @@ export const createDiscoverPost = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'At least one image is required for an image post' })
     }
 
-    const userId = (req as AuthRequest).user?.id
+    const userId = authReq.user?.id
+    // A seller can never publish directly, regardless of what isActive
+    // they send -- every seller-authored post starts pending review (see
+    // reviewDiscoverPost). Admin/staff keep full control, unchanged.
+    const isActive = authReq.sellerProfileId ? false : (req.body.isActive ?? true)
+    // Sellers can't pin/reorder the global feed via position either.
+    const resolvedPosition = authReq.sellerProfileId ? 0 : position
 
     const result = await dbQuery(
       `INSERT INTO discover_posts
-       (media_type, video_url, video_poster_url, caption, category_id, is_active, position, created_by, audio_url, audio_label)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       (media_type, video_url, video_poster_url, caption, category_id, is_active, position, created_by, audio_url, audio_label, seller_profile_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
       [
         mediaType,
@@ -226,10 +326,11 @@ export const createDiscoverPost = async (req: Request, res: Response) => {
         caption || null,
         categoryId || null,
         isActive,
-        position,
+        resolvedPosition,
         userId || null,
         media.audioUrl || null,
         audioLabel || null,
+        authReq.sellerProfileId || null,
       ],
     )
     const post = result.rows[0]
@@ -271,6 +372,7 @@ export const updateDiscoverPost = async (req: Request, res: Response) => {
   try {
     const { id } = req.params
     const updates = req.body
+    const authReq = req as DiscoverAuthRequest
 
     if (updates.categoryId === '') updates.categoryId = null
     if (updates.category_id === '') updates.category_id = null
@@ -280,9 +382,20 @@ export const updateDiscoverPost = async (req: Request, res: Response) => {
     if (updates.audioUrl === '') updates.audioUrl = null
     if (updates.audio_url === '') updates.audio_url = null
 
-    const postCheck = await dbQuery('SELECT id FROM discover_posts WHERE id = $1', [id])
-    if (postCheck.rows.length === 0) {
-      return res.status(404).json({ success: false, message: 'Discover post not found' })
+    const ownershipError = await assertOwnsPostOrIsAdmin(authReq, id)
+    if (ownershipError) {
+      return res.status(ownershipError.status).json({ success: false, message: ownershipError.message })
+    }
+
+    // A seller editing their own post can never re-approve it or touch
+    // the global feed pin -- those stay admin-only levers. Editing an
+    // already-live post also drops it back to pending, since the content
+    // just changed and hasn't been reviewed in its new form.
+    if (authReq.sellerProfileId) {
+      delete updates.isActive
+      delete updates.is_active
+      delete updates.position
+      updates.isActive = false
     }
 
     const media = await resolvePostMedia(req)
@@ -324,6 +437,11 @@ export const updateDiscoverPost = async (req: Request, res: Response) => {
 export const deleteDiscoverPost = async (req: Request, res: Response) => {
   try {
     const { id } = req.params
+    const ownershipError = await assertOwnsPostOrIsAdmin(req as DiscoverAuthRequest, id)
+    if (ownershipError) {
+      return res.status(ownershipError.status).json({ success: false, message: ownershipError.message })
+    }
+
     const result = await dbQuery('DELETE FROM discover_posts WHERE id = $1 RETURNING id', [id])
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Discover post not found' })
@@ -365,6 +483,33 @@ export const reorderDiscoverPosts = async (req: Request, res: Response) => {
   }
 }
 
+// Admin-only approval for a seller-authored post -- the trust/safety
+// gate for opening Discover posting beyond staff. There's no separate
+// "rejected" state: an admin declining a post just deletes it via the
+// existing deleteDiscoverPost endpoint (same admin-only access, no new
+// state to invent or for a pending queue to accumulate forever).
+export const reviewDiscoverPost = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+    const result = await dbQuery(
+      `UPDATE discover_posts SET is_active = TRUE, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND seller_profile_id IS NOT NULL
+       RETURNING *`,
+      [id],
+    )
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Pending seller post not found (already reviewed, or not a seller-authored post)',
+      })
+    }
+    res.json({ success: true, message: 'Discover post approved and published', data: result.rows[0] })
+  } catch (error: any) {
+    logger.error('Error approving discover post:', error)
+    res.status(500).json({ success: false, message: 'Failed to approve discover post', error: error.message })
+  }
+}
+
 // =====================================================
 // PRODUCT TAGGING -- verbatim clone of hero-slides.controller.ts's
 // addHeroSlideItems/removeHeroSlideItem/reorderHeroSlideItems, scoped to
@@ -380,9 +525,9 @@ export const addPostProducts = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Product IDs array is required' })
     }
 
-    const postCheck = await dbQuery('SELECT id FROM discover_posts WHERE id = $1', [id])
-    if (postCheck.rows.length === 0) {
-      return res.status(404).json({ success: false, message: 'Discover post not found' })
+    const ownershipError = await assertOwnsPostOrIsAdmin(req as DiscoverAuthRequest, id)
+    if (ownershipError) {
+      return res.status(ownershipError.status).json({ success: false, message: ownershipError.message })
     }
 
     const existingCountResult = await dbQuery(
@@ -450,6 +595,11 @@ export const addPostProducts = async (req: Request, res: Response) => {
 export const removePostProduct = async (req: Request, res: Response) => {
   try {
     const { id, productId } = req.params
+    const ownershipError = await assertOwnsPostOrIsAdmin(req as DiscoverAuthRequest, id)
+    if (ownershipError) {
+      return res.status(ownershipError.status).json({ success: false, message: ownershipError.message })
+    }
+
     const result = await dbQuery(
       'DELETE FROM discover_post_products WHERE discover_post_id = $1 AND product_id = $2 RETURNING *',
       [id, productId],
@@ -471,6 +621,11 @@ export const reorderPostProducts = async (req: Request, res: Response) => {
 
     if (!Array.isArray(productOrder) || productOrder.length === 0) {
       return res.status(400).json({ success: false, message: 'Invalid product order data' })
+    }
+
+    const ownershipError = await assertOwnsPostOrIsAdmin(req as DiscoverAuthRequest, id)
+    if (ownershipError) {
+      return res.status(ownershipError.status).json({ success: false, message: ownershipError.message })
     }
 
     const client = await getClient()
@@ -527,10 +682,15 @@ export const getDiscoverFeed = async (req: Request, res: Response) => {
       `SELECT dp.*,
               cat.name as category_name,
               cat.slug as category_slug,
+              sp.id as seller_id,
+              sp.display_name as seller_display_name,
+              sp.handle as seller_handle,
+              sp.avatar_url as seller_avatar_url,
               (dp.like_count + dp.save_count * 3 + dp.add_to_cart_count * 4 + dp.purchase_count * 10
                - GREATEST(0, EXTRACT(EPOCH FROM (now() - dp.created_at)) / 86400 - 3) * 2) as score
        FROM discover_posts dp
        LEFT JOIN categories cat ON dp.category_id = cat.id
+       LEFT JOIN seller_profiles sp ON dp.seller_profile_id = sp.id
        WHERE dp.is_active = TRUE
        ORDER BY dp.position DESC, score DESC, dp.created_at DESC
        LIMIT $1 OFFSET $2`,
@@ -606,6 +766,11 @@ export const getDiscoverFeed = async (req: Request, res: Response) => {
       // no stored column) -- null when the video isn't Cloudinary-hosted
       // (local/R2 storage), in which case the client just plays video_url.
       video_streaming_url: getCloudinaryStreamingUrl(post.video_url),
+      // seller_id/seller_display_name/seller_handle/seller_avatar_url
+      // already flow through via the spread above (same flat-field
+      // pattern as category_name/category_slug) -- null across the
+      // board for platform/admin content, and the frontend falls back
+      // to the existing "@TechTools" treatment in that case.
       products: productsByPost.get(post.id) || [],
       images: post.media_type === 'image' ? imagesByPost.get(post.id) || [] : undefined,
       isLiked: likedSet.has(post.id),

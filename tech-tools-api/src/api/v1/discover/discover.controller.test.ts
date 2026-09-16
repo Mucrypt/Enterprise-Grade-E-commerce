@@ -1,5 +1,9 @@
 import {
   createDiscoverPost,
+  updateDiscoverPost,
+  deleteDiscoverPost,
+  reviewDiscoverPost,
+  requireAdminOrApprovedSeller,
   likePost,
   unlikePost,
 } from './discover.controller'
@@ -173,6 +177,181 @@ describe('likePost / unlikePost -- real, per-user, transactional counters', () =
     const res = makeRes()
 
     await likePost(req, res)
+
+    expect(res.status).toHaveBeenCalledWith(404)
+  })
+})
+
+const SELLER_PROFILE_ID = '99999999-0000-0000-0000-000000000001'
+
+describe('requireAdminOrApprovedSeller -- real DB check, not a cached JWT claim', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it('rejects with 401 when there is no authenticated user', async () => {
+    const req: any = {}
+    const res = makeRes()
+    const next = jest.fn()
+
+    await requireAdminOrApprovedSeller(req, res, next)
+
+    expect(res.status).toHaveBeenCalledWith(401)
+    expect(next).not.toHaveBeenCalled()
+  })
+
+  it('lets admin/super_admin through without touching seller_profiles', async () => {
+    const req: any = { user: { id: USER_ID, userType: 'admin' } }
+    const res = makeRes()
+    const next = jest.fn()
+
+    await requireAdminOrApprovedSeller(req, res, next)
+
+    expect(mockQuery).not.toHaveBeenCalled()
+    expect(next).toHaveBeenCalled()
+  })
+
+  it('rejects a signed-in customer with no approved seller_profiles row', async () => {
+    mockQuery.mockResolvedValue({ rows: [] })
+    const req: any = { user: { id: USER_ID, userType: 'customer' } }
+    const res = makeRes()
+    const next = jest.fn()
+
+    await requireAdminOrApprovedSeller(req, res, next)
+
+    expect(res.status).toHaveBeenCalledWith(403)
+    expect(next).not.toHaveBeenCalled()
+  })
+
+  it('attaches sellerProfileId and calls next for an approved seller', async () => {
+    mockQuery.mockResolvedValue({ rows: [{ id: SELLER_PROFILE_ID }] })
+    const req: any = { user: { id: USER_ID, userType: 'customer' } }
+    const res = makeRes()
+    const next = jest.fn()
+
+    await requireAdminOrApprovedSeller(req, res, next)
+
+    expect(req.sellerProfileId).toBe(SELLER_PROFILE_ID)
+    expect(next).toHaveBeenCalled()
+  })
+})
+
+describe('createDiscoverPost -- seller-authored posts are always pending review', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it('forces is_active=false and stamps seller_profile_id, ignoring any isActive/position the seller sent', async () => {
+    mockQuery.mockResolvedValue({ rows: [{ id: POST_ID, media_type: 'video' }] })
+    const req: any = {
+      body: { mediaType: 'video', videoUrl: 'https://example.com/x.mp4', isActive: true, position: 99 },
+      files: undefined,
+      user: { id: USER_ID },
+      sellerProfileId: SELLER_PROFILE_ID,
+    }
+    const res = makeRes()
+
+    await createDiscoverPost(req, res)
+
+    const params = mockQuery.mock.calls[0][1]
+    expect(params[5]).toBe(false) // is_active
+    expect(params[6]).toBe(0) // position -- sellers can't pin the feed
+    expect(params[10]).toBe(SELLER_PROFILE_ID) // seller_profile_id
+    expect(res.status).toHaveBeenCalledWith(201)
+  })
+
+  it('admin/staff (no sellerProfileId) keep full control of isActive/position', async () => {
+    mockQuery.mockResolvedValue({ rows: [{ id: POST_ID, media_type: 'video' }] })
+    const req: any = {
+      body: { mediaType: 'video', videoUrl: 'https://example.com/x.mp4', isActive: true, position: 5 },
+      files: undefined,
+      user: { id: USER_ID },
+    }
+    const res = makeRes()
+
+    await createDiscoverPost(req, res)
+
+    const params = mockQuery.mock.calls[0][1]
+    expect(params[5]).toBe(true)
+    expect(params[6]).toBe(5)
+    expect(params[10]).toBeNull()
+  })
+})
+
+describe('updateDiscoverPost / deleteDiscoverPost -- a seller can only touch their own posts', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it('403s when a seller tries to update a post they did not create', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ created_by: 'someone-else' }] }) // ownership lookup
+    const req: any = {
+      params: { id: POST_ID },
+      body: { caption: 'hijacked' },
+      files: undefined,
+      user: { id: USER_ID },
+      sellerProfileId: SELLER_PROFILE_ID,
+    }
+    const res = makeRes()
+
+    await updateDiscoverPost(req, res)
+
+    expect(res.status).toHaveBeenCalledWith(403)
+    // Only the ownership lookup ran -- no UPDATE was attempted.
+    expect(mockQuery).toHaveBeenCalledTimes(1)
+  })
+
+  it('403s when a seller tries to delete a post they did not create', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ created_by: 'someone-else' }] })
+    const req: any = { params: { id: POST_ID }, user: { id: USER_ID }, sellerProfileId: SELLER_PROFILE_ID }
+    const res = makeRes()
+
+    await deleteDiscoverPost(req, res)
+
+    expect(res.status).toHaveBeenCalledWith(403)
+  })
+
+  it('allows a seller to update their own post, but forces it back to pending', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ created_by: USER_ID }] }) // ownership lookup
+      .mockResolvedValueOnce({ rows: [{ id: POST_ID, is_active: false }] }) // UPDATE ... RETURNING *
+
+    const req: any = {
+      params: { id: POST_ID },
+      body: { caption: 'updated by the seller', isActive: true, position: 50 },
+      files: undefined,
+      user: { id: USER_ID },
+      sellerProfileId: SELLER_PROFILE_ID,
+    }
+    const res = makeRes()
+
+    await updateDiscoverPost(req, res)
+
+    const updateCall = mockQuery.mock.calls[1]
+    expect(updateCall[0]).toContain('is_active = $')
+    expect(updateCall[0]).not.toContain('position = $')
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ success: true }),
+    )
+  })
+})
+
+describe('reviewDiscoverPost -- admin-only approval for a pending seller post', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it('approves (is_active=true) a pending seller-authored post', async () => {
+    mockQuery.mockResolvedValue({ rows: [{ id: POST_ID, is_active: true, seller_profile_id: SELLER_PROFILE_ID }] })
+    const req: any = { params: { id: POST_ID } }
+    const res = makeRes()
+
+    await reviewDiscoverPost(req, res)
+
+    expect(mockQuery.mock.calls[0][0]).toContain('SET is_active = TRUE')
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ success: true, data: expect.objectContaining({ is_active: true }) }),
+    )
+  })
+
+  it('404s when there is no matching pending seller post', async () => {
+    mockQuery.mockResolvedValue({ rows: [] })
+    const req: any = { params: { id: 'does-not-exist' } }
+    const res = makeRes()
+
+    await reviewDiscoverPost(req, res)
 
     expect(res.status).toHaveBeenCalledWith(404)
   })

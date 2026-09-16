@@ -6,6 +6,7 @@ import {
   updateDiscoverPost,
   deleteDiscoverPost,
   reorderDiscoverPosts,
+  reviewDiscoverPost,
   addPostProducts,
   removePostProduct,
   reorderPostProducts,
@@ -16,6 +17,7 @@ import {
   unsavePost,
   trackShare,
   trackAddToCart,
+  requireAdminOrApprovedSeller,
 } from './discover.controller'
 import { authenticate, authenticateIfPresent, authorize } from '../../../middleware/auth'
 import { upload, handleUploadErrors } from '../../../utils/media'
@@ -46,17 +48,21 @@ router.post('/posts/:id/share', trackShare)
 router.post('/posts/:id/add-to-cart', trackAddToCart)
 
 // =====================================================
-// Admin
+// Admin + approved sellers -- requireAdminOrApprovedSeller lets both in,
+// then every handler scopes by ownership (a seller only ever sees/edits
+// their own posts; admin/staff are unrestricted). Global feed pin/order
+// (reorder, review/approval) stays strictly admin-only below.
 // =====================================================
-router.get('/posts', authenticate, authorize('admin', 'super_admin'), getAdminDiscoverPosts)
-router.post('/posts', authenticate, authorize('admin', 'super_admin'), uploadPostMedia, createDiscoverPost)
+router.get('/posts', authenticate, requireAdminOrApprovedSeller, getAdminDiscoverPosts)
+router.post('/posts', authenticate, requireAdminOrApprovedSeller, uploadPostMedia, createDiscoverPost)
 router.put('/posts/reorder', authenticate, authorize('admin', 'super_admin'), reorderDiscoverPosts)
-router.get('/posts/:id', authenticate, authorize('admin', 'super_admin'), getAdminDiscoverPostById)
-router.put('/posts/:id', authenticate, authorize('admin', 'super_admin'), uploadPostMedia, updateDiscoverPost)
-router.delete('/posts/:id', authenticate, authorize('admin', 'super_admin'), deleteDiscoverPost)
+router.get('/posts/:id', authenticate, requireAdminOrApprovedSeller, getAdminDiscoverPostById)
+router.put('/posts/:id', authenticate, requireAdminOrApprovedSeller, uploadPostMedia, updateDiscoverPost)
+router.delete('/posts/:id', authenticate, requireAdminOrApprovedSeller, deleteDiscoverPost)
+router.patch('/posts/:id/review', authenticate, authorize('admin', 'super_admin'), reviewDiscoverPost)
 
-router.post('/posts/:id/products', authenticate, authorize('admin', 'super_admin'), addPostProducts)
-router.delete('/posts/:id/products/:productId', authenticate, authorize('admin', 'super_admin'), removePostProduct)
-router.put('/posts/:id/products/reorder', authenticate, authorize('admin', 'super_admin'), reorderPostProducts)
+router.post('/posts/:id/products', authenticate, requireAdminOrApprovedSeller, addPostProducts)
+router.delete('/posts/:id/products/:productId', authenticate, requireAdminOrApprovedSeller, removePostProduct)
+router.put('/posts/:id/products/reorder', authenticate, requireAdminOrApprovedSeller, reorderPostProducts)
 
 export default router
