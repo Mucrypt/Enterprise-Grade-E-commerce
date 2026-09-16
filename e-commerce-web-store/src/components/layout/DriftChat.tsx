@@ -228,12 +228,12 @@ export function DriftChat({ enabled = false, supportProfile }: DriftChatProps) {
         type="button"
         onClick={handleToggle}
         aria-label={isOpen ? 'Close chat' : 'Open chat'}
-        className="animate-fade-in relative flex h-14 w-14 items-center justify-center rounded-full bg-brand-orange text-white shadow-lg transition-transform duration-150 hover:scale-105 active:scale-95"
+        className="animate-fade-in relative flex h-14 w-14 items-center justify-center rounded-full bg-orange-500 text-white shadow-lg transition-transform duration-150 hover:scale-105 active:scale-95"
       >
         {isOpen ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
 
         {!isOpen && unreadCount > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-red px-1 text-[11px] font-bold text-white">
+          <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-bold text-white">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
