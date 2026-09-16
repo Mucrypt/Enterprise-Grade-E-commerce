@@ -22,6 +22,7 @@ import {
   ViewToken,
 } from 'react-native'
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs'
+import { Audio } from 'expo-av'
 import { discoverApi, DiscoverPost } from '@/api'
 import DiscoverSlide from '@/components/discover/DiscoverSlide'
 import ProductBottomSheet from '@/components/discover/ProductBottomSheet'
@@ -69,6 +70,13 @@ export default function DiscoverTabScreen() {
   useEffect(() => {
     loadPage(1)
   }, [loadPage])
+
+  // Posts with a background track (see DiscoverSlide's Audio.Sound
+  // usage) should play like TikTok/Reels -- audible even when the
+  // device's silent switch is on, not swallowed like a system sound.
+  useEffect(() => {
+    Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: false }).catch(() => {})
+  }, [])
 
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {

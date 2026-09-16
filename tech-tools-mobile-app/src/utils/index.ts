@@ -18,6 +18,25 @@ export const formatPrice = (
 }
 
 /**
+ * Compact large real counts for display (1200 -> "1.2K") -- formatting
+ * only, never rounds a real number into a fabricated-looking bigger one.
+ */
+export const formatCompactNumber = (value: number): string => {
+  if (!Number.isFinite(value)) return '0'
+  const abs = Math.abs(value)
+  if (abs < 1000) return String(value)
+  const units = [
+    { threshold: 1_000_000_000, suffix: 'B' },
+    { threshold: 1_000_000, suffix: 'M' },
+    { threshold: 1_000, suffix: 'K' },
+  ]
+  const unit = units.find((u) => abs >= u.threshold)!
+  const scaled = value / unit.threshold
+  const formatted = scaled >= 100 ? Math.round(scaled).toString() : scaled.toFixed(1).replace(/\.0$/, '')
+  return `${formatted}${unit.suffix}`
+}
+
+/**
  * Calculate discount percentage
  */
 export const calculateDiscount = (

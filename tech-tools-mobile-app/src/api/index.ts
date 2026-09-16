@@ -1551,6 +1551,11 @@ export interface DiscoverPost {
   media_type: 'video' | 'image'
   video_url: string | null
   video_poster_url: string | null
+  // Admin's own uploaded background track -- not a licensed music
+  // catalog. audio_label is free text the admin can type; falls back to
+  // "Original sound" in the UI when absent.
+  audio_url: string | null
+  audio_label: string | null
   caption: string | null
   category_id: string | null
   category_name: string | null
