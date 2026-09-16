@@ -17,6 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,6 +40,8 @@ import {
   Clapperboard,
   Tag,
   Eye,
+  Check,
+  Store,
 } from 'lucide-react'
 import { RequirePagePermission } from '@/components/auth/RequirePagePermission'
 import { getAbsoluteMediaUrl } from '@/lib/utils'
@@ -73,6 +76,7 @@ function DiscoverFeedContent() {
   // again in the separate product-tagging step.
   const [pendingProductId, setPendingProductId] = useState<string | null>(null)
   const [pendingProductName, setPendingProductName] = useState<string | null>(null)
+  const [tab, setTab] = useState<'all' | 'pending'>('all')
 
   useEffect(() => {
     const productId = searchParams.get('createFromProductId')
@@ -86,10 +90,19 @@ function DiscoverFeedContent() {
   }, [])
 
   const { data, isLoading } = useQuery({
-    queryKey: ['discover-posts'],
-    queryFn: () => discoverService.getAll(),
+    queryKey: ['discover-posts', tab],
+    queryFn: () => discoverService.getAll(tab === 'pending' ? 'pending' : undefined),
   })
   const posts: DiscoverPost[] = (data as any)?.data || []
+
+  // Real count for the tab badge -- a second lightweight query rather
+  // than filtering the "all" list client-side, so the badge is correct
+  // even while viewing the "all" tab.
+  const { data: pendingData } = useQuery({
+    queryKey: ['discover-posts', 'pending'],
+    queryFn: () => discoverService.getAll('pending'),
+  })
+  const pendingCount = ((pendingData as any)?.data || []).length
 
   const createMutation = useMutation({
     mutationFn: ({ formData, files }: { formData: DiscoverPostFormData; files: DiscoverPostFiles }) => {
@@ -154,6 +167,15 @@ function DiscoverFeedContent() {
     onError: (error: any) => toast.error(error.response?.data?.message || 'Failed to update post'),
   })
 
+  const approveMutation = useMutation({
+    mutationFn: (id: string) => discoverService.approve(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['discover-posts'] })
+      toast.success('Post approved and published')
+    },
+    onError: (error: any) => toast.error(error.response?.data?.message || 'Failed to approve post'),
+  })
+
   const reorderMutation = useMutation({
     mutationFn: (order: Array<{ id: string; position: number }>) => discoverService.reorder(order),
     onSuccess: () => {
@@ -216,6 +238,20 @@ function DiscoverFeedContent() {
         </Button>
       </div>
 
+      <Tabs value={tab} onValueChange={(v: string) => setTab(v as 'all' | 'pending')}>
+        <TabsList>
+          <TabsTrigger value='all'>All Posts</TabsTrigger>
+          <TabsTrigger value='pending'>
+            Pending Review
+            {pendingCount > 0 && (
+              <Badge variant='destructive' className='ml-2'>
+                {pendingCount}
+              </Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+
       {isLoading ? (
         <div className='space-y-3'>
           {[...Array(4)].map((_, i) => (
@@ -227,20 +263,26 @@ function DiscoverFeedContent() {
           <div className='mx-auto h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4'>
             <Clapperboard className='h-6 w-6 text-muted-foreground' />
           </div>
-          <h3 className='text-lg font-medium'>No Discover posts yet</h3>
+          <h3 className='text-lg font-medium'>
+            {tab === 'pending' ? 'Nothing pending review' : 'No Discover posts yet'}
+          </h3>
           <p className='text-muted-foreground text-sm mt-1'>
-            Add your first video or image post to start populating the feed.
+            {tab === 'pending'
+              ? 'Seller-authored posts waiting for approval will show up here.'
+              : 'Add your first video or image post to start populating the feed.'}
           </p>
-          <Button
-            className='mt-4'
-            onClick={() => {
-              setEditingPost(null)
-              setFormOpen(true)
-            }}
-          >
-            <Plus className='mr-2 h-4 w-4' />
-            Add Post
-          </Button>
+          {tab === 'all' && (
+            <Button
+              className='mt-4'
+              onClick={() => {
+                setEditingPost(null)
+                setFormOpen(true)
+              }}
+            >
+              <Plus className='mr-2 h-4 w-4' />
+              Add Post
+            </Button>
+          )}
         </div>
       ) : (
         <Table>
@@ -248,12 +290,13 @@ function DiscoverFeedContent() {
             <TableRow>
               <TableHead className='w-16'>Media</TableHead>
               <TableHead>Caption</TableHead>
+              <TableHead>Posted by</TableHead>
               <TableHead>Type</TableHead>
               <TableHead>Products</TableHead>
               <TableHead className='text-center'>Views</TableHead>
               <TableHead className='text-center'>Order</TableHead>
               <TableHead className='text-center'>Active</TableHead>
-              <TableHead className='w-28'></TableHead>
+              <TableHead className='w-36'></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -282,6 +325,19 @@ function DiscoverFeedContent() {
                       <div className='mt-1'>
                         <Badge variant='outline' className='text-xs'>#{post.category_name}</Badge>
                       </div>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {post.seller_profile_id ? (
+                      <span className='inline-flex items-center gap-1 text-sm'>
+                        <Store className='h-3.5 w-3.5 text-muted-foreground' />
+                        {post.seller_display_name || 'Seller'}
+                        {!post.is_active && (
+                          <Badge variant='secondary' className='ml-1'>Pending</Badge>
+                        )}
+                      </span>
+                    ) : (
+                      <span className='text-sm text-muted-foreground'>TechTools</span>
                     )}
                   </TableCell>
                   <TableCell>
@@ -332,6 +388,18 @@ function DiscoverFeedContent() {
                   </TableCell>
                   <TableCell>
                     <div className='flex items-center gap-1'>
+                      {post.seller_profile_id && !post.is_active && (
+                        <Button
+                          variant='ghost'
+                          size='icon'
+                          className='h-8 w-8 text-green-600 hover:text-green-600'
+                          title='Approve and publish'
+                          onClick={() => approveMutation.mutate(post.id)}
+                          disabled={approveMutation.isPending}
+                        >
+                          <Check className='h-4 w-4' />
+                        </Button>
+                      )}
                       <Button
                         variant='ghost'
                         size='icon'

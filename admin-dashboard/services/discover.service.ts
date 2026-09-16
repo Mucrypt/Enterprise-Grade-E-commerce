@@ -18,6 +18,12 @@ export interface DiscoverPost {
   category_slug?: string
   is_active: boolean
   position: number
+  // Real author when this post came from an approved seller rather than
+  // admin/staff (null in that case, same as today). Set together --
+  // never one without the other.
+  seller_profile_id?: string | null
+  seller_display_name?: string | null
+  seller_handle?: string | null
   view_count: number
   like_count: number
   save_count: number
@@ -72,8 +78,8 @@ function buildDiscoverPostFormData(
 }
 
 export const discoverService = {
-  async getAll() {
-    return apiClient.get('/discover/posts')
+  async getAll(status?: 'pending') {
+    return apiClient.get('/discover/posts', status ? { params: { status } } : undefined)
   },
 
   async getById(id: string) {
@@ -104,6 +110,12 @@ export const discoverService = {
 
   async reorder(order: Array<{ id: string; position: number }>) {
     return apiClient.put('/discover/posts/reorder', { order })
+  },
+
+  // Admin-only approval for a pending seller-authored post -- rejecting
+  // is just the existing `delete` above, no separate state to manage.
+  async approve(id: string) {
+    return apiClient.patch(`/discover/posts/${id}/review`, { approve: true })
   },
 
   async addProducts(postId: string, productIds: string[]) {
