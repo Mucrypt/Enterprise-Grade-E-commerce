@@ -65,18 +65,29 @@ export function NotificationToast() {
   if (!toast) return null
 
   return (
-    <div className='fixed bottom-6 right-6 max-w-sm z-50 animate-in fade-in slide-in-from-bottom'>
+    // bottom-24 (not bottom-6) so this doesn't stack under/collide with
+    // the persistent chat launcher, which lives at bottom-5 right-5.
+    // animate-in/fade-in/slide-in-from-bottom are tailwindcss-animate
+    // plugin classes that aren't installed in this project -- they
+    // silently generated no CSS at all, so this never actually animated.
+    // animate-fade-in is this project's own real, working entrance
+    // animation (defined via @theme in src/index.css, the v4-native way).
+    <div className='fixed bottom-24 right-6 max-w-sm z-50 animate-fade-in'>
       <div className='bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg p-4 flex gap-3'>
         <div className='shrink-0'>
           <Bell className='h-5 w-5 text-blue-500' />
         </div>
         <div className='flex-1 min-w-0'>
-          <h3 className='font-semibold text-sm'>{toast.title}</h3>
-          <p className='text-xs text-muted-foreground mt-1'>{toast.message}</p>
+          <h3 className='font-semibold text-sm text-slate-900 dark:text-white'>{toast.title}</h3>
+          {/* text-muted-foreground isn't a real class in this app's Tailwind
+              setup (no shadcn theme tokens wired up) -- it resolved to no
+              color at all, which read fine by inheritance in light mode but
+              made every message illegible against dark:bg-slate-900. */}
+          <p className='text-xs text-slate-500 dark:text-slate-400 mt-1'>{toast.message}</p>
           {toast.actionUrl && (
             <a
               href={toast.actionUrl}
-              className='text-xs text-blue-600 hover:underline mt-2 inline-block'
+              className='text-xs text-blue-600 dark:text-blue-400 hover:underline mt-2 inline-block'
             >
               View Details →
             </a>
@@ -84,7 +95,7 @@ export function NotificationToast() {
         </div>
         <button
           onClick={() => setToast(null)}
-          className='shrink-0 text-muted-foreground hover:text-foreground'
+          className='shrink-0 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'
         >
           <X className='h-4 w-4' />
         </button>

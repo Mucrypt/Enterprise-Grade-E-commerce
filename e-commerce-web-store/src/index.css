@@ -23,6 +23,49 @@
   --color-brand-800: #9a3412;
   --color-brand-900: #7c2d12;
   --color-brand-950: #431407;
+
+  /* animate-fade-in/slide-down/pulse-slow are used across the app
+     (SearchOverlay, Header, LanguageSelector, DriftChat,
+     NotificationToast) but were only ever defined in tailwind.config.js's
+     theme.extend -- dead in Tailwind v4, which reads theme from this
+     @theme block, not that file, unless wired up via @config (it isn't
+     here). Every one of those entrance animations was silently a no-op:
+     elements just appeared instantly, easy to miss since nothing looked
+     "broken", just less polished. Defined here the v4-native way so they
+     actually generate real utility classes. */
+  --animate-fade-in: fadeIn 0.2s ease-out;
+  --animate-slide-down: slideDown 0.3s ease-out;
+  --animate-pulse-slow: pulseSlow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulseSlow {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 /* Base styles */
