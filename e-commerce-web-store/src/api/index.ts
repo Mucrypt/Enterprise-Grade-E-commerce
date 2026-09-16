@@ -335,6 +335,16 @@ export interface DiscoverPost {
   images?: { id: string; image_url: string; position: number }[]
   isLiked: boolean
   isSaved: boolean
+  // Present on the public feed (real per-post author, or null for
+  // platform/"@TechTools" content) and on a seller's own post-management
+  // list ("my posts" -- always their own id there).
+  seller_profile_id?: string | null
+  seller_display_name?: string | null
+  seller_handle?: string | null
+  seller_avatar_url?: string | null
+  // "My Discover Posts" (seller self-service) list/create/update only --
+  // absent on the public feed shape.
+  product_count?: number
 }
 
 export const discoverApi = {
@@ -373,6 +383,41 @@ export const discoverApi = {
 
   async trackAddToCart(postId: string): Promise<void> {
     await api.post(`/discover/posts/${postId}/add-to-cart`)
+  },
+
+  // ==========================================================
+  // Seller self-service -- same /discover/posts endpoints the admin
+  // dashboard uses, just called with the signed-in seller's own JWT.
+  // The backend scopes everything by ownership (requireAdminOrApprovedSeller
+  // + assertOwnsPostOrIsAdmin in discover.controller.ts) -- a seller only
+  // ever sees/edits their own posts here, and every create/edit lands
+  // pending review (is_active=false) until an admin approves it.
+  // ==========================================================
+  async getMine(): Promise<DiscoverPost[]> {
+    const response = await api.get<{ success: boolean; data: DiscoverPost[] }>('/discover/posts')
+    return response.data.data
+  },
+
+  async createMine(formData: FormData): Promise<DiscoverPost> {
+    const response = await api.post<{ success: boolean; data: DiscoverPost }>('/discover/posts', formData)
+    return response.data.data
+  },
+
+  async updateMine(postId: string, formData: FormData): Promise<DiscoverPost> {
+    const response = await api.put<{ success: boolean; data: DiscoverPost }>(`/discover/posts/${postId}`, formData)
+    return response.data.data
+  },
+
+  async deleteMine(postId: string): Promise<void> {
+    await api.delete(`/discover/posts/${postId}`)
+  },
+
+  async addProducts(postId: string, productIds: string[]): Promise<void> {
+    await api.post(`/discover/posts/${postId}/products`, { productIds })
+  },
+
+  async removeProduct(postId: string, productId: string): Promise<void> {
+    await api.delete(`/discover/posts/${postId}/products/${productId}`)
   },
 }
 

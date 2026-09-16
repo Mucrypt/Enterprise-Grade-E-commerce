@@ -677,6 +677,10 @@ export const getDiscoverFeed = async (req: Request, res: Response) => {
     const limit = Math.min(MAX_PUBLIC_POSTS_PER_PAGE, parseInt(String(req.query.limit || '10'), 10))
     const offset = (page - 1) * limit
     const userId = (req as AuthRequest).user?.userId
+    // Optional -- a seller's public profile page uses this to show only
+    // their own approved posts, reusing the exact same feed query/scoring
+    // instead of a separate endpoint.
+    const sellerId = req.query.sellerId ? String(req.query.sellerId) : null
 
     const postsResult = await dbQuery(
       `SELECT dp.*,
@@ -691,10 +695,10 @@ export const getDiscoverFeed = async (req: Request, res: Response) => {
        FROM discover_posts dp
        LEFT JOIN categories cat ON dp.category_id = cat.id
        LEFT JOIN seller_profiles sp ON dp.seller_profile_id = sp.id
-       WHERE dp.is_active = TRUE
+       WHERE dp.is_active = TRUE ${sellerId ? 'AND dp.seller_profile_id = $3' : ''}
        ORDER BY dp.position DESC, score DESC, dp.created_at DESC
        LIMIT $1 OFFSET $2`,
-      [limit, offset],
+      sellerId ? [limit, offset, sellerId] : [limit, offset],
     )
     const posts = postsResult.rows
     if (posts.length === 0) {

@@ -539,3 +539,85 @@ export const getMySellerVerificationRequests = async (
     })
   }
 }
+
+// =====================================================
+// PUBLIC SELLER PROFILE -- the storefront-facing page for an approved
+// seller's own brand (real follower count via seller_follows, mirroring
+// brand_follows exactly; real approved-only post count, never a
+// fabricated number). Unapproved/suspended sellers 404 here even if the
+// row exists -- there's nothing public to show for a profile that isn't
+// live yet.
+// =====================================================
+
+export const getPublicSellerProfile = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(await ensureSellerInfrastructure(res))) {
+      return
+    }
+
+    const { handle } = req.params
+    const viewerId = req.user?.userId
+
+    const result = await query(
+      `SELECT sp.id, sp.display_name, sp.handle, sp.bio, sp.avatar_url, sp.banner_url, sp.created_at,
+              (SELECT COUNT(*) FROM seller_follows sf WHERE sf.seller_profile_id = sp.id) as follower_count,
+              (SELECT COUNT(*) FROM discover_posts dp WHERE dp.seller_profile_id = sp.id AND dp.is_active = TRUE) as post_count
+              ${viewerId ? ', EXISTS(SELECT 1 FROM seller_follows sf2 WHERE sf2.seller_profile_id = sp.id AND sf2.user_id = $2) as is_following' : ''}
+       FROM seller_profiles sp
+       WHERE sp.handle = $1 AND sp.verification_status = 'approved' AND sp.is_active = TRUE AND sp.is_suspended = FALSE
+       LIMIT 1`,
+      viewerId ? [handle, viewerId] : [handle],
+    )
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Seller not found' })
+    }
+
+    const seller = result.rows[0]
+    return res.json({
+      success: true,
+      data: {
+        ...seller,
+        followerCount: parseInt(seller.follower_count, 10),
+        postCount: parseInt(seller.post_count, 10),
+        isFollowing: seller.is_following ?? false,
+      },
+    })
+  } catch (error) {
+    logger.error('Get public seller profile error:', error)
+    return res.status(500).json({ success: false, error: 'Failed to get seller profile' })
+  }
+}
+
+export const followSeller = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.userId
+    const { id } = req.params
+
+    await query(
+      `INSERT INTO seller_follows (user_id, seller_profile_id)
+       VALUES ($1, $2)
+       ON CONFLICT (user_id, seller_profile_id) DO NOTHING`,
+      [userId, id],
+    )
+
+    res.json({ success: true, message: 'Following seller' })
+  } catch (error) {
+    logger.error('Follow seller error:', error)
+    res.status(500).json({ success: false, error: 'Failed to follow seller' })
+  }
+}
+
+export const unfollowSeller = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.userId
+    const { id } = req.params
+
+    await query('DELETE FROM seller_follows WHERE user_id = $1 AND seller_profile_id = $2', [userId, id])
+
+    res.json({ success: true, message: 'Unfollowed seller' })
+  } catch (error) {
+    logger.error('Unfollow seller error:', error)
+    res.status(500).json({ success: false, error: 'Failed to unfollow seller' })
+  }
+}

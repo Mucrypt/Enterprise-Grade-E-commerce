@@ -17,14 +17,22 @@ import {
   Package,
   FolderKanban,
   Settings2,
+  Clapperboard,
+  Trash2,
+  Search,
+  Plus,
+  X,
+  Tag,
 } from 'lucide-react'
-import { creatorApi, sellerApi, userApi } from '../api'
+import { creatorApi, discoverApi, productsApi, sellerApi, userApi } from '../api'
+import type { DiscoverPost } from '../api'
 import type {
   CreatorBookDraftInput,
   CreatorActivityItem,
   CreatorDashboardMetrics,
   CreatorProduct,
   CreatorProfile,
+  Product,
   SellerProfile,
 } from '../types'
 import { useAuthStore } from '../stores'
@@ -105,6 +113,26 @@ export default function CreatorDashboardPage() {
     previewUrl: '',
     coverImageUrl: '',
   })
+
+  // "My Discover Posts" -- a seller's own shoppable video/image posts.
+  // Every create/edit lands pending review (backend-enforced, see
+  // requireAdminOrApprovedSeller in discover.controller.ts) until an
+  // admin approves it; this UI just reflects that real status, never
+  // claims a post is live before it actually is.
+  const [discoverPosts, setDiscoverPosts] = useState<DiscoverPost[]>([])
+  const [discoverPostsLoading, setDiscoverPostsLoading] = useState(false)
+  const [discoverMediaType, setDiscoverMediaType] = useState<'video' | 'image'>('video')
+  const [discoverCaption, setDiscoverCaption] = useState('')
+  const [discoverVideoFile, setDiscoverVideoFile] = useState<File | null>(null)
+  const [discoverPosterFile, setDiscoverPosterFile] = useState<File | null>(null)
+  const [discoverImageFiles, setDiscoverImageFiles] = useState<File[]>([])
+  const [isSavingDiscoverPost, setIsSavingDiscoverPost] = useState(false)
+  const [discoverFormError, setDiscoverFormError] = useState('')
+  const [productPanelPostId, setProductPanelPostId] = useState<string | null>(null)
+  const [productSearch, setProductSearch] = useState('')
+  const [productSearchResults, setProductSearchResults] = useState<Product[]>([])
+  const [isSearchingProducts, setIsSearchingProducts] = useState(false)
+  const [taggingProductId, setTaggingProductId] = useState<string | null>(null)
 
   useEffect(() => {
     if (hasHydrated && !isAuthenticated && !authLoading) {
@@ -233,6 +261,122 @@ export default function CreatorDashboardPage() {
     user?.is_business_account,
   ])
 
+  const loadDiscoverPosts = async () => {
+    setDiscoverPostsLoading(true)
+    try {
+      const posts = await discoverApi.getMine()
+      setDiscoverPosts(posts)
+    } catch {
+      // Soft failure -- the rest of the dashboard still works.
+    } finally {
+      setDiscoverPostsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!creatorDashboardReady) return
+    loadDiscoverPosts()
+  }, [creatorDashboardReady])
+
+  const resetDiscoverForm = () => {
+    setDiscoverMediaType('video')
+    setDiscoverCaption('')
+    setDiscoverVideoFile(null)
+    setDiscoverPosterFile(null)
+    setDiscoverImageFiles([])
+    setDiscoverFormError('')
+  }
+
+  const handleCreateDiscoverPost = async () => {
+    setDiscoverFormError('')
+
+    if (discoverMediaType === 'video' && !discoverVideoFile) {
+      setDiscoverFormError('Choose a video file first.')
+      return
+    }
+    if (discoverMediaType === 'image' && discoverImageFiles.length === 0) {
+      setDiscoverFormError('Choose at least one image.')
+      return
+    }
+
+    setIsSavingDiscoverPost(true)
+    try {
+      const formData = new FormData()
+      formData.append('mediaType', discoverMediaType)
+      if (discoverCaption) formData.append('caption', discoverCaption)
+      if (discoverMediaType === 'video' && discoverVideoFile) {
+        formData.append('video', discoverVideoFile)
+        if (discoverPosterFile) formData.append('poster', discoverPosterFile)
+      } else {
+        discoverImageFiles.forEach((file) => formData.append('images', file))
+      }
+
+      await discoverApi.createMine(formData)
+      resetDiscoverForm()
+      await loadDiscoverPosts()
+      setSuccess('Post submitted -- it will appear on Discover once an admin approves it.')
+    } catch (createError: any) {
+      setDiscoverFormError(
+        createError?.response?.data?.message || 'Could not create the post right now.',
+      )
+    } finally {
+      setIsSavingDiscoverPost(false)
+    }
+  }
+
+  const handleDeleteDiscoverPost = async (postId: string) => {
+    try {
+      await discoverApi.deleteMine(postId)
+      setDiscoverPosts((current) => current.filter((post) => post.id !== postId))
+    } catch (deleteError: any) {
+      setError(deleteError?.response?.data?.message || 'Could not delete the post right now.')
+    }
+  }
+
+  const handleToggleProductPanel = (postId: string) => {
+    setProductPanelPostId((current) => (current === postId ? null : postId))
+    setProductSearch('')
+    setProductSearchResults([])
+  }
+
+  const handleSearchProducts = async (search: string) => {
+    setProductSearch(search)
+    if (search.trim().length < 2) {
+      setProductSearchResults([])
+      return
+    }
+    setIsSearchingProducts(true)
+    try {
+      const result = await productsApi.getAll({ search, limit: 8 })
+      setProductSearchResults(result.products)
+    } catch {
+      setProductSearchResults([])
+    } finally {
+      setIsSearchingProducts(false)
+    }
+  }
+
+  const handleTagProduct = async (postId: string, productId: string) => {
+    setTaggingProductId(productId)
+    try {
+      await discoverApi.addProducts(postId, [productId])
+      await loadDiscoverPosts()
+    } catch (tagError: any) {
+      setError(tagError?.response?.data?.message || 'Could not tag that product.')
+    } finally {
+      setTaggingProductId(null)
+    }
+  }
+
+  const handleUntagProduct = async (postId: string, productId: string) => {
+    try {
+      await discoverApi.removeProduct(postId, productId)
+      await loadDiscoverPosts()
+    } catch (untagError: any) {
+      setError(untagError?.response?.data?.message || 'Could not remove that product.')
+    }
+  }
+
   const totalBooks = metrics?.activation.totalBooks ?? 0
   const publishedBooks = metrics?.activation.publishedBooks ?? 0
   const pendingReviewBooks = metrics?.activation.pendingReviewBooks ?? 0
@@ -274,6 +418,7 @@ export default function CreatorDashboardPage() {
   const sidebarNav = [
     { id: 'creator-overview', label: 'Overview', icon: BarChart3 },
     { id: 'product-studio', label: 'Product studio', icon: Package },
+    { id: 'discover-posts', label: 'My Discover Posts', icon: Clapperboard },
     { id: 'creator-activity', label: 'Activity feed', icon: ListTodo },
     { id: 'catalog-ops', label: 'Catalog ops', icon: FolderKanban },
     { id: 'creator-settings', label: 'Creator settings', icon: Settings2 },
@@ -1493,6 +1638,222 @@ export default function CreatorDashboardPage() {
                       {creatorProfile ? 'Ready' : 'Not configured'}
                     </span>
                   </div>
+                </div>
+              </div>
+            </div>
+
+            <div id='discover-posts' className='space-y-6'>
+              <div className='rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5'>
+                <h2 className='flex items-center gap-2 text-xl font-bold text-slate-900'>
+                  <Clapperboard className='h-5 w-5 text-orange-600' /> Create a Discover post
+                </h2>
+                <p className='mt-1 text-sm text-gray-500'>
+                  Your own video or images -- every post goes to Discover pending an admin&apos;s
+                  approval, and you can tag any real product once it&apos;s created.
+                </p>
+
+                <div className='mt-5 flex gap-2'>
+                  {(['video', 'image'] as const).map((type) => (
+                    <button
+                      key={type}
+                      type='button'
+                      onClick={() => setDiscoverMediaType(type)}
+                      className={`rounded-xl px-4 py-2 text-sm font-semibold capitalize transition ${
+                        discoverMediaType === type
+                          ? 'bg-slate-900 text-white'
+                          : 'bg-slate-50 text-gray-600 ring-1 ring-slate-100 hover:bg-slate-100'
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+
+                {discoverMediaType === 'video' ? (
+                  <div className='mt-4 grid gap-3 md:grid-cols-2'>
+                    <label className='flex flex-col gap-1 text-xs font-medium text-gray-500'>
+                      Video file
+                      <input
+                        type='file'
+                        accept='video/mp4,video/quicktime'
+                        onChange={(e) => setDiscoverVideoFile(e.target.files?.[0] || null)}
+                        className='rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none transition file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white'
+                      />
+                    </label>
+                    <label className='flex flex-col gap-1 text-xs font-medium text-gray-500'>
+                      Poster image (optional)
+                      <input
+                        type='file'
+                        accept='image/*'
+                        onChange={(e) => setDiscoverPosterFile(e.target.files?.[0] || null)}
+                        className='rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none transition file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white'
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <label className='mt-4 flex flex-col gap-1 text-xs font-medium text-gray-500'>
+                    Images (up to 10)
+                    <input
+                      type='file'
+                      accept='image/*'
+                      multiple
+                      onChange={(e) => setDiscoverImageFiles(Array.from(e.target.files || []).slice(0, 10))}
+                      className='rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none transition file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white'
+                    />
+                  </label>
+                )}
+
+                <textarea
+                  value={discoverCaption}
+                  onChange={(e) => setDiscoverCaption(e.target.value)}
+                  rows={2}
+                  placeholder='Caption (optional)'
+                  className='mt-4 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-orange-300 focus:ring-2 focus:ring-orange-100'
+                />
+
+                {discoverFormError && (
+                  <p className='mt-3 text-sm font-medium text-red-600'>{discoverFormError}</p>
+                )}
+
+                <button
+                  type='button'
+                  onClick={handleCreateDiscoverPost}
+                  disabled={isSavingDiscoverPost}
+                  className='mt-4 inline-flex items-center justify-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60'
+                >
+                  {isSavingDiscoverPost ? (
+                    <>
+                      <Loader2 className='h-4 w-4 animate-spin' /> Submitting...
+                    </>
+                  ) : (
+                    'Submit for review'
+                  )}
+                </button>
+              </div>
+
+              <div className='rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5'>
+                <div className='flex items-center justify-between gap-4'>
+                  <h2 className='flex items-center gap-2 text-xl font-bold text-slate-900'>
+                    <Package className='h-5 w-5 text-orange-600' /> Your posts
+                  </h2>
+                  <span className='rounded-xl bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-gray-500 ring-1 ring-slate-100'>
+                    {discoverPosts.length} total
+                  </span>
+                </div>
+
+                <div className='mt-5 space-y-4'>
+                  {discoverPostsLoading ? (
+                    <div className='flex items-center gap-2 text-sm text-gray-500'>
+                      <Loader2 className='h-4 w-4 animate-spin' /> Loading your posts...
+                    </div>
+                  ) : discoverPosts.length === 0 ? (
+                    <div className='rounded-2xl border border-dashed border-gray-200 bg-slate-50 px-4 py-6 text-sm text-gray-500'>
+                      No posts yet -- create your first one above.
+                    </div>
+                  ) : (
+                    discoverPosts.map((post) => (
+                      <div key={post.id} className='rounded-2xl border border-gray-100 bg-slate-50 p-4'>
+                        <div className='flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between'>
+                          <div>
+                            <p className='font-semibold text-slate-900'>
+                              {post.caption || <span className='text-gray-400'>No caption</span>}
+                            </p>
+                            <p className='text-xs text-gray-500 capitalize'>{post.media_type} post</p>
+                          </div>
+                          <span
+                            className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${
+                              post.is_active
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : 'bg-amber-100 text-amber-700'
+                            }`}
+                          >
+                            {post.is_active ? 'Live' : 'Pending review'}
+                          </span>
+                        </div>
+
+                        <div className='mt-3 flex items-center gap-3'>
+                          <button
+                            type='button'
+                            onClick={() => handleToggleProductPanel(post.id)}
+                            className='inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 ring-1 ring-slate-200 transition hover:bg-slate-50'
+                          >
+                            <Tag className='h-3.5 w-3.5' />
+                            {post.product_count ?? 0} tagged
+                          </button>
+                          <button
+                            type='button'
+                            onClick={() => handleDeleteDiscoverPost(post.id)}
+                            className='inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-red-600 ring-1 ring-slate-200 transition hover:bg-red-50'
+                          >
+                            <Trash2 className='h-3.5 w-3.5' />
+                            Delete
+                          </button>
+                        </div>
+
+                        {productPanelPostId === post.id && (
+                          <div className='mt-4 rounded-xl border border-gray-200 bg-white p-4'>
+                            <div className='flex items-center gap-2'>
+                              <Search className='h-4 w-4 text-gray-400' />
+                              <input
+                                value={productSearch}
+                                onChange={(e) => handleSearchProducts(e.target.value)}
+                                placeholder='Search products to tag...'
+                                className='w-full text-sm outline-none'
+                              />
+                            </div>
+
+                            {isSearchingProducts && (
+                              <p className='mt-2 text-xs text-gray-400'>Searching...</p>
+                            )}
+
+                            {productSearchResults.length > 0 && (
+                              <div className='mt-3 space-y-2'>
+                                {productSearchResults.map((product) => (
+                                  <div
+                                    key={product.id}
+                                    className='flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2'
+                                  >
+                                    <span className='truncate text-sm text-slate-800'>{product.name}</span>
+                                    <button
+                                      type='button'
+                                      onClick={() => handleTagProduct(post.id, product.id)}
+                                      disabled={taggingProductId === product.id}
+                                      className='inline-flex shrink-0 items-center gap-1 rounded-lg bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-60'
+                                    >
+                                      <Plus className='h-3 w-3' /> Tag
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {(post.products || []).length > 0 && (
+                              <div className='mt-4 space-y-2 border-t border-gray-100 pt-3'>
+                                <p className='text-xs font-semibold uppercase tracking-wide text-gray-400'>
+                                  Tagged products
+                                </p>
+                                {post.products.map((product) => (
+                                  <div
+                                    key={product.id}
+                                    className='flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2'
+                                  >
+                                    <span className='truncate text-sm text-slate-800'>{product.name}</span>
+                                    <button
+                                      type='button'
+                                      onClick={() => handleUntagProduct(post.id, product.id)}
+                                      className='shrink-0 text-gray-400 hover:text-red-600'
+                                    >
+                                      <X className='h-4 w-4' />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
