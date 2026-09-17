@@ -92,6 +92,15 @@ function DiscoverFeedContent() {
   const { data, isLoading } = useQuery({
     queryKey: ['discover-posts', tab],
     queryFn: () => discoverService.getAll(tab === 'pending' ? 'pending' : undefined),
+    // Video/audio uploads process in the background now (see
+    // discover.controller.ts) -- while any post here is still
+    // media_status='pending', poll so it flips to a real thumbnail/error
+    // on its own instead of the admin having to manually refresh to find
+    // out whether their upload ever finished.
+    refetchInterval: (query) => {
+      const rows: DiscoverPost[] = (query.state.data as any)?.data || []
+      return rows.some((p) => p.media_status === 'pending') ? 4000 : false
+    },
   })
   const posts: DiscoverPost[] = (data as any)?.data || []
 
@@ -341,7 +350,20 @@ function DiscoverFeedContent() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge variant='outline' className='capitalize'>{post.media_type}</Badge>
+                    <div className='flex flex-col gap-1'>
+                      <Badge variant='outline' className='capitalize w-fit'>{post.media_type}</Badge>
+                      {post.media_status === 'pending' && (
+                        <Badge variant='secondary' className='w-fit gap-1'>
+                          <Loader2 className='h-3 w-3 animate-spin' />
+                          Processing
+                        </Badge>
+                      )}
+                      {post.media_status === 'failed' && (
+                        <Badge variant='destructive' className='w-fit' title={post.media_error || 'Processing failed'}>
+                          Failed
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <Button variant='link' size='sm' className='h-auto p-0' onClick={() => setProductsPost(post)}>

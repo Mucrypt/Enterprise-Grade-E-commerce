@@ -32,6 +32,13 @@ export interface DiscoverPost {
   purchase_count: number
   created_at: string
   updated_at: string
+  // Video/audio uploads process in the background (ffmpeg transcode can
+  // take longer than any request timeout) -- 'pending' means the post
+  // exists but video_url/audio_url aren't ready yet and it won't show in
+  // the public feed until 'ready'. 'failed' surfaces media_error instead
+  // of leaving the admin guessing why nothing ever showed up.
+  media_status: 'pending' | 'ready' | 'failed'
+  media_error?: string | null
   // Admin-list-only field (getAdminDiscoverPosts only).
   product_count?: number
   // getAdminDiscoverPostById only -- the post's current tagged products /

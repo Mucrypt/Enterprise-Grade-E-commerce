@@ -56,26 +56,39 @@ const PRODUCT_SELECT_FIELDS = `
 const MAX_PUBLIC_POSTS_PER_PAGE = 20
 const MAX_TAGGED_PRODUCTS = 8
 
-async function resolvePostMedia(
+// Video/audio processing (ffmpeg transcode + CDN upload) is real work that
+// can legitimately take longer than any reasonable HTTP client timeout on
+// a real video -- confirmed live: admin dashboard uploads were timing out
+// at axios's 120s default while ffmpeg (given up to 5 minutes internally,
+// see TRANSCODE_TIMEOUT_MS) was still running. Poster/carousel images use
+// sharp (optimizeImage), not ffmpeg, and are fast enough to stay
+// synchronous. This only validates+resolves the fast media and hands back
+// the raw video/audio file handles for the caller to process in the
+// background instead (see processDeferredMediaInBackground below).
+async function resolveFastMedia(
   req: Request,
 ): Promise<{
-  videoUrl?: string
   videoPosterUrl?: string
   imageUrls?: string[]
-  audioUrl?: string
+  videoFile?: Express.Multer.File
+  audioFile?: Express.Multer.File
 }> {
   const files = req.files as
     | { [fieldname: string]: Express.Multer.File[] }
     | undefined
 
-  const result: { videoUrl?: string; videoPosterUrl?: string; imageUrls?: string[]; audioUrl?: string } = {}
+  const result: {
+    videoPosterUrl?: string
+    imageUrls?: string[]
+    videoFile?: Express.Multer.File
+    audioFile?: Express.Multer.File
+  } = {}
 
   const videoFile = files?.video?.[0]
   if (videoFile) {
     const validation = validateVideoFile(videoFile)
     if (!validation.valid) throw new Error(`Video: ${validation.error}`)
-    const processed = await processDiscoverVideo(videoFile)
-    result.videoUrl = processed.url
+    result.videoFile = videoFile
   }
 
   const posterFile = files?.poster?.[0]
@@ -102,11 +115,49 @@ async function resolvePostMedia(
   if (audioFile) {
     const validation = validateAudioFile(audioFile)
     if (!validation.valid) throw new Error(`Audio: ${validation.error}`)
-    const processed = await processDiscoverAudio(audioFile)
-    result.audioUrl = processed.url
+    result.audioFile = audioFile
   }
 
   return result
+}
+
+// Runs after the HTTP response has already gone out (see createDiscoverPost/
+// updateDiscoverPost) -- deliberately not awaited by the request handler.
+// The post row already exists with media_status='pending'; this fills in
+// the real video_url/audio_url and flips it to 'ready' on success, or
+// records why on failure, so the admin dashboard and public feed both have
+// something real to check instead of a request that just never returns.
+async function processDeferredMediaInBackground(
+  postId: string,
+  videoFile: Express.Multer.File | undefined,
+  audioFile: Express.Multer.File | undefined,
+): Promise<void> {
+  try {
+    const fields: string[] = []
+    const values: any[] = []
+    let n = 1
+
+    if (videoFile) {
+      const processed = await processDiscoverVideo(videoFile)
+      fields.push(`video_url = $${n++}`)
+      values.push(processed.url)
+    }
+    if (audioFile) {
+      const processed = await processDiscoverAudio(audioFile)
+      fields.push(`audio_url = $${n++}`)
+      values.push(processed.url)
+    }
+    fields.push(`media_status = 'ready'`)
+    values.push(postId)
+
+    await dbQuery(`UPDATE discover_posts SET ${fields.join(', ')} WHERE id = $${n}`, values)
+  } catch (error: any) {
+    logger.error(`Discover post ${postId} background media processing failed:`, error)
+    await dbQuery(
+      `UPDATE discover_posts SET media_status = 'failed', media_error = $1 WHERE id = $2`,
+      [String(error?.message || 'Processing failed').slice(0, 500), postId],
+    ).catch(() => undefined)
+  }
 }
 
 // Mirrors the DB's discover_post_video_requires_url CHECK constraint so a
@@ -256,9 +307,9 @@ export const createDiscoverPost = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'mediaType must be "video" or "image"' })
     }
 
-    const media = await resolvePostMedia(req)
+    const media = await resolveFastMedia(req)
 
-    if (mediaType === 'video' && !media.videoUrl && !req.body.videoUrl) {
+    if (mediaType === 'video' && !media.videoFile && !req.body.videoUrl) {
       return res.status(400).json({ success: false, message: 'A video file (or videoUrl) is required for a video post' })
     }
     if (mediaType === 'image' && (!media.imageUrls || media.imageUrls.length === 0)) {
@@ -272,24 +323,32 @@ export const createDiscoverPost = async (req: Request, res: Response) => {
     const isActive = authReq.sellerProfileId ? false : (req.body.isActive ?? true)
     // Sellers can't pin/reorder the global feed via position either.
     const resolvedPosition = authReq.sellerProfileId ? 0 : position
+    // A video/audio FILE needs real ffmpeg processing -- deferred to the
+    // background (see processDeferredMediaInBackground) so this request
+    // can return immediately instead of blocking on a transcode. A plain
+    // videoUrl string (no file) has nothing to process, so it's ready
+    // right away, same as before.
+    const needsBackgroundProcessing = !!media.videoFile || !!media.audioFile
+    const mediaStatus = needsBackgroundProcessing ? 'pending' : 'ready'
 
     const result = await dbQuery(
       `INSERT INTO discover_posts
-       (media_type, video_url, video_poster_url, caption, category_id, is_active, position, created_by, audio_url, audio_label, seller_profile_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       (media_type, video_url, video_poster_url, caption, category_id, is_active, position, created_by, audio_url, audio_label, seller_profile_id, media_status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING *`,
       [
         mediaType,
-        media.videoUrl || req.body.videoUrl || null,
+        media.videoFile ? null : req.body.videoUrl || null,
         media.videoPosterUrl || req.body.videoPosterUrl || null,
         caption || null,
         categoryId || null,
         isActive,
         resolvedPosition,
         userId || null,
-        media.audioUrl || null,
+        null,
         audioLabel || null,
         authReq.sellerProfileId || null,
+        mediaStatus,
       ],
     )
     const post = result.rows[0]
@@ -304,7 +363,18 @@ export const createDiscoverPost = async (req: Request, res: Response) => {
       }
     }
 
-    res.status(201).json({ success: true, message: 'Discover post created successfully', data: post })
+    if (needsBackgroundProcessing) {
+      // Fire-and-forget on purpose -- see processDeferredMediaInBackground.
+      void processDeferredMediaInBackground(post.id, media.videoFile, media.audioFile)
+    }
+
+    res.status(201).json({
+      success: true,
+      message: needsBackgroundProcessing
+        ? 'Discover post created -- video is processing and will appear in the feed shortly'
+        : 'Discover post created successfully',
+      data: post,
+    })
   } catch (error: any) {
     respondDiscoverError(res, error, 'Failed to create discover post')
   }
@@ -357,10 +427,14 @@ export const updateDiscoverPost = async (req: Request, res: Response) => {
       updates.isActive = false
     }
 
-    const media = await resolvePostMedia(req)
-    if (media.videoUrl) updates.videoUrl = media.videoUrl
+    const media = await resolveFastMedia(req)
     if (media.videoPosterUrl) updates.videoPosterUrl = media.videoPosterUrl
-    if (media.audioUrl) updates.audioUrl = media.audioUrl
+    // A new video/audio FILE needs real ffmpeg processing -- deferred to
+    // the background exactly like createDiscoverPost, so re-uploading a
+    // video on an edit doesn't time out either. videoUrl/audioUrl are
+    // deliberately NOT set from updates here when a file was uploaded --
+    // the background job fills them in once transcoding finishes.
+    const needsBackgroundProcessing = !!media.videoFile || !!media.audioFile
 
     const fields: string[] = []
     const values: any[] = []
@@ -375,6 +449,10 @@ export const updateDiscoverPost = async (req: Request, res: Response) => {
         appliedFields.add(dbField)
       }
     }
+    if (needsBackgroundProcessing) {
+      fields.push(`media_status = $${paramCount++}`)
+      values.push('pending')
+    }
 
     if (fields.length === 0) {
       return res.status(400).json({ success: false, message: 'No fields to update' })
@@ -386,8 +464,19 @@ export const updateDiscoverPost = async (req: Request, res: Response) => {
       `UPDATE discover_posts SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $${paramCount} RETURNING *`,
       values,
     )
+    const post = result.rows[0]
 
-    res.json({ success: true, message: 'Discover post updated successfully', data: result.rows[0] })
+    if (needsBackgroundProcessing) {
+      void processDeferredMediaInBackground(post.id, media.videoFile, media.audioFile)
+    }
+
+    res.json({
+      success: true,
+      message: needsBackgroundProcessing
+        ? 'Discover post updated -- video is processing and will appear in the feed shortly'
+        : 'Discover post updated successfully',
+      data: post,
+    })
   } catch (error: any) {
     respondDiscoverError(res, error, 'Failed to update discover post')
   }
@@ -654,7 +743,7 @@ export const getDiscoverFeed = async (req: Request, res: Response) => {
        FROM discover_posts dp
        LEFT JOIN categories cat ON dp.category_id = cat.id
        LEFT JOIN seller_profiles sp ON dp.seller_profile_id = sp.id
-       WHERE dp.is_active = TRUE ${sellerId ? 'AND dp.seller_profile_id = $3' : ''}
+       WHERE dp.is_active = TRUE AND dp.media_status = 'ready' ${sellerId ? 'AND dp.seller_profile_id = $3' : ''}
        ORDER BY dp.position DESC, score DESC, dp.created_at DESC
        LIMIT $1 OFFSET $2`,
       sellerId ? [limit, offset, sellerId] : [limit, offset],

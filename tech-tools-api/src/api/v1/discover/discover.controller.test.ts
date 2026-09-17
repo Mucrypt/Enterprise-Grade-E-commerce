@@ -8,6 +8,7 @@ import {
 } from './discover.controller'
 import { requireAdminOrApprovedSeller } from '../../../middleware/seller-auth'
 import { query, getClient } from '../../../database/connection'
+import { processDiscoverVideo } from '../../../utils/media'
 
 jest.mock('../../../database/connection', () => ({
   query: jest.fn(),
@@ -17,9 +18,30 @@ jest.mock('../../../utils/logger', () => ({
   __esModule: true,
   default: { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: jest.fn() },
 }))
+// Real validate*/process* would spawn actual ffmpeg -- mocked so these
+// tests exercise the controller's own pending/background-processing logic
+// (see discover.controller.ts's resolveFastMedia/processDeferredMediaInBackground)
+// without needing a real video file or ffmpeg binary.
+jest.mock('../../../utils/media', () => ({
+  validateVideoFile: jest.fn(() => ({ valid: true })),
+  validateImageFile: jest.fn(() => ({ valid: true })),
+  validateAudioFile: jest.fn(() => ({ valid: true })),
+  processDiscoverImage: jest.fn(async () => ({
+    optimized: { large: { url: 'https://cdn.example.com/poster.webp' } },
+    original: { url: 'https://cdn.example.com/poster-original.webp' },
+  })),
+  processDiscoverVideo: jest.fn(async () => ({
+    url: 'https://cdn.example.com/video.mp4',
+    fileName: 'video.mp4',
+    fileSize: 123,
+    format: 'mp4',
+  })),
+  processDiscoverAudio: jest.fn(async () => ({ url: 'https://cdn.example.com/audio.m4a' })),
+}))
 
 const mockQuery = query as jest.Mock
 const mockGetClient = getClient as jest.Mock
+const mockProcessDiscoverVideo = processDiscoverVideo as jest.Mock
 
 const makeRes = () => {
   const res: any = {}
@@ -81,6 +103,55 @@ describe('createDiscoverPost -- required media validation, no fabricated posts',
 
     expect(mockQuery).toHaveBeenCalled()
     expect(res.status).toHaveBeenCalledWith(201)
+  })
+})
+
+describe('createDiscoverPost -- a real video FILE processes in the background, not inline', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it('responds 201 with media_status=pending and a null video_url before ffmpeg finishes', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ id: POST_ID, media_type: 'video', video_url: null, media_status: 'pending' }],
+    })
+
+    // processDiscoverVideo's mock stays pending until resolveProcessing()
+    // is called below -- if createDiscoverPost awaited it inline, the
+    // assertions right after await createDiscoverPost(...) would never
+    // run within this test's lifetime. They do, which proves the
+    // response goes out without waiting for the transcode.
+    let resolveProcessing: () => void = () => undefined
+    const processing = new Promise<void>((resolve) => {
+      resolveProcessing = resolve
+    })
+    mockProcessDiscoverVideo.mockImplementation(async () => {
+      await processing
+      return { url: 'https://cdn.example.com/video.mp4', fileName: 'v.mp4', fileSize: 1, format: 'mp4' }
+    })
+
+    const req: any = {
+      body: { mediaType: 'video' },
+      files: { video: [{ path: '/tmp/upload.mp4', originalname: 'upload.mp4' }] },
+      user: { id: USER_ID },
+    }
+    const res = makeRes()
+
+    await createDiscoverPost(req, res)
+
+    expect(res.status).toHaveBeenCalledWith(201)
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: true,
+        message: expect.stringContaining('processing'),
+        data: expect.objectContaining({ media_status: 'pending' }),
+      }),
+    )
+
+    const insertParams = mockQuery.mock.calls[0][1]
+    expect(insertParams[1]).toBeNull() // video_url -- not known yet
+    expect(insertParams[11]).toBe('pending') // media_status
+
+    resolveProcessing()
+    await processing
   })
 })
 
@@ -327,6 +398,45 @@ describe('updateDiscoverPost / deleteDiscoverPost -- a seller can only touch the
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({ success: true }),
     )
+  })
+
+  it('re-uploading a video file on edit sets media_status=pending and defers the URL, same as create', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ created_by: USER_ID }] }) // ownership lookup
+      .mockResolvedValueOnce({ rows: [{ id: POST_ID, media_status: 'pending', video_url: null }] }) // UPDATE ... RETURNING *
+
+    let resolveProcessing: () => void = () => undefined
+    const processing = new Promise<void>((resolve) => {
+      resolveProcessing = resolve
+    })
+    mockProcessDiscoverVideo.mockImplementation(async () => {
+      await processing
+      return { url: 'https://cdn.example.com/replacement.mp4', fileName: 'v.mp4', fileSize: 1, format: 'mp4' }
+    })
+
+    const req: any = {
+      params: { id: POST_ID },
+      body: { caption: 'same post, new video' },
+      files: { video: [{ path: '/tmp/replacement.mp4', originalname: 'replacement.mp4' }] },
+      user: { id: USER_ID },
+    }
+    const res = makeRes()
+
+    await updateDiscoverPost(req, res)
+
+    const updateCall = mockQuery.mock.calls[1]
+    expect(updateCall[0]).toContain('media_status = $')
+    expect(updateCall[0]).not.toContain('video_url = $') // deferred -- no file-derived URL to write yet
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: true,
+        message: expect.stringContaining('processing'),
+        data: expect.objectContaining({ media_status: 'pending' }),
+      }),
+    )
+
+    resolveProcessing()
+    await processing
   })
 })
 
