@@ -113,7 +113,13 @@ export default function DiscoverTabScreen() {
   // back to the nearest exact multiple of slideHeight every time a
   // scroll gesture ends, so the result is always either "this slide" or
   // "the next slide" -- never a boundary in between.
-  const handleMomentumScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+  //
+  // Wired to BOTH onMomentumScrollEnd and onScrollEndDrag -- a fast fling
+  // ends via momentum, but a slower, more deliberate drag can release
+  // with too little velocity to ever enter a momentum phase at all, in
+  // which case onMomentumScrollEnd never fires and this correction would
+  // silently never run for that gesture.
+  const correctScrollPosition = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetY = e.nativeEvent.contentOffset.y
     const nearestIndex = Math.round(offsetY / slideHeight)
     const correctedOffset = nearestIndex * slideHeight
@@ -149,7 +155,8 @@ export default function DiscoverTabScreen() {
         ref={flatListRef}
         data={posts}
         keyExtractor={(item) => item.id}
-        onMomentumScrollEnd={handleMomentumScrollEnd}
+        onMomentumScrollEnd={correctScrollPosition}
+        onScrollEndDrag={correctScrollPosition}
         renderItem={({ item }) => (
           <DiscoverSlide
             post={item}
