@@ -121,10 +121,21 @@ export default function DiscoverTabScreen() {
   // silently never run for that gesture.
   const correctScrollPosition = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetY = e.nativeEvent.contentOffset.y
-    const nearestIndex = Math.round(offsetY / slideHeight)
+    const rawIndex = Math.round(offsetY / slideHeight)
+    const nearestIndex = Math.max(0, Math.min(posts.length - 1, rawIndex))
     const correctedOffset = nearestIndex * slideHeight
     if (Math.abs(offsetY - correctedOffset) > 1) {
-      flatListRef.current?.scrollToOffset({ offset: correctedOffset, animated: true })
+      // scrollToIndex (backed by getItemLayout) rather than a raw
+      // scrollToOffset -- confirmed live that the raw-offset version
+      // never actually fixed the very last slide specifically, even
+      // though it's wired to fire on every gesture end. A raw offset
+      // targeting exactly the end of the scrollable content is the one
+      // case a native scroll view is most likely to silently clamp
+      // short of, since it has no "next slide" beyond it to justify that
+      // much scroll room -- scrollToIndex asks for the item directly
+      // instead of trusting that pixel math lines up with however the
+      // native view computed its own max scroll extent.
+      flatListRef.current?.scrollToIndex({ index: nearestIndex, animated: true, viewPosition: 0 })
     }
   }
 
@@ -157,6 +168,16 @@ export default function DiscoverTabScreen() {
         keyExtractor={(item) => item.id}
         onMomentumScrollEnd={correctScrollPosition}
         onScrollEndDrag={correctScrollPosition}
+        // scrollToIndex can fail if the target hasn't been measured yet --
+        // shouldn't happen here since getItemLayout makes that measurement
+        // synchronous, but falling back to the raw offset keeps this
+        // correction from silently doing nothing if it ever does.
+        onScrollToIndexFailed={(info) => {
+          flatListRef.current?.scrollToOffset({
+            offset: info.averageItemLength * info.index,
+            animated: true,
+          })
+        }}
         renderItem={({ item }) => (
           <DiscoverSlide
             post={item}
