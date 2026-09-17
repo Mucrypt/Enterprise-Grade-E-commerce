@@ -20,6 +20,8 @@ import {
   Text,
   StyleSheet,
   ViewToken,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
 } from 'react-native'
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs'
 import { setAudioModeAsync } from 'expo-audio'
@@ -48,6 +50,7 @@ export default function DiscoverTabScreen() {
   } | null>(null)
 
   const loadingRef = useRef(false)
+  const flatListRef = useRef<FlatList<DiscoverPost>>(null)
 
   const loadPage = useCallback(async (nextPage: number) => {
     if (loadingRef.current) return
@@ -101,6 +104,24 @@ export default function DiscoverTabScreen() {
     if (!loadingRef.current && hasMore) loadPage(page + 1)
   }
 
+  // Belt-and-braces on top of snapToInterval below: confirmed real and
+  // mobile-specific (the exact same post renders correctly on the web
+  // storefront, so this isn't a data/content issue) -- some scroll
+  // gestures still settle a few pixels off a true slide boundary on
+  // Android, showing a sliver of the adjacent slide. Whatever native
+  // precision quirk causes that, this forces the final rest position
+  // back to the nearest exact multiple of slideHeight every time a
+  // scroll gesture ends, so the result is always either "this slide" or
+  // "the next slide" -- never a boundary in between.
+  const handleMomentumScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offsetY = e.nativeEvent.contentOffset.y
+    const nearestIndex = Math.round(offsetY / slideHeight)
+    const correctedOffset = nearestIndex * slideHeight
+    if (Math.abs(offsetY - correctedOffset) > 1) {
+      flatListRef.current?.scrollToOffset({ offset: correctedOffset, animated: true })
+    }
+  }
+
   const handleOpenProduct = (post: DiscoverPost, productId?: string) => {
     setSheet({ products: post.products, initialProductId: productId, discoverPostId: post.id })
     getEventTracker().trackDiscoverEvent('discover_product_card_open', post.id, { productId })
@@ -125,8 +146,10 @@ export default function DiscoverTabScreen() {
   return (
     <View style={styles.container}>
       <FlatList
+        ref={flatListRef}
         data={posts}
         keyExtractor={(item) => item.id}
+        onMomentumScrollEnd={handleMomentumScrollEnd}
         renderItem={({ item }) => (
           <DiscoverSlide
             post={item}
