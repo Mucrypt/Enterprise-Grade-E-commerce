@@ -327,7 +327,7 @@ export function HeroSlideItemsManager({ open, onClose, slide }: HeroSlideItemsMa
                 />
               </div>
 
-              <ScrollArea className='flex-1 max-h-100'>
+              <ScrollArea className='flex-1 max-h-[400px]'>
                 {availableLoading ? (
                   <div className='space-y-2'>
                     {[...Array(5)].map((_, i) => (
