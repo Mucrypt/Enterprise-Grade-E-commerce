@@ -149,6 +149,17 @@ export default function DiscoverTabScreen() {
         snapToAlignment="start"
         decelerationRate="fast"
         disableIntervalMomentum
+        // With nothing below the last slide (or above the first) to snap
+        // against, elastic overscroll can carry a fling slightly past its
+        // true position and rest there instead of snapping back --
+        // confirmed live: only the last slide's product card (anchored to
+        // the bottom of its own slide) visibly shifted, since the whole
+        // slide was resting a bit higher than its real snap point.
+        // Disabling bounce/overscroll means every slide, first and last
+        // included, can only ever rest exactly on a snapToInterval
+        // boundary.
+        bounces={false}
+        overScrollMode="never"
         showsVerticalScrollIndicator={false}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
