@@ -135,7 +135,20 @@ export default function DiscoverTabScreen() {
             onOpenProduct={(productId) => handleOpenProduct(item, productId)}
           />
         )}
-        pagingEnabled
+        // pagingEnabled snaps to the FlatList's own measured frame height,
+        // NOT the slideHeight used below in getItemLayout -- any tiny
+        // mismatch between the two (safe-area insets, notch, a status bar
+        // height that Dimensions.get('window') doesn't perfectly account
+        // for) compounds with every swipe, which is exactly what showed
+        // up live: the first slide centered fine, then each subsequent
+        // one drifted further off until slides were showing half-and-half.
+        // snapToInterval driven by the SAME slideHeight value as
+        // getItemLayout guarantees both agree on exactly where each slide
+        // starts, so there's nothing left to drift.
+        snapToInterval={slideHeight}
+        snapToAlignment="start"
+        decelerationRate="fast"
+        disableIntervalMomentum
         showsVerticalScrollIndicator={false}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
