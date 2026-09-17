@@ -172,7 +172,15 @@ export default function DiscoverTabScreen() {
         onEndReachedThreshold={1.5}
         windowSize={3}
         maxToRenderPerBatch={2}
-        removeClippedSubviews
+        // removeClippedSubviews has long-documented Android rendering bugs
+        // when list items contain complex native views (video players,
+        // BlurView, absolutely-positioned overlays) -- exactly what each
+        // Discover slide is. Confirmed live: reached only when scrolling
+        // into a slide, at rest, after a full reload (so not a stale-code
+        // or mid-gesture issue) -- a clipped-then-reattached slide can
+        // render with the wrong/stale content instead of a real scroll
+        // misalignment. With only a handful of posts in this feed, the
+        // memory/perf win this prop exists for is negligible anyway.
       />
 
       {sheet && (
