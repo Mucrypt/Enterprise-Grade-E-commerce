@@ -105,7 +105,7 @@ export default function TrendingBrandSection({
           <View style={styles.brandDetails}>
             <Text style={styles.brandName}>{brand.name}</Text>
             <View style={styles.statsRow}>
-              {stats?.soldCount && (
+              {!!stats?.soldCount && (
                 <View style={styles.statItem}>
                   <Ionicons name='flash' size={12} color={AppColors.primary} />
                   <Text style={styles.statText}>
@@ -113,7 +113,7 @@ export default function TrendingBrandSection({
                   </Text>
                 </View>
               )}
-              {stats?.newProductsCount && stats.newProductsCount > 0 && (
+              {!!stats?.newProductsCount && stats.newProductsCount > 0 && (
                 <View style={styles.newBadge}>
                   <Text style={styles.newBadgeText}>
                     {stats.newProductsCount}+ New
