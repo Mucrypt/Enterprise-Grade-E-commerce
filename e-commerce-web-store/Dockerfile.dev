@@ -17,7 +17,10 @@ RUN apk add --no-cache libc6-compat
 # `npm ci`, which only works there because admin-dashboard happens to
 # carry its own separate committed lockfile.
 COPY package.json package-lock.json* ./
-RUN npm install
+# --no-audit skips npm's post-install registry audit call -- confirmed
+# unreliable in this Docker network environment (see
+# admin-dashboard/Dockerfile.dev), and not needed for a container build.
+RUN npm install --no-audit --no-fund
 
 COPY . .
 

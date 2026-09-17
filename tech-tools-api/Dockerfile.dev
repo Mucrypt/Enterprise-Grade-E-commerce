@@ -13,8 +13,11 @@ RUN apk add --no-cache \
 # Copy package files
 COPY package*.json ./
 
-# Install all dependencies (including dev dependencies)
-RUN npm install
+# Install all dependencies (including dev dependencies). --no-audit
+# skips npm's post-install registry audit call -- confirmed unreliable
+# in this Docker network environment (see admin-dashboard/Dockerfile.dev),
+# and not needed for a container build anyway.
+RUN npm install --no-audit --no-fund
 
 # Copy source code
 COPY . .

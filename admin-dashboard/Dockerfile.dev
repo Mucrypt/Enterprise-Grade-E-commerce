@@ -12,8 +12,14 @@ RUN apk add --no-cache libc6-compat
 # Copy package files
 COPY package.json package-lock.json* ./
 
-# Install dependencies
-RUN npm ci
+# Install dependencies. --no-audit skips npm's post-install call to the
+# registry's audit endpoint -- confirmed live: two consecutive builds
+# both got ECONNRESET a few seconds after npm's own "audit endpoint is
+# being retired" notice, right at the very end of an otherwise-successful
+# install. Not needed for a container build anyway (nothing here acts on
+# an audit result), so removing that one unreliable network call outright
+# beats hoping for a third attempt to get lucky.
+RUN npm ci --no-audit --no-fund
 
 # Copy application code
 COPY . .
