@@ -8,8 +8,16 @@ WORKDIR /app
 
 RUN apk add --no-cache libc6-compat
 
+# e-commerce-web-store is a root npm workspace member -- it has no
+# package-lock.json of its own (only the monorepo root does), so `npm ci`
+# (which hard-requires an existing lockfile) always failed here on a
+# fresh `docker compose up`. tech-tools-api/Dockerfile.dev and the
+# production Dockerfile both already use `npm install` for exactly this
+# reason; matching that instead of the admin-dashboard Dockerfile.dev's
+# `npm ci`, which only works there because admin-dashboard happens to
+# carry its own separate committed lockfile.
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm install
 
 COPY . .
 
