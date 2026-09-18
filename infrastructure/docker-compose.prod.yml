@@ -140,6 +140,12 @@ services:
       BOOKS_MARKETPLACE_ENABLED: ${BOOKS_MARKETPLACE_ENABLED:-false}
       CREATOR_PORTAL_ENABLED: ${CREATOR_PORTAL_ENABLED:-false}
       DIGITAL_LIBRARY_ENABLED: ${DIGITAL_LIBRARY_ENABLED:-false}
+      # Gates the entire seller subsystem (seller_profiles, tiers,
+      # verification, payouts, support tickets) -- was never added here,
+      # so setting it in .env alone did nothing: docker compose only
+      # injects vars explicitly listed in this environment: block, so the
+      # running container always saw it as unset regardless of .env.
+      ENABLE_SELLER_TIERS: ${ENABLE_SELLER_TIERS:-false}
     volumes:
       - api_uploads:/app/uploads
     networks:
