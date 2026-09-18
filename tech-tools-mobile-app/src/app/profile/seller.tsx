@@ -339,13 +339,22 @@ export default function SellerHubScreen() {
         </View>
 
         {creatorDashboardReady && (
-          <TouchableOpacity
-            style={styles.manageProductsButton}
-            onPress={() => router.push('/profile/seller-products' as never)}
-          >
-            <Ionicons name="storefront-outline" size={18} color={AppColors.white} />
-            <Text style={styles.manageProductsButtonText}>Manage My Products</Text>
-          </TouchableOpacity>
+          <View style={styles.hubActionsRow}>
+            <TouchableOpacity
+              style={[styles.manageProductsButton, styles.hubActionButton]}
+              onPress={() => router.push('/profile/seller-products' as never)}
+            >
+              <Ionicons name="storefront-outline" size={18} color={AppColors.white} />
+              <Text style={styles.manageProductsButtonText}>Manage My Products</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.manageProductsButton, styles.hubActionButton, styles.earningsButton]}
+              onPress={() => router.push('/profile/seller-earnings' as never)}
+            >
+              <Ionicons name="wallet-outline" size={18} color={AppColors.white} />
+              <Text style={styles.manageProductsButtonText}>Earnings</Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         <View style={styles.statsRow}>
@@ -610,6 +619,15 @@ const styles = StyleSheet.create({
     padding: AppSpacing.md,
     lineHeight: 20,
   },
+  hubActionsRow: {
+    flexDirection: 'row',
+    gap: AppSpacing.sm,
+    marginBottom: AppSpacing.md,
+  },
+  hubActionButton: {
+    flex: 1,
+    marginBottom: 0,
+  },
   manageProductsButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -619,6 +637,9 @@ const styles = StyleSheet.create({
     borderRadius: AppBorderRadius.md,
     paddingVertical: AppSpacing.sm + 4,
     marginBottom: AppSpacing.md,
+  },
+  earningsButton: {
+    backgroundColor: AppColors.gray900,
   },
   manageProductsButtonText: {
     fontSize: 14,

@@ -177,6 +177,22 @@ const navigation: NavItem[] = [
     href: '/sellers',
     icon: UserCheck,
     badge: 'New',
+    children: [
+      {
+        title: 'Verification',
+        href: '/sellers',
+        icon: UserCheck,
+      },
+      {
+        title: 'Payouts',
+        href: '/sellers/payouts',
+        // Real money-movement surface, gated tighter than seller
+        // verification -- sellers.payouts.view, not implied by any
+        // catalog/seller-review permission (staff-permissions.config.ts).
+        icon: Wallet,
+        permission: 'sellers.payouts.view',
+      },
+    ],
   },
   {
     title: 'Media Library',

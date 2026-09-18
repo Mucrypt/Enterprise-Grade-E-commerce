@@ -40,6 +40,10 @@ import {
   stopAffiliateCommissionWorker,
 } from './services/affiliate-commission.queue'
 import {
+  startSellerPayoutCommissionWorker,
+  stopSellerPayoutCommissionWorker,
+} from './services/seller-payout-commission.queue'
+import {
   startChannelProductSyncWorker,
   stopChannelProductSyncWorker,
 } from './services/channels/channel-product-sync.worker'
@@ -158,6 +162,7 @@ if (cluster.isPrimary && numWorkers > 1) {
         startMetricsBroadcaster()
         startPromotionQueueWorker()
         startAffiliateCommissionWorker()
+        startSellerPayoutCommissionWorker()
         startChannelProductSyncWorker()
         startChannelInventoryDiffWorker()
         startChannelOrderImportWorker()
@@ -192,6 +197,7 @@ if (cluster.isPrimary && numWorkers > 1) {
       stopMetricsBroadcaster()
       stopPromotionQueueWorker()
       stopAffiliateCommissionWorker()
+      stopSellerPayoutCommissionWorker()
       stopChannelProductSyncWorker()
       stopChannelInventoryDiffWorker()
       stopChannelOrderImportWorker()

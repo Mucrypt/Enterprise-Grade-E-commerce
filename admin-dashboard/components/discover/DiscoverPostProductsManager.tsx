@@ -327,7 +327,7 @@ export function DiscoverPostProductsManager({ open, onClose, post }: DiscoverPos
                 />
               </div>
 
-              <ScrollArea className='flex-1 max-h-[400px]'>
+              <ScrollArea className='flex-1 max-h-100'>
                 {availableLoading ? (
                   <div className='space-y-2'>
                     {[...Array(5)].map((_, i) => (

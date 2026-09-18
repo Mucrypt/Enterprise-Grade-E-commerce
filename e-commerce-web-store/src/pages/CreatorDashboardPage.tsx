@@ -23,9 +23,19 @@ import {
   Plus,
   X,
   Tag,
+  Wallet,
 } from 'lucide-react'
-import { categoriesApi, creatorApi, discoverApi, productsApi, sellerApi, sellerProductsApi, userApi } from '../api'
-import type { DiscoverPost, SellerProduct } from '../api'
+import {
+  categoriesApi,
+  creatorApi,
+  discoverApi,
+  productsApi,
+  sellerApi,
+  sellerEarningsApi,
+  sellerProductsApi,
+  userApi,
+} from '../api'
+import type { DiscoverPost, SellerEarningsSummary, SellerLedgerEntry, SellerProduct } from '../api'
 import type {
   Category,
   CreatorBookDraftInput,
@@ -151,6 +161,16 @@ export default function CreatorDashboardPage() {
   const [storeProductImages, setStoreProductImages] = useState<File[]>([])
   const [isSavingStoreProduct, setIsSavingStoreProduct] = useState(false)
   const [storeProductFormError, setStoreProductFormError] = useState('')
+
+  // "Earnings" -- real balances computed from the seller_payout_ledger,
+  // never a client-side estimate. See seller-payout.service.ts.
+  const [earningsSummary, setEarningsSummary] = useState<SellerEarningsSummary | null>(null)
+  const [earningsSummaryLoading, setEarningsSummaryLoading] = useState(false)
+  const [earningsLedger, setEarningsLedger] = useState<SellerLedgerEntry[]>([])
+  const [earningsLedgerPage, setEarningsLedgerPage] = useState(1)
+  const [earningsLedgerHasMore, setEarningsLedgerHasMore] = useState(false)
+  const [earningsLedgerLoading, setEarningsLedgerLoading] = useState(false)
+  const [isLoadingMoreLedger, setIsLoadingMoreLedger] = useState(false)
 
   useEffect(() => {
     if (hasHydrated && !isAuthenticated && !authLoading) {
@@ -413,6 +433,54 @@ export default function CreatorDashboardPage() {
     categoriesApi.getAll().then(setStoreCategories).catch(() => setStoreCategories([]))
   }, [creatorDashboardReady])
 
+  const loadEarningsSummary = async () => {
+    setEarningsSummaryLoading(true)
+    try {
+      const summary = await sellerEarningsApi.getSummary()
+      setEarningsSummary(summary)
+    } catch {
+      // Soft failure -- the rest of the dashboard still works.
+    } finally {
+      setEarningsSummaryLoading(false)
+    }
+  }
+
+  const loadEarningsLedger = async (page: number) => {
+    setEarningsLedgerLoading(true)
+    try {
+      const result = await sellerEarningsApi.getLedger({ page, limit: 20 })
+      setEarningsLedger((current) => (page === 1 ? result.entries : [...current, ...result.entries]))
+      setEarningsLedgerPage(result.page)
+      setEarningsLedgerHasMore(result.hasMore)
+    } catch {
+      // Soft failure -- the rest of the dashboard still works.
+    } finally {
+      setEarningsLedgerLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!creatorDashboardReady) return
+    loadEarningsSummary()
+    loadEarningsLedger(1)
+  }, [creatorDashboardReady])
+
+  const handleLoadMoreLedger = async () => {
+    if (!earningsLedgerHasMore || isLoadingMoreLedger) return
+    setIsLoadingMoreLedger(true)
+    try {
+      await loadEarningsLedger(earningsLedgerPage + 1)
+    } finally {
+      setIsLoadingMoreLedger(false)
+    }
+  }
+
+  const earningsLedgerReasonLabel: Record<string, string> = {
+    earning_confirmed: 'Earning confirmed',
+    earning_clawback: 'Clawed back',
+    payout_sent: 'Payout sent',
+  }
+
   const resetStoreProductForm = () => {
     setStoreProductName('')
     setStoreProductDescription('')
@@ -525,6 +593,7 @@ export default function CreatorDashboardPage() {
     { id: 'product-studio', label: 'Product studio', icon: Package },
     { id: 'discover-posts', label: 'My Discover Posts', icon: Clapperboard },
     { id: 'store-products', label: 'My Store Products', icon: Store },
+    { id: 'creator-earnings', label: 'Earnings', icon: Wallet },
     { id: 'creator-activity', label: 'Activity feed', icon: ListTodo },
     { id: 'catalog-ops', label: 'Catalog ops', icon: FolderKanban },
     { id: 'creator-settings', label: 'Creator settings', icon: Settings2 },
@@ -2108,6 +2177,136 @@ export default function CreatorDashboardPage() {
                     ))
                   )}
                 </div>
+              </div>
+            </div>
+
+            <div id='creator-earnings' className='space-y-6'>
+              <div className='rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5'>
+                <h2 className='flex items-center gap-2 text-xl font-bold text-slate-900'>
+                  <Wallet className='h-5 w-5 text-orange-600' /> Earnings
+                </h2>
+                <p className='mt-1 text-sm text-gray-500'>
+                  What you&apos;ve earned from your own store products and Discover sales. Balances
+                  are computed live from your real payout history -- never an estimate.
+                </p>
+
+                {earningsSummaryLoading && !earningsSummary ? (
+                  <div className='mt-5 flex items-center gap-2 text-sm text-gray-500'>
+                    <Loader2 className='h-4 w-4 animate-spin' /> Loading your earnings...
+                  </div>
+                ) : (
+                  <>
+                    <div className='mt-5 grid gap-3 sm:grid-cols-3'>
+                      <div className='rounded-2xl border border-gray-100 bg-slate-50 p-4'>
+                        <p className='text-xs font-semibold uppercase tracking-[0.2em] text-gray-500'>
+                          Pending
+                        </p>
+                        <p className='mt-1 text-2xl font-bold text-slate-900'>
+                          {formatMoney(earningsSummary?.pendingBalance ?? 0)}
+                        </p>
+                        <p className='mt-1 text-xs text-gray-500'>
+                          Not yet confirmed -- still inside the payout hold period.
+                        </p>
+                      </div>
+                      <div className='rounded-2xl border border-gray-100 bg-slate-50 p-4'>
+                        <p className='text-xs font-semibold uppercase tracking-[0.2em] text-gray-500'>
+                          Owed to you
+                        </p>
+                        <p className='mt-1 text-2xl font-bold text-emerald-700'>
+                          {formatMoney(earningsSummary?.confirmedUnpaidBalance ?? 0)}
+                        </p>
+                        <p className='mt-1 text-xs text-gray-500'>Confirmed and ready for payout.</p>
+                      </div>
+                      <div className='rounded-2xl border border-gray-100 bg-slate-50 p-4'>
+                        <p className='text-xs font-semibold uppercase tracking-[0.2em] text-gray-500'>
+                          Lifetime paid
+                        </p>
+                        <p className='mt-1 text-2xl font-bold text-slate-900'>
+                          {formatMoney(earningsSummary?.lifetimePaid ?? 0)}
+                        </p>
+                        <p className='mt-1 text-xs text-gray-500'>Total sent to you so far.</p>
+                      </div>
+                    </div>
+
+                    {earningsSummary?.tier ? (
+                      <p className='mt-4 text-xs text-gray-500'>
+                        Current tier: <span className='font-semibold text-slate-700'>{earningsSummary.tier}</span>
+                        {earningsSummary.commissionRate !== null && (
+                          <> -- {earningsSummary.commissionRate}% platform commission on new sales.</>
+                        )}
+                      </p>
+                    ) : null}
+                  </>
+                )}
+              </div>
+
+              <div className='rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5'>
+                <h2 className='flex items-center gap-2 text-xl font-bold text-slate-900'>
+                  <DollarSign className='h-5 w-5 text-orange-600' /> Payout history
+                </h2>
+
+                <div className='mt-5 space-y-2'>
+                  {earningsLedgerLoading && earningsLedger.length === 0 ? (
+                    <div className='flex items-center gap-2 text-sm text-gray-500'>
+                      <Loader2 className='h-4 w-4 animate-spin' /> Loading your history...
+                    </div>
+                  ) : earningsLedger.length === 0 ? (
+                    <div className='rounded-2xl border border-dashed border-gray-200 bg-slate-50 px-4 py-6 text-sm text-gray-500'>
+                      Nothing here yet -- entries appear once an order confirms and clears its
+                      hold period.
+                    </div>
+                  ) : (
+                    earningsLedger.map((entry) => {
+                      const amount = Number(entry.delta_amount)
+                      return (
+                        <div
+                          key={entry.id}
+                          className='flex items-center justify-between gap-4 rounded-2xl border border-gray-100 bg-slate-50 px-4 py-3'
+                        >
+                          <div>
+                            <p className='text-sm font-medium text-slate-900'>
+                              {earningsLedgerReasonLabel[entry.reason] || entry.reason}
+                            </p>
+                            <p className='text-xs text-gray-500'>
+                              {new Date(entry.created_at).toLocaleDateString(undefined, {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                              })}
+                            </p>
+                          </div>
+                          <p
+                            className={`text-sm font-bold ${
+                              amount >= 0 ? 'text-emerald-700' : 'text-red-600'
+                            }`}
+                          >
+                            {amount >= 0 ? '+' : ''}
+                            {formatMoney(amount)}
+                          </p>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+
+                {earningsLedgerHasMore ? (
+                  <div className='mt-5'>
+                    <button
+                      type='button'
+                      onClick={handleLoadMoreLedger}
+                      disabled={isLoadingMoreLedger}
+                      className='inline-flex items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60'
+                    >
+                      {isLoadingMoreLedger ? (
+                        <>
+                          <Loader2 className='h-4 w-4 animate-spin' /> Loading more
+                        </>
+                      ) : (
+                        'Load more history'
+                      )}
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>

@@ -58,6 +58,15 @@ export type Permission =
   | 'affiliates.view'
   | 'affiliates.manage'
   | 'affiliates.payouts'
+  // Seller earnings & manual payouts -- a real money-movement surface
+  // (seller_earnings/seller_payout_ledger, see
+  // 071_seller_earnings_payouts.sql), split into view/manage the same
+  // way 'affiliates.payouts' is split from 'affiliates.manage'.
+  // Narrowest reasonable default: withheld from every role below except
+  // ADMIN/OWNER at launch, expanded later once a real deployment proves
+  // the workflow.
+  | 'sellers.payouts.view'
+  | 'sellers.payouts.manage'
   // Hero Slides CMS -- the admin-managed homepage hero carousel (which
   // products/categories/collections appear, ordering, product_grid
   // slides). Homepage content, not a catalog concern -- see the grant
@@ -131,6 +140,8 @@ const ALL_PERMISSIONS: Permission[] = [
   'affiliates.view',
   'affiliates.manage',
   'affiliates.payouts',
+  'sellers.payouts.view',
+  'sellers.payouts.manage',
   'homepage.view',
   'homepage.manage',
   'discover.view',
@@ -210,6 +221,8 @@ export const STAFF_ROLE_PERMISSIONS: Record<StaffRole, ReadonlySet<Permission>> 
     'affiliates.view',
     'affiliates.manage',
     'affiliates.payouts',
+    'sellers.payouts.view',
+    'sellers.payouts.manage',
     'homepage.view',
     'homepage.manage',
     'discover.view',

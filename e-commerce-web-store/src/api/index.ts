@@ -1126,6 +1126,45 @@ export const sellerProductsApi = {
   },
 }
 
+export interface SellerEarningsSummary {
+  pendingBalance: number
+  confirmedUnpaidBalance: number
+  lifetimePaid: number
+  tier: string | null
+  commissionRate: number | null
+}
+
+export interface SellerLedgerEntry {
+  id: string
+  delta_amount: string
+  reason: string
+  reference_type: string | null
+  reference_id: string | null
+  created_at: string
+}
+
+// Read-only view over the seller's own seller_earnings/seller_payout_ledger
+// rows -- balances are always computed live on the backend (SUM of real
+// ledger rows), never a cached rollup. See seller-payout.service.ts.
+export const sellerEarningsApi = {
+  async getSummary(): Promise<SellerEarningsSummary> {
+    const response = await api.get<{ success: boolean; data: SellerEarningsSummary }>('/seller/earnings/summary')
+    return response.data.data
+  },
+
+  async getLedger(params?: { page?: number; limit?: number }): Promise<{
+    entries: SellerLedgerEntry[]
+    page: number
+    hasMore: boolean
+  }> {
+    const response = await api.get<{
+      success: boolean
+      data: { entries: SellerLedgerEntry[]; page: number; hasMore: boolean }
+    }>('/seller/earnings/ledger', { params })
+    return response.data.data
+  },
+}
+
 export const creatorApi = {
   normalizeProduct(raw: any): CreatorProduct {
     return {

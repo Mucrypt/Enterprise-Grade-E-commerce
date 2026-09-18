@@ -22,6 +22,7 @@ import {
   deleteSellerProduct,
   reviewSellerProduct,
 } from './seller-product.controller'
+import { getMyEarningsSummary, getMyEarningsLedger } from './seller-earnings.controller'
 
 const router = Router()
 
@@ -84,5 +85,14 @@ router.delete('/products/:id', requireAdminOrApprovedSeller, deleteSellerProduct
 // is distinct), but stays strictly admin, unlike the seller-facing ones.
 router.get('/products/pending', authorize('admin', 'super_admin'), getPendingSellerProducts)
 router.patch('/products/:id/review', authorize('admin', 'super_admin'), reviewSellerProduct)
+
+// =====================================================
+// Seller-facing earnings -- read-only. Admin's view over ALL sellers'
+// balances/payouts lives separately at /admin/seller-payouts (a distinct
+// money-movement surface with its own permission gates, not bolted onto
+// this file).
+// =====================================================
+router.get('/earnings/summary', requireAdminOrApprovedSeller, getMyEarningsSummary)
+router.get('/earnings/ledger', requireAdminOrApprovedSeller, getMyEarningsLedger)
 
 export default router

@@ -502,6 +502,20 @@ class StripeService {
         )
       }
 
+      // Seller earnings -- same "only on confirmed payment, never at
+      // checkout-session creation" reasoning as affiliate commissions
+      // above. Idempotent on (order_id, seller_profile_id), so a Stripe
+      // webhook retry never double-records.
+      try {
+        const { recordSellerEarningsForOrder } = await import('./seller-payout.service')
+        await recordSellerEarningsForOrder(orderId)
+      } catch (sellerPayoutError) {
+        logger.error(
+          'Failed to record seller earnings after payment succeeded:',
+          sellerPayoutError,
+        )
+      }
+
       // Send the order confirmation email/WhatsApp now that payment is
       // actually confirmed -- not a fatal error for the webhook if this
       // fails, same "don't fail the order over a notification" rule the
