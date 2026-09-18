@@ -80,6 +80,44 @@ describe('seller-support.service -- real threaded seller<->staff conversation', 
     expect(insertCall![1][3]).toBe('other')
   })
 
+  it('createTicket opened by admin (openedBy.senderType=staff) inserts the message as staff and notifies the seller, not the staff broadcast', async () => {
+    const { service, freshQuery } = loadServiceFresh()
+    const freshEmailService = require('./email.service').default
+    const freshNotificationService = require('./notification.service').NotificationService
+    freshQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('INSERT INTO support_tickets'))
+        return { rows: [{ id: 'ticket-1', subject: 'Please update your listing', user_id: 'seller-user-1' }] }
+      if (sql.includes('INSERT INTO support_messages'))
+        return { rows: [{ id: 'msg-1', sender_type: 'staff', body: 'Please update your listing photos.' }] }
+      if (sql.includes('SELECT email, first_name FROM users'))
+        return { rows: [{ email: 'seller@example.com', first_name: 'Sam' }] }
+      return { rows: [] }
+    })
+
+    const result = await service.createTicket({
+      sellerProfileId: 'sp-1',
+      userId: 'seller-user-1',
+      subject: 'Please update your listing',
+      body: 'Please update your listing photos.',
+      openedBy: { userId: 'admin-1', senderType: 'staff' },
+    })
+    await flush()
+
+    const messageInsertCall = freshQuery.mock.calls.find((c: any[]) => c[0].includes('INSERT INTO support_messages'))
+    expect(messageInsertCall![1]).toEqual(['ticket-1', 'staff', 'admin-1', 'Please update your listing photos.'])
+    expect(result.message.sender_type).toBe('staff')
+
+    // Notifies the seller (email + in-app), not the staff-broadcast path
+    // a seller-opened ticket would trigger.
+    expect(freshEmailService.sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ to: 'seller@example.com' }),
+    )
+    expect(freshNotificationService.create).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'seller-user-1' }),
+    )
+    expect(freshEmailService.sendAdminNotification).not.toHaveBeenCalled()
+  })
+
   it('addMessage reopens a resolved ticket when the seller replies', async () => {
     const { service, freshQuery } = loadServiceFresh()
     freshQuery.mockImplementation(async (sql: string) => {
@@ -189,5 +227,50 @@ describe('seller-support.service -- real threaded seller<->staff conversation', 
     expect(result.total).toBe(1)
     const listCall = freshQuery.mock.calls.find((c: any[]) => c[0].includes('SELECT st.*'))
     expect(listCall![1]).toEqual(['open', 'staff-1', 'payouts', '%jane%', 25, 0])
+  })
+
+  it('getSupportReportingSummary averages first-reply time only over tickets that HAVE a staff reply (INNER JOIN, never treats a waiting ticket as 0h)', async () => {
+    const { service, freshQuery } = loadServiceFresh()
+    freshQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('GROUP BY status')) return { rows: [{ status: 'open', count: 2 }] }
+      if (sql.includes('GROUP BY category')) return { rows: [{ category: 'payouts', count: 2 }] }
+      if (sql.includes('avg_hours')) return { rows: [{ avg_hours: 4.5 }] }
+      if (sql.includes('assigned_to_user_id')) return { rows: [] }
+      return { rows: [] }
+    })
+
+    const from = new Date('2026-01-01')
+    const to = new Date('2026-02-01')
+    const result = await service.getSupportReportingSummary({ from, to })
+
+    expect(result.averageFirstReplyHours).toBe(4.5)
+    const avgCall = freshQuery.mock.calls.find((c: any[]) => c[0].includes('avg_hours'))
+    expect(avgCall![0]).toContain('INNER JOIN')
+    expect(avgCall![0]).not.toContain('LEFT JOIN')
+  })
+
+  it('getSupportReportingSummary returns null (not 0) average when no ticket has ever received a staff reply', async () => {
+    const { service, freshQuery } = loadServiceFresh()
+    freshQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('avg_hours')) return { rows: [{ avg_hours: null }] }
+      return { rows: [] }
+    })
+
+    const result = await service.getSupportReportingSummary({ from: new Date(), to: new Date() })
+
+    expect(result.averageFirstReplyHours).toBeNull()
+  })
+
+  it('getSupportReportingSummary\'s per-staff workload only counts open/in_progress tickets, not resolved/closed ones', async () => {
+    const { service, freshQuery } = loadServiceFresh()
+    freshQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('assigned_to_user_id') && sql.includes("IN ('open', 'in_progress')"))
+        return { rows: [{ userId: 'staff-1', first_name: 'Robin', last_name: null, email: 'r@x.com', count: 3 }] }
+      return { rows: [] }
+    })
+
+    const result = await service.getSupportReportingSummary({ from: new Date(), to: new Date() })
+
+    expect(result.ticketsPerStaffMember).toEqual([{ userId: 'staff-1', name: 'Robin', count: 3 }])
   })
 })

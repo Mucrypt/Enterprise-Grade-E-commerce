@@ -5,6 +5,8 @@ import { requirePermissionOrLegacyRole } from '../../../middleware/staff'
 import { adminSupportTicketSchemas, validate } from '../../../middleware/validation'
 import {
   assignAdminTicket,
+  createAdminTicket,
+  getAdminSupportReporting,
   getAdminTicket,
   getAdminTickets,
   replyToAdminTicket,
@@ -27,6 +29,8 @@ const view = requirePermissionOrLegacyRole('support.view', 'admin', 'super_admin
 const manage = requirePermissionOrLegacyRole('support.manage', 'admin', 'super_admin')
 
 router.get('/', view, getAdminTickets)
+router.post('/', manage, writeLimiter, validate(adminSupportTicketSchemas.create), createAdminTicket)
+router.get('/reporting', view, getAdminSupportReporting)
 router.get('/:id', view, getAdminTicket)
 router.post('/:id/messages', manage, writeLimiter, validate(adminSupportTicketSchemas.reply), replyToAdminTicket)
 router.patch('/:id/assign', manage, writeLimiter, validate(adminSupportTicketSchemas.assign), assignAdminTicket)

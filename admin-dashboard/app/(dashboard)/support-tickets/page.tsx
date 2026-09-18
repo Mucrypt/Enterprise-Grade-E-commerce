@@ -6,10 +6,12 @@ import { format, formatDistanceToNow, parseISO } from 'date-fns'
 import { toast } from 'sonner'
 import {
   supportTicketService,
+  type SupportReportingSummary,
   type SupportTicket,
   type SupportTicketCategory,
   type SupportTicketStatus,
 } from '@/services/support-ticket.service'
+import { announcementService, type SellerTier } from '@/services/announcement.service'
 import { staffService } from '@/services/staff.service'
 import { RequirePagePermission } from '@/components/auth/RequirePagePermission'
 import { useStaffAccess } from '@/contexts/StaffAccessContext'
@@ -28,6 +30,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Select,
   SelectContent,
@@ -41,7 +44,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { LifeBuoy, Search, Send, UserCog } from 'lucide-react'
+import { BarChart3, LifeBuoy, Megaphone, Search, Send, UserCog } from 'lucide-react'
 
 const STATUS_LABEL: Record<SupportTicketStatus, string> = {
   open: 'Open',
@@ -220,7 +223,7 @@ function TicketDrawer({ ticket, onClose }: { ticket: SupportTicket; onClose: () 
   )
 }
 
-function SupportTicketsContent() {
+function TicketsTab() {
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [search, setSearch] = useState('')
@@ -336,6 +339,248 @@ function SupportTicketsContent() {
         <TicketDrawer ticket={selectedTicket} onClose={() => setSelectedTicket(null)} />
       )}
     </div>
+  )
+}
+
+function AnnouncementsTab() {
+  const queryClient = useQueryClient()
+  const { hasPermission } = useStaffAccess()
+  const canManage = hasPermission('support.manage')
+
+  const [subject, setSubject] = useState('')
+  const [body, setBody] = useState('')
+  const [targetTier, setTargetTier] = useState<SellerTier | 'all'>('all')
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-announcements'],
+    queryFn: () => announcementService.list({ limit: 20 }),
+  })
+  const announcements = data?.data?.items || []
+
+  const createMutation = useMutation({
+    mutationFn: () =>
+      announcementService.create({ subject, body, targetTier: targetTier === 'all' ? null : targetTier }),
+    onSuccess: () => {
+      toast.success('Announcement sent')
+      setSubject('')
+      setBody('')
+      setTargetTier('all')
+      queryClient.invalidateQueries({ queryKey: ['admin-announcements'] })
+    },
+    onError: (error: any) => toast.error(error?.response?.data?.error || 'Failed to send announcement'),
+  })
+
+  return (
+    <div className='space-y-6'>
+      {canManage && (
+        <Card>
+          <CardHeader>
+            <CardTitle className='flex items-center gap-2'>
+              <Megaphone className='h-5 w-5 text-primary' />
+              New announcement
+            </CardTitle>
+            <CardDescription>
+              A one-to-many message to sellers -- in-app only for now, no bulk email.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className='space-y-3'>
+            <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder='Subject' />
+            <Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={3} placeholder='Message' />
+            <div className='flex items-center gap-3'>
+              <Select value={targetTier} onValueChange={(value: SellerTier | 'all') => setTargetTier(value)}>
+                <SelectTrigger className='w-48'>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='all'>All sellers</SelectItem>
+                  <SelectItem value='unverified'>Unverified tier only</SelectItem>
+                  <SelectItem value='basic'>Basic tier only</SelectItem>
+                  <SelectItem value='trusted'>Trusted tier only</SelectItem>
+                  <SelectItem value='pro'>Pro tier only</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                disabled={!subject.trim() || !body.trim() || createMutation.isPending}
+                onClick={() => createMutation.mutate()}
+              >
+                {createMutation.isPending ? 'Sending...' : 'Send announcement'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Past announcements</CardTitle>
+        </CardHeader>
+        <CardContent className='space-y-3'>
+          {isLoading ? (
+            <Skeleton className='h-16 w-full' />
+          ) : announcements.length === 0 ? (
+            <p className='text-sm text-muted-foreground'>No announcements sent yet.</p>
+          ) : (
+            announcements.map((announcement) => (
+              <div key={announcement.id} className='rounded-lg border p-3'>
+                <div className='flex items-center justify-between gap-3'>
+                  <p className='font-medium'>{announcement.subject}</p>
+                  <Badge variant='outline'>{announcement.target_tier ? `${announcement.target_tier} tier` : 'All sellers'}</Badge>
+                </div>
+                <p className='mt-1 text-sm text-muted-foreground'>{announcement.body}</p>
+                <p className='mt-2 text-xs text-muted-foreground'>
+                  {format(parseISO(announcement.created_at), 'MMM d, yyyy')} &middot; {announcement.readCount} of{' '}
+                  {announcement.totalRecipients} read
+                </p>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+function ReportingTab() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-support-reporting'],
+    queryFn: () => supportTicketService.getReportingSummary(),
+  })
+  const summary: SupportReportingSummary | undefined = data?.data
+
+  if (isLoading) {
+    return <Skeleton className='h-64 w-full' />
+  }
+  if (!summary) {
+    return <p className='text-sm text-muted-foreground'>Reporting data isn&apos;t available right now.</p>
+  }
+
+  const maxStatusCount = Math.max(...summary.byStatus.map((s) => s.count), 1)
+  const maxCategoryCount = Math.max(...summary.byCategory.map((c) => c.count), 1)
+
+  return (
+    <div className='space-y-6'>
+      <div className='grid gap-4 sm:grid-cols-2'>
+        <Card>
+          <CardHeader>
+            <CardTitle className='text-base'>Tickets by status (last 30 days)</CardTitle>
+          </CardHeader>
+          <CardContent className='space-y-2'>
+            {summary.byStatus.length === 0 ? (
+              <p className='text-sm text-muted-foreground'>No tickets in range.</p>
+            ) : (
+              summary.byStatus.map((row) => (
+                <div key={row.status} className='space-y-1'>
+                  <div className='flex items-center justify-between text-sm'>
+                    <span className='capitalize'>{row.status.replace('_', ' ')}</span>
+                    <span className='text-muted-foreground'>{row.count}</span>
+                  </div>
+                  <div className='h-2 rounded-full bg-muted'>
+                    <div
+                      className='h-2 rounded-full bg-primary'
+                      style={{ width: `${Math.max((row.count / maxStatusCount) * 100, 4)}%` }}
+                    />
+                  </div>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className='text-base'>Tickets by category (last 30 days)</CardTitle>
+          </CardHeader>
+          <CardContent className='space-y-2'>
+            {summary.byCategory.length === 0 ? (
+              <p className='text-sm text-muted-foreground'>No tickets in range.</p>
+            ) : (
+              summary.byCategory.map((row) => (
+                <div key={row.category} className='space-y-1'>
+                  <div className='flex items-center justify-between text-sm'>
+                    <span className='capitalize'>{row.category.replace('_', ' ')}</span>
+                    <span className='text-muted-foreground'>{row.count}</span>
+                  </div>
+                  <div className='h-2 rounded-full bg-muted'>
+                    <div
+                      className='h-2 rounded-full bg-primary'
+                      style={{ width: `${Math.max((row.count / maxCategoryCount) * 100, 4)}%` }}
+                    />
+                  </div>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className='text-base'>Average time to first staff reply</CardTitle>
+          <CardDescription>Only counted over tickets that have received at least one staff reply.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className='text-2xl font-semibold'>
+            {summary.averageFirstReplyHours !== null ? `${summary.averageFirstReplyHours.toFixed(1)}h` : 'No replies yet'}
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className='text-base'>Current ticket load per staff member</CardTitle>
+          <CardDescription>Open and in-progress tickets only.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {summary.ticketsPerStaffMember.length === 0 ? (
+            <p className='text-sm text-muted-foreground'>No tickets currently assigned to staff.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Staff member</TableHead>
+                  <TableHead className='text-right'>Open tickets</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {summary.ticketsPerStaffMember.map((row) => (
+                  <TableRow key={row.userId}>
+                    <TableCell>{row.name}</TableCell>
+                    <TableCell className='text-right'>{row.count}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+function SupportTicketsContent() {
+  return (
+    <Tabs defaultValue='tickets' className='space-y-6'>
+      <TabsList>
+        <TabsTrigger value='tickets'>
+          <LifeBuoy className='mr-2 h-4 w-4' /> Tickets
+        </TabsTrigger>
+        <TabsTrigger value='announcements'>
+          <Megaphone className='mr-2 h-4 w-4' /> Announcements
+        </TabsTrigger>
+        <TabsTrigger value='reporting'>
+          <BarChart3 className='mr-2 h-4 w-4' /> Reporting
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value='tickets'>
+        <TicketsTab />
+      </TabsContent>
+      <TabsContent value='announcements'>
+        <AnnouncementsTab />
+      </TabsContent>
+      <TabsContent value='reporting'>
+        <ReportingTab />
+      </TabsContent>
+    </Tabs>
   )
 }
 

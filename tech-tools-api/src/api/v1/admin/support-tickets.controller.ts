@@ -1,8 +1,11 @@
 import { Response } from 'express'
 import { AuthRequest } from '../../../middleware/auth'
+import { query } from '../../../database/connection'
 import {
   addMessage,
   assignTicket,
+  createTicket,
+  getSupportReportingSummary,
   getTicketWithMessages,
   listForAdmin,
   updateStatus,
@@ -10,6 +13,68 @@ import {
 import logger from '../../../utils/logger'
 
 const VALID_STATUSES = ['open', 'in_progress', 'resolved', 'closed']
+
+export const getAdminSupportReporting = async (req: AuthRequest, res: Response) => {
+  try {
+    const to = req.query.to ? new Date(String(req.query.to)) : new Date()
+    const from = req.query.from
+      ? new Date(String(req.query.from))
+      : new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000)
+
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+      return res.status(400).json({ success: false, error: 'Invalid from/to date' })
+    }
+
+    const summary = await getSupportReportingSummary({ from, to })
+    res.json({ success: true, data: summary })
+  } catch (error) {
+    logger.error('Get support reporting summary error:', error)
+    res.status(500).json({ success: false, error: 'Failed to load support reporting' })
+  }
+}
+
+// Admin proactively opening a ticket on a seller's behalf -- distinct
+// from every other handler here, which acts on a ticket a seller already
+// opened. Reuses createTicket's openedBy branch (see
+// seller-support.service.ts), which handles notifying the seller
+// exactly like a staff reply would.
+export const createAdminTicket = async (req: AuthRequest, res: Response) => {
+  try {
+    const adminId = req.user?.userId
+    if (!adminId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' })
+    }
+
+    const { sellerProfileId, subject, category, body } = req.body as {
+      sellerProfileId: string
+      subject: string
+      category?: string
+      body: string
+    }
+
+    const sellerResult = await query(`SELECT user_id FROM seller_profiles WHERE id = $1 LIMIT 1`, [
+      sellerProfileId,
+    ])
+    const seller = sellerResult.rows[0]
+    if (!seller) {
+      return res.status(404).json({ success: false, error: 'Seller profile not found' })
+    }
+
+    const result = await createTicket({
+      sellerProfileId,
+      userId: seller.user_id,
+      subject,
+      category,
+      body,
+      openedBy: { userId: adminId, senderType: 'staff' },
+    })
+
+    res.status(201).json({ success: true, data: result })
+  } catch (error) {
+    logger.error('Create admin support ticket error:', error)
+    res.status(500).json({ success: false, error: 'Failed to create support ticket' })
+  }
+}
 
 export const getAdminTickets = async (req: AuthRequest, res: Response) => {
   try {

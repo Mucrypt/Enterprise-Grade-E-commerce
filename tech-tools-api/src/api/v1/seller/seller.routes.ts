@@ -24,6 +24,7 @@ import {
 } from './seller-product.controller'
 import { getMyEarningsSummary, getMyEarningsLedger } from './seller-earnings.controller'
 import sellerSupportRoutes from './seller-support.routes'
+import sellerAnnouncementsRoutes from './seller-announcements.routes'
 
 const router = Router()
 
@@ -103,5 +104,10 @@ router.get('/earnings/ledger', requireAdminOrApprovedSeller, getMyEarningsLedger
 // an unverified/pending seller can still reach support.
 // =====================================================
 router.use('/support/tickets', sellerSupportRoutes)
+
+// Broadcast announcements -- separate router (not "tickets") since it's
+// a genuinely different, one-to-many shape, same requireSellerProfile
+// gate applied inside seller-announcements.routes.ts.
+router.use('/support/announcements', sellerAnnouncementsRoutes)
 
 export default router

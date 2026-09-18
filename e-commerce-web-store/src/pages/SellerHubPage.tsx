@@ -17,6 +17,7 @@ import { formatPrice } from '../utils'
 import { useCreatorDashboardReady } from '../hooks/useCreatorDashboardReady'
 import { SELLER_TIER_ORDER, formatTier, getTierStyle } from '../utils/sellerTier'
 import SellerIdentityHeader from '../components/seller/SellerIdentityHeader'
+import SellerAnnouncementsBanner from '../components/seller/SellerAnnouncementsBanner'
 
 const formatMoney = (value?: number | string | null) => {
   if (value === null || value === undefined || value === '') {
@@ -234,6 +235,12 @@ export default function SellerHubPage() {
             </div>
           )}
         </div>
+
+        {sellerProfile && (
+          <div className='mt-6'>
+            <SellerAnnouncementsBanner />
+          </div>
+        )}
 
         {(error || success) && (
           <div

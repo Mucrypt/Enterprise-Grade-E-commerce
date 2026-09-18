@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { format, parseISO } from 'date-fns'
 import { toast } from 'sonner'
 import { sellerService } from '@/services/seller.service'
+import { supportTicketService, type SupportTicketCategory } from '@/services/support-ticket.service'
 import { RequirePagePermission } from '@/components/auth/RequirePagePermission'
 import { useStaffAccess } from '@/contexts/StaffAccessContext'
 import { formatCurrency } from '@/components/analytics/format'
@@ -14,6 +15,9 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -22,14 +26,87 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   ArrowLeft,
   BadgeCheck,
   Clapperboard,
+  MessageSquarePlus,
   Package,
   RotateCcw,
   ShieldAlert,
   Wallet,
 } from 'lucide-react'
+
+function NewTicketDialog({ sellerProfileId, onClose }: { sellerProfileId: string; onClose: () => void }) {
+  const router = useRouter()
+  const [subject, setSubject] = useState('')
+  const [category, setCategory] = useState<SupportTicketCategory>('other')
+  const [body, setBody] = useState('')
+
+  const mutation = useMutation({
+    mutationFn: () => supportTicketService.createForSeller({ sellerProfileId, subject, category, body }),
+    onSuccess: () => {
+      toast.success('Ticket opened -- the seller has been notified')
+      router.push('/support-tickets')
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.error || 'Failed to open ticket')
+    },
+  })
+
+  return (
+    <Dialog open onOpenChange={(open: boolean) => !open && onClose()}>
+      <DialogContent className='max-w-lg'>
+        <DialogHeader>
+          <DialogTitle>Open a ticket with this seller</DialogTitle>
+          <DialogDescription>Starts a new support conversation -- the seller is notified immediately.</DialogDescription>
+        </DialogHeader>
+
+        <div className='space-y-3'>
+          <div className='space-y-2'>
+            <Label>Subject</Label>
+            <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder='e.g. Please update your product photos' />
+          </div>
+          <div className='space-y-2'>
+            <Label>Category</Label>
+            <Select value={category} onValueChange={(value: SupportTicketCategory) => setCategory(value)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value='payouts'>Payouts</SelectItem>
+                <SelectItem value='verification'>Verification</SelectItem>
+                <SelectItem value='product_listing'>Product listing</SelectItem>
+                <SelectItem value='technical'>Technical</SelectItem>
+                <SelectItem value='other'>Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className='space-y-2'>
+            <Label>Message</Label>
+            <Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={4} placeholder='What do you need from the seller?' />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant='outline' onClick={onClose}>
+            Cancel
+          </Button>
+          <Button disabled={!subject.trim() || !body.trim() || mutation.isPending} onClick={() => mutation.mutate()}>
+            {mutation.isPending ? 'Opening...' : 'Open ticket'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 function SellerDetailContent() {
   const params = useParams()
@@ -40,6 +117,7 @@ function SellerDetailContent() {
   const canManage = hasPermission('sellers.manage')
 
   const [pendingTier, setPendingTier] = useState<string | null>(null)
+  const [ticketDialogOpen, setTicketDialogOpen] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-seller-detail', sellerProfileId],
@@ -121,6 +199,9 @@ function SellerDetailContent() {
           <ArrowLeft className='mr-2 h-4 w-4' /> Back to sellers
         </Button>
         <div className='flex gap-2'>
+          <Button variant='outline' disabled={!canManage} onClick={() => setTicketDialogOpen(true)}>
+            <MessageSquarePlus className='mr-2 h-4 w-4' /> New ticket
+          </Button>
           {sellerProfile.is_suspended ? (
             <Button variant='outline' disabled={!canManage || reactivateMutation.isPending} onClick={() => reactivateMutation.mutate()}>
               <RotateCcw className='mr-2 h-4 w-4' /> Reactivate
@@ -132,6 +213,10 @@ function SellerDetailContent() {
           )}
         </div>
       </div>
+
+      {ticketDialogOpen && (
+        <NewTicketDialog sellerProfileId={sellerProfileId} onClose={() => setTicketDialogOpen(false)} />
+      )}
 
       <Card>
         <CardHeader>

@@ -1,11 +1,13 @@
 import {
   assignAdminTicket,
+  createAdminTicket,
   getAdminTicket,
   getAdminTickets,
   replyToAdminTicket,
   updateAdminTicketStatus,
 } from './support-tickets.controller'
 import * as sellerSupportService from '../../../services/seller-support.service'
+import { query } from '../../../database/connection'
 
 jest.mock('../../../services/seller-support.service', () => ({
   listForAdmin: jest.fn(),
@@ -13,7 +15,9 @@ jest.mock('../../../services/seller-support.service', () => ({
   addMessage: jest.fn(),
   assignTicket: jest.fn(),
   updateStatus: jest.fn(),
+  createTicket: jest.fn(),
 }))
+jest.mock('../../../database/connection', () => ({ query: jest.fn() }))
 jest.mock('../../../utils/logger', () => ({
   __esModule: true,
   default: { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: jest.fn() },
@@ -24,6 +28,8 @@ const mockGetTicketWithMessages = sellerSupportService.getTicketWithMessages as 
 const mockAddMessage = sellerSupportService.addMessage as jest.Mock
 const mockAssignTicket = sellerSupportService.assignTicket as jest.Mock
 const mockUpdateStatus = sellerSupportService.updateStatus as jest.Mock
+const mockCreateTicket = sellerSupportService.createTicket as jest.Mock
+const mockQuery = query as jest.Mock
 
 const makeRes = () => {
   const res: any = {}
@@ -130,5 +136,42 @@ describe('admin support-tickets controller', () => {
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({ success: true, data: { ticket: { id: 't1', status: 'resolved' } } }),
     )
+  })
+
+  it('createAdminTicket 404s when the target seller profile does not exist', async () => {
+    mockQuery.mockResolvedValue({ rows: [] })
+
+    const req: any = {
+      user: { userId: 'admin-1' },
+      body: { sellerProfileId: 'missing-sp', subject: 'Heads up', body: 'Please fix your listing.' },
+    }
+    const res = makeRes()
+
+    await createAdminTicket(req, res)
+
+    expect(res.status).toHaveBeenCalledWith(404)
+    expect(mockCreateTicket).not.toHaveBeenCalled()
+  })
+
+  it('createAdminTicket opens the ticket as staff on the seller\'s behalf', async () => {
+    mockQuery.mockResolvedValue({ rows: [{ user_id: 'seller-user-1' }] })
+    mockCreateTicket.mockResolvedValue({ ticket: { id: 't-new' }, message: { id: 'm-new' } })
+
+    const req: any = {
+      user: { userId: 'admin-1' },
+      body: { sellerProfileId: 'sp-1', subject: 'Heads up', category: 'product_listing', body: 'Please fix your listing.' },
+    }
+    const res = makeRes()
+
+    await createAdminTicket(req, res)
+
+    expect(mockCreateTicket).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sellerProfileId: 'sp-1',
+        userId: 'seller-user-1',
+        openedBy: { userId: 'admin-1', senderType: 'staff' },
+      }),
+    )
+    expect(res.status).toHaveBeenCalledWith(201)
   })
 })

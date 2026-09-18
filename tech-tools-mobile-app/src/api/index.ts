@@ -994,6 +994,32 @@ export const sellerSupportApi = {
   },
 }
 
+export type SellerAnnouncementTier = 'unverified' | 'basic' | 'trusted' | 'pro'
+
+export interface SellerAnnouncement {
+  id: string
+  subject: string
+  body: string
+  target_tier: SellerAnnouncementTier | null
+  created_at: string
+  isRead: boolean
+}
+
+// Broadcast, one-to-many messages from admin -- same
+// /seller/support/announcements endpoints the web store's
+// sellerAnnouncementsApi calls. Real per-seller read tracking.
+export const sellerAnnouncementsApi = {
+  list: async (): Promise<SellerAnnouncement[]> => {
+    const response = await apiClient.get('/seller/support/announcements')
+    const data = response.data?.data || response.data
+    return (data?.items || []) as SellerAnnouncement[]
+  },
+
+  markRead: async (id: string): Promise<void> => {
+    await apiClient.post(`/seller/support/announcements/${id}/read`)
+  },
+}
+
 export const creatorApi = {
   getDashboardActivity: async (
     limit = 10,

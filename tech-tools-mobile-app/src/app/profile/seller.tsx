@@ -13,7 +13,14 @@ import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import * as Haptics from 'expo-haptics'
 import { useRouter } from 'expo-router'
-import { creatorApi, sellerApi, userApi, type PublicSellerProfile } from '@/api'
+import {
+  creatorApi,
+  sellerAnnouncementsApi,
+  sellerApi,
+  userApi,
+  type PublicSellerProfile,
+  type SellerAnnouncement,
+} from '@/api'
 import {
   AppBorderRadius,
   AppColors,
@@ -36,6 +43,67 @@ const formatMoney = (value?: number | string | null) => {
   }
 
   return `$${Number(value).toFixed(2)}`
+}
+
+// Broadcast announcements from admin -- real per-seller read tracking,
+// marked read the moment a seller expands one, matching the web store's
+// SellerAnnouncementsBanner behavior exactly.
+function AnnouncementsBanner() {
+  const [announcements, setAnnouncements] = useState<SellerAnnouncement[]>([])
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    sellerAnnouncementsApi
+      .list()
+      .then((items) => {
+        if (!cancelled) setAnnouncements(items)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  if (announcements.length === 0) return null
+
+  const handleExpand = (announcement: SellerAnnouncement) => {
+    setExpandedId((current) => (current === announcement.id ? null : announcement.id))
+    if (!announcement.isRead) {
+      setAnnouncements((current) =>
+        current.map((item) => (item.id === announcement.id ? { ...item, isRead: true } : item)),
+      )
+      sellerAnnouncementsApi.markRead(announcement.id).catch(() => {})
+    }
+  }
+
+  return (
+    <View style={styles.card}>
+      <Text style={styles.sectionTitle}>Announcements</Text>
+      <View style={{ marginTop: AppSpacing.sm, gap: AppSpacing.sm }}>
+        {announcements.map((announcement) => (
+          <TouchableOpacity
+            key={announcement.id}
+            onPress={() => handleExpand(announcement)}
+            style={styles.announcementRow}
+          >
+            <View style={styles.announcementHeader}>
+              {!announcement.isRead && <View style={styles.announcementDot} />}
+              <Text style={announcement.isRead ? styles.announcementSubjectRead : styles.announcementSubject}>
+                {announcement.subject}
+              </Text>
+              <Text style={styles.announcementDate}>
+                {new Date(announcement.created_at).toLocaleDateString()}
+              </Text>
+            </View>
+            {expandedId === announcement.id && (
+              <Text style={styles.announcementBody}>{announcement.body}</Text>
+            )}
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  )
 }
 
 export default function SellerHubScreen() {
@@ -361,6 +429,8 @@ export default function SellerHubScreen() {
         })()}
 
         {message ? <Text style={styles.message}>{message}</Text> : null}
+
+        <AnnouncementsBanner />
 
         <View style={styles.summaryGrid}>
           {summaryCards.map((card) => (
@@ -785,6 +855,44 @@ const styles = StyleSheet.create({
     marginTop: 8,
     color: AppColors.gray500,
     lineHeight: 20,
+  },
+  announcementRow: {
+    borderRadius: 16,
+    backgroundColor: AppColors.gray50,
+    padding: AppSpacing.md,
+  },
+  announcementHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: AppSpacing.sm,
+  },
+  announcementDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: AppColors.primary,
+  },
+  announcementSubject: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '800',
+    color: AppColors.gray900,
+  },
+  announcementSubjectRead: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: AppColors.gray700,
+  },
+  announcementDate: {
+    fontSize: 11,
+    color: AppColors.gray400,
+  },
+  announcementBody: {
+    marginTop: AppSpacing.sm,
+    fontSize: 13,
+    color: AppColors.gray600,
+    lineHeight: 19,
   },
   primaryButton: {
     marginTop: AppSpacing.md,

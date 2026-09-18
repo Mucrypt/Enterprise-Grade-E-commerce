@@ -36,6 +36,21 @@ export interface SupportMessage {
 }
 
 export const supportTicketService = {
+  // Admin proactively opens a ticket on a seller's behalf -- distinct
+  // from every other method here, which acts on a ticket the seller
+  // already opened themselves.
+  async createForSeller(payload: {
+    sellerProfileId: string
+    subject: string
+    category?: SupportTicketCategory
+    body: string
+  }) {
+    return await apiClient.post<{
+      success: boolean
+      data: { ticket: SupportTicket; message: SupportMessage }
+    }>('/admin/support-tickets', payload)
+  },
+
   async list(params?: {
     page?: number
     limit?: number
@@ -74,6 +89,20 @@ export const supportTicketService = {
   async updateStatus(id: string, status: SupportTicketStatus) {
     return await apiClient.patch(`/admin/support-tickets/${id}/status`, { status })
   },
+
+  async getReportingSummary(params?: { from?: string; to?: string }) {
+    return await apiClient.get<{ success: boolean; data: SupportReportingSummary }>(
+      '/admin/support-tickets/reporting',
+      { params },
+    )
+  },
+}
+
+export interface SupportReportingSummary {
+  byStatus: { status: SupportTicketStatus; count: number }[]
+  byCategory: { category: SupportTicketCategory; count: number }[]
+  averageFirstReplyHours: number | null
+  ticketsPerStaffMember: { userId: string; name: string; count: number }[]
 }
 
 export default supportTicketService

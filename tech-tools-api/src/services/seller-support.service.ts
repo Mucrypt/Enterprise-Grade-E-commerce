@@ -46,12 +46,20 @@ const CATEGORIES = ['payouts', 'verification', 'product_listing', 'technical', '
 
 export async function createTicket(params: {
   sellerProfileId: string
+  // The seller's own user id -- always identifies whose ticket this is,
+  // regardless of who sent the first message (see openedBy below).
   userId: string
   subject: string
   category?: string
   body: string
+  // Who is actually sending the first message. Defaults to the seller
+  // themselves (the original, seller-only-initiated behavior) -- admin
+  // routes pass { userId: adminId, senderType: 'staff' } to open a
+  // ticket proactively on a seller's behalf.
+  openedBy?: { userId: string; senderType: 'seller' | 'staff' }
 }): Promise<{ ticket: SupportTicket; message: SupportMessage }> {
   const category = CATEGORIES.includes(params.category || '') ? params.category! : 'other'
+  const openedBy = params.openedBy || { userId: params.userId, senderType: 'seller' as const }
 
   const ticketResult = await query(
     `INSERT INTO support_tickets (seller_profile_id, user_id, subject, category)
@@ -63,15 +71,21 @@ export async function createTicket(params: {
 
   const messageResult = await query(
     `INSERT INTO support_messages (ticket_id, sender_type, sender_user_id, body)
-     VALUES ($1, 'seller', $2, $3)
+     VALUES ($1, $2, $3, $4)
      RETURNING *`,
-    [ticket.id, params.userId, params.body.trim()],
+    [ticket.id, openedBy.senderType, openedBy.userId, params.body.trim()],
   )
   const message = messageResult.rows[0] as SupportMessage
 
-  await notifyStaffOfActivity(ticket, 'created').catch((error) =>
-    logger.warn('Failed to notify staff of new support ticket:', error),
-  )
+  if (openedBy.senderType === 'staff') {
+    await notifyNewTicketToSeller(ticket, message).catch((error) =>
+      logger.warn('Failed to notify seller of new admin-opened support ticket:', error),
+    )
+  } else {
+    await notifyStaffOfActivity(ticket, 'created').catch((error) =>
+      logger.warn('Failed to notify staff of new support ticket:', error),
+    )
+  }
 
   return { ticket, message }
 }
@@ -242,6 +256,71 @@ export async function updateStatus(ticketId: string, status: string): Promise<Su
   return result.rows[0] || null
 }
 
+export interface SupportReportingSummary {
+  byStatus: { status: string; count: number }[]
+  byCategory: { category: string; count: number }[]
+  // Hours, averaged only over tickets that HAVE received a staff reply --
+  // a ticket still waiting is never counted as "0 hours," which would
+  // dishonestly understate real response time.
+  averageFirstReplyHours: number | null
+  // Current workload snapshot (open/in_progress only) -- not date-ranged,
+  // since "who's carrying what right now" is a present-tense question.
+  ticketsPerStaffMember: { userId: string; name: string; count: number }[]
+}
+
+export async function getSupportReportingSummary(params: {
+  from: Date
+  to: Date
+}): Promise<SupportReportingSummary> {
+  const [byStatusResult, byCategoryResult, firstReplyResult, staffLoadResult] = await Promise.all([
+    query(
+      `SELECT status, COUNT(*)::int AS count
+       FROM support_tickets
+       WHERE created_at BETWEEN $1 AND $2
+       GROUP BY status`,
+      [params.from, params.to],
+    ),
+    query(
+      `SELECT category, COUNT(*)::int AS count
+       FROM support_tickets
+       WHERE created_at BETWEEN $1 AND $2
+       GROUP BY category`,
+      [params.from, params.to],
+    ),
+    query(
+      `SELECT AVG(EXTRACT(EPOCH FROM (first_reply.first_staff_reply_at - st.created_at)) / 3600)::float AS avg_hours
+       FROM support_tickets st
+       INNER JOIN (
+         SELECT ticket_id, MIN(created_at) AS first_staff_reply_at
+         FROM support_messages
+         WHERE sender_type = 'staff' AND is_internal_note = false
+         GROUP BY ticket_id
+       ) first_reply ON first_reply.ticket_id = st.id
+       WHERE st.created_at BETWEEN $1 AND $2`,
+      [params.from, params.to],
+    ),
+    query(
+      `SELECT st.assigned_to_user_id AS "userId", u.first_name, u.last_name, u.email, COUNT(*)::int AS count
+       FROM support_tickets st
+       INNER JOIN users u ON u.id = st.assigned_to_user_id
+       WHERE st.status IN ('open', 'in_progress')
+       GROUP BY st.assigned_to_user_id, u.first_name, u.last_name, u.email
+       ORDER BY count DESC`,
+    ),
+  ])
+
+  return {
+    byStatus: byStatusResult.rows,
+    byCategory: byCategoryResult.rows,
+    averageFirstReplyHours: firstReplyResult.rows[0]?.avg_hours ?? null,
+    ticketsPerStaffMember: staffLoadResult.rows.map((row: any) => ({
+      userId: row.userId,
+      name: `${row.first_name || ''} ${row.last_name || ''}`.trim() || row.email,
+      count: row.count,
+    })),
+  }
+}
+
 // ============================================
 // Notifications
 // ============================================
@@ -290,31 +369,42 @@ async function notifyStaffOfActivity(ticket: SupportTicket, event: 'created') {
   )
 }
 
+// Shared by a staff reply on an existing ticket and a brand new
+// admin-opened ticket -- from the seller's perspective both are "staff
+// sent me a message," so they get the exact same notification treatment.
+async function notifyStaffMessageToSeller(ticket: SupportTicket, message: SupportMessage) {
+  const sellerResult = await query(`SELECT email, first_name FROM users WHERE id = $1 LIMIT 1`, [
+    ticket.user_id,
+  ])
+  const seller = sellerResult.rows[0]
+  if (!seller) return
+
+  await Promise.all([
+    NotificationService.create({
+      userId: ticket.user_id,
+      type: 'support_ticket_reply',
+      title: 'Support replied to your ticket',
+      message: ticket.subject,
+      actionUrl: `/seller-hub/support/${ticket.id}`,
+    }).catch(() => null),
+    emailService
+      .sendEmail({
+        to: seller.email,
+        toName: seller.first_name || undefined,
+        subject: `Re: ${ticket.subject}`,
+        html: `<p>${message.body.replace(/\n/g, '<br/>')}</p>`,
+      })
+      .catch(() => null),
+  ])
+}
+
+async function notifyNewTicketToSeller(ticket: SupportTicket, message: SupportMessage) {
+  await notifyStaffMessageToSeller(ticket, message)
+}
+
 async function notifySingleReply(ticket: SupportTicket, message: SupportMessage) {
   if (message.sender_type === 'staff') {
-    const sellerResult = await query(`SELECT email, first_name FROM users WHERE id = $1 LIMIT 1`, [
-      ticket.user_id,
-    ])
-    const seller = sellerResult.rows[0]
-    if (!seller) return
-
-    await Promise.all([
-      NotificationService.create({
-        userId: ticket.user_id,
-        type: 'support_ticket_reply',
-        title: 'Support replied to your ticket',
-        message: ticket.subject,
-        actionUrl: `/seller-hub/support/${ticket.id}`,
-      }).catch(() => null),
-      emailService
-        .sendEmail({
-          to: seller.email,
-          toName: seller.first_name || undefined,
-          subject: `Re: ${ticket.subject}`,
-          html: `<p>${message.body.replace(/\n/g, '<br/>')}</p>`,
-        })
-        .catch(() => null),
-    ])
+    await notifyStaffMessageToSeller(ticket, message)
     return
   }
 

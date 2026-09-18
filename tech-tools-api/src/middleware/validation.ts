@@ -266,6 +266,13 @@ export const sellerSupportSchemas = {
 }
 
 export const adminSupportTicketSchemas = {
+  create: Joi.object({
+    sellerProfileId: Joi.string().uuid().required(),
+    subject: Joi.string().max(255).required(),
+    category: Joi.string().valid('payouts', 'verification', 'product_listing', 'technical', 'other'),
+    body: Joi.string().max(8000).required(),
+  }),
+
   reply: Joi.object({
     body: Joi.string().max(8000).required(),
     isInternalNote: Joi.boolean(),
@@ -277,5 +284,13 @@ export const adminSupportTicketSchemas = {
 
   status: Joi.object({
     status: Joi.string().valid('open', 'in_progress', 'resolved', 'closed').required(),
+  }),
+}
+
+export const adminAnnouncementSchemas = {
+  create: Joi.object({
+    subject: Joi.string().max(255).required(),
+    body: Joi.string().max(8000).required(),
+    targetTier: Joi.string().valid('unverified', 'basic', 'trusted', 'pro').allow(null),
   }),
 }
