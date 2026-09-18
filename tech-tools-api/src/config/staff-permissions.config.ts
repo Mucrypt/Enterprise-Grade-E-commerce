@@ -67,6 +67,12 @@ export type Permission =
   // the workflow.
   | 'sellers.payouts.view'
   | 'sellers.payouts.manage'
+  // General seller management -- viewing/searching all seller profiles,
+  // granting seller access to an arbitrary user, changing tier directly,
+  // suspend/reactivate. Distinct from 'sellers.payouts.*' (money) the
+  // same way 'affiliates.manage' is distinct from 'affiliates.payouts'.
+  | 'sellers.view'
+  | 'sellers.manage'
   // Hero Slides CMS -- the admin-managed homepage hero carousel (which
   // products/categories/collections appear, ordering, product_grid
   // slides). Homepage content, not a catalog concern -- see the grant
@@ -142,6 +148,8 @@ const ALL_PERMISSIONS: Permission[] = [
   'affiliates.payouts',
   'sellers.payouts.view',
   'sellers.payouts.manage',
+  'sellers.view',
+  'sellers.manage',
   'homepage.view',
   'homepage.manage',
   'discover.view',
@@ -223,6 +231,8 @@ export const STAFF_ROLE_PERMISSIONS: Record<StaffRole, ReadonlySet<Permission>> 
     'affiliates.payouts',
     'sellers.payouts.view',
     'sellers.payouts.manage',
+    'sellers.view',
+    'sellers.manage',
     'homepage.view',
     'homepage.manage',
     'discover.view',

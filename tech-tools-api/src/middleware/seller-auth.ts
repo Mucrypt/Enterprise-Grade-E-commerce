@@ -21,6 +21,41 @@ export interface SellerAuthRequest extends AuthRequest {
   sellerProfileId?: string
 }
 
+// Looser than requireAdminOrApprovedSeller -- any user with a
+// seller_profiles row at all, regardless of verification_status. Used
+// for seller support tickets: an unverified/pending seller is exactly
+// who most needs to reach staff (e.g. "why is my verification stuck"),
+// so gating support behind approval would lock out the sellers who need
+// it most.
+export async function requireSellerProfile(req: Request, res: Response, next: NextFunction) {
+  const authReq = req as SellerAuthRequest
+  if (!authReq.user) {
+    return res.status(401).json({ success: false, message: 'Authentication required' })
+  }
+
+  if (authReq.user.userType === 'admin' || authReq.user.userType === 'super_admin') {
+    return next()
+  }
+
+  try {
+    const sellerResult = await dbQuery(
+      `SELECT id FROM seller_profiles WHERE user_id = $1 LIMIT 1`,
+      [authReq.user.id],
+    )
+    if (sellerResult.rows.length === 0) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only sellers can do this',
+      })
+    }
+    authReq.sellerProfileId = sellerResult.rows[0].id
+    next()
+  } catch (error: any) {
+    logger.error('Error checking seller profile:', error)
+    res.status(500).json({ success: false, message: 'Failed to verify seller status', error: error.message })
+  }
+}
+
 export async function requireAdminOrApprovedSeller(req: Request, res: Response, next: NextFunction) {
   const authReq = req as SellerAuthRequest
   if (!authReq.user) {

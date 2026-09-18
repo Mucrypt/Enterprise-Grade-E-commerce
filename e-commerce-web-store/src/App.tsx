@@ -28,6 +28,7 @@ const LoginPage = lazy(() => import('./pages/LoginPage'))
 const RegisterPage = lazy(() => import('./pages/RegisterPage'))
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const SellerHubPage = lazy(() => import('./pages/SellerHubPage'))
+const SellerSupportPage = lazy(() => import('./pages/SellerSupportPage'))
 const CreatorDashboardLayout = lazy(
   () => import('./pages/creator-dashboard/CreatorDashboardLayout'),
 )
@@ -137,6 +138,7 @@ function App() {
                 {/* User Profile */}
                 <Route path='profile' element={<ProfilePage />} />
                 <Route path='seller-hub' element={<SellerHubPage />} />
+                <Route path='seller-hub/support' element={<SellerSupportPage />} />
                 <Route path='creator-dashboard' element={<CreatorDashboardLayout />}>
                   <Route index element={<Navigate to='overview' replace />} />
                   <Route path='overview' element={<CreatorOverviewTab />} />

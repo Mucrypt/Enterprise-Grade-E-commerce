@@ -1,12 +1,18 @@
 import { Router } from 'express'
 import rateLimit from 'express-rate-limit'
-import { authenticate, authorize } from '../../../middleware/auth'
+import { authenticate } from '../../../middleware/auth'
+import { requirePermissionOrLegacyRole } from '../../../middleware/staff'
 import { adminSellerSchemas, validate } from '../../../middleware/validation'
 import {
   approveSellerVerificationRequest,
+  getAllSellers,
+  getSellerDetail,
   getSellerVerificationQueue,
+  grantSellerAccess,
+  reactivateSellerProfile,
   rejectSellerVerificationRequest,
   setSellerCreatorAccess,
+  setSellerTier,
   suspendSellerProfile,
 } from './sellers.controller'
 
@@ -23,29 +29,59 @@ const adminSellerWriteLimiter = rateLimit({
   },
 })
 
-router.use(authenticate, authorize('admin', 'super_admin'))
+router.use(authenticate)
 
-router.get('/verification-queue', getSellerVerificationQueue)
+const view = requirePermissionOrLegacyRole('sellers.view', 'admin', 'super_admin')
+const manage = requirePermissionOrLegacyRole('sellers.manage', 'admin', 'super_admin')
+
+router.get('/', view, getAllSellers)
+router.get('/verification-queue', view, getSellerVerificationQueue)
+router.get('/:sellerProfileId', view, getSellerDetail)
+
+router.post(
+  '/grant',
+  manage,
+  adminSellerWriteLimiter,
+  validate(adminSellerSchemas.grantSellerAccess),
+  grantSellerAccess,
+)
+router.patch(
+  '/:sellerProfileId/tier',
+  manage,
+  adminSellerWriteLimiter,
+  validate(adminSellerSchemas.setSellerTier),
+  setSellerTier,
+)
+router.post(
+  '/:sellerProfileId/reactivate',
+  manage,
+  adminSellerWriteLimiter,
+  reactivateSellerProfile,
+)
 router.post(
   '/verification-requests/:requestId/approve',
+  manage,
   adminSellerWriteLimiter,
   validate(adminSellerSchemas.approveVerification),
   approveSellerVerificationRequest,
 )
 router.post(
   '/verification-requests/:requestId/reject',
+  manage,
   adminSellerWriteLimiter,
   validate(adminSellerSchemas.rejectVerification),
   rejectSellerVerificationRequest,
 )
 router.post(
   '/:sellerProfileId/suspend',
+  manage,
   adminSellerWriteLimiter,
   validate(adminSellerSchemas.suspendSeller),
   suspendSellerProfile,
 )
 router.post(
   '/:sellerProfileId/creator-access',
+  manage,
   adminSellerWriteLimiter,
   validate(adminSellerSchemas.setCreatorAccess),
   setSellerCreatorAccess,

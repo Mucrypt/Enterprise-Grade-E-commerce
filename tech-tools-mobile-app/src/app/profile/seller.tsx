@@ -511,6 +511,15 @@ export default function SellerHubScreen() {
               verification.
             </Text>
           ) : null}
+          {sellerProfile ? (
+            <TouchableOpacity
+              style={styles.contactSupportButton}
+              onPress={() => router.push('/profile/seller-support' as never)}
+            >
+              <Ionicons name='chatbubble-ellipses-outline' size={16} color={AppColors.gray900} />
+              <Text style={styles.contactSupportButtonText}>Contact support</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         <View style={styles.card}>
@@ -903,6 +912,21 @@ const styles = StyleSheet.create({
     color: AppColors.gray500,
     fontSize: 13,
     lineHeight: 19,
+  },
+  contactSupportButton: {
+    marginTop: AppSpacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: AppSpacing.sm,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 16,
+    paddingVertical: 12,
+  },
+  contactSupportButtonText: {
+    color: AppColors.gray900,
+    fontWeight: '700',
   },
   timelineItem: {
     marginTop: AppSpacing.md,

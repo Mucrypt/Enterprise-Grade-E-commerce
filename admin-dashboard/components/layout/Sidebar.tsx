@@ -31,6 +31,7 @@ import {
   Mail,
   Newspaper,
   Inbox,
+  LifeBuoy,
   Send,
   Megaphone,
   Bot,
@@ -182,6 +183,7 @@ const navigation: NavItem[] = [
         title: 'Verification',
         href: '/sellers',
         icon: UserCheck,
+        permission: 'sellers.view',
       },
       {
         title: 'Payouts',
@@ -302,6 +304,15 @@ const navigation: NavItem[] = [
         title: 'Contact Messages',
         href: '/contact',
         icon: Inbox,
+      },
+      {
+        title: 'Support Tickets',
+        href: '/support-tickets',
+        // A real threaded conversation with sellers specifically --
+        // distinct from Contact Messages (the general customer form),
+        // gated by support.view/support.manage (finally put to use).
+        icon: LifeBuoy,
+        permission: 'support.view',
       },
     ],
   },

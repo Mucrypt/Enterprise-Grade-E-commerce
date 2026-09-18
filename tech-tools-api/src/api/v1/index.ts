@@ -39,6 +39,7 @@ import adminBooksRoutes from './admin/books.routes'
 import sellerRoutes from './seller/seller.routes'
 import adminSellersRoutes from './admin/sellers.routes'
 import adminSellerPayoutsRoutes from './admin/seller-payouts.routes'
+import adminSupportTicketsRoutes from './admin/support-tickets.routes'
 import staffRoutes from './staff/staff.routes'
 import promotionCampaignRoutes from './promotions/promotion-campaign.routes'
 import socialConnectionRoutes from './promotions/social-connection.routes'
@@ -68,6 +69,7 @@ router.use('/auth', authRoutes)
 router.use('/admin/customers', customersRoutes) // Must be before /admin to avoid /:adminId catching "customers"
 router.use('/admin/sellers', adminSellersRoutes)
 router.use('/admin/seller-payouts', adminSellerPayoutsRoutes)
+router.use('/admin/support-tickets', adminSupportTicketsRoutes)
 router.use('/admin', adminRoutes)
 router.use('/admin/books', adminBooksRoutes)
 router.use('/users', userRoutes)

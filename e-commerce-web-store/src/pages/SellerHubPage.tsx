@@ -6,6 +6,7 @@ import {
   Briefcase,
   CircleDollarSign,
   Loader2,
+  MessageCircle,
   ShieldCheck,
   Store,
 } from 'lucide-react'
@@ -503,6 +504,14 @@ export default function SellerHubPage() {
                     Finish activation and verification to unlock the creator
                     dashboard.
                   </p>
+                )}
+                {sellerProfile && (
+                  <Link
+                    to='/seller-hub/support'
+                    className='inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50'
+                  >
+                    <MessageCircle className='h-4 w-4' /> Contact support
+                  </Link>
                 )}
               </div>
             </div>

@@ -927,6 +927,73 @@ export const sellerEarningsApi = {
   },
 }
 
+export type SupportTicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed'
+export type SupportTicketCategory = 'payouts' | 'verification' | 'product_listing' | 'technical' | 'other'
+
+export interface SupportTicket {
+  id: string
+  seller_profile_id: string
+  user_id: string
+  subject: string
+  category: SupportTicketCategory
+  status: SupportTicketStatus
+  priority: 'low' | 'normal' | 'high'
+  assigned_to_user_id: string | null
+  created_at: string
+  updated_at: string
+  last_message_at: string
+  resolved_at: string | null
+}
+
+export interface SupportMessage {
+  id: string
+  ticket_id: string
+  sender_type: 'seller' | 'staff'
+  sender_user_id: string
+  body: string
+  is_internal_note: boolean
+  created_at: string
+}
+
+// A seller's own support tickets -- same /seller/support/tickets
+// endpoints the web store's sellerSupportApi calls. Reachable by any
+// seller with a profile at all, even unverified/pending.
+export const sellerSupportApi = {
+  list: async (params?: { page?: number; limit?: number }): Promise<{
+    items: SupportTicket[]
+    page: number
+    hasMore: boolean
+  }> => {
+    const response = await apiClient.get('/seller/support/tickets', { params })
+    const data = response.data?.data || response.data
+    return {
+      items: (data?.items || []) as SupportTicket[],
+      page: Number(data?.page ?? 1),
+      hasMore: Boolean(data?.hasMore),
+    }
+  },
+
+  create: async (payload: {
+    subject: string
+    category?: SupportTicketCategory
+    body: string
+  }): Promise<{ ticket: SupportTicket; message: SupportMessage }> => {
+    const response = await apiClient.post('/seller/support/tickets', payload)
+    return (response.data?.data || response.data) as { ticket: SupportTicket; message: SupportMessage }
+  },
+
+  getById: async (id: string): Promise<{ ticket: SupportTicket; messages: SupportMessage[] }> => {
+    const response = await apiClient.get(`/seller/support/tickets/${id}`)
+    return (response.data?.data || response.data) as { ticket: SupportTicket; messages: SupportMessage[] }
+  },
+
+  reply: async (id: string, body: string): Promise<SupportMessage> => {
+    const response = await apiClient.post(`/seller/support/tickets/${id}/messages`, { body })
+    const data = response.data?.data || response.data
+    return data?.message as SupportMessage
+  },
+}
+
 export const creatorApi = {
   getDashboardActivity: async (
     limit = 10,

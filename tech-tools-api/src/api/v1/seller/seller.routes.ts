@@ -23,6 +23,7 @@ import {
   reviewSellerProduct,
 } from './seller-product.controller'
 import { getMyEarningsSummary, getMyEarningsLedger } from './seller-earnings.controller'
+import sellerSupportRoutes from './seller-support.routes'
 
 const router = Router()
 
@@ -94,5 +95,13 @@ router.patch('/products/:id/review', authorize('admin', 'super_admin'), reviewSe
 // =====================================================
 router.get('/earnings/summary', requireAdminOrApprovedSeller, getMyEarningsSummary)
 router.get('/earnings/ledger', requireAdminOrApprovedSeller, getMyEarningsLedger)
+
+// =====================================================
+// Seller support tickets -- real threaded conversation with admin
+// staff. Gated by requireSellerProfile (applied inside
+// seller-support.routes.ts), looser than requireAdminOrApprovedSeller:
+// an unverified/pending seller can still reach support.
+// =====================================================
+router.use('/support/tickets', sellerSupportRoutes)
 
 export default router

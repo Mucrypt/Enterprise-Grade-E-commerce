@@ -242,4 +242,40 @@ export const adminSellerSchemas = {
     accessEnabled: Joi.boolean().required(),
     reason: Joi.string().max(2000),
   }),
+
+  grantSellerAccess: Joi.object({
+    userId: Joi.string().uuid().required(),
+    tier: Joi.string().valid('unverified', 'basic', 'trusted', 'pro'),
+  }),
+
+  setSellerTier: Joi.object({
+    tier: Joi.string().valid('unverified', 'basic', 'trusted', 'pro').required(),
+  }),
+}
+
+export const sellerSupportSchemas = {
+  createTicket: Joi.object({
+    subject: Joi.string().max(255).required(),
+    category: Joi.string().valid('payouts', 'verification', 'product_listing', 'technical', 'other'),
+    body: Joi.string().max(8000).required(),
+  }),
+
+  reply: Joi.object({
+    body: Joi.string().max(8000).required(),
+  }),
+}
+
+export const adminSupportTicketSchemas = {
+  reply: Joi.object({
+    body: Joi.string().max(8000).required(),
+    isInternalNote: Joi.boolean(),
+  }),
+
+  assign: Joi.object({
+    userId: Joi.string().uuid().allow(null),
+  }),
+
+  status: Joi.object({
+    status: Joi.string().valid('open', 'in_progress', 'resolved', 'closed').required(),
+  }),
 }
