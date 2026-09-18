@@ -23,8 +23,10 @@ import {
   AppShadows,
   AppGradients,
 } from '@/constants/appTheme'
-import { ordersApiNew } from '@/api'
+import { ordersApiNew, sellerApi, sellerEarningsApi } from '@/api'
+import type { SellerProfile } from '@/types'
 import { useAuthStore, useCartStore, useWishlistStore } from '@/stores'
+import { formatTier, getTierStyle } from '@/utils/sellerTier'
 
 interface MenuItemProps {
   icon: string
@@ -101,6 +103,8 @@ export default function ProfileTabScreen() {
   const wishlistCount = useWishlistStore((state) => state.items.length)
   const [activeOrdersCount, setActiveOrdersCount] = useState(0)
   const [totalOrdersCount, setTotalOrdersCount] = useState(0)
+  const [sellerProfile, setSellerProfile] = useState<SellerProfile | null>(null)
+  const [sellerOwed, setSellerOwed] = useState<number | null>(null)
 
   useEffect(() => {
     const loadOrdersSummary = async () => {
@@ -134,6 +138,32 @@ export default function ProfileTabScreen() {
     }
 
     loadOrdersSummary()
+  }, [isAuthenticated])
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+
+    let cancelled = false
+    sellerApi
+      .getMyProfile()
+      .then((result) => {
+        if (cancelled) return
+        setSellerProfile(result.sellerProfile)
+        if (result.sellerProfile?.verification_status === 'approved') {
+          sellerEarningsApi
+            .getSummary()
+            .then((summary) => {
+              if (!cancelled) setSellerOwed(summary.confirmedUnpaidBalance)
+            })
+            .catch(() => {})
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSellerProfile(null)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [isAuthenticated])
 
   const handleLogout = () => {
@@ -302,30 +332,69 @@ export default function ProfileTabScreen() {
             />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.quickAccessSecondaryCard}
-            onPress={() => router.push('/profile/seller' as Href)}
-            activeOpacity={0.9}
-          >
-            <View style={styles.quickAccessIconWrapSecondary}>
+          {sellerProfile ? (
+            <TouchableOpacity
+              style={styles.sellerStatusCard}
+              onPress={() => router.push('/profile/seller' as Href)}
+              activeOpacity={0.9}
+            >
+              <LinearGradient
+                colors={getTierStyle(sellerProfile.tier).gradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.sellerStatusAvatar}
+              >
+                <Text style={styles.sellerStatusAvatarText}>
+                  {(sellerProfile.display_name || user?.first_name || 'S').charAt(0).toUpperCase()}
+                </Text>
+              </LinearGradient>
+              <View style={styles.quickAccessTextWrap}>
+                <View style={styles.sellerStatusTitleRow}>
+                  <Text style={styles.quickAccessSecondaryTitle}>
+                    {sellerProfile.display_name || 'Your seller profile'}
+                  </Text>
+                  <View style={styles.sellerStatusTierPill}>
+                    <Text style={styles.sellerStatusTierPillText}>
+                      {formatTier(sellerProfile.tier)}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.quickAccessSecondarySubtitle}>
+                  {sellerOwed !== null
+                    ? `$${sellerOwed.toFixed(2)} owed to you`
+                    : sellerProfile.verification_status === 'pending'
+                    ? 'Verification pending review'
+                    : 'Open your seller dashboard'}
+                </Text>
+              </View>
+              <Ionicons name='chevron-forward' size={18} color={AppColors.primary} />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.quickAccessSecondaryCard}
+              onPress={() => router.push('/profile/seller' as Href)}
+              activeOpacity={0.9}
+            >
+              <View style={styles.quickAccessIconWrapSecondary}>
+                <Ionicons
+                  name='storefront-outline'
+                  size={22}
+                  color={AppColors.primary}
+                />
+              </View>
+              <View style={styles.quickAccessTextWrap}>
+                <Text style={styles.quickAccessSecondaryTitle}>Become a seller</Text>
+                <Text style={styles.quickAccessSecondarySubtitle}>
+                  Activate business mode and start listing products.
+                </Text>
+              </View>
               <Ionicons
-                name='storefront-outline'
-                size={22}
+                name='chevron-forward'
+                size={18}
                 color={AppColors.primary}
               />
-            </View>
-            <View style={styles.quickAccessTextWrap}>
-              <Text style={styles.quickAccessSecondaryTitle}>Seller Hub</Text>
-              <Text style={styles.quickAccessSecondarySubtitle}>
-                Manage business mode and trust tiers.
-              </Text>
-            </View>
-            <Ionicons
-              name='chevron-forward'
-              size={18}
-              color={AppColors.primary}
-            />
-          </TouchableOpacity>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Menu Sections */}
@@ -357,12 +426,6 @@ export default function ProfileTabScreen() {
             title='Books Library'
             subtitle='Browse and buy digital books'
             onPress={() => router.push('/books' as Href)}
-          />
-          <MenuItem
-            icon='storefront-outline'
-            title='Seller Hub'
-            subtitle='Manage business mode, seller profile, and verification'
-            onPress={() => router.push('/profile/seller' as Href)}
           />
           <MenuItem
             icon='gift-outline'
@@ -554,6 +617,46 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.18)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  sellerStatusCard: {
+    backgroundColor: '#FFF7ED',
+    borderRadius: AppBorderRadius.xl,
+    padding: AppSpacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: AppSpacing.md,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+    ...AppShadows.sm,
+  },
+  sellerStatusAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sellerStatusAvatarText: {
+    color: AppColors.white,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  sellerStatusTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  sellerStatusTierPill: {
+    borderRadius: 999,
+    backgroundColor: '#FFEDD5',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  sellerStatusTierPillText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: AppColors.primaryDark,
+    textTransform: 'uppercase',
   },
   quickAccessIconWrapSecondary: {
     width: 42,

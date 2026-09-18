@@ -3,7 +3,7 @@
 // ============================================
 
 import { useEffect, lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { StripeProvider } from './contexts/StripeContext'
 import Layout from './components/layout/Layout'
@@ -28,7 +28,17 @@ const LoginPage = lazy(() => import('./pages/LoginPage'))
 const RegisterPage = lazy(() => import('./pages/RegisterPage'))
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const SellerHubPage = lazy(() => import('./pages/SellerHubPage'))
-const CreatorDashboardPage = lazy(() => import('./pages/CreatorDashboardPage'))
+const CreatorDashboardLayout = lazy(
+  () => import('./pages/creator-dashboard/CreatorDashboardLayout'),
+)
+const CreatorOverviewTab = lazy(() => import('./pages/creator-dashboard/OverviewTab'))
+const CreatorStoreProductsTab = lazy(() => import('./pages/creator-dashboard/StoreProductsTab'))
+const CreatorBooksTab = lazy(() => import('./pages/creator-dashboard/BooksTab'))
+const CreatorDiscoverTab = lazy(() => import('./pages/creator-dashboard/DiscoverTab'))
+const CreatorPerformanceTab = lazy(() => import('./pages/creator-dashboard/PerformanceTab'))
+const CreatorEarningsTab = lazy(() => import('./pages/creator-dashboard/EarningsTab'))
+const CreatorActivityTab = lazy(() => import('./pages/creator-dashboard/ActivityTab'))
+const CreatorSettingsTab = lazy(() => import('./pages/creator-dashboard/SettingsTab'))
 const SellerProfilePage = lazy(() => import('./pages/SellerProfilePage'))
 const OrdersPage = lazy(() => import('./pages/OrdersPage'))
 const WishlistPage = lazy(() => import('./pages/WishlistPage'))
@@ -127,10 +137,17 @@ function App() {
                 {/* User Profile */}
                 <Route path='profile' element={<ProfilePage />} />
                 <Route path='seller-hub' element={<SellerHubPage />} />
-                <Route
-                  path='creator-dashboard'
-                  element={<CreatorDashboardPage />}
-                />
+                <Route path='creator-dashboard' element={<CreatorDashboardLayout />}>
+                  <Route index element={<Navigate to='overview' replace />} />
+                  <Route path='overview' element={<CreatorOverviewTab />} />
+                  <Route path='store' element={<CreatorStoreProductsTab />} />
+                  <Route path='books' element={<CreatorBooksTab />} />
+                  <Route path='discover' element={<CreatorDiscoverTab />} />
+                  <Route path='performance' element={<CreatorPerformanceTab />} />
+                  <Route path='earnings' element={<CreatorEarningsTab />} />
+                  <Route path='activity' element={<CreatorActivityTab />} />
+                  <Route path='settings' element={<CreatorSettingsTab />} />
+                </Route>
                 <Route path='orders' element={<OrdersPage />} />
                 <Route path='wishlist' element={<WishlistPage />} />
                 <Route path='compare' element={<ComparePage />} />

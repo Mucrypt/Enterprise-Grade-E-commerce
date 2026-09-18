@@ -10,19 +10,12 @@ import {
   Store,
 } from 'lucide-react'
 import { sellerApi, userApi } from '../api'
-import type {
-  SellerProfile,
-  SellerTier,
-  SellerTierConfig,
-  SellerVerificationRequest,
-} from '../types'
+import type { SellerProfile, SellerTierConfig, SellerVerificationRequest } from '../types'
 import { useAuthStore } from '../stores'
 import { formatPrice } from '../utils'
-
-const tierOrder: SellerTier[] = ['unverified', 'basic', 'trusted', 'pro']
-
-const formatTier = (tier: string) =>
-  tier.charAt(0).toUpperCase() + tier.slice(1).replace(/_/g, ' ')
+import { useCreatorDashboardReady } from '../hooks/useCreatorDashboardReady'
+import { SELLER_TIER_ORDER, formatTier, getTierStyle } from '../utils/sellerTier'
+import SellerIdentityHeader from '../components/seller/SellerIdentityHeader'
 
 const formatMoney = (value?: number | string | null) => {
   if (value === null || value === undefined || value === '') {
@@ -50,7 +43,7 @@ export default function SellerHubPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [busyAction, setBusyAction] = useState<
-    'activate' | 'onboard' | SellerTier | null
+    'activate' | 'onboard' | string | null
   >(null)
 
   useEffect(() => {
@@ -94,15 +87,14 @@ export default function SellerHubPage() {
 
   const currentTierIndex = useMemo(() => {
     const tier = sellerProfile?.tier || 'unverified'
-    return tierOrder.indexOf(tier as SellerTier)
+    return SELLER_TIER_ORDER.indexOf(tier)
   }, [sellerProfile?.tier])
 
   const pendingRequest = verificationRequests.find(
     (request) => request.status === 'pending',
   )
 
-  const creatorDashboardReady =
-    sellerProfile?.verification_status === 'approved'
+  const { ready: creatorDashboardReady } = useCreatorDashboardReady(sellerProfile)
 
   const handleActivateBusinessMode = async () => {
     setBusyAction('activate')
@@ -203,48 +195,43 @@ export default function SellerHubPage() {
 
   if (!user) return null
 
+  const fallbackName =
+    `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email
+
   return (
     <div className='min-h-screen bg-stone-50 py-8'>
       <div className='mx-auto max-w-6xl px-4'>
-        <div className='rounded-[28px] bg-linear-to-br from-slate-950 via-slate-900 to-orange-700 p-8 text-white shadow-xl'>
-          <div className='flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between'>
-            <div className='max-w-3xl'>
-              <div className='inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-orange-100'>
-                <Store className='h-4 w-4' /> Seller Hub
-              </div>
-              <h1 className='mt-4 text-3xl font-black tracking-tight sm:text-4xl'>
-                Start small, build trust, and grow into a protected marketplace
-                seller.
-              </h1>
-              <p className='mt-3 max-w-2xl text-sm leading-6 text-orange-50/85'>
-                This rollout is designed for fast onboarding with layered trust
-                controls. Users can activate business mode quickly, begin with
-                capped limits, and unlock higher tiers through lightweight
-                verification.
-              </p>
-            </div>
+        <Link
+          to='/profile'
+          className='mb-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-500 transition hover:text-slate-900'
+        >
+          <ArrowLeft className='h-4 w-4' /> Back to profile
+        </Link>
 
-            <div className='flex flex-wrap gap-3'>
-              <Link
-                to='/profile'
-                className='inline-flex items-center gap-2 rounded-2xl border border-white/15 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10'
-              >
-                <ArrowLeft className='h-4 w-4' /> Back to profile
-              </Link>
-              {creatorDashboardReady ? (
-                <Link
-                  to='/creator-dashboard'
-                  className='inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-orange-50'
-                >
-                  <Briefcase className='h-4 w-4' /> Creator dashboard
-                </Link>
-              ) : (
-                <div className='inline-flex items-center gap-2 rounded-2xl bg-white/10 px-4 py-2.5 text-sm font-semibold text-white/80 ring-1 ring-white/15'>
-                  <Briefcase className='h-4 w-4' /> Creator dashboard locked
-                </div>
-              )}
-            </div>
+        <SellerIdentityHeader sellerProfile={sellerProfile} fallbackName={fallbackName} />
+
+        <div className='mt-6 flex flex-wrap items-center justify-between gap-4 rounded-3xl bg-white p-5 shadow-sm ring-1 ring-black/5'>
+          <div>
+            <p className='inline-flex items-center gap-2 rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-orange-700'>
+              <Store className='h-3.5 w-3.5' /> Seller Hub
+            </p>
+            <p className='mt-2 max-w-xl text-sm text-gray-500'>
+              Start small, build trust, and grow into a protected marketplace seller with
+              layered verification tiers.
+            </p>
           </div>
+          {creatorDashboardReady ? (
+            <Link
+              to='/creator-dashboard'
+              className='inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800'
+            >
+              <Briefcase className='h-4 w-4' /> Creator dashboard
+            </Link>
+          ) : (
+            <div className='inline-flex items-center gap-2 rounded-2xl bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-500'>
+              <Briefcase className='h-4 w-4' /> Creator dashboard locked
+            </div>
+          )}
         </div>
 
         {(error || success) && (
@@ -364,22 +351,29 @@ export default function SellerHubPage() {
               </div>
 
               <div className='mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4'>
-                {tiers.map((tier) => {
+                {tiers.map((tier, index) => {
                   const isCurrent = sellerProfile?.tier === tier.tier
                   const isLocked =
                     Boolean(pendingRequest) || !sellerProfile || isCurrent
                   const isUpgrade =
-                    tierOrder.indexOf(tier.tier) > currentTierIndex
+                    SELLER_TIER_ORDER.indexOf(tier.tier) > currentTierIndex
+                  const isPastTier = index < currentTierIndex
+                  const tierStyle = getTierStyle(tier.tier)
 
                   return (
                     <div
                       key={tier.tier}
-                      className={`rounded-3xl border p-5 ${
+                      className={`relative overflow-hidden rounded-3xl border p-5 ${
                         isCurrent
                           ? 'border-orange-300 bg-orange-50'
+                          : isPastTier
+                          ? 'border-gray-100 bg-slate-50 opacity-60'
                           : 'border-gray-200 bg-white'
                       }`}
                     >
+                      <div
+                        className={`absolute inset-x-0 top-0 h-1.5 bg-linear-to-r ${tierStyle.gradient}`}
+                      />
                       <div className='flex items-center justify-between gap-3'>
                         <h3 className='text-lg font-bold text-slate-900'>
                           {formatTier(tier.tier)}
@@ -407,6 +401,14 @@ export default function SellerHubPage() {
                           <span>Max price</span>
                           <span className='font-semibold'>
                             {formatMoney(tier.max_product_price)}
+                          </span>
+                        </div>
+                        <div className='flex items-center justify-between gap-4'>
+                          <span>Platform commission</span>
+                          <span className='font-semibold'>
+                            {tier.commission_rate !== null && tier.commission_rate !== undefined
+                              ? `${tier.commission_rate}%`
+                              : 'Standard'}
                           </span>
                         </div>
                         <div className='flex items-center justify-between gap-4'>
@@ -473,11 +475,7 @@ export default function SellerHubPage() {
                 <div className='flex items-center justify-between gap-4'>
                   <span>Display name</span>
                   <span className='font-semibold text-slate-900'>
-                    {sellerProfile?.display_name ||
-                      `${user.first_name || ''} ${
-                        user.last_name || ''
-                      }`.trim() ||
-                      user.email}
+                    {sellerProfile?.display_name || fallbackName}
                   </span>
                 </div>
                 <div className='flex items-center justify-between gap-4'>
@@ -492,13 +490,20 @@ export default function SellerHubPage() {
                     {sellerProfile?.max_active_listings ?? 0}
                   </span>
                 </div>
-                <Link
-                  to='/creator-dashboard'
-                  className='mt-2 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800'
-                >
-                  <CircleDollarSign className='h-4 w-4' /> Open creator
-                  dashboard
-                </Link>
+                {creatorDashboardReady ? (
+                  <Link
+                    to='/creator-dashboard'
+                    className='mt-2 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800'
+                  >
+                    <CircleDollarSign className='h-4 w-4' /> Open creator
+                    dashboard
+                  </Link>
+                ) : (
+                  <p className='mt-2 rounded-2xl bg-slate-50 px-4 py-2.5 text-center text-xs text-gray-500 ring-1 ring-slate-100'>
+                    Finish activation and verification to unlock the creator
+                    dashboard.
+                  </p>
+                )}
               </div>
             </div>
 

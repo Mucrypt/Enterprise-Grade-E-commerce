@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
-  Alert,
-  Linking,
+  Image,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -11,8 +10,10 @@ import {
   View,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import { LinearGradient } from 'expo-linear-gradient'
+import * as Haptics from 'expo-haptics'
 import { useRouter } from 'expo-router'
-import { creatorApi, sellerApi, userApi } from '@/api'
+import { creatorApi, sellerApi, userApi, type PublicSellerProfile } from '@/api'
 import {
   AppBorderRadius,
   AppColors,
@@ -27,11 +28,7 @@ import type {
   SellerVerificationRequest,
 } from '@/types'
 import { useAuthStore } from '@/stores'
-
-const tierOrder: SellerTier[] = ['unverified', 'basic', 'trusted', 'pro']
-
-const formatTier = (tier: string) =>
-  tier.charAt(0).toUpperCase() + tier.slice(1).replace(/_/g, ' ')
+import { SELLER_TIER_ORDER as tierOrder, formatTier, getTierStyle } from '@/utils/sellerTier'
 
 const formatMoney = (value?: number | string | null) => {
   if (value === null || value === undefined || value === '') {
@@ -47,6 +44,7 @@ export default function SellerHubScreen() {
     useAuthStore()
   const [screenLoading, setScreenLoading] = useState(true)
   const [sellerProfile, setSellerProfile] = useState<SellerProfile | null>(null)
+  const [publicProfile, setPublicProfile] = useState<PublicSellerProfile | null>(null)
   const [tiers, setTiers] = useState<SellerTierConfig[]>([])
   const [requests, setRequests] = useState<SellerVerificationRequest[]>([])
   const [activityFeed, setActivityFeed] = useState<CreatorActivityItem[]>([])
@@ -107,6 +105,23 @@ export default function SellerHubScreen() {
 
     load()
   }, [hasHydrated, isAuthenticated])
+
+  useEffect(() => {
+    const handle = sellerProfile?.handle
+    if (!handle) return
+    let cancelled = false
+    sellerApi
+      .getPublicProfile(handle)
+      .then((data) => {
+        if (!cancelled) setPublicProfile(data)
+      })
+      .catch(() => {
+        if (!cancelled) setPublicProfile(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [sellerProfile?.handle])
 
   const currentTierIndex = useMemo(() => {
     const tier = sellerProfile?.tier || 'unverified'
@@ -169,6 +184,7 @@ export default function SellerHubScreen() {
       })
 
       setMessage('Business mode is active. Finish seller setup below.')
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
     } catch (error: any) {
       setMessage(
         error?.response?.data?.error ||
@@ -191,6 +207,7 @@ export default function SellerHubScreen() {
 
       setSellerProfile(result.sellerProfile)
       setMessage('Seller profile ready with protected starter limits.')
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
     } catch (error: any) {
       setMessage(
         error?.response?.data?.error ||
@@ -225,6 +242,7 @@ export default function SellerHubScreen() {
           requestedTier,
         )} verification submitted. You can continue selling while it is reviewed.`,
       )
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
     } catch (error: any) {
       setMessage(
         error?.response?.data?.error ||
@@ -232,22 +250,6 @@ export default function SellerHubScreen() {
       )
     } finally {
       setBusyAction(null)
-    }
-  }
-
-  const openCreatorHub = async () => {
-    if (!creatorDashboardReady) {
-      Alert.alert(
-        'Verification pending',
-        'An admin must approve your seller verification before creator tools unlock.',
-      )
-      return
-    }
-
-    try {
-      await Linking.openURL('https://techtoolstore.com/creator-dashboard')
-    } catch {
-      Alert.alert('Unavailable', 'Could not open creator dashboard right now.')
     }
   }
 
@@ -300,23 +302,63 @@ export default function SellerHubScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.hero}>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={styles.backButton}
-          >
-            <Ionicons name='arrow-back' size={18} color={AppColors.white} />
-            <Text style={styles.backButtonText}>Back</Text>
-          </TouchableOpacity>
-          <Text style={styles.heroEyebrow}>Seller Hub</Text>
-          <Text style={styles.heroTitle}>
-            Start selling fast with built-in trust and buyer protection.
-          </Text>
-          <Text style={styles.heroSubtitle}>
-            Activate business mode, create your seller profile, and move through
-            verification tiers without blocking early growth.
-          </Text>
-        </View>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButtonRow}>
+          <Ionicons name='arrow-back' size={18} color={AppColors.gray700} />
+          <Text style={styles.backButtonRowText}>Back</Text>
+        </TouchableOpacity>
+
+        {(() => {
+          const tierStyle = getTierStyle(sellerProfile?.tier || 'unverified')
+          const displayName =
+            sellerProfile?.display_name ||
+            `${user.first_name || ''} ${user.last_name || ''}`.trim() ||
+            user.email
+          return (
+            <LinearGradient
+              colors={tierStyle.gradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.hero}
+            >
+              <View style={styles.identityRow}>
+                <View style={styles.avatar}>
+                  {publicProfile?.avatar_url ? (
+                    <Image source={{ uri: publicProfile.avatar_url }} style={styles.avatarImage} />
+                  ) : (
+                    <Text style={styles.avatarInitial}>{displayName.charAt(0).toUpperCase()}</Text>
+                  )}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.identityNameRow}>
+                    <Text style={styles.identityName} numberOfLines={1}>
+                      {displayName}
+                    </Text>
+                    <View style={styles.tierPill}>
+                      <Text style={styles.tierPillText}>{formatTier(sellerProfile?.tier || 'unverified')}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.identityHandle}>
+                    {sellerProfile?.handle ? `@${sellerProfile.handle}` : 'Finish setup to claim a handle'}
+                  </Text>
+                </View>
+              </View>
+
+              {publicProfile ? (
+                <View style={styles.identityStatsRow}>
+                  <View style={styles.identityStat}>
+                    <Text style={styles.identityStatValue}>{publicProfile.followerCount}</Text>
+                    <Text style={styles.identityStatLabel}>Followers</Text>
+                  </View>
+                  <View style={styles.identityStatDivider} />
+                  <View style={styles.identityStat}>
+                    <Text style={styles.identityStatValue}>{publicProfile.postCount}</Text>
+                    <Text style={styles.identityStatLabel}>Posts</Text>
+                  </View>
+                </View>
+              ) : null}
+            </LinearGradient>
+          )
+        })()}
 
         {message ? <Text style={styles.message}>{message}</Text> : null}
 
@@ -344,33 +386,25 @@ export default function SellerHubScreen() {
               style={[styles.manageProductsButton, styles.hubActionButton]}
               onPress={() => router.push('/profile/seller-products' as never)}
             >
-              <Ionicons name="storefront-outline" size={18} color={AppColors.white} />
-              <Text style={styles.manageProductsButtonText}>Manage My Products</Text>
+              <Ionicons name="storefront-outline" size={16} color={AppColors.white} />
+              <Text style={styles.manageProductsButtonText}>Products</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.manageProductsButton, styles.hubActionButton, styles.earningsButton]}
               onPress={() => router.push('/profile/seller-earnings' as never)}
             >
-              <Ionicons name="wallet-outline" size={18} color={AppColors.white} />
+              <Ionicons name="wallet-outline" size={16} color={AppColors.white} />
               <Text style={styles.manageProductsButtonText}>Earnings</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.manageProductsButton, styles.hubActionButton, styles.performanceButton]}
+              onPress={() => router.push('/profile/seller-performance' as never)}
+            >
+              <Ionicons name="trending-up-outline" size={16} color={AppColors.white} />
+              <Text style={styles.manageProductsButtonText}>Performance</Text>
             </TouchableOpacity>
           </View>
         )}
-
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Business mode</Text>
-            <Text style={styles.statValue}>
-              {user.is_business_account ? 'Active' : 'Customer'}
-            </Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Tier</Text>
-            <Text style={styles.statValue}>
-              {formatTier(sellerProfile?.tier || 'unverified')}
-            </Text>
-          </View>
-        </View>
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Activation flow</Text>
@@ -471,20 +505,12 @@ export default function SellerHubScreen() {
           <Text style={styles.snapshotRow}>
             Price cap: {formatMoney(sellerProfile?.max_product_price)}
           </Text>
-          <TouchableOpacity
-            style={[
-              styles.secondaryButton,
-              !creatorDashboardReady && styles.secondaryButtonDisabled,
-            ]}
-            onPress={openCreatorHub}
-            disabled={!creatorDashboardReady}
-          >
-            <Text style={styles.secondaryButtonText}>
-              {creatorDashboardReady
-                ? 'Open creator tools'
-                : 'Creator tools locked'}
+          {!creatorDashboardReady ? (
+            <Text style={styles.snapshotHint}>
+              Manage Products, Earnings, and Performance unlock once an admin approves your
+              verification.
             </Text>
-          </TouchableOpacity>
+          ) : null}
         </View>
 
         <View style={styles.card}>
@@ -578,39 +604,100 @@ const styles = StyleSheet.create({
     paddingBottom: AppSpacing['2xl'],
     gap: AppSpacing.base,
   },
-  hero: {
-    borderRadius: 28,
-    backgroundColor: '#111827',
-    padding: AppSpacing.lg,
-  },
-  backButton: {
-    marginBottom: AppSpacing.md,
+  backButtonRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
-  backButtonText: {
-    color: AppColors.white,
+  backButtonRowText: {
+    color: AppColors.gray700,
     fontWeight: '600',
   },
-  heroEyebrow: {
-    color: '#FDBA74',
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+  hero: {
+    borderRadius: 28,
+    padding: AppSpacing.lg,
   },
-  heroTitle: {
-    marginTop: AppSpacing.sm,
+  identityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: AppSpacing.md,
+  },
+  avatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.5)',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarInitial: {
     color: AppColors.white,
-    fontSize: 28,
-    fontWeight: '900',
-    lineHeight: 34,
+    fontSize: 22,
+    fontWeight: '800',
   },
-  heroSubtitle: {
-    marginTop: AppSpacing.sm,
-    color: 'rgba(255,255,255,0.82)',
-    lineHeight: 22,
+  identityNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: AppSpacing.sm,
+  },
+  identityName: {
+    color: AppColors.white,
+    fontSize: 18,
+    fontWeight: '800',
+    flexShrink: 1,
+  },
+  tierPill: {
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  tierPillText: {
+    color: AppColors.white,
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  identityHandle: {
+    marginTop: 2,
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 13,
+  },
+  identityStatsRow: {
+    marginTop: AppSpacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: AppSpacing.md,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: AppSpacing.md,
+    paddingVertical: AppSpacing.sm,
+  },
+  identityStat: {
+    alignItems: 'center',
+  },
+  identityStatValue: {
+    color: AppColors.white,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  identityStatLabel: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 10,
+    textTransform: 'uppercase',
+  },
+  identityStatDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: 'rgba(255,255,255,0.25)',
   },
   message: {
     borderRadius: AppBorderRadius.lg,
@@ -641,14 +728,13 @@ const styles = StyleSheet.create({
   earningsButton: {
     backgroundColor: AppColors.gray900,
   },
+  performanceButton: {
+    backgroundColor: AppColors.secondary,
+  },
   manageProductsButtonText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: AppColors.white,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: AppSpacing.md,
   },
   summaryGrid: {
     flexDirection: 'row',
@@ -675,23 +761,6 @@ const styles = StyleSheet.create({
   summaryValueEmerald: { color: '#047857' },
   summaryValueAmber: { color: '#B45309' },
   summaryValueBlue: { color: '#2563EB' },
-  statCard: {
-    flex: 1,
-    borderRadius: 24,
-    backgroundColor: AppColors.white,
-    padding: AppSpacing.md,
-    ...AppShadows.sm,
-  },
-  statLabel: {
-    color: AppColors.gray500,
-    fontSize: 13,
-  },
-  statValue: {
-    marginTop: 8,
-    color: AppColors.gray900,
-    fontSize: 22,
-    fontWeight: '800',
-  },
   card: {
     borderRadius: 24,
     backgroundColor: AppColors.white,
@@ -828,6 +897,12 @@ const styles = StyleSheet.create({
     marginTop: 10,
     color: AppColors.gray700,
     fontWeight: '600',
+  },
+  snapshotHint: {
+    marginTop: AppSpacing.md,
+    color: AppColors.gray500,
+    fontSize: 13,
+    lineHeight: 19,
   },
   timelineItem: {
     marginTop: AppSpacing.md,

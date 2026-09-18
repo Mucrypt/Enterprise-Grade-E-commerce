@@ -30,8 +30,9 @@ import {
   BookOpen,
   Gift,
 } from 'lucide-react'
-import { supportApi, userApi, ordersApiNew } from '../api'
+import { supportApi, userApi, ordersApiNew, sellerApi } from '../api'
 import { SupportConcierge } from '../components/layout/SupportConcierge'
+import SellerStatusCard from '../components/seller/SellerStatusCard'
 import { useAuthStore, useWishlistStore } from '../stores'
 import { cn } from '../utils'
 
@@ -67,6 +68,13 @@ export default function ProfilePage() {
     retry: false,
   })
   const wishlistCount = useWishlistStore((state) => state.items.length)
+
+  const { data: sellerData } = useQuery({
+    queryKey: ['profile-seller-status', user?.id],
+    queryFn: () => sellerApi.getMyProfile(),
+    enabled: hasHydrated && isAuthenticated,
+    retry: false,
+  })
 
   const [formData, setFormData] = useState({
     first_name: '',
@@ -360,25 +368,12 @@ export default function ProfilePage() {
                 </div>
               </Link>
 
-              <Link
-                to='/seller-hub'
-                className='group rounded-2xl border border-orange-100 bg-orange-50 p-5 text-slate-900 shadow-sm transition hover:shadow-lg'
-              >
-                <div className='flex items-center justify-between gap-4'>
-                  <div className='flex items-start gap-3'>
-                    <span className='inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-orange-100'>
-                      <Store className='h-5 w-5 text-orange-600' />
-                    </span>
-                    <div>
-                      <p className='text-lg font-bold'>Seller Hub</p>
-                      <p className='mt-1 text-sm text-slate-600'>
-                        Manage business mode and seller verification tiers.
-                      </p>
-                    </div>
-                  </div>
-                  <ChevronRight className='h-5 w-5 text-orange-500 transition group-hover:text-orange-700' />
-                </div>
-              </Link>
+              <SellerStatusCard
+                sellerProfile={sellerData?.sellerProfile ?? null}
+                fallbackName={
+                  `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email
+                }
+              />
             </div>
 
             {/* Profile Tab */}

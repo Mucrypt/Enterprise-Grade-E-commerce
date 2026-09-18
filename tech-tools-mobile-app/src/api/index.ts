@@ -1695,6 +1695,15 @@ export interface DiscoverPost {
 }
 
 export const discoverApi = {
+  // A seller's own posts -- same GET /discover/posts endpoint the web
+  // creator dashboard's discoverApi.getMine() calls, scoped server-side
+  // to the signed-in seller's own content. Used by the mobile Performance
+  // screen to surface real per-post engagement counters.
+  getMine: async (): Promise<DiscoverPost[]> => {
+    const response = await apiClient.get('/discover/posts')
+    return response.data?.data || response.data || []
+  },
+
   getFeed: async (
     page = 1,
     limit = 10,
