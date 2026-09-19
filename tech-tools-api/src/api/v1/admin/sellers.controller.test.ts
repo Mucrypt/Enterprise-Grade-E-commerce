@@ -242,17 +242,34 @@ describe('admin sellers controller', () => {
     expect(res.status).toHaveBeenCalledWith(400)
   })
 
-  it('setSellerTier updates tier and limits from seller_tier_config directly, independent of any verification request', async () => {
+  it('setSellerTier updates tier and limits from seller_tier_config directly, and approves a seller left dangling in "pending" from an earlier self-submitted request', async () => {
     mockQuery.mockImplementation(async (sql: string) => {
       if (mockRegclass(sql)) return { rows: [{ regclass: 'seller_verification_requests' }] }
-      if (sql.includes('FROM seller_profiles WHERE id = $1'))
-        return { rows: [{ id: 'sp-1', user_id: 'user-1', tier: 'unverified' }] }
+      if (sql.includes('FROM seller_profiles sp') && sql.includes('WHERE sp.id = $1'))
+        return {
+          rows: [
+            {
+              id: 'sp-1',
+              user_id: 'user-1',
+              tier: 'unverified',
+              verification_status: 'pending',
+              is_suspended: false,
+              is_business_account: true,
+            },
+          ],
+        }
       if (sql.includes('FROM seller_tier_config'))
         return { rows: [{ max_active_listings: 100, max_product_price: 2000 }] }
-      if (sql.includes('UPDATE seller_profiles'))
-        return { rows: [{ id: 'sp-1', tier: 'pro' }] }
       return { rows: [] }
     })
+    const client = { query: jest.fn(), release: jest.fn() }
+    client.query.mockImplementation(async (sql: string) => {
+      if (sql === 'BEGIN' || sql === 'COMMIT') return { rows: [] }
+      if (sql.includes('UPDATE seller_profiles'))
+        return { rows: [{ id: 'sp-1', tier: 'pro', verification_status: 'approved' }] }
+      return { rows: [] }
+    })
+    mockGetClient.mockResolvedValue(client)
 
     const req: any = {
       user: { userId: 'admin-1' },
@@ -266,7 +283,61 @@ describe('admin sellers controller', () => {
     await setSellerTier(req, res)
 
     expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ success: true, data: { sellerProfile: { id: 'sp-1', tier: 'pro' } } }),
+      expect.objectContaining({
+        success: true,
+        data: { sellerProfile: { id: 'sp-1', tier: 'pro', verification_status: 'approved' } },
+      }),
+    )
+    // Never silently reactivates a business account that was already true --
+    // no spurious UPDATE users call for the already-business-account case.
+    const usersUpdateCall = client.query.mock.calls.find((c: any[]) => c[0].includes('UPDATE users'))
+    expect(usersUpdateCall).toBeUndefined()
+  })
+
+  it('setSellerTier does not silently un-suspend a seller -- verification_status is left untouched while suspended', async () => {
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (mockRegclass(sql)) return { rows: [{ regclass: 'seller_verification_requests' }] }
+      if (sql.includes('FROM seller_profiles sp') && sql.includes('WHERE sp.id = $1'))
+        return {
+          rows: [
+            {
+              id: 'sp-1',
+              user_id: 'user-1',
+              tier: 'basic',
+              verification_status: 'suspended',
+              is_suspended: true,
+              is_business_account: true,
+            },
+          ],
+        }
+      if (sql.includes('FROM seller_tier_config'))
+        return { rows: [{ max_active_listings: 10, max_product_price: 100 }] }
+      return { rows: [] }
+    })
+    const client = { query: jest.fn(), release: jest.fn() }
+    client.query.mockImplementation(async (sql: string) => {
+      if (sql === 'BEGIN' || sql === 'COMMIT') return { rows: [] }
+      if (sql.includes('UPDATE seller_profiles'))
+        return { rows: [{ id: 'sp-1', tier: 'trusted', verification_status: 'suspended' }] }
+      return { rows: [] }
+    })
+    mockGetClient.mockResolvedValue(client)
+
+    const req: any = {
+      user: { userId: 'admin-1' },
+      params: { sellerProfileId: 'sp-1' },
+      body: { tier: 'trusted' },
+      headers: {},
+      ip: '127.0.0.1',
+    }
+    const res = makeRes()
+
+    await setSellerTier(req, res)
+
+    const updateCall = client.query.mock.calls.find((c: any[]) => c[0].includes('UPDATE seller_profiles'))
+    expect(updateCall![1]).toEqual(['trusted', 10, 100, true, 'admin-1', 'sp-1'])
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { sellerProfile: { id: 'sp-1', tier: 'trusted', verification_status: 'suspended' } } }),
     )
   })
 

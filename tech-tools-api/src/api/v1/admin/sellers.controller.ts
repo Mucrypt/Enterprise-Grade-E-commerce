@@ -891,7 +891,11 @@ export const setSellerTier = async (req: AuthRequest, res: Response) => {
     }
 
     const current = await query(
-      `SELECT * FROM seller_profiles WHERE id = $1 LIMIT 1`,
+      `SELECT sp.*, u.is_business_account
+       FROM seller_profiles sp
+       INNER JOIN users u ON u.id = sp.user_id
+       WHERE sp.id = $1
+       LIMIT 1`,
       [sellerProfileId],
     )
     if (current.rows.length === 0) {
@@ -914,31 +918,68 @@ export const setSellerTier = async (req: AuthRequest, res: Response) => {
       })
     }
 
-    const updated = await query(
-      `UPDATE seller_profiles
-       SET tier = $1,
-           max_active_listings = $2,
-           max_product_price = $3,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = $4
-       RETURNING *`,
-      [tier, tierConfig.max_active_listings, tierConfig.max_product_price, sellerProfileId],
-    )
+    // An admin explicitly picking a tier here is a complete "yes, this
+    // seller is approved at this tier" decision -- it shouldn't leave a
+    // stale 'pending'/'none'/'rejected' verification_status behind from
+    // whatever the seller last self-submitted. Suspension stays a
+    // separate, deliberate action: never silently un-suspend a seller
+    // just because their tier changed.
+    const isSuspended = Boolean(current.rows[0].is_suspended)
+    const wasBusinessAccount = Boolean(current.rows[0].is_business_account)
 
-    await appendAuditLog({
-      profileId: sellerProfileId,
-      userId: current.rows[0].user_id,
-      actorId: adminId,
-      action: 'seller_tier_changed_by_admin',
-      previousState: { tier: current.rows[0].tier },
-      newState: { tier },
-      req,
-    })
+    const client = await getClient()
+    try {
+      await client.query('BEGIN')
 
-    return res.json({
-      success: true,
-      data: { sellerProfile: updated.rows[0] },
-    })
+      if (!isSuspended && !wasBusinessAccount) {
+        await client.query(
+          `UPDATE users
+           SET is_business_account = true,
+               business_mode_activated_at = COALESCE(business_mode_activated_at, CURRENT_TIMESTAMP),
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = $1`,
+          [current.rows[0].user_id],
+        )
+      }
+
+      const updatedResult = await client.query(
+        `UPDATE seller_profiles
+         SET tier = $1,
+             max_active_listings = $2,
+             max_product_price = $3,
+             verification_status = CASE WHEN $4 THEN verification_status ELSE 'approved' END,
+             verified_at = CASE WHEN $4 THEN verified_at ELSE COALESCE(verified_at, CURRENT_TIMESTAMP) END,
+             verified_by_admin_id = CASE WHEN $4 THEN verified_by_admin_id ELSE COALESCE(verified_by_admin_id, $5) END,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $6
+         RETURNING *`,
+        [tier, tierConfig.max_active_listings, tierConfig.max_product_price, isSuspended, adminId, sellerProfileId],
+      )
+
+      await client.query('COMMIT')
+
+      const updated = updatedResult.rows[0]
+
+      await appendAuditLog({
+        profileId: sellerProfileId,
+        userId: current.rows[0].user_id,
+        actorId: adminId,
+        action: 'seller_tier_changed_by_admin',
+        previousState: { tier: current.rows[0].tier, verification_status: current.rows[0].verification_status },
+        newState: { tier, verification_status: updated.verification_status },
+        req,
+      })
+
+      return res.json({
+        success: true,
+        data: { sellerProfile: updated },
+      })
+    } catch (error) {
+      await client.query('ROLLBACK')
+      throw error
+    } finally {
+      client.release()
+    }
   } catch (error) {
     logger.error('Set seller tier error:', error)
     return res.status(500).json({
