@@ -204,6 +204,19 @@ export default function SellerHubScreen() {
     sellerProfile?.verification_status === 'approved'
   const isBusinessAccount = user?.is_business_account ?? false
 
+  // Self-healing: verification_status is fetched fresh every load, but
+  // the store's is_business_account is cached at login and only updates
+  // via an explicit client action -- an admin approving a seller
+  // server-side (grant/tier-change/creator-access all flip it true) has
+  // no way to reach an already-logged-in session. Sync it the moment we
+  // see the mismatch so the "Business mode" tile stops showing stale
+  // "Inactive" once verification is really approved.
+  useEffect(() => {
+    if (creatorDashboardReady && !isBusinessAccount) {
+      updateUser({ is_business_account: true })
+    }
+  }, [creatorDashboardReady, isBusinessAccount, updateUser])
+
   const summaryCards = useMemo(
     () => [
       {
