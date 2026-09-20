@@ -5,8 +5,6 @@ import * as dotenv from 'dotenv'
 
 // Load environment variables from .env file
 dotenv.config()
-// For CommonJS compatibility with ts-node
-declare const __dirname: string
 
 // PostgreSQL to TypeScript type mapping
 const pgToTsType: Record<string, string> = {
@@ -38,6 +36,11 @@ interface ColumnInfo {
   is_nullable: string
   column_default: string | null
   udt_name: string
+}
+
+interface EnumLabelRow {
+  enum_type: string
+  enum_label: string
 }
 
 interface TableInfo {
@@ -81,21 +84,21 @@ async function generateTypesFromDatabase() {
 
     // Query to get all columns from all tables
     const query = `
-      SELECT 
+      SELECT
         c.table_name,
         c.column_name,
         c.data_type,
         c.is_nullable,
         c.column_default,
         c.udt_name
-      FROM 
+      FROM
         information_schema.columns c
-      JOIN 
+      JOIN
         information_schema.tables t ON c.table_name = t.table_name
-      WHERE 
+      WHERE
         c.table_schema = 'public'
         AND t.table_type = 'BASE TABLE'
-      ORDER BY 
+      ORDER BY
         c.table_name, c.ordinal_position
     `
 
@@ -107,6 +110,36 @@ async function generateTypesFromDatabase() {
     }
 
     console.log(`✅ Found ${result.rows.length} columns in database`)
+
+    // Every Postgres ENUM type's real ordered labels (pg_enum), keyed by
+    // the type name exactly as columns reference it via udt_name. Before
+    // this, a `data_type = 'USER-DEFINED'` column (every enum column in
+    // this schema, including the whole seller-lifecycle status split)
+    // fell through pgToTsType's lookup miss straight to 'any' -- silently
+    // discarding the actual valid-value contract that is the entire
+    // point of generating types from the database in the first place.
+    // This is exactly the gap that let the admin dashboard, web store,
+    // and mobile app each independently hand-write (and each
+    // independently get wrong) the same enum's values as stale lowercase
+    // strings after the seller-lifecycle migration moved them to
+    // uppercase.
+    const enumResult = await pool.query<EnumLabelRow>(`
+      SELECT t.typname AS enum_type, e.enumlabel AS enum_label
+      FROM pg_type t
+      JOIN pg_enum e ON t.oid = e.enumtypid
+      JOIN pg_namespace n ON n.oid = t.typnamespace
+      WHERE n.nspname = 'public'
+      ORDER BY t.typname, e.enumsortorder
+    `)
+
+    const enumLabelsByType = new Map<string, string[]>()
+    enumResult.rows.forEach((row) => {
+      const labels = enumLabelsByType.get(row.enum_type) || []
+      labels.push(row.enum_label)
+      enumLabelsByType.set(row.enum_type, labels)
+    })
+
+    console.log(`✅ Found ${enumLabelsByType.size} enum types in database`)
 
     // Group columns by table
     const tables: TableInfo = {}
@@ -125,6 +158,21 @@ async function generateTypesFromDatabase() {
     output +=
       '// DO NOT EDIT MANUALLY - Run npm run generate:types to regenerate\n\n'
 
+    // One exported named union type per Postgres ENUM type -- e.g.
+    // seller_verification_case_status -> SellerVerificationCaseStatus,
+    // with its real, current ordered label set. Emitted before the table
+    // interfaces so every USER-DEFINED column below can reference it by
+    // name instead of repeating (or worse, re-guessing) the union inline.
+    if (enumLabelsByType.size > 0) {
+      output += '// ---- Enum types (from pg_enum, real values, not guessed) ----\n\n'
+      for (const [enumType, labels] of Array.from(enumLabelsByType.entries()).sort()) {
+        const typeName = toPascalCase(enumType)
+        const union = labels.map((label) => `'${label}'`).join(' | ')
+        output += `export type ${typeName} = ${union}\n`
+      }
+      output += '\n'
+    }
+
     // Generate interface for each table
     for (const [tableName, columns] of Object.entries(tables)) {
       const interfaceName = toPascalCase(tableName)
@@ -132,11 +180,21 @@ async function generateTypesFromDatabase() {
       output += `export interface ${interfaceName} {\n`
 
       columns.forEach((col) => {
-        let tsType = pgToTsType[col.data_type] || 'any'
+        let tsType: string
 
-        // Handle array types
-        if (col.udt_name.startsWith('_')) {
-          tsType = `${pgToTsType[col.udt_name.substring(1)] || 'any'}[]`
+        if (col.data_type === 'USER-DEFINED' && enumLabelsByType.has(col.udt_name)) {
+          tsType = toPascalCase(col.udt_name)
+        } else if (col.udt_name.startsWith('_')) {
+          // Array types -- e.g. _text -> string[]. An array of a known
+          // enum type resolves to that enum's named union array too,
+          // not 'any[]'.
+          const baseUdtName = col.udt_name.substring(1)
+          const baseType = enumLabelsByType.has(baseUdtName)
+            ? toPascalCase(baseUdtName)
+            : pgToTsType[baseUdtName] || 'any'
+          tsType = `${baseType}[]`
+        } else {
+          tsType = pgToTsType[col.data_type] || 'any'
         }
 
         // Handle JSONB with proper typing for known fields
@@ -201,15 +259,28 @@ async function generateTypesFromDatabase() {
   }
 }\n`
 
-    // Save to API types folder
-    const apiTypesPath = path.join(__dirname, '../src/types/generated.ts')
+    // Paths are resolve()'d against the CURRENT WORKING DIRECTORY, not
+    // __dirname -- this script runs from two very different locations
+    // depending on environment: `ts-node src/scripts/...` locally (cwd
+    // is tech-tools-api/'s root) and `node dist/scripts/...` inside the
+    // production container (cwd is /app, which the API's own Dockerfile
+    // build context maps 1:1 onto tech-tools-api/'s root). __dirname
+    // would differ between the two (src/scripts vs dist/scripts) and
+    // between environments where this file may or may not have been
+    // compiled yet; cwd does not.
+    const apiTypesPath = path.resolve(process.cwd(), 'src/types/generated.ts')
     fs.writeFileSync(apiTypesPath, output)
     console.log(`✅ API types saved to: ${apiTypesPath}`)
 
-    // Save to admin-dashboard types folder
-    const adminDashboardPath = path.join(
-      __dirname,
-      '../../admin-dashboard/types/generated.ts',
+    // Only reachable in a full monorepo checkout (local dev) -- the
+    // production container's build context is tech-tools-api/ alone, so
+    // admin-dashboard/ never exists as a sibling there. That's fine:
+    // server-scripts/generate-types-prod.sh separately `docker cp`s this
+    // same file out to admin-dashboard/types/generated.ts on the host
+    // afterward, from outside the container.
+    const adminDashboardPath = path.resolve(
+      process.cwd(),
+      '../admin-dashboard/types/generated.ts',
     )
     if (fs.existsSync(path.dirname(adminDashboardPath))) {
       fs.writeFileSync(adminDashboardPath, output)
@@ -223,7 +294,7 @@ async function generateTypesFromDatabase() {
     console.log('\n🎉 Type generation completed successfully!')
     console.log('\n📝 Summary:')
     console.log(`   - Tables processed: ${Object.keys(tables).length}`)
-    console.log(`   - Interfaces generated: ${Object.keys(tables).length}`)
+    console.log(`   - Enum types processed: ${enumLabelsByType.size}`)
     console.log('\n💡 Next steps:')
     console.log('   1. Review the generated types in src/types/generated.ts')
     console.log(

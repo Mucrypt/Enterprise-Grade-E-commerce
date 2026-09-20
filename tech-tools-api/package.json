@@ -37,7 +37,8 @@
     "docker:backup": "./infra/scripts/backup-db.sh",
     "ssl:setup": "./infra/scripts/ssl-setup.sh",
     "generate:types": "docker exec techtools-api-dev npm run generate:types:local",
-    "generate:types:local": "ts-node scripts/generate-types-from-db.ts",
+    "generate:types:local": "ts-node src/scripts/generate-types-from-db.ts",
+    "generate:types:prod": "node dist/scripts/generate-types-from-db.js",
     "types:watch": "nodemon --watch src/database/migrations --exec npm run generate:types"
   },
   "dependencies": {

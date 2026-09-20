@@ -32,8 +32,14 @@ log_info "Connecting to production database..."
 log_info "  Host: ${DB_HOST:-postgres}"
 log_info "  Database: ${DB_NAME:-techtools}"
 
-# Run type generation inside the API container
-docker exec techtools-api-prod sh -c "cd /app && npm run generate:types:local"
+# The production image only ships compiled JS + non-dev dependencies
+# (ts-node/typescript are devDependencies, correctly excluded from that
+# image) -- generate:types:local's `ts-node ...` doesn't exist in this
+# container. generate:types:prod runs the already-compiled
+# dist/scripts/generate-types-from-db.js with plain `node` instead; the
+# API's own Dockerfile build already produces this as part of its normal
+# `npm run build` step, no extra install needed here.
+docker exec techtools-api-prod sh -c "cd /app && npm run generate:types:prod"
 
 if [ $? -eq 0 ]; then
     log_success "Types generated successfully!"
