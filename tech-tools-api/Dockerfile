@@ -33,11 +33,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends dumb-init ffmpe
 RUN groupadd --gid 1001 nodejs && \
     useradd --uid 1001 --gid nodejs --shell /bin/bash --create-home nodejs
 
-# Create uploads directory with proper ownership
+# Create uploads directories with proper ownership -- Docker only copies
+# a named volume's ownership from what already exists at that path in
+# the image on the volume's FIRST mount; a path with no prior content
+# (like a newly-added volume mount) gets created root-owned instead,
+# which the non-root `nodejs` user then can't write to. private-uploads
+# hit exactly this in production: the volume was added to docker-compose
+# without a matching entry here, so the container failed its startup
+# safety check (assertPrivateMediaStorageIsSafe) with EACCES until this
+# was added and the running volume's ownership was fixed manually.
 RUN mkdir -p /app/uploads/products/images /app/uploads/products/videos /app/uploads/products/thumbnails \
              /app/uploads/categories/images /app/uploads/categories/videos /app/uploads/categories/thumbnails \
-             /app/uploads/temp && \
-    chown -R nodejs:nodejs /app/uploads
+             /app/uploads/temp \
+             /app/private-uploads && \
+    chown -R nodejs:nodejs /app/uploads /app/private-uploads
 
 # Copy package files for production install
 COPY --chown=nodejs:nodejs package*.json ./
