@@ -168,7 +168,7 @@ export default function ProfilePage() {
     { label: 'Payment Methods', icon: CreditCard, href: '/payment-methods' },
     { label: 'Refer & Earn', icon: Gift, href: '/refer' },
     { label: 'Seller Hub', icon: Store, href: '/seller-hub' },
-    { label: 'Creator Dashboard', icon: Store, href: '/creator-dashboard' },
+    { label: 'Seller Center', icon: Store, href: '/seller-center' },
     { label: 'Settings', icon: Settings, href: '/settings' },
   ]
 

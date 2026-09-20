@@ -360,7 +360,7 @@ export default function SettingsPage() {
                 </Link>
 
                 <Link
-                  to='/creator-dashboard'
+                  to='/seller-center'
                   className='rounded-2xl border border-gray-200 p-4 transition hover:border-orange-200 hover:bg-orange-50/40'
                 >
                   <div className='flex items-center gap-3'>
@@ -499,11 +499,11 @@ export default function SettingsPage() {
                     </button>
                   </div>
                   <Link
-                    to='/creator-dashboard'
+                    to='/seller-center'
                     className='mt-3 inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100'
                   >
                     <Store className='h-4 w-4' />
-                    Open Creator Dashboard
+                    Open Seller Center
                   </Link>
                   <Link
                     to='/seller-hub'

@@ -61,7 +61,7 @@ export default function SellerStatusCard({
 
   return (
     <Link
-      to={ready ? '/creator-dashboard' : '/seller-hub'}
+      to={ready ? '/seller-center' : '/seller-hub'}
       className='block rounded-2xl bg-slate-950 p-5 text-white shadow-sm transition hover:bg-slate-900'
     >
       <div className='flex items-center gap-3'>

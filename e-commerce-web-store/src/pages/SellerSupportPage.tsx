@@ -4,9 +4,10 @@
 // unverified/pending -- that's exactly when support matters most.
 
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Loader2, MessageSquarePlus, Send } from 'lucide-react'
 import { sellerSupportApi, type SupportTicket, type SupportMessage, type SupportTicketCategory } from '../api'
+import SellerPageHeader from '../components/seller-center/SellerPageHeader'
 
 const STATUS_LABEL: Record<string, string> = {
   open: 'Open',
@@ -216,9 +217,12 @@ function TicketThread({ ticketId, onBack }: { ticketId: string; onBack: () => vo
 }
 
 export default function SellerSupportPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [tickets, setTickets] = useState<SupportTicket[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null)
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(
+    searchParams.get('ticket'),
+  )
 
   const loadTickets = async () => {
     setLoading(true)
@@ -236,30 +240,38 @@ export default function SellerSupportPage() {
     loadTickets()
   }, [])
 
+  const handleSelectTicket = (id: string | null) => {
+    setSelectedTicketId(id)
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current)
+        if (id) {
+          next.set('ticket', id)
+        } else {
+          next.delete('ticket')
+        }
+        return next
+      },
+      { replace: true },
+    )
+  }
+
   return (
-    <div className='min-h-screen bg-stone-50 py-8'>
-      <div className='mx-auto max-w-3xl px-4'>
-        <Link
-          to='/seller-hub'
-          className='mb-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-500 transition hover:text-slate-900'
-        >
-          <ArrowLeft className='h-4 w-4' /> Seller hub
-        </Link>
+    <div className='max-w-3xl'>
+      <SellerPageHeader
+        title='Support'
+        description='A real conversation with our team -- ask about payouts, verification, listings, or anything else.'
+      />
 
-        <h1 className='text-2xl font-black text-slate-900'>Support</h1>
-        <p className='mt-1 text-sm text-gray-500'>
-          A real conversation with our team -- ask about payouts, verification, listings, or anything else.
-        </p>
-
-        <div className='mt-6 space-y-6'>
+      <div className='mt-6 space-y-6'>
           {selectedTicketId ? (
-            <TicketThread ticketId={selectedTicketId} onBack={() => setSelectedTicketId(null)} />
+            <TicketThread ticketId={selectedTicketId} onBack={() => handleSelectTicket(null)} />
           ) : (
             <>
               <NewTicketForm
                 onCreated={(ticket) => {
                   setTickets((current) => [ticket, ...current])
-                  setSelectedTicketId(ticket.id)
+                  handleSelectTicket(ticket.id)
                 }}
               />
 
@@ -277,7 +289,7 @@ export default function SellerSupportPage() {
                       <button
                         key={ticket.id}
                         type='button'
-                        onClick={() => setSelectedTicketId(ticket.id)}
+                        onClick={() => handleSelectTicket(ticket.id)}
                         className='flex w-full items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-slate-50 px-4 py-3 text-left transition hover:bg-slate-100'
                       >
                         <div>
@@ -297,7 +309,6 @@ export default function SellerSupportPage() {
             </>
           )}
         </div>
-      </div>
     </div>
   )
 }

@@ -1,42 +1,24 @@
-// Replaces the old single-route, single-long-scroll CreatorDashboardPage.
-// Fetches identity-level data ONLY (who is this seller/creator, are they
-// approved) and renders a persistent identity header + tab switcher +
-// <Outlet/>. Each tab route fetches its own data on mount instead of
-// everything loading up front.
+// The Seller Center's application shell -- sidebar + topbar + <Outlet/>,
+// evolved from the old CreatorDashboardLayout (same identity fetch, same
+// useCreatorDashboardReady() gate, same locked-state screen -- all of
+// that was already correct). What changed is purely presentational: the
+// old pill-tab strip + big gradient identity banner are replaced with a
+// real sidebar-based workspace shell, matching a Stripe Dashboard/
+// Shopify Admin register rather than another marketing page.
 
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import {
-  ArrowLeft,
-  Activity,
-  BarChart3,
-  BookOpen,
-  Clapperboard,
-  Loader2,
-  Settings2,
-  Store,
-  TrendingUp,
-  Wallet,
-} from 'lucide-react'
-import { cn } from '../../utils'
+import { Loader2, Store } from 'lucide-react'
 import { creatorApi, sellerApi, userApi } from '../../api'
 import type { CreatorProfile, SellerProfile } from '../../types'
 import { useAuthStore } from '../../stores'
 import { useCreatorDashboardReady } from '../../hooks/useCreatorDashboardReady'
-import SellerIdentityHeader from '../../components/seller/SellerIdentityHeader'
+import SellerSidebar from '../../components/seller-center/SellerSidebar'
+import SellerMobileNav from '../../components/seller-center/SellerMobileNav'
+import SellerTopbar from '../../components/seller-center/SellerTopbar'
+import SellerCommandPalette from '../../components/seller-center/SellerCommandPalette'
 
-const TABS = [
-  { to: '/creator-dashboard/overview', label: 'Overview', icon: BarChart3 },
-  { to: '/creator-dashboard/store', label: 'Store products', icon: Store },
-  { to: '/creator-dashboard/books', label: 'Books', icon: BookOpen },
-  { to: '/creator-dashboard/discover', label: 'Discover', icon: Clapperboard },
-  { to: '/creator-dashboard/performance', label: 'Performance', icon: TrendingUp },
-  { to: '/creator-dashboard/earnings', label: 'Earnings', icon: Wallet },
-  { to: '/creator-dashboard/activity', label: 'Activity', icon: Activity },
-  { to: '/creator-dashboard/settings', label: 'Settings', icon: Settings2 },
-]
-
-export default function CreatorDashboardLayout() {
+export default function SellerCenterShell() {
   const navigate = useNavigate()
   const { user, isAuthenticated, hasHydrated, isLoading: authLoading, updateUser } =
     useAuthStore()
@@ -45,10 +27,12 @@ export default function CreatorDashboardLayout() {
   const [isActivating, setIsActivating] = useState(false)
   const [sellerProfile, setSellerProfile] = useState<SellerProfile | null>(null)
   const [creatorProfile, setCreatorProfile] = useState<CreatorProfile | null>(null)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
 
   useEffect(() => {
     if (hasHydrated && !isAuthenticated && !authLoading) {
-      navigate('/login', { state: { from: { pathname: '/creator-dashboard' } } })
+      navigate('/login', { state: { from: { pathname: '/seller-center' } } })
     }
   }, [authLoading, hasHydrated, isAuthenticated, navigate])
 
@@ -70,6 +54,19 @@ export default function CreatorDashboardLayout() {
     load()
   }, [hasHydrated, isAuthenticated])
 
+  // Real, global Cmd/Ctrl+K -- the "⌘K" hint in the customer store's own
+  // Header.tsx has never had a listener behind it; this is the first one.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setCommandPaletteOpen((v) => !v)
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
   const { ready, isBusinessAccount, verificationStatus } = useCreatorDashboardReady(
     sellerProfile,
     creatorProfile,
@@ -78,7 +75,7 @@ export default function CreatorDashboardLayout() {
   const handleActivateBusiness = async () => {
     setIsActivating(true)
     try {
-      const result = await userApi.activateBusinessMode({ source: 'web_creator_dashboard' })
+      const result = await userApi.activateBusinessMode({ source: 'web_seller_center' })
       updateUser({
         is_business_account: result.user.isBusinessAccount,
         user_type: result.user.userType,
@@ -115,19 +112,19 @@ export default function CreatorDashboardLayout() {
                 : verificationStatus === 'rejected'
                 ? 'Verification was rejected'
                 : sellerProfile?.is_suspended
-                ? 'Creator access suspended'
-                : 'Creator dashboard locked'}
+                ? 'Seller Center access suspended'
+                : 'Seller Center locked'}
             </h2>
             <p className='mt-2 text-sm text-gray-600'>
               {!isBusinessAccount
-                ? 'This dashboard is available to verified seller/creator accounts only. Activate business mode, then request admin verification from Seller Hub.'
+                ? 'Seller Center is available to verified seller accounts only. Activate business mode, then request admin verification from Seller Hub.'
                 : verificationStatus === 'pending'
-                ? 'Your verification request is pending review. Once an admin approves it, your dashboard will unlock and you can create books and products.'
+                ? 'Your verification request is pending review. Once an admin approves it, Seller Center will unlock.'
                 : verificationStatus === 'rejected'
                 ? 'Your verification request was rejected. Return to Seller Hub to update your verification details and resubmit.'
                 : sellerProfile?.is_suspended
                 ? 'Your seller profile is suspended. Access is paused until moderation clears it.'
-                : 'Creator access is not yet approved.'}
+                : 'Seller Center access is not yet approved.'}
             </p>
             <div className='mt-5 flex flex-wrap gap-3'>
               {!isBusinessAccount ? (
@@ -155,40 +152,19 @@ export default function CreatorDashboardLayout() {
   }
 
   return (
-    <div className='min-h-screen bg-slate-50 pb-16'>
-      <div className='mx-auto max-w-6xl px-4 pt-8'>
-        <NavLink
-          to='/seller-hub'
-          className='mb-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-500 transition hover:text-slate-900'
-        >
-          <ArrowLeft className='h-4 w-4' /> Seller hub
-        </NavLink>
+    <div className='flex h-screen overflow-hidden bg-slate-50'>
+      <SellerSidebar />
+      <SellerMobileNav open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
 
-        <SellerIdentityHeader sellerProfile={sellerProfile} fallbackName={fallbackName} />
+      <div className='flex min-w-0 flex-1 flex-col'>
+        <SellerTopbar
+          sellerProfile={sellerProfile}
+          fallbackName={fallbackName}
+          onOpenMobileNav={() => setMobileNavOpen(true)}
+          onOpenCommandPalette={() => setCommandPaletteOpen(true)}
+        />
 
-        <div className='sticky top-0 z-10 -mx-4 mt-6 overflow-x-auto bg-slate-50/95 px-4 py-3 backdrop-blur-sm'>
-          <div className='flex w-max gap-2'>
-            {TABS.map((tab) => (
-              <NavLink
-                key={tab.to}
-                to={tab.to}
-                className={({ isActive }: { isActive: boolean }) =>
-                  cn(
-                    'inline-flex items-center gap-2 whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition',
-                    isActive
-                      ? 'bg-slate-900 text-white shadow-sm'
-                      : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100',
-                  )
-                }
-              >
-                <tab.icon className='h-4 w-4' />
-                {tab.label}
-              </NavLink>
-            ))}
-          </div>
-        </div>
-
-        <div className='mt-6'>
+        <main className='flex-1 overflow-y-auto p-4 sm:p-6'>
           <Outlet
             context={{
               sellerProfile,
@@ -197,8 +173,10 @@ export default function CreatorDashboardLayout() {
               fallbackName,
             }}
           />
-        </div>
+        </main>
       </div>
+
+      <SellerCommandPalette open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />
     </div>
   )
 }

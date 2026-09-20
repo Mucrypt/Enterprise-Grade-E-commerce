@@ -224,14 +224,14 @@ export default function SellerHubPage() {
           </div>
           {creatorDashboardReady ? (
             <Link
-              to='/creator-dashboard'
+              to='/seller-center'
               className='inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800'
             >
-              <Briefcase className='h-4 w-4' /> Creator dashboard
+              <Briefcase className='h-4 w-4' /> Seller Center
             </Link>
           ) : (
             <div className='inline-flex items-center gap-2 rounded-2xl bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-500'>
-              <Briefcase className='h-4 w-4' /> Creator dashboard locked
+              <Briefcase className='h-4 w-4' /> Seller Center locked
             </div>
           )}
         </div>
@@ -500,11 +500,11 @@ export default function SellerHubPage() {
                 </div>
                 {creatorDashboardReady ? (
                   <Link
-                    to='/creator-dashboard'
+                    to='/seller-center'
                     className='mt-2 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800'
                   >
-                    <CircleDollarSign className='h-4 w-4' /> Open creator
-                    dashboard
+                    <CircleDollarSign className='h-4 w-4' /> Open Seller
+                    Center
                   </Link>
                 ) : (
                   <p className='mt-2 rounded-2xl bg-slate-50 px-4 py-2.5 text-center text-xs text-gray-500 ring-1 ring-slate-100'>
@@ -514,7 +514,7 @@ export default function SellerHubPage() {
                 )}
                 {sellerProfile && (
                   <Link
-                    to='/seller-hub/support'
+                    to='/seller-center/support'
                     className='inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50'
                   >
                     <MessageCircle className='h-4 w-4' /> Contact support

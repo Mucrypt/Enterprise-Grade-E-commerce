@@ -20,6 +20,7 @@ import {
 import { creatorApi, discoverApi, sellerEarningsApi, sellerProductsApi } from '../../api'
 import type { CreatorActivityItem, CreatorDashboardMetrics } from '../../types'
 import { formatPrice } from '../../utils'
+import SellerQuickActions from '../../components/seller-center/SellerQuickActions'
 import { useCreatorDashboardContext } from './context'
 
 export default function OverviewTab() {
@@ -87,14 +88,14 @@ export default function OverviewTab() {
   const grossSales30d = metrics?.sales.grossSales30d ?? 0
 
   const checklist = [
-    { label: 'List your first store product', done: storeProductCount > 0, to: '/creator-dashboard/store' },
-    { label: 'Post to Discover', done: discoverReach.postCount > 0, to: '/creator-dashboard/discover' },
+    { label: 'List your first store product', done: storeProductCount > 0, to: '/seller-center/products' },
+    { label: 'Post to Discover', done: discoverReach.postCount > 0, to: '/seller-center/content' },
     {
       label: 'Make your first sale',
       done:
         storeEarnings.pendingBalance + storeEarnings.confirmedUnpaidBalance + storeEarnings.lifetimePaid > 0 ||
         (metrics?.sales.unitsSold ?? 0) > 0,
-      to: '/creator-dashboard/earnings',
+      to: '/seller-center/finances',
     },
   ]
   const allDone = checklist.every((item) => item.done)
@@ -109,6 +110,8 @@ export default function OverviewTab() {
 
   return (
     <div className='space-y-6'>
+      <SellerQuickActions handle={sellerProfile?.handle || null} dashboardReady />
+
       {!allDone && (
         <div className='rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5'>
           <h2 className='text-lg font-bold text-slate-900'>Getting started</h2>
@@ -174,7 +177,7 @@ export default function OverviewTab() {
         <div className='flex items-center justify-between gap-4'>
           <h2 className='text-lg font-bold text-slate-900'>Recent activity</h2>
           <Link
-            to='/creator-dashboard/activity'
+            to='/seller-center/activity'
             className='inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:text-blue-700'
           >
             View all <ArrowRight className='h-3.5 w-3.5' />

@@ -385,7 +385,7 @@ async function notifyStaffMessageToSeller(ticket: SupportTicket, message: Suppor
       type: 'support_ticket_reply',
       title: 'Support replied to your ticket',
       message: ticket.subject,
-      actionUrl: `/seller-hub/support/${ticket.id}`,
+      actionUrl: `/seller-center/support?ticket=${ticket.id}`,
     }).catch(() => null),
     emailService
       .sendEmail({

@@ -146,6 +146,12 @@ services:
       # injects vars explicitly listed in this environment: block, so the
       # running container always saw it as unset regardless of .env.
       ENABLE_SELLER_TIERS: ${ENABLE_SELLER_TIERS:-false}
+      # Same gap, same fix -- gates the self-service "Activate business
+      # mode" endpoint (users/business-mode/activate), which threw
+      # "Business mode switching is not enabled" for the exact same
+      # reason ENABLE_SELLER_TIERS did above.
+      ENABLE_BUSINESS_MODE_SWITCH: ${ENABLE_BUSINESS_MODE_SWITCH:-false}
+      ENABLE_ADMIN_BOOK_PUBLISHING: ${ENABLE_ADMIN_BOOK_PUBLISHING:-false}
     volumes:
       - api_uploads:/app/uploads
     networks:
