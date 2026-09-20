@@ -303,21 +303,26 @@ async function generateTypesFromDatabase() {
 
     // Only reachable in a full monorepo checkout (local dev) -- the
     // production container's build context is tech-tools-api/ alone, so
-    // admin-dashboard/ never exists as a sibling there. That's fine:
+    // none of these ever exist as siblings there. That's fine:
     // server-scripts/generate-types-prod.sh separately `docker cp`s this
-    // same file out to admin-dashboard/types/generated.ts on the host
-    // afterward, from outside the container.
-    const adminDashboardPath = path.resolve(
-      process.cwd(),
-      '../admin-dashboard/types/generated.ts',
-    )
-    if (fs.existsSync(path.dirname(adminDashboardPath))) {
-      fs.writeFileSync(adminDashboardPath, output)
-      console.log(`✅ Admin dashboard types saved to: ${adminDashboardPath}`)
-    } else {
-      console.log(
-        `⚠️  Admin dashboard path not found, skipping: ${adminDashboardPath}`,
-      )
+    // same file out to each one on the host afterward, from outside the
+    // container. Same file, same content, in every app -- one shared
+    // source of truth for every enum instead of each app hand-copying
+    // (and, as this session found three times over, hand-copying wrong)
+    // its own guess at what a Postgres enum's real values are.
+    const siblingTargets = [
+      { name: 'Admin dashboard', relativePath: '../admin-dashboard/types/generated.ts' },
+      { name: 'Web store', relativePath: '../e-commerce-web-store/src/types/generated.ts' },
+      { name: 'Mobile app', relativePath: '../tech-tools-mobile-app/src/types/generated.ts' },
+    ]
+    for (const target of siblingTargets) {
+      const targetPath = path.resolve(process.cwd(), target.relativePath)
+      if (fs.existsSync(path.dirname(targetPath))) {
+        fs.writeFileSync(targetPath, output)
+        console.log(`✅ ${target.name} types saved to: ${targetPath}`)
+      } else {
+        console.log(`⚠️  ${target.name} path not found, skipping: ${targetPath}`)
+      }
     }
 
     console.log('\n🎉 Type generation completed successfully!')

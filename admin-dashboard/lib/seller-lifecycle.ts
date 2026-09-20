@@ -14,46 +14,27 @@
 // the valid-value lists and the reviewable/terminal predicates here means
 // an unrecognized or stale value now fails closed (no actions shown, not
 // counted as pending) instead of silently miscomparing.
+//
+// The six types below are re-exported from types/generated.ts (run
+// `npm run generate:types` / server-scripts/generate-types-prod.sh to
+// regenerate) rather than hand-declared -- they used to be hand-written
+// here too, which is exactly the class of bug this file exists to fix:
+// a hand-copied enum silently drifting from the real one. Now there is
+// exactly one place these values come from (pg_enum, read live off the
+// database), and every app that imports them gets the same file.
+export type {
+  SellerProfileVerificationStatus,
+  SellerVerificationCaseStatus,
+  SellerAccountStatus,
+  SellerStoreStatus,
+  SellerOnboardingStatus,
+  SellerTier,
+} from '@/types/generated'
 
-// A seller PROFILE's own current verification standing.
-export type SellerProfileVerificationStatus =
-  | 'NOT_STARTED'
-  | 'IN_PROGRESS'
-  | 'PENDING_REVIEW'
-  | 'MORE_INFORMATION_REQUIRED'
-  | 'APPROVED'
-  | 'REJECTED'
-  | 'EXPIRED'
-
-// An individual review CASE's lifecycle (one row in
-// seller_verification_requests) -- a DIFFERENT enum from the profile
-// status above. A profile can be APPROVED overall while a later
-// tier-upgrade case is independently PENDING; a SUPERSEDED case was never
-// itself reviewed to a decision (see 074's migration comment), so it is
-// deliberately distinct from APPROVED/REJECTED.
-export type SellerVerificationCaseStatus =
-  | 'PENDING'
-  | 'MORE_INFORMATION_REQUIRED'
-  | 'APPROVED'
-  | 'REJECTED'
-  | 'EXPIRED'
-  | 'SUPERSEDED'
-
-export type SellerAccountStatus =
-  | 'DRAFT'
-  | 'PENDING_REVIEW'
-  | 'ACTIVE'
-  | 'RESTRICTED'
-  | 'SUSPENDED'
-  | 'REJECTED'
-  | 'CLOSED'
-
-export type SellerStoreStatus = 'DRAFT' | 'READY' | 'LIVE' | 'PAUSED' | 'SUSPENDED' | 'CLOSED'
-
-export type SellerOnboardingStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'SUBMITTED' | 'COMPLETED'
-
-// Tier stays lowercase by design -- it was never part of the enum split.
-export type SellerTier = 'unverified' | 'basic' | 'trusted' | 'pro'
+import type {
+  SellerProfileVerificationStatus,
+  SellerVerificationCaseStatus,
+} from '@/types/generated'
 
 const REVIEWABLE_CASE_STATUSES: readonly SellerVerificationCaseStatus[] = [
   'PENDING',

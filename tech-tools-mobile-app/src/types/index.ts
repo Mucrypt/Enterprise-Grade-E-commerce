@@ -2,6 +2,12 @@
 // TechTools Mobile App - Type Definitions
 // ============================================
 
+import type {
+  SellerTier,
+  SellerVerificationCaseStatus,
+  SellerProfileVerificationStatus as SellerVerificationStatus,
+} from './generated'
+
 export interface Product {
   id: string
   sku: string
@@ -171,30 +177,28 @@ export interface User {
   created_at: string
 }
 
-export type SellerTier = 'unverified' | 'basic' | 'trusted' | 'pro'
-
-// seller_profiles.verification_status (profile-level standing). Matches
-// the `seller_profile_verification_status` Postgres enum exactly --
-// uppercase values, no more lowercase 'approved'/'pending' on the wire.
-export type SellerVerificationStatus =
-  | 'NOT_STARTED'
-  | 'IN_PROGRESS'
-  | 'PENDING_REVIEW'
-  | 'MORE_INFORMATION_REQUIRED'
-  | 'APPROVED'
-  | 'REJECTED'
-  | 'EXPIRED'
-
-// seller_verification_requests.status (one review case's own lifecycle).
-// Matches `seller_verification_case_status` -- distinct from the
-// profile-level status above.
-export type SellerVerificationCaseStatus =
-  | 'PENDING'
-  | 'MORE_INFORMATION_REQUIRED'
-  | 'APPROVED'
-  | 'REJECTED'
-  | 'EXPIRED'
-  | 'SUPERSEDED'
+// Re-exported from generated.ts (run `npm run generate:types` in
+// tech-tools-api, or server-scripts/generate-types-prod.sh, to
+// regenerate) instead of hand-declared -- these three used to be
+// hand-written here, which is exactly the class of bug this session
+// spent most of its time fixing: a hand-copied enum silently drifting
+// from the real one after a migration. There is now exactly one place
+// these values come from (pg_enum, read live off the database).
+//
+// SellerTier and SellerVerificationCaseStatus keep their names as-is --
+// generated.ts already exports them under the same name with the same
+// values. seller_profiles.verification_status is aliased explicitly:
+// generated.ts's own `SellerVerificationStatus` export is the OLD,
+// pre-migration, now-orphaned enum (lowercase 'approved'/'pending' --
+// still cataloged in Postgres since it was never dropped, just no
+// longer used by any column). The enum this app actually needs for
+// verification_status is named `seller_profile_verification_status` in
+// Postgres, generated here as `SellerProfileVerificationStatus` --
+// aliased back to the name every call site in this app already uses.
+// (Imported at the top of this file, alongside no other imports it ever
+// had before -- re-exported here.)
+export type { SellerTier, SellerVerificationCaseStatus } from './generated'
+export type { SellerProfileVerificationStatus as SellerVerificationStatus } from './generated'
 
 export interface SellerProfile {
   id: string

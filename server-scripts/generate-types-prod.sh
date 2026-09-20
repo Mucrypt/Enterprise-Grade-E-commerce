@@ -59,12 +59,27 @@ if [ $? -eq 0 ]; then
         CONTAINER_TYPES_PATH="/app/dist/types/generated.ts"
         log_info "  (using fallback path inside the container: $CONTAINER_TYPES_PATH)"
     fi
+    # This checkout may be a sparse one (the production server's is --
+    # e.g. it may never have needed tech-tools-mobile-app/ at all, since
+    # nothing here builds or deploys the mobile app). Only copy into a
+    # sibling that actually exists locally rather than hard-failing
+    # (`set -e`) on one that was never checked out.
     docker cp "techtools-api-prod:$CONTAINER_TYPES_PATH" tech-tools-api/src/types/generated.ts
-    docker cp "techtools-api-prod:$CONTAINER_TYPES_PATH" admin-dashboard/types/generated.ts
 
     log_success "Types copied to:"
     echo "  - tech-tools-api/src/types/generated.ts"
-    echo "  - admin-dashboard/types/generated.ts"
+    for target in \
+        "admin-dashboard/types/generated.ts" \
+        "e-commerce-web-store/src/types/generated.ts" \
+        "tech-tools-mobile-app/src/types/generated.ts"; do
+        target_dir="$(dirname "$target")"
+        if [ -d "$target_dir" ]; then
+            docker cp "techtools-api-prod:$CONTAINER_TYPES_PATH" "$target"
+            echo "  - $target"
+        else
+            echo "  - $target (skipped -- $target_dir not present in this checkout)"
+        fi
+    done
 else
     echo "Failed to generate types"
     exit 1

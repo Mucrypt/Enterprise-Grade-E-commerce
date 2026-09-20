@@ -283,34 +283,32 @@ export interface User {
   created_at: string
 }
 
-export type SellerTier = 'unverified' | 'basic' | 'trusted' | 'pro'
+// Re-exported from generated.ts (run `npm run generate:types` in
+// tech-tools-api, or server-scripts/generate-types-prod.sh, to
+// regenerate) instead of hand-declared -- these three used to be
+// hand-written here, which is exactly the class of bug this session
+// spent most of its time fixing: a hand-copied enum silently drifting
+// from the real one after a migration. There is now exactly one place
+// these values come from (pg_enum, read live off the database).
+//
+// SellerTier and SellerVerificationCaseStatus keep their names as-is --
+// generated.ts already exports them under the same name with the same
+// values. seller_profiles.verification_status is aliased explicitly:
+// generated.ts's own `SellerVerificationStatus` export is the OLD,
+// pre-migration, now-orphaned enum (lowercase 'approved'/'pending' --
+// still cataloged in Postgres since it was never dropped, just no
+// longer used by any column). The enum this app actually needs for
+// verification_status is named `seller_profile_verification_status` in
+// Postgres, generated here as `SellerProfileVerificationStatus` --
+// aliased back to the name every call site in this app already uses.
+import type {
+  SellerTier,
+  SellerVerificationCaseStatus,
+  SellerProfileVerificationStatus as SellerVerificationStatus,
+} from './generated'
 
-// seller_profiles.verification_status (profile-level standing). Matches
-// the `seller_profile_verification_status` Postgres enum exactly --
-// these were split into two dedicated enums (this one, and
-// SellerVerificationCaseStatus below) and moved to uppercase values in
-// the seller-lifecycle migration; there is no longer a lowercase
-// 'approved'/'pending' on the wire.
-export type SellerVerificationStatus =
-  | 'NOT_STARTED'
-  | 'IN_PROGRESS'
-  | 'PENDING_REVIEW'
-  | 'MORE_INFORMATION_REQUIRED'
-  | 'APPROVED'
-  | 'REJECTED'
-  | 'EXPIRED'
-
-// seller_verification_requests.status (one review case's own lifecycle).
-// Matches `seller_verification_case_status` -- a distinct enum from the
-// profile-level status above, since a profile can be APPROVED overall
-// while a later tier-upgrade case is independently PENDING.
-export type SellerVerificationCaseStatus =
-  | 'PENDING'
-  | 'MORE_INFORMATION_REQUIRED'
-  | 'APPROVED'
-  | 'REJECTED'
-  | 'EXPIRED'
-  | 'SUPERSEDED'
+export type { SellerTier, SellerVerificationCaseStatus } from './generated'
+export type { SellerProfileVerificationStatus as SellerVerificationStatus } from './generated'
 
 export interface SellerProfile {
   id: string
