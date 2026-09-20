@@ -3,10 +3,10 @@ import { Package, Plus, Store, UserCheck } from 'lucide-react'
 
 export default function SellerQuickActions({
   handle,
-  dashboardReady,
+  canOpenStorefront,
 }: {
   handle: string | null
-  dashboardReady: boolean
+  canOpenStorefront: boolean
 }) {
   return (
     <div className='flex flex-wrap gap-3'>
@@ -22,7 +22,7 @@ export default function SellerQuickActions({
       >
         <Package className='h-4 w-4' /> Manage products
       </Link>
-      {handle && (
+      {handle && canOpenStorefront && (
         <Link
           to={`/seller/${handle}`}
           target='_blank'
@@ -32,12 +32,12 @@ export default function SellerQuickActions({
           <Store className='h-4 w-4' /> View storefront
         </Link>
       )}
-      {!dashboardReady && (
+      {!canOpenStorefront && (
         <Link
           to='/seller-hub'
           className='inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-700 transition hover:bg-amber-100'
         >
-          <UserCheck className='h-4 w-4' /> Complete seller setup
+          <UserCheck className='h-4 w-4' /> Go live: finish verification
         </Link>
       )}
     </div>

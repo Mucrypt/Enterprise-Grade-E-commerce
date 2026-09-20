@@ -1,64 +1,90 @@
-// Single source of truth for "is this seller allowed into the creator
-// dashboard." Previously SellerHubPage and CreatorDashboardPage each
-// computed this with slightly different conditions (SellerHubPage only
-// checked verification_status; CreatorDashboardPage also checked
-// is_business_account and !is_suspended), which let one page's "open
-// dashboard" link dead-end into the other's locked screen. Both pages
-// (plus the Profile page's live seller card) now share this hook.
+// Single source of truth for "is this seller allowed into the Seller
+// Center." Previously this derived `ready` itself from raw
+// verification_status/is_suspended fields passed in by each caller --
+// duplicated eligibility logic the founder's own spec explicitly warned
+// against, and it broke outright once the backend split
+// verification_status onto its own dedicated enum with uppercase values
+// ('APPROVED' instead of 'approved'): every seller, including
+// already-approved ones, was locked out until this was fixed.
 //
-// `ready` deliberately does NOT gate on the store's `is_business_account`
-// flag. That flag is cached in the browser at login and only ever
-// updated by an explicit client-side action (e.g. the self-service
-// "Activate business mode" button) -- it has no way to learn about an
-// admin approving a seller server-side (grantSellerAccess/setSellerTier/
-// setSellerCreatorAccess all flip users.is_business_account=true as part
-// of approval). `verification_status` is fetched fresh on every load, so
-// 'approved' is already an authoritative signal on its own -- every
-// backend path that sets it also guarantees is_business_account=true at
-// the same time. Gating on the stale client flag on top of that only
-// risked a real seller staying locked out of their own dashboard until
-// they happened to log out and back in, which is exactly what happened.
-// A self-healing effect still syncs the store below, so the rest of the
-// app (e.g. SellerHubPage's "Business mode: Active/Customer" tile and
-// its activation-flow step 1) stops showing stale info too.
+// This hook now calls the server-authoritative GET /seller/capabilities
+// endpoint (sellerApi.getMyCapabilities) instead of re-deriving
+// eligibility from raw enum strings. It also reflects the current
+// product policy: a seller can use the whole Seller Center (build
+// products, manage content, see their own finances) as soon as they've
+// started onboarding -- verification is only required to actually go
+// public (`canOpenStorefront`). `ready` tracks `canAccessSellerCenter`,
+// which the backend only refuses for a genuinely closed door
+// (no profile yet, or SUSPENDED/CLOSED) -- see
+// seller-lifecycle-query.service.ts's resolveSellerCapabilities for the
+// exact rule.
+//
+// Deliberately does not take sellerProfile/creatorProfile as
+// parameters anymore -- capabilities are resolved entirely server-side
+// from the authenticated session, so callers that already fetch a
+// seller/creator profile for their own display purposes (the Seller
+// Center topbar, Seller Hub's tier cards) do so independently; this
+// hook's own fetch is a separate, lightweight concern.
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuthStore } from '../stores'
-import type { CreatorProfile, SellerProfile } from '../types'
+import { sellerApi, type SellerCapabilities } from '../api'
 
 export interface CreatorDashboardReadiness {
   ready: boolean
+  loading: boolean
   isBusinessAccount: boolean
   verificationStatus: string
+  capabilities: SellerCapabilities | null
 }
 
-export function useCreatorDashboardReady(
-  sellerProfile: SellerProfile | null,
-  creatorProfile?: CreatorProfile | null,
-): CreatorDashboardReadiness {
-  const isBusinessAccount = useAuthStore((s) =>
-    Boolean(s.user?.is_business_account),
-  )
-  const updateUser = useAuthStore((s) => s.updateUser)
-
-  const verificationStatus =
-    sellerProfile?.verification_status ||
-    creatorProfile?.verification_status ||
-    'none'
+export function useCreatorDashboardReady(): CreatorDashboardReadiness {
+  const { isAuthenticated, hasHydrated, user, updateUser } = useAuthStore()
+  const [capabilities, setCapabilities] = useState<SellerCapabilities | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (verificationStatus === 'approved' && !isBusinessAccount) {
+    if (!hasHydrated) return
+    if (!isAuthenticated) {
+      setCapabilities(null)
+      setLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setLoading(true)
+    sellerApi
+      .getMyCapabilities()
+      .then((result) => {
+        if (!cancelled) setCapabilities(result)
+      })
+      .catch(() => {
+        if (!cancelled) setCapabilities(null)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [hasHydrated, isAuthenticated])
+
+  // Same self-healing purpose as before: the client-cached
+  // is_business_account flag has no way to learn about a server-side
+  // change on an already-open session, so sync it once the
+  // authoritative capabilities response says otherwise.
+  useEffect(() => {
+    if (capabilities?.accountMode === 'BUSINESS' && !user?.is_business_account) {
       updateUser({ is_business_account: true })
     }
-  }, [verificationStatus, isBusinessAccount, updateUser])
+  }, [capabilities?.accountMode, user?.is_business_account, updateUser])
 
-  return useMemo(() => {
-    const effectiveIsBusinessAccount = isBusinessAccount || verificationStatus === 'approved'
-
-    return {
-      ready: verificationStatus === 'approved' && !sellerProfile?.is_suspended,
-      isBusinessAccount: effectiveIsBusinessAccount,
-      verificationStatus,
-    }
-  }, [isBusinessAccount, verificationStatus, sellerProfile?.is_suspended])
+  return {
+    ready: capabilities?.canAccessSellerCenter ?? false,
+    loading,
+    isBusinessAccount: Boolean(user?.is_business_account) || capabilities?.accountMode === 'BUSINESS',
+    verificationStatus: capabilities?.verificationStatus || 'NOT_STARTED',
+    capabilities,
+  }
 }

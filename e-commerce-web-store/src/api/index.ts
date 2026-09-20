@@ -1069,6 +1069,37 @@ export const sellerApi = {
   async unfollow(sellerId: string): Promise<void> {
     await api.delete(`/seller/profile/${sellerId}/follow`)
   },
+
+  // The server-authoritative "what can this seller actually do right
+  // now" response -- see useCreatorDashboardReady, which is this
+  // endpoint's only consumer. Never re-derive this from raw
+  // verification_status/account_status strings in frontend code; the
+  // backend already resolved the business rules (and their exact enum
+  // values, which this app doesn't otherwise need to know).
+  async getMyCapabilities(): Promise<SellerCapabilities> {
+    const response = await api.get<{ success: boolean; data: SellerCapabilities }>(
+      '/seller/capabilities',
+    )
+    return response.data.data
+  },
+}
+
+export interface SellerCapabilities {
+  accountMode: 'CUSTOMER' | 'BUSINESS'
+  onboardingStatus: string
+  verificationStatus: string
+  sellerAccountStatus: string
+  storeStatus: string | null
+  sellerTier: string | null
+  canAccessSellerCenter: boolean
+  canManageProducts: boolean
+  canPublishProducts: boolean
+  canReceiveOrders: boolean
+  canUseCreatorTools: boolean
+  canViewFinances: boolean
+  canOpenStorefront: boolean
+  requiredNextAction: string
+  blockingReasons: string[]
 }
 
 export interface PublicSellerProfile {

@@ -11,7 +11,7 @@ import logger from '../../../utils/logger'
 // =====================================================
 // A seller's own support tickets -- real threaded conversation with
 // admin staff. Guarded by requireSellerProfile (not
-// requireAdminOrApprovedSeller) -- an unverified/pending seller can
+// requireAdminOrOnboardedSeller) -- an unverified/pending seller can
 // still reach support, since that's exactly when they most need to.
 // =====================================================
 

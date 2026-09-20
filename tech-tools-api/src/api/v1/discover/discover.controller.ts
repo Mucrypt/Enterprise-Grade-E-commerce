@@ -184,7 +184,7 @@ function respondDiscoverError(res: Response, error: any, fallbackMessage: string
   res.status(500).json({ success: false, message: fallbackMessage, error: error.message })
 }
 
-// requireAdminOrApprovedSeller / SellerAuthRequest now live in
+// requireAdminOrOnboardedSeller / SellerAuthRequest now live in
 // middleware/seller-auth.ts -- shared with seller-product.controller.ts,
 // which needs the exact same "admin, or a real approved seller" check.
 

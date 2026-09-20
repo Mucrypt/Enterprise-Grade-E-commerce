@@ -75,7 +75,7 @@ export default function SettingsPage() {
     useState(false)
   const [sellerTier, setSellerTier] = useState<string>('unverified')
   const [sellerVerificationStatus, setSellerVerificationStatus] =
-    useState<string>('none')
+    useState<string>('NOT_STARTED')
   const [businessError, setBusinessError] = useState('')
   const [businessSuccess, setBusinessSuccess] = useState('')
 
@@ -188,7 +188,7 @@ export default function SettingsPage() {
         notes: 'Requested from web settings onboarding flow.',
       })
 
-      setSellerVerificationStatus('pending')
+      setSellerVerificationStatus('PENDING_REVIEW')
       setBusinessSuccess(
         'Verification request submitted. You can continue selling while review is in progress.',
       )
@@ -487,13 +487,13 @@ export default function SettingsPage() {
                       onClick={handleRequestBasicVerification}
                       disabled={
                         isRequestingVerification ||
-                        sellerVerificationStatus === 'pending'
+                        sellerVerificationStatus === 'PENDING_REVIEW'
                       }
                       className='inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-70'
                     >
                       {isRequestingVerification
                         ? 'Submitting verification...'
-                        : sellerVerificationStatus === 'pending'
+                        : sellerVerificationStatus === 'PENDING_REVIEW'
                         ? 'Verification Pending'
                         : 'Request Basic Verification'}
                     </button>

@@ -149,7 +149,7 @@ export default function ProfileTabScreen() {
       .then((result) => {
         if (cancelled) return
         setSellerProfile(result.sellerProfile)
-        if (result.sellerProfile?.verification_status === 'approved') {
+        if (result.sellerProfile) {
           sellerEarningsApi
             .getSummary()
             .then((summary) => {
@@ -362,7 +362,7 @@ export default function ProfileTabScreen() {
                 <Text style={styles.quickAccessSecondarySubtitle}>
                   {sellerOwed !== null
                     ? `$${sellerOwed.toFixed(2)} owed to you`
-                    : sellerProfile.verification_status === 'pending'
+                    : sellerProfile.verification_status === 'PENDING_REVIEW'
                     ? 'Verification pending review'
                     : 'Open your seller dashboard'}
                 </Text>

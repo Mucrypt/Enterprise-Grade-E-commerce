@@ -1,15 +1,14 @@
-// The Seller Center's application shell -- sidebar + topbar + <Outlet/>,
-// evolved from the old CreatorDashboardLayout (same identity fetch, same
-// useCreatorDashboardReady() gate, same locked-state screen -- all of
-// that was already correct). What changed is purely presentational: the
-// old pill-tab strip + big gradient identity banner are replaced with a
-// real sidebar-based workspace shell, matching a Stripe Dashboard/
-// Shopify Admin register rather than another marketing page.
+// The Seller Center's application shell -- sidebar + topbar + <Outlet/>.
+// The locked-state screen only shows for a genuinely closed door (no
+// seller profile yet, or the account is SUSPENDED/CLOSED) -- an
+// onboarded-but-unverified seller reaches the full shell so they can
+// keep building their store; a persistent banner (not a wall) explains
+// when their storefront specifically isn't public yet.
 
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { Loader2, Store } from 'lucide-react'
-import { creatorApi, sellerApi, userApi } from '../../api'
+import { creatorApi, sellerApi } from '../../api'
 import type { CreatorProfile, SellerProfile } from '../../types'
 import { useAuthStore } from '../../stores'
 import { useCreatorDashboardReady } from '../../hooks/useCreatorDashboardReady'
@@ -20,11 +19,9 @@ import SellerCommandPalette from '../../components/seller-center/SellerCommandPa
 
 export default function SellerCenterShell() {
   const navigate = useNavigate()
-  const { user, isAuthenticated, hasHydrated, isLoading: authLoading, updateUser } =
-    useAuthStore()
+  const { user, isAuthenticated, hasHydrated, isLoading: authLoading } = useAuthStore()
 
   const [loading, setLoading] = useState(true)
-  const [isActivating, setIsActivating] = useState(false)
   const [sellerProfile, setSellerProfile] = useState<SellerProfile | null>(null)
   const [creatorProfile, setCreatorProfile] = useState<CreatorProfile | null>(null)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
@@ -67,26 +64,9 @@ export default function SellerCenterShell() {
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  const { ready, isBusinessAccount, verificationStatus } = useCreatorDashboardReady(
-    sellerProfile,
-    creatorProfile,
-  )
+  const { ready, loading: capabilitiesLoading, capabilities } = useCreatorDashboardReady()
 
-  const handleActivateBusiness = async () => {
-    setIsActivating(true)
-    try {
-      const result = await userApi.activateBusinessMode({ source: 'web_seller_center' })
-      updateUser({
-        is_business_account: result.user.isBusinessAccount,
-        user_type: result.user.userType,
-        business_mode_activated_at: result.user.businessModeActivatedAt || null,
-      })
-    } finally {
-      setIsActivating(false)
-    }
-  }
-
-  if (authLoading || !hasHydrated || loading) {
+  if (authLoading || !hasHydrated || loading || capabilitiesLoading) {
     return (
       <div className='flex min-h-screen items-center justify-center bg-slate-50'>
         <Loader2 className='h-8 w-8 animate-spin text-orange-500' />
@@ -99,57 +79,59 @@ export default function SellerCenterShell() {
   const fallbackName =
     `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email
 
+  // A genuinely closed door only -- no seller application started yet,
+  // or the account is SUSPENDED/CLOSED. Anyone else (still onboarding,
+  // pending review, rejected, restricted) reaches the real shell below
+  // so they can keep building; canOpenStorefront is the one thing that
+  // still requires real verification, surfaced as a banner inside the
+  // shell instead of a wall in front of it.
   if (!ready) {
+    const nextAction = capabilities?.requiredNextAction
+    const message =
+      capabilities?.blockingReasons[0] ||
+      'Seller Center access is not available for this account right now.'
+    const heading =
+      nextAction === 'START_ONBOARDING'
+        ? 'Start your seller journey'
+        : nextAction === 'CONTACT_SUPPORT'
+        ? 'Seller account suspended'
+        : 'Seller Center unavailable'
+
     return (
       <div className='min-h-screen bg-slate-50 py-8'>
         <div className='mx-auto max-w-3xl px-4'>
           <div className='rounded-3xl bg-white p-8 shadow-sm ring-1 ring-black/5'>
-            <h2 className='text-xl font-bold text-slate-900'>
-              {!isBusinessAccount
-                ? 'Activate business mode first'
-                : verificationStatus === 'pending'
-                ? 'Waiting for admin verification'
-                : verificationStatus === 'rejected'
-                ? 'Verification was rejected'
-                : sellerProfile?.is_suspended
-                ? 'Seller Center access suspended'
-                : 'Seller Center locked'}
-            </h2>
-            <p className='mt-2 text-sm text-gray-600'>
-              {!isBusinessAccount
-                ? 'Seller Center is available to verified seller accounts only. Activate business mode, then request admin verification from Seller Hub.'
-                : verificationStatus === 'pending'
-                ? 'Your verification request is pending review. Once an admin approves it, Seller Center will unlock.'
-                : verificationStatus === 'rejected'
-                ? 'Your verification request was rejected. Return to Seller Hub to update your verification details and resubmit.'
-                : sellerProfile?.is_suspended
-                ? 'Your seller profile is suspended. Access is paused until moderation clears it.'
-                : 'Seller Center access is not yet approved.'}
-            </p>
+            <h2 className='text-xl font-bold text-slate-900'>{heading}</h2>
+            <p className='mt-2 text-sm text-gray-600'>{message}</p>
             <div className='mt-5 flex flex-wrap gap-3'>
-              {!isBusinessAccount ? (
-                <button
-                  type='button'
-                  onClick={handleActivateBusiness}
-                  disabled={isActivating}
-                  className='inline-flex items-center gap-2 rounded-2xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60'
+              {nextAction === 'START_ONBOARDING' ? (
+                <NavLink
+                  to='/seller-hub'
+                  className='inline-flex items-center gap-2 rounded-2xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-600'
                 >
-                  <Store className='h-4 w-4' />
-                  {isActivating ? 'Activating...' : 'Activate business mode'}
-                </button>
-              ) : null}
-              <NavLink
-                to='/seller-hub'
-                className='inline-flex items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50'
-              >
-                <Store className='h-4 w-4' /> Open seller hub
-              </NavLink>
+                  <Store className='h-4 w-4' /> Start onboarding
+                </NavLink>
+              ) : (
+                <NavLink
+                  to='/support'
+                  className='inline-flex items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50'
+                >
+                  <Store className='h-4 w-4' /> Contact support
+                </NavLink>
+              )}
             </div>
           </div>
         </div>
       </div>
     )
   }
+
+  // The one thing that still requires real verification: a public,
+  // buyer-facing storefront. Shown as a persistent banner inside the
+  // shell rather than a wall in front of it -- everyone reaching this
+  // point can already build; this just explains why "View storefront"
+  // is hidden and what unlocks it.
+  const showStorefrontBanner = capabilities != null && !capabilities.canOpenStorefront
 
   return (
     <div className='flex h-screen overflow-hidden bg-slate-50'>
@@ -164,6 +146,21 @@ export default function SellerCenterShell() {
           onOpenCommandPalette={() => setCommandPaletteOpen(true)}
         />
 
+        {showStorefrontBanner && (
+          <div className='flex flex-wrap items-center justify-between gap-3 border-b border-amber-100 bg-amber-50 px-4 py-2.5 sm:px-6'>
+            <p className='text-sm text-amber-800'>
+              {capabilities?.blockingReasons[0] ||
+                "Your storefront isn't public yet -- verification is required before customers can find and buy from you."}
+            </p>
+            <NavLink
+              to='/seller-hub'
+              className='shrink-0 text-sm font-semibold text-amber-900 underline underline-offset-2 hover:text-amber-950'
+            >
+              Continue verification
+            </NavLink>
+          </div>
+        )}
+
         <main className='flex-1 overflow-y-auto p-4 sm:p-6'>
           <Outlet
             context={{
@@ -171,6 +168,7 @@ export default function SellerCenterShell() {
               creatorProfile,
               setCreatorProfile,
               fallbackName,
+              capabilities,
             }}
           />
         </main>

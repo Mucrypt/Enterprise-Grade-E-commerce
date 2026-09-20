@@ -57,7 +57,7 @@ describe('seller-lifecycle-query.service -- resolveSellerCapabilities is 100% se
     expect(capabilities.blockingReasons).toEqual([]);
   })
 
-  it('a RESTRICTED account keeps read-only capabilities but loses publish/receive-orders/storefront', async () => {
+  it('a RESTRICTED account keeps building capabilities (dashboard, products, finances) but loses receive-orders/storefront', async () => {
     mockQuery.mockResolvedValue({
       rows: [
         {
@@ -77,7 +77,8 @@ describe('seller-lifecycle-query.service -- resolveSellerCapabilities is 100% se
 
     expect(capabilities.canAccessSellerCenter).toBe(true)
     expect(capabilities.canManageProducts).toBe(true)
-    expect(capabilities.canPublishProducts).toBe(false)
+    expect(capabilities.canPublishProducts).toBe(true)
+    expect(capabilities.canViewFinances).toBe(true)
     expect(capabilities.canReceiveOrders).toBe(false)
     expect(capabilities.canOpenStorefront).toBe(false)
     expect(capabilities.blockingReasons.length).toBeGreaterThan(0)
@@ -110,7 +111,7 @@ describe('seller-lifecycle-query.service -- resolveSellerCapabilities is 100% se
     expect(capabilities.requiredNextAction).toBe('CONTACT_SUPPORT')
   })
 
-  it('an incomplete onboarding never yields any capability regardless of tier or verification fields present on the row', async () => {
+  it('an in-progress, unverified DRAFT seller still gets dashboard/build access -- verification only gates going public', async () => {
     mockQuery.mockResolvedValue({
       rows: [
         {
@@ -128,8 +129,61 @@ describe('seller-lifecycle-query.service -- resolveSellerCapabilities is 100% se
 
     const capabilities = await resolveSellerCapabilities('user-1')
 
-    expect(capabilities.canAccessSellerCenter).toBe(false)
+    expect(capabilities.canAccessSellerCenter).toBe(true)
+    expect(capabilities.canManageProducts).toBe(true)
+    expect(capabilities.canViewFinances).toBe(true)
+    // Still correctly blocked from anything that requires real trust:
+    expect(capabilities.canReceiveOrders).toBe(false)
+    expect(capabilities.canOpenStorefront).toBe(false)
     expect(capabilities.requiredNextAction).toBe('COMPLETE_ONBOARDING')
+  })
+
+  it('a still-pending-review (submitted but not yet approved) seller can build; only the storefront stays gated', async () => {
+    mockQuery.mockResolvedValue({
+      rows: [
+        {
+          id: 'sp-1',
+          is_business_account: true,
+          has_creator_profile: false,
+          account_status: 'PENDING_REVIEW',
+          store_status: 'DRAFT',
+          onboarding_status: 'SUBMITTED',
+          verification_status: 'PENDING_REVIEW',
+          tier: 'unverified',
+        },
+      ],
+    })
+
+    const capabilities = await resolveSellerCapabilities('user-1')
+
+    expect(capabilities.canAccessSellerCenter).toBe(true)
+    expect(capabilities.canManageProducts).toBe(true)
+    expect(capabilities.canPublishProducts).toBe(true)
+    expect(capabilities.canOpenStorefront).toBe(false)
+    expect(capabilities.canReceiveOrders).toBe(false)
+    expect(capabilities.requiredNextAction).toBe('AWAIT_REVIEW')
+  })
+
+  it('a REJECTED seller can still reach their dashboard to see why and resubmit', async () => {
+    mockQuery.mockResolvedValue({
+      rows: [
+        {
+          id: 'sp-1',
+          is_business_account: true,
+          has_creator_profile: false,
+          account_status: 'REJECTED',
+          store_status: 'DRAFT',
+          onboarding_status: 'SUBMITTED',
+          verification_status: 'REJECTED',
+          tier: 'unverified',
+        },
+      ],
+    })
+
+    const capabilities = await resolveSellerCapabilities('user-1')
+
+    expect(capabilities.canAccessSellerCenter).toBe(true)
+    expect(capabilities.requiredNextAction).toBe('REVIEW_REJECTION')
   })
 })
 

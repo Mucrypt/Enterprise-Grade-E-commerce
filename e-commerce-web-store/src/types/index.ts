@@ -284,12 +284,33 @@ export interface User {
 }
 
 export type SellerTier = 'unverified' | 'basic' | 'trusted' | 'pro'
+
+// seller_profiles.verification_status (profile-level standing). Matches
+// the `seller_profile_verification_status` Postgres enum exactly --
+// these were split into two dedicated enums (this one, and
+// SellerVerificationCaseStatus below) and moved to uppercase values in
+// the seller-lifecycle migration; there is no longer a lowercase
+// 'approved'/'pending' on the wire.
 export type SellerVerificationStatus =
-  | 'none'
-  | 'pending'
-  | 'approved'
-  | 'rejected'
-  | 'suspended'
+  | 'NOT_STARTED'
+  | 'IN_PROGRESS'
+  | 'PENDING_REVIEW'
+  | 'MORE_INFORMATION_REQUIRED'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'EXPIRED'
+
+// seller_verification_requests.status (one review case's own lifecycle).
+// Matches `seller_verification_case_status` -- a distinct enum from the
+// profile-level status above, since a profile can be APPROVED overall
+// while a later tier-upgrade case is independently PENDING.
+export type SellerVerificationCaseStatus =
+  | 'PENDING'
+  | 'MORE_INFORMATION_REQUIRED'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'EXPIRED'
+  | 'SUPERSEDED'
 
 export interface SellerProfile {
   id: string
@@ -299,6 +320,9 @@ export interface SellerProfile {
   bio?: string | null
   tier: SellerTier
   verification_status: SellerVerificationStatus
+  account_status?: string
+  store_status?: string
+  onboarding_status?: string
   max_active_listings: number
   max_product_price?: number | string | null
   is_active: boolean
@@ -312,7 +336,7 @@ export interface SellerVerificationRequest {
   user_id: string
   seller_profile_id: string
   requested_tier: SellerTier
-  status: SellerVerificationStatus
+  status: SellerVerificationCaseStatus
   documents_submitted?: unknown[] | null
   notes?: string | null
   reviewed_by_admin_id?: string | null

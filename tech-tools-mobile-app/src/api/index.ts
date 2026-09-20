@@ -817,6 +817,13 @@ export const sellerApi = {
     return (data?.requests || []) as SellerVerificationRequest[]
   },
 
+  getMyCapabilities: async (): Promise<SellerCapabilities> => {
+    const response = await apiClient.get('/seller/capabilities')
+    const data = response.data?.data || response.data
+
+    return data as SellerCapabilities
+  },
+
   // Public storefront profile -- real follower/post counts, mirrors the
   // web version exactly. Works for guests too (isFollowing just comes
   // back false).
@@ -832,6 +839,24 @@ export const sellerApi = {
   unfollow: async (sellerId: string): Promise<void> => {
     await apiClient.delete(`/seller/profile/${sellerId}/follow`)
   },
+}
+
+export interface SellerCapabilities {
+  accountMode: 'CUSTOMER' | 'BUSINESS'
+  onboardingStatus: string
+  verificationStatus: string
+  sellerAccountStatus: string
+  storeStatus: string | null
+  sellerTier: string | null
+  canAccessSellerCenter: boolean
+  canManageProducts: boolean
+  canPublishProducts: boolean
+  canReceiveOrders: boolean
+  canUseCreatorTools: boolean
+  canViewFinances: boolean
+  canOpenStorefront: boolean
+  requiredNextAction: string
+  blockingReasons: string[]
 }
 
 export interface PublicSellerProfile {

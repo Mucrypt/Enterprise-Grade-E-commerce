@@ -36,6 +36,7 @@ describe('OverviewTab -- honest zero-state, no invented numbers when data is una
       creatorProfile: null,
       setCreatorProfile: vi.fn(),
       fallbackName: 'Test Seller',
+      capabilities: null,
     })
 
     await waitFor(() => expect(screen.getByText('Store earnings')).toBeInTheDocument())
@@ -52,6 +53,7 @@ describe('OverviewTab -- honest zero-state, no invented numbers when data is una
       creatorProfile: null,
       setCreatorProfile: vi.fn(),
       fallbackName: 'Test Seller',
+      capabilities: null,
     })
 
     await waitFor(() =>
@@ -67,6 +69,7 @@ describe('OverviewTab -- honest zero-state, no invented numbers when data is una
       creatorProfile: null,
       setCreatorProfile: vi.fn(),
       fallbackName: 'Test Seller',
+      capabilities: null,
     })
 
     await waitFor(() => expect(screen.getByText('List your first store product')).toBeInTheDocument())

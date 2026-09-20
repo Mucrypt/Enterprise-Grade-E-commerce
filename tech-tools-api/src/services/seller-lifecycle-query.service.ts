@@ -3,7 +3,7 @@
 // eligibility, onboarding progress, and the single capability/
 // entitlement response the frontend is meant to trust instead of
 // re-deriving eligibility per page (replacing the inconsistent
-// canBecomeSeller / requireAdminOrApprovedSeller / getCreatorAccessContext
+// canBecomeSeller / requireAdminOrOnboardedSeller / getCreatorAccessContext
 // checks, each of which reads slightly different columns today).
 //
 // One-directional dependency only: seller-lifecycle.service.ts imports
@@ -217,35 +217,54 @@ export async function resolveSellerCapabilities(userId: string): Promise<Capabil
   const hasCreatorProfile = Boolean(row?.has_creator_profile)
 
   const isActive = accountStatus === 'ACTIVE'
-  const isRestricted = accountStatus === 'RESTRICTED'
+  // Business-strategy gate (not a security one): let anyone who has
+  // started onboarding in to build immediately -- create/edit products,
+  // manage content, see their own (possibly $0) balance -- so they
+  // spend time on the platform instead of waiting on a review queue
+  // before they can do anything at all. SUSPENDED/CLOSED are the only
+  // states that actually cut a seller off from their own workspace; a
+  // REJECTED seller still needs in to see why and resubmit, and a
+  // PENDING_REVIEW/DRAFT seller needs in to have something worth
+  // reviewing in the first place. The one thing that still requires
+  // real verification is going PUBLIC: a storefront customers can find
+  // and buy from (canOpenStorefront, below) -- untouched by this.
+  const isInGoodStanding = accountStatus !== 'SUSPENDED' && accountStatus !== 'CLOSED'
 
   const blockingReasons: string[] = []
   let requiredNextAction = 'NONE'
 
+  // Account-standing checks come first, deliberately: they describe a
+  // decision that was already made about this seller (suspended,
+  // closed, restricted, rejected), which is always more specific and
+  // more actionable than a generic progress-based status like "still
+  // submitted, awaiting review" -- several of these states legitimately
+  // overlap with onboardingStatus='SUBMITTED' && !isActive, so getting
+  // this order right is what keeps a rejected seller from being told
+  // they're merely "awaiting review".
   if (!hasSellerProfile) {
     requiredNextAction = 'START_ONBOARDING'
     blockingReasons.push('No seller application has been started yet.')
-  } else if (onboardingStatus === 'NOT_STARTED' || onboardingStatus === 'IN_PROGRESS') {
-    requiredNextAction = 'COMPLETE_ONBOARDING'
-    blockingReasons.push('Your seller application is incomplete.')
-  } else if (verificationStatus === 'MORE_INFORMATION_REQUIRED') {
-    requiredNextAction = 'PROVIDE_MORE_INFORMATION'
-    blockingReasons.push('We need more information before we can approve your application.')
-  } else if (onboardingStatus === 'SUBMITTED' && !isActive) {
-    requiredNextAction = 'AWAIT_REVIEW'
-    blockingReasons.push('Your application is submitted and awaiting review.')
   } else if (accountStatus === 'SUSPENDED') {
     requiredNextAction = 'CONTACT_SUPPORT'
     blockingReasons.push('Your seller account is suspended.')
+  } else if (accountStatus === 'CLOSED') {
+    requiredNextAction = 'NONE'
+    blockingReasons.push('Your seller account is closed.')
   } else if (accountStatus === 'RESTRICTED') {
     requiredNextAction = 'CONTACT_SUPPORT'
     blockingReasons.push('Your seller account is restricted.')
   } else if (accountStatus === 'REJECTED') {
     requiredNextAction = 'REVIEW_REJECTION'
     blockingReasons.push('Your seller application was not approved.')
-  } else if (accountStatus === 'CLOSED') {
-    requiredNextAction = 'NONE'
-    blockingReasons.push('Your seller account is closed.')
+  } else if (onboardingStatus === 'NOT_STARTED' || onboardingStatus === 'IN_PROGRESS') {
+    requiredNextAction = 'COMPLETE_ONBOARDING'
+    blockingReasons.push('Finish and submit your seller application to go public and start selling.')
+  } else if (verificationStatus === 'MORE_INFORMATION_REQUIRED') {
+    requiredNextAction = 'PROVIDE_MORE_INFORMATION'
+    blockingReasons.push('We need more information before your storefront can go live.')
+  } else if (onboardingStatus === 'SUBMITTED' && !isActive) {
+    requiredNextAction = 'AWAIT_REVIEW'
+    blockingReasons.push('Your application is submitted and awaiting review before your storefront can go live.')
   }
 
   return {
@@ -255,12 +274,12 @@ export async function resolveSellerCapabilities(userId: string): Promise<Capabil
     sellerAccountStatus: accountStatus,
     storeStatus,
     sellerTier: row?.tier || null,
-    canAccessSellerCenter: isActive || isRestricted,
-    canManageProducts: isActive || isRestricted,
-    canPublishProducts: isActive,
+    canAccessSellerCenter: hasSellerProfile && isInGoodStanding,
+    canManageProducts: hasSellerProfile && isInGoodStanding,
+    canPublishProducts: hasSellerProfile && isInGoodStanding,
     canReceiveOrders: isActive,
-    canUseCreatorTools: isActive && hasCreatorProfile,
-    canViewFinances: isActive || isRestricted,
+    canUseCreatorTools: hasSellerProfile && isInGoodStanding && hasCreatorProfile,
+    canViewFinances: hasSellerProfile && isInGoodStanding,
     canOpenStorefront: storeStatus === 'LIVE',
     requiredNextAction,
     blockingReasons,

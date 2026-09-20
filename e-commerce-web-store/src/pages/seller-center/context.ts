@@ -5,12 +5,14 @@
 
 import { useOutletContext } from 'react-router-dom'
 import type { CreatorProfile, SellerProfile } from '../../types'
+import type { SellerCapabilities } from '../../api'
 
 export interface CreatorDashboardContext {
   sellerProfile: SellerProfile | null
   creatorProfile: CreatorProfile | null
   setCreatorProfile: (profile: CreatorProfile | null) => void
   fallbackName: string
+  capabilities: SellerCapabilities | null
 }
 
 export function useCreatorDashboardContext() {

@@ -24,7 +24,7 @@ import SellerQuickActions from '../../components/seller-center/SellerQuickAction
 import { useCreatorDashboardContext } from './context'
 
 export default function OverviewTab() {
-  const { sellerProfile } = useCreatorDashboardContext()
+  const { sellerProfile, capabilities } = useCreatorDashboardContext()
 
   const [loading, setLoading] = useState(true)
   const [metrics, setMetrics] = useState<CreatorDashboardMetrics | null>(null)
@@ -110,7 +110,10 @@ export default function OverviewTab() {
 
   return (
     <div className='space-y-6'>
-      <SellerQuickActions handle={sellerProfile?.handle || null} dashboardReady />
+      <SellerQuickActions
+        handle={sellerProfile?.handle || null}
+        canOpenStorefront={capabilities?.canOpenStorefront ?? false}
+      />
 
       {!allDone && (
         <div className='rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5'>

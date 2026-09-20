@@ -93,10 +93,10 @@ export default function SellerHubPage() {
   }, [sellerProfile?.tier])
 
   const pendingRequest = verificationRequests.find(
-    (request) => request.status === 'pending',
+    (request) => request.status === 'PENDING',
   )
 
-  const { ready: creatorDashboardReady } = useCreatorDashboardReady(sellerProfile)
+  const { ready: creatorDashboardReady } = useCreatorDashboardReady()
 
   const handleActivateBusinessMode = async () => {
     setBusyAction('activate')
@@ -168,7 +168,7 @@ export default function SellerHubPage() {
         current
           ? {
               ...current,
-              verification_status: 'pending',
+              verification_status: 'PENDING_REVIEW',
             }
           : current,
       )
@@ -272,7 +272,7 @@ export default function SellerHubPage() {
               <div className='rounded-3xl bg-white p-5 shadow-sm ring-1 ring-black/5'>
                 <p className='text-sm text-gray-500'>Verification</p>
                 <p className='mt-3 text-2xl font-bold text-slate-900'>
-                  {formatTier(sellerProfile?.verification_status || 'none')}
+                  {formatTier(sellerProfile?.verification_status || 'NOT_STARTED')}
                 </p>
               </div>
             </div>
@@ -470,8 +470,9 @@ export default function SellerHubPage() {
                 </li>
               </ul>
               <p className='mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600 ring-1 ring-slate-100'>
-                Creator dashboard access is unlocked only after an admin
-                approves verification in the seller queue.
+                Your Seller Center dashboard is available as soon as your
+                seller profile is ready -- build your store now. Verification
+                is only required before your storefront can go public.
               </p>
             </div>
 
@@ -508,8 +509,7 @@ export default function SellerHubPage() {
                   </Link>
                 ) : (
                   <p className='mt-2 rounded-2xl bg-slate-50 px-4 py-2.5 text-center text-xs text-gray-500 ring-1 ring-slate-100'>
-                    Finish activation and verification to unlock the creator
-                    dashboard.
+                    Finish activation to unlock your Seller Center dashboard.
                   </p>
                 )}
                 {sellerProfile && (

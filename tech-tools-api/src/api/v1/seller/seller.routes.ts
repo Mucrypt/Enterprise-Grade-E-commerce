@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import rateLimit from 'express-rate-limit'
 import { authenticate, authenticateIfPresent, authorize } from '../../../middleware/auth'
-import { requireAdminOrApprovedSeller } from '../../../middleware/seller-auth'
+import { requireAdminOrOnboardedSeller } from '../../../middleware/seller-auth'
 import { sellerSchemas, productSchemas, validate } from '../../../middleware/validation'
 import { upload, handleUploadErrors, uploadSellerDocument } from '../../../utils/media'
 import {
@@ -109,23 +109,23 @@ router.get('/documents/:documentId/download', downloadMySellerDocument)
 router.delete('/documents/:documentId', deleteMySellerDocument)
 
 // =====================================================
-// Seller-owned products -- requireAdminOrApprovedSeller lets both admin
+// Seller-owned products -- requireAdminOrOnboardedSeller lets both admin
 // and a real approved seller in; every handler then scopes by
 // ownership. Every seller-created/edited product is forced pending
 // review, same real trust/safety gate as Discover posts.
 // =====================================================
 const uploadProductImages = handleUploadErrors(upload.fields([{ name: 'images', maxCount: 10 }]))
 
-router.get('/products', requireAdminOrApprovedSeller, getMySellerProducts)
+router.get('/products', requireAdminOrOnboardedSeller, getMySellerProducts)
 router.post(
   '/products',
-  requireAdminOrApprovedSeller,
+  requireAdminOrOnboardedSeller,
   uploadProductImages,
   validate(productSchemas.create),
   createSellerProduct,
 )
-router.put('/products/:id', requireAdminOrApprovedSeller, updateSellerProduct)
-router.delete('/products/:id', requireAdminOrApprovedSeller, deleteSellerProduct)
+router.put('/products/:id', requireAdminOrOnboardedSeller, updateSellerProduct)
+router.delete('/products/:id', requireAdminOrOnboardedSeller, deleteSellerProduct)
 
 // Admin-only review queue -- must come after the generic /products
 // routes above are declared (order doesn't matter here since the path
@@ -139,13 +139,13 @@ router.patch('/products/:id/review', authorize('admin', 'super_admin'), reviewSe
 // money-movement surface with its own permission gates, not bolted onto
 // this file).
 // =====================================================
-router.get('/earnings/summary', requireAdminOrApprovedSeller, getMyEarningsSummary)
-router.get('/earnings/ledger', requireAdminOrApprovedSeller, getMyEarningsLedger)
+router.get('/earnings/summary', requireAdminOrOnboardedSeller, getMyEarningsSummary)
+router.get('/earnings/ledger', requireAdminOrOnboardedSeller, getMyEarningsLedger)
 
 // =====================================================
 // Seller support tickets -- real threaded conversation with admin
 // staff. Gated by requireSellerProfile (applied inside
-// seller-support.routes.ts), looser than requireAdminOrApprovedSeller:
+// seller-support.routes.ts), looser than requireAdminOrOnboardedSeller:
 // an unverified/pending seller can still reach support.
 // =====================================================
 router.use('/support/tickets', sellerSupportRoutes)

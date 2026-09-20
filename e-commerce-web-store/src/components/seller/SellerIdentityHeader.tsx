@@ -17,21 +17,28 @@ interface SellerIdentityHeaderProps {
   fallbackName: string
 }
 
+// Keys match the `seller_profile_verification_status` Postgres enum
+// exactly (uppercase) -- see types/index.ts's SellerVerificationStatus.
 const VERIFICATION_BADGE: Record<
   string,
   { label: string; className: string; icon: typeof BadgeCheck }
 > = {
-  approved: {
+  APPROVED: {
     label: 'Verified seller',
     className: 'bg-emerald-500/15 text-emerald-100 ring-1 ring-emerald-400/30',
     icon: BadgeCheck,
   },
-  pending: {
+  PENDING_REVIEW: {
     label: 'Verification pending',
     className: 'bg-amber-500/15 text-amber-100 ring-1 ring-amber-400/30',
     icon: Clock3,
   },
-  rejected: {
+  MORE_INFORMATION_REQUIRED: {
+    label: 'More info needed',
+    className: 'bg-amber-500/15 text-amber-100 ring-1 ring-amber-400/30',
+    icon: Clock3,
+  },
+  REJECTED: {
     label: 'Verification rejected',
     className: 'bg-red-500/15 text-red-100 ring-1 ring-red-400/30',
     icon: ShieldAlert,

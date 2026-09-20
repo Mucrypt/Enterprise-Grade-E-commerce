@@ -24,7 +24,7 @@ export default function SellerStatusCard({
   sellerProfile,
   fallbackName,
 }: SellerStatusCardProps) {
-  const { ready } = useCreatorDashboardReady(sellerProfile)
+  const { ready } = useCreatorDashboardReady()
   const [earnings, setEarnings] = useState<SellerEarningsSummary | null>(null)
 
   useEffect(() => {
@@ -93,7 +93,7 @@ export default function SellerStatusCard({
         </div>
       ) : (
         <p className='mt-4 text-sm text-slate-400'>
-          {sellerProfile.verification_status === 'pending'
+          {sellerProfile.verification_status === 'PENDING_REVIEW'
             ? 'Verification pending review.'
             : 'Open your seller dashboard.'}
         </p>

@@ -20,6 +20,7 @@ import {
   userApi,
   type PublicSellerProfile,
   type SellerAnnouncement,
+  type SellerCapabilities,
 } from '@/api'
 import {
   AppBorderRadius,
@@ -121,6 +122,7 @@ export default function SellerHubScreen() {
   )
   const [activityHasMore, setActivityHasMore] = useState(false)
   const [activityLoadingMore, setActivityLoadingMore] = useState(false)
+  const [capabilities, setCapabilities] = useState<SellerCapabilities | null>(null)
   const [message, setMessage] = useState('')
   const [busyAction, setBusyAction] = useState<
     'activate' | 'onboard' | SellerTier | null
@@ -140,7 +142,7 @@ export default function SellerHubScreen() {
 
       setScreenLoading(true)
       try {
-        const [tierData, profileData, requestData, activityData] =
+        const [tierData, profileData, requestData, activityData, capabilitiesData] =
           await Promise.all([
             sellerApi.getTierConfig().catch(() => []),
             sellerApi
@@ -156,6 +158,7 @@ export default function SellerHubScreen() {
               },
               generatedAt: new Date().toISOString(),
             })),
+            sellerApi.getMyCapabilities().catch(() => null),
           ])
 
         setTiers(tierData)
@@ -164,6 +167,7 @@ export default function SellerHubScreen() {
         setActivityFeed(activityData.items)
         setActivityHasMore(activityData.pagination?.hasMore ?? false)
         setActivityNextCursor(activityData.pagination?.nextCursor ?? null)
+        setCapabilities(capabilitiesData)
       } catch {
         setMessage('Could not load seller tools right now.')
       } finally {
@@ -197,25 +201,28 @@ export default function SellerHubScreen() {
   }, [sellerProfile?.tier])
 
   const pendingRequest = requests.find(
-    (request) => request.status === 'pending',
+    (request) => request.status === 'PENDING',
   )
 
-  const creatorDashboardReady =
-    sellerProfile?.verification_status === 'approved'
+  // Server-authoritative: the dashboard opens as soon as a seller profile
+  // exists and the account isn't SUSPENDED/CLOSED -- verification is only
+  // required for canOpenStorefront (going publicly live). Mirrors the web
+  // store's useCreatorDashboardReady hook exactly.
+  const creatorDashboardReady = capabilities?.canAccessSellerCenter ?? false
+  const canOpenStorefront = capabilities?.canOpenStorefront ?? false
   const isBusinessAccount = user?.is_business_account ?? false
 
-  // Self-healing: verification_status is fetched fresh every load, but
-  // the store's is_business_account is cached at login and only updates
-  // via an explicit client action -- an admin approving a seller
-  // server-side (grant/tier-change/creator-access all flip it true) has
-  // no way to reach an already-logged-in session. Sync it the moment we
-  // see the mismatch so the "Business mode" tile stops showing stale
-  // "Inactive" once verification is really approved.
+  // Self-healing: the store's is_business_account is cached at login and
+  // only updates via an explicit client action -- a server-side change
+  // (grant/tier-change/creator-access all flip it true) has no way to
+  // reach an already-logged-in session. Sync it the moment the
+  // authoritative capabilities response disagrees, same as the web
+  // store's useCreatorDashboardReady hook.
   useEffect(() => {
-    if (creatorDashboardReady && !isBusinessAccount) {
+    if (capabilities?.accountMode === 'BUSINESS' && !isBusinessAccount) {
       updateUser({ is_business_account: true })
     }
-  }, [creatorDashboardReady, isBusinessAccount, updateUser])
+  }, [capabilities?.accountMode, isBusinessAccount, updateUser])
 
   const summaryCards = useMemo(
     () => [
@@ -231,12 +238,12 @@ export default function SellerHubScreen() {
       },
       {
         label: 'Approval status',
-        value: formatTier(sellerProfile?.verification_status || 'none'),
-        tone: creatorDashboardReady ? 'emerald' : 'slate',
+        value: formatTier(sellerProfile?.verification_status || 'NOT_STARTED'),
+        tone: canOpenStorefront ? 'emerald' : 'slate',
       },
     ],
     [
-      creatorDashboardReady,
+      canOpenStorefront,
       sellerProfile?.tier,
       sellerProfile?.verification_status,
       isBusinessAccount,
@@ -314,7 +321,7 @@ export default function SellerHubScreen() {
         current
           ? {
               ...current,
-              verification_status: 'pending',
+              verification_status: 'PENDING_REVIEW',
             }
           : current,
       )
@@ -580,7 +587,7 @@ export default function SellerHubScreen() {
           <Text style={styles.sectionTitle}>Seller snapshot</Text>
           <Text style={styles.snapshotRow}>
             Verification:{' '}
-            {formatTier(sellerProfile?.verification_status || 'none')}
+            {formatTier(sellerProfile?.verification_status || 'NOT_STARTED')}
           </Text>
           <Text style={styles.snapshotRow}>
             Active listing limit: {sellerProfile?.max_active_listings ?? 0}
@@ -590,8 +597,13 @@ export default function SellerHubScreen() {
           </Text>
           {!creatorDashboardReady ? (
             <Text style={styles.snapshotHint}>
-              Manage Products, Earnings, and Performance unlock once an admin approves your
-              verification.
+              Manage Products, Earnings, and Performance unlock once your
+              seller profile is ready.
+            </Text>
+          ) : !canOpenStorefront ? (
+            <Text style={styles.snapshotHint}>
+              {capabilities?.blockingReasons?.[0] ||
+                "Your storefront isn't public yet -- verification is required before customers can find and buy from you."}
             </Text>
           ) : null}
           {sellerProfile ? (

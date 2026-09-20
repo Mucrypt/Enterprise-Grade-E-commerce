@@ -6,7 +6,7 @@ import {
   likePost,
   unlikePost,
 } from './discover.controller'
-import { requireAdminOrApprovedSeller } from '../../../middleware/seller-auth'
+import { requireAdminOrOnboardedSeller } from '../../../middleware/seller-auth'
 import { query, getClient } from '../../../database/connection'
 import { processDiscoverVideo } from '../../../utils/media'
 
@@ -255,7 +255,7 @@ describe('likePost / unlikePost -- real, per-user, transactional counters', () =
 
 const SELLER_PROFILE_ID = '99999999-0000-0000-0000-000000000001'
 
-describe('requireAdminOrApprovedSeller -- real DB check, not a cached JWT claim', () => {
+describe('requireAdminOrOnboardedSeller -- real DB check, not a cached JWT claim', () => {
   beforeEach(() => jest.clearAllMocks())
 
   it('rejects with 401 when there is no authenticated user', async () => {
@@ -263,7 +263,7 @@ describe('requireAdminOrApprovedSeller -- real DB check, not a cached JWT claim'
     const res = makeRes()
     const next = jest.fn()
 
-    await requireAdminOrApprovedSeller(req, res, next)
+    await requireAdminOrOnboardedSeller(req, res, next)
 
     expect(res.status).toHaveBeenCalledWith(401)
     expect(next).not.toHaveBeenCalled()
@@ -274,31 +274,31 @@ describe('requireAdminOrApprovedSeller -- real DB check, not a cached JWT claim'
     const res = makeRes()
     const next = jest.fn()
 
-    await requireAdminOrApprovedSeller(req, res, next)
+    await requireAdminOrOnboardedSeller(req, res, next)
 
     expect(mockQuery).not.toHaveBeenCalled()
     expect(next).toHaveBeenCalled()
   })
 
-  it('rejects a signed-in customer with no approved seller_profiles row', async () => {
+  it('rejects a signed-in customer with no seller_profiles row in good standing', async () => {
     mockQuery.mockResolvedValue({ rows: [] })
     const req: any = { user: { id: USER_ID, userType: 'customer' } }
     const res = makeRes()
     const next = jest.fn()
 
-    await requireAdminOrApprovedSeller(req, res, next)
+    await requireAdminOrOnboardedSeller(req, res, next)
 
     expect(res.status).toHaveBeenCalledWith(403)
     expect(next).not.toHaveBeenCalled()
   })
 
-  it('attaches sellerProfileId and calls next for an approved seller', async () => {
+  it('attaches sellerProfileId and calls next for an onboarded seller in good standing', async () => {
     mockQuery.mockResolvedValue({ rows: [{ id: SELLER_PROFILE_ID }] })
     const req: any = { user: { id: USER_ID, userType: 'customer' } }
     const res = makeRes()
     const next = jest.fn()
 
-    await requireAdminOrApprovedSeller(req, res, next)
+    await requireAdminOrOnboardedSeller(req, res, next)
 
     expect(req.sellerProfileId).toBe(SELLER_PROFILE_ID)
     expect(next).toHaveBeenCalled()
