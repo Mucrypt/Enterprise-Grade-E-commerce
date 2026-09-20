@@ -5,10 +5,21 @@ import Link from 'next/link'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
-import { sellerService, type SellerVerificationQueueItem } from '@/services/seller.service'
+import {
+  sellerService,
+  type SellerProfileStatusFilter,
+  type SellerVerificationQueueItem,
+  type SellerVerificationQueueStatusFilter,
+} from '@/services/seller.service'
 import { customerService, type Customer } from '@/services/customer.service'
 import { RequirePagePermission } from '@/components/auth/RequirePagePermission'
 import { useStaffAccess } from '@/contexts/StaffAccessContext'
+import {
+  getCaseStatusPresentation,
+  getProfileVerificationPresentation,
+  isVerificationCaseReviewable,
+  isVerificationCaseTerminal,
+} from '@/lib/seller-lifecycle'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -57,12 +68,18 @@ import {
   XCircle,
 } from 'lucide-react'
 
-const parseQueue = (response: unknown): SellerVerificationQueueItem[] => {
-  const data = (response as { data?: { data?: unknown } })?.data?.data
-  const payload = data as { items?: SellerVerificationQueueItem[] } | undefined
-
-  return payload?.items || []
-}
+// `sellerService.getVerificationQueue()` resolves to the API's
+// `{ success, data: { items, pagination } }` body directly -- apiClient's
+// `get<T>()` already unwraps axios's own response.data, so this is ONE
+// `.data` away from `items`, not two. The previous `.data?.data` here
+// silently resolved to undefined on every call, meaning this table
+// showed "No seller verification requests found" regardless of what was
+// actually pending -- a second, independent bug from the enum-casing one
+// (confirmed by re-deriving this from the real return type below rather
+// than an `unknown` cast, which is what hid it).
+const parseQueue = (
+  response: Awaited<ReturnType<typeof sellerService.getVerificationQueue>> | undefined,
+): SellerVerificationQueueItem[] => response?.data?.items || []
 
 function GrantSellerAccessDialog({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient()
@@ -179,16 +196,27 @@ function GrantSellerAccessDialog({ onClose }: { onClose: () => void }) {
 function AllSellersSection({ canManage }: { canManage: boolean }) {
   const [search, setSearch] = useState('')
   const [tierFilter, setTierFilter] = useState('all')
-  const [statusFilter, setStatusFilter] = useState('all')
+  // 'all' | a real SellerProfileStatusFilter value -- 'suspended' is
+  // deliberately NOT one of these anymore. Suspension moved to
+  // seller_account_status in the lifecycle migration; it was never a
+  // real seller_profile_verification_status value the backend's `status`
+  // filter understood, so picking "Suspended" here used to silently
+  // apply no filter at all (matching every seller). It's now its own
+  // dedicated toggle below, wired to the `suspended` boolean param the
+  // backend actually supports.
+  const [statusFilter, setStatusFilter] = useState<'all' | SellerProfileStatusFilter>('all')
+  const [suspendedFilter, setSuspendedFilter] = useState<'all' | 'suspended' | 'active'>('all')
   const [grantDialogOpen, setGrantDialogOpen] = useState(false)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['admin-all-sellers', search, tierFilter, statusFilter],
+    queryKey: ['admin-all-sellers', search, tierFilter, statusFilter, suspendedFilter],
     queryFn: () =>
       sellerService.getAllSellers({
         search: search || undefined,
         tier: tierFilter === 'all' ? undefined : tierFilter,
         status: statusFilter === 'all' ? undefined : statusFilter,
+        suspended:
+          suspendedFilter === 'all' ? undefined : suspendedFilter === 'suspended',
         limit: 50,
       }),
   })
@@ -235,17 +263,38 @@ function AllSellersSection({ canManage }: { canManage: boolean }) {
               <SelectItem value='pro'>Pro</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className='w-45'>
-              <SelectValue placeholder='Status' />
+          <Select
+            value={statusFilter}
+            onValueChange={(value: string) =>
+              setStatusFilter(value as 'all' | SellerProfileStatusFilter)
+            }
+          >
+            <SelectTrigger className='w-52'>
+              <SelectValue placeholder='Verification status' />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value='all'>All statuses</SelectItem>
-              <SelectItem value='approved'>Approved</SelectItem>
-              <SelectItem value='pending'>Pending</SelectItem>
+              <SelectItem value='all'>All verification statuses</SelectItem>
+              <SelectItem value='approved'>Verified</SelectItem>
+              <SelectItem value='pending'>Pending review</SelectItem>
+              <SelectItem value='more_information_required'>More info requested</SelectItem>
               <SelectItem value='rejected'>Rejected</SelectItem>
+              <SelectItem value='expired'>Expired</SelectItem>
+              <SelectItem value='none'>Not started</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select
+            value={suspendedFilter}
+            onValueChange={(value: string) =>
+              setSuspendedFilter(value as 'all' | 'suspended' | 'active')
+            }
+          >
+            <SelectTrigger className='w-36'>
+              <SelectValue placeholder='Suspension' />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value='all'>Any standing</SelectItem>
+              <SelectItem value='active'>Not suspended</SelectItem>
               <SelectItem value='suspended'>Suspended</SelectItem>
-              <SelectItem value='none'>None</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -284,17 +333,16 @@ function AllSellersSection({ canManage }: { canManage: boolean }) {
                     <Badge variant='outline'>{seller.tier}</Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge
-                      variant={
-                        seller.is_suspended
-                          ? 'destructive'
-                          : seller.verification_status === 'approved'
-                            ? 'default'
-                            : 'secondary'
-                      }
-                    >
-                      {seller.is_suspended ? 'suspended' : seller.verification_status}
-                    </Badge>
+                    {seller.is_suspended ? (
+                      <Badge variant='destructive'>Suspended</Badge>
+                    ) : (
+                      (() => {
+                        const presentation = getProfileVerificationPresentation(
+                          seller.verification_status,
+                        )
+                        return <Badge variant={presentation.variant}>{presentation.label}</Badge>
+                      })()
+                    )}
                   </TableCell>
                   <TableCell>{seller.max_active_listings}</TableCell>
                   <TableCell className='text-right'>
@@ -316,9 +364,32 @@ function AllSellersSection({ canManage }: { canManage: boolean }) {
   )
 }
 
-function VerificationQueueSection({ canManage }: { canManage: boolean }) {
+// The backend's fail-closed document rule (seller-lifecycle.service.ts's
+// approveVerification) rejects an approval that requires ID verification
+// but has no document that is BOTH admin-accepted AND malware-scanned
+// clean -- correct behavior in a phase with no real scanner wired in yet,
+// not a bug. Its IllegalTransitionError message names this explicitly;
+// detect it here to show a specific, honest explanation instead of a
+// generic "failed" toast that would read as a transient error an admin
+// might just retry.
+const MALWARE_GATE_MESSAGE_FRAGMENT = 'malware-scanned-clean'
+
+function describeApprovalError(rawMessage: string | undefined): string {
+  if (rawMessage && rawMessage.includes(MALWARE_GATE_MESSAGE_FRAGMENT)) {
+    return (
+      'Cannot approve: this tier requires an identity document that has been ' +
+      'both accepted by an admin and confirmed clean by malware scanning. No ' +
+      'automated scanner is connected yet, so document-based approval for this ' +
+      'tier is intentionally unavailable until one is. This is not an error to ' +
+      'retry -- it will keep failing until a scanner is integrated.'
+    )
+  }
+  return rawMessage || 'Failed to approve verification'
+}
+
+export function VerificationQueueSection({ canManage }: { canManage: boolean }) {
   const queryClient = useQueryClient()
-  const [statusFilter, setStatusFilter] = useState<'pending' | 'approved' | 'rejected' | 'suspended' | 'none'>('pending')
+  const [statusFilter, setStatusFilter] = useState<SellerVerificationQueueStatusFilter>('pending')
   const [moderationNotes, setModerationNotes] = useState('')
   const [suspendReason, setSuspendReason] = useState('')
   const [accessReason, setAccessReason] = useState('')
@@ -329,13 +400,27 @@ function VerificationQueueSection({ canManage }: { canManage: boolean }) {
       sellerService.getVerificationQueue({ status: statusFilter, limit: 100 }),
   })
 
+  // Independent of the currently-selected filter above -- a real
+  // breakdown across every case status, not just a client-side count of
+  // whatever page happens to be loaded (which is undefined/misleading
+  // the moment the filter isn't 'pending').
+  const { data: counts } = useQuery({
+    queryKey: ['admin-seller-verification-queue-counts'],
+    queryFn: () => sellerService.getVerificationQueueCounts(),
+  })
+
   const queue = useMemo(() => parseQueue(data), [data])
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['admin-seller-verification-queue'] })
+    queryClient.invalidateQueries({ queryKey: ['admin-seller-verification-queue-counts'] })
     queryClient.invalidateQueries({ queryKey: ['admin-all-sellers'] })
   }
 
+  // No optimistic update anywhere in this mutation: onSuccess only
+  // re-fetches from the server (`invalidate()`), and onError only shows
+  // the real backend message -- the case's displayed status never
+  // changes locally unless the server actually confirms it did.
   const approveMutation = useMutation({
     mutationFn: (requestId: string) =>
       sellerService.approveVerificationRequest(requestId, {
@@ -349,7 +434,7 @@ function VerificationQueueSection({ canManage }: { canManage: boolean }) {
       setModerationNotes('')
     },
     onError: (error: any) => {
-      toast.error(error?.response?.data?.error || 'Failed to approve verification')
+      toast.error(describeApprovalError(error?.response?.data?.error), { duration: 10000 })
     },
   })
 
@@ -413,7 +498,18 @@ function VerificationQueueSection({ canManage }: { canManage: boolean }) {
     },
   })
 
-  const pendingCount = queue.filter((item) => item.status === 'pending').length
+  // Real counts across every case status, fetched independently of
+  // whichever filter is currently selected below (see
+  // getVerificationQueueCounts) -- not a client-side count of the
+  // currently-loaded page, which would silently read 0 for every status
+  // except whichever one the dropdown happens to be set to.
+  const pendingCount = counts?.pending ?? 0
+  const moreInfoCount = counts?.more_information_required ?? 0
+  const approvedCount = counts?.approved ?? 0
+  const rejectedCount = counts?.rejected ?? 0
+  const expiredCount = counts?.expired ?? 0
+  const supersededCount = counts?.superseded ?? 0
+  const activeCount = pendingCount + moreInfoCount
 
   return (
     <Card>
@@ -427,25 +523,35 @@ function VerificationQueueSection({ canManage }: { canManage: boolean }) {
         </CardDescription>
       </CardHeader>
       <CardContent className='space-y-4'>
+        <div className='flex flex-wrap items-center gap-2'>
+          <Badge variant='secondary'>Active review cases: {activeCount}</Badge>
+          <Badge variant='secondary'>Pending review: {pendingCount}</Badge>
+          <Badge variant='secondary'>More info requested: {moreInfoCount}</Badge>
+          <Badge variant='outline'>Approved (historical): {approvedCount}</Badge>
+          <Badge variant='outline'>Rejected (historical): {rejectedCount}</Badge>
+          <Badge variant='outline'>Expired (historical): {expiredCount}</Badge>
+          <Badge variant='outline'>Superseded (historical): {supersededCount}</Badge>
+        </div>
+
         <div className='flex flex-wrap items-center gap-3'>
-          <Badge variant='secondary'>Pending: {pendingCount}</Badge>
           <Select
             value={statusFilter}
             onValueChange={(value: string) =>
-              setStatusFilter(
-                value as 'pending' | 'approved' | 'rejected' | 'suspended' | 'none',
-              )
+              setStatusFilter(value as SellerVerificationQueueStatusFilter)
             }
           >
-            <SelectTrigger className='w-55'>
+            <SelectTrigger className='w-64'>
               <SelectValue placeholder='Filter by status' />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value='pending'>Pending</SelectItem>
-              <SelectItem value='approved'>Approved</SelectItem>
-              <SelectItem value='rejected'>Rejected</SelectItem>
-              <SelectItem value='suspended'>Suspended</SelectItem>
-              <SelectItem value='none'>None</SelectItem>
+              <SelectItem value='pending'>Pending review (active)</SelectItem>
+              <SelectItem value='more_information_required'>
+                More info requested (active)
+              </SelectItem>
+              <SelectItem value='approved'>Approved (historical)</SelectItem>
+              <SelectItem value='rejected'>Rejected (historical)</SelectItem>
+              <SelectItem value='expired'>Expired (historical)</SelectItem>
+              <SelectItem value='superseded'>Superseded (historical)</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -485,8 +591,8 @@ function VerificationQueueSection({ canManage }: { canManage: boolean }) {
           <TableHeader>
             <TableRow>
               <TableHead>Seller</TableHead>
-              <TableHead>Requested Tier</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>Tier (requested / current)</TableHead>
+              <TableHead>Case status</TableHead>
               <TableHead>Submitted</TableHead>
               <TableHead className='text-right'>Actions</TableHead>
             </TableRow>
@@ -501,121 +607,134 @@ function VerificationQueueSection({ canManage }: { canManage: boolean }) {
                 <TableCell colSpan={5}>No seller verification requests found.</TableCell>
               </TableRow>
             ) : (
-              queue.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell>
-                    <div className='space-y-1'>
-                      <p className='font-medium'>
-                        {item.display_name ||
-                          `${item.first_name || ''} ${item.last_name || ''}`.trim() ||
-                          item.email ||
-                          'Unknown Seller'}
-                      </p>
-                      <p className='text-xs text-muted-foreground'>
-                        {item.handle ? `@${item.handle}` : item.email}
-                      </p>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant='outline'>{item.requested_tier}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        item.status === 'approved'
-                          ? 'default'
-                          : item.status === 'pending'
-                            ? 'secondary'
-                            : 'destructive'
-                      }
-                    >
-                      {item.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {item.created_at
-                      ? formatDistanceToNow(new Date(item.created_at), {
-                          addSuffix: true,
-                        })
-                      : 'Unknown'}
-                  </TableCell>
-                  <TableCell className='text-right'>
-                    <div className='inline-flex gap-2'>
-                      <Button
-                        size='sm'
-                        onClick={() => approveMutation.mutate(item.id)}
-                        disabled={!canManage || item.status !== 'pending' || approveMutation.isPending}
-                      >
-                        <CheckCircle2 className='mr-1 h-4 w-4' /> Approve
-                      </Button>
-                      <Button
-                        size='sm'
-                        variant='secondary'
-                        onClick={() => rejectMutation.mutate(item.id)}
-                        disabled={!canManage || item.status !== 'pending' || rejectMutation.isPending}
-                      >
-                        <XCircle className='mr-1 h-4 w-4' /> Reject
-                      </Button>
-                      <Button
-                        size='sm'
-                        variant='destructive'
-                        onClick={() =>
-                          item.seller_profile_id
-                            ? suspendMutation.mutate(item.seller_profile_id)
-                            : null
-                        }
-                        disabled={
-                          !canManage ||
-                          !item.seller_profile_id ||
-                          suspendMutation.isPending
-                        }
-                      >
-                        <ShieldAlert className='mr-1 h-4 w-4' /> Suspend
-                      </Button>
-                      <Button
-                        size='sm'
-                        variant='secondary'
-                        onClick={() =>
-                          item.seller_profile_id
-                            ? setAccessMutation.mutate({
-                                sellerProfileId: item.seller_profile_id,
-                                accessEnabled: true,
-                              })
-                            : null
-                        }
-                        disabled={
-                          !canManage ||
-                          !item.seller_profile_id ||
-                          item.verification_status === 'approved' ||
-                          setAccessMutation.isPending
-                        }
-                      >
-                        <ShieldCheck className='mr-1 h-4 w-4' /> Grant access
-                      </Button>
-                      <Button
-                        size='sm'
-                        variant='outline'
-                        onClick={() =>
-                          item.seller_profile_id
-                            ? setAccessMutation.mutate({
-                                sellerProfileId: item.seller_profile_id,
-                                accessEnabled: false,
-                              })
-                            : null
-                        }
-                        disabled={
-                          !canManage ||
-                          !item.seller_profile_id ||
-                          item.verification_status !== 'approved' ||
-                          setAccessMutation.isPending
-                        }
-                      >
-                        <ShieldX className='mr-1 h-4 w-4' /> Revoke access
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
+              queue.map((item) => {
+                // This request's OWN case lifecycle -- separate from
+                // item.verification_status (the seller PROFILE's overall
+                // standing) used below for the Grant/Revoke access
+                // buttons. Conflating them would describe a tier-upgrade
+                // request as identity approval, or vice versa.
+                const reviewable = isVerificationCaseReviewable(item.status)
+                const terminal = isVerificationCaseTerminal(item.status)
+                const casePresentation = getCaseStatusPresentation(item.status)
+
+                return (
+                  <TableRow key={item.id}>
+                    <TableCell>
+                      <div className='space-y-1'>
+                        <p className='font-medium'>
+                          {item.display_name ||
+                            `${item.first_name || ''} ${item.last_name || ''}`.trim() ||
+                            item.email ||
+                            'Unknown Seller'}
+                        </p>
+                        <p className='text-xs text-muted-foreground'>
+                          {item.handle ? `@${item.handle}` : item.email}
+                        </p>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className='flex items-center gap-2'>
+                        <Badge variant='outline'>{item.requested_tier}</Badge>
+                        <span className='text-xs text-muted-foreground'>
+                          current: {item.tier || 'unverified'}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className='space-y-1'>
+                        <Badge variant={casePresentation.variant}>{casePresentation.label}</Badge>
+                        {terminal && (
+                          <p className='text-[11px] text-muted-foreground'>
+                            Historical -- not actionable
+                          </p>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {item.created_at
+                        ? formatDistanceToNow(new Date(item.created_at), {
+                            addSuffix: true,
+                          })
+                        : 'Unknown'}
+                    </TableCell>
+                    <TableCell className='text-right'>
+                      <div className='inline-flex flex-wrap justify-end gap-2'>
+                        <Button
+                          size='sm'
+                          onClick={() => approveMutation.mutate(item.id)}
+                          disabled={!canManage || !reviewable || approveMutation.isPending}
+                        >
+                          <CheckCircle2 className='mr-1 h-4 w-4' /> Approve
+                        </Button>
+                        <Button
+                          size='sm'
+                          variant='secondary'
+                          onClick={() => rejectMutation.mutate(item.id)}
+                          disabled={!canManage || !reviewable || rejectMutation.isPending}
+                        >
+                          <XCircle className='mr-1 h-4 w-4' /> Reject
+                        </Button>
+                        <Button
+                          size='sm'
+                          variant='destructive'
+                          onClick={() =>
+                            item.seller_profile_id
+                              ? suspendMutation.mutate(item.seller_profile_id)
+                              : null
+                          }
+                          disabled={
+                            !canManage ||
+                            !item.seller_profile_id ||
+                            suspendMutation.isPending
+                          }
+                        >
+                          <ShieldAlert className='mr-1 h-4 w-4' /> Suspend
+                        </Button>
+                        <Button
+                          size='sm'
+                          variant='secondary'
+                          onClick={() =>
+                            item.seller_profile_id
+                              ? setAccessMutation.mutate({
+                                  sellerProfileId: item.seller_profile_id,
+                                  accessEnabled: true,
+                                })
+                              : null
+                          }
+                          disabled={
+                            !canManage ||
+                            !item.seller_profile_id ||
+                            item.verification_status === 'APPROVED' ||
+                            setAccessMutation.isPending
+                          }
+                        >
+                          <ShieldCheck className='mr-1 h-4 w-4' /> Grant access
+                        </Button>
+                        <Button
+                          size='sm'
+                          variant='outline'
+                          onClick={() =>
+                            item.seller_profile_id
+                              ? setAccessMutation.mutate({
+                                  sellerProfileId: item.seller_profile_id,
+                                  accessEnabled: false,
+                                })
+                              : null
+                          }
+                          disabled={
+                            !canManage ||
+                            !item.seller_profile_id ||
+                            item.verification_status !== 'APPROVED' ||
+                            setAccessMutation.isPending
+                          }
+                        >
+                          <ShieldX className='mr-1 h-4 w-4' /> Revoke access
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })
             )}
           </TableBody>
         </Table>

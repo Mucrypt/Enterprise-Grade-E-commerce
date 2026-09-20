@@ -10,6 +10,10 @@ import { sellerService } from '@/services/seller.service'
 import { supportTicketService, type SupportTicketCategory } from '@/services/support-ticket.service'
 import { RequirePagePermission } from '@/components/auth/RequirePagePermission'
 import { useStaffAccess } from '@/contexts/StaffAccessContext'
+import {
+  getCaseStatusPresentation,
+  getProfileVerificationPresentation,
+} from '@/lib/seller-lifecycle'
 import { formatCurrency } from '@/components/analytics/format'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -224,7 +228,7 @@ function SellerDetailContent() {
             <div>
               <CardTitle className='flex items-center gap-2 text-xl'>
                 {displayName}
-                {sellerProfile.verification_status === 'approved' && (
+                {sellerProfile.verification_status === 'APPROVED' && (
                   <BadgeCheck className='h-5 w-5 text-emerald-600' />
                 )}
               </CardTitle>
@@ -234,17 +238,16 @@ function SellerDetailContent() {
               </CardDescription>
             </div>
             <div className='flex items-center gap-2'>
-              <Badge
-                variant={
-                  sellerProfile.is_suspended
-                    ? 'destructive'
-                    : sellerProfile.verification_status === 'approved'
-                      ? 'default'
-                      : 'secondary'
-                }
-              >
-                {sellerProfile.is_suspended ? 'suspended' : sellerProfile.verification_status}
-              </Badge>
+              {sellerProfile.is_suspended ? (
+                <Badge variant='destructive'>Suspended</Badge>
+              ) : (
+                (() => {
+                  const presentation = getProfileVerificationPresentation(
+                    sellerProfile.verification_status,
+                  )
+                  return <Badge variant={presentation.variant}>{presentation.label}</Badge>
+                })()
+              )}
               <Select
                 value={pendingTier ?? sellerProfile.tier}
                 onValueChange={(value: string) => {
@@ -335,17 +338,20 @@ function SellerDetailContent() {
           {verificationRequests.length === 0 ? (
             <p className='text-sm text-muted-foreground'>No verification requests yet.</p>
           ) : (
-            verificationRequests.map((request) => (
-              <div key={request.id} className='rounded-lg border p-3'>
-                <div className='flex items-center justify-between'>
-                  <p className='font-medium'>{request.requested_tier} tier request</p>
-                  <Badge variant='outline'>{request.status}</Badge>
+            verificationRequests.map((request) => {
+              const presentation = getCaseStatusPresentation(request.status)
+              return (
+                <div key={request.id} className='rounded-lg border p-3'>
+                  <div className='flex items-center justify-between'>
+                    <p className='font-medium'>{request.requested_tier} tier request</p>
+                    <Badge variant={presentation.variant}>{presentation.label}</Badge>
+                  </div>
+                  <p className='mt-1 text-xs text-muted-foreground'>
+                    {request.created_at ? format(parseISO(request.created_at), 'MMM d, yyyy') : ''}
+                  </p>
                 </div>
-                <p className='mt-1 text-xs text-muted-foreground'>
-                  {request.created_at ? format(parseISO(request.created_at), 'MMM d, yyyy') : ''}
-                </p>
-              </div>
-            ))
+              )
+            })
           )}
         </CardContent>
       </Card>
