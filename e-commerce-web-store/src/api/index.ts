@@ -1084,6 +1084,48 @@ export const sellerApi = {
   },
 }
 
+// Verification documents -- private storage, never the public /media
+// endpoint (see the backend's media-storage.service.ts). A tier that
+// requires ID verification cannot be approved without one of these on
+// file that is both admin-accepted AND malware-scanned clean; this is
+// what actually feeds that gate; requestVerification alone (a bare text
+// note) was never enough on its own for those tiers.
+export interface SellerDocument {
+  id: string
+  category: 'identity_document' | 'proof_of_address' | 'business_registration' | 'tax_document' | 'additional_requested'
+  uploadStatus: string
+  reviewStatus: 'pending' | 'accepted' | 'rejected'
+  malwareScanStatus: 'not_scanned' | 'clean' | 'flagged' | 'error'
+  byteSize: number
+  contentType: string
+  createdAt: string
+  reviewedAt: string | null
+}
+
+export const sellerDocumentsApi = {
+  async getMine(): Promise<SellerDocument[]> {
+    const response = await api.get<{ success: boolean; data: { documents: SellerDocument[] } }>(
+      '/seller/documents',
+    )
+    return response.data.data.documents
+  },
+
+  async upload(file: File, category: SellerDocument['category']): Promise<SellerDocument> {
+    const formData = new FormData()
+    formData.append('document', file)
+    formData.append('category', category)
+    const response = await api.post<{ success: boolean; data: { document: SellerDocument } }>(
+      '/seller/documents',
+      formData,
+    )
+    return response.data.data.document
+  },
+
+  async remove(documentId: string): Promise<void> {
+    await api.delete(`/seller/documents/${documentId}`)
+  },
+}
+
 export interface SellerCapabilities {
   accountMode: 'CUSTOMER' | 'BUSINESS'
   onboardingStatus: string

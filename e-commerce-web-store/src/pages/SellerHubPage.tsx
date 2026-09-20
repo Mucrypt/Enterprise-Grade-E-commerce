@@ -18,6 +18,7 @@ import { useCreatorDashboardReady } from '../hooks/useCreatorDashboardReady'
 import { SELLER_TIER_ORDER, formatTier, getTierStyle } from '../utils/sellerTier'
 import SellerIdentityHeader from '../components/seller/SellerIdentityHeader'
 import SellerAnnouncementsBanner from '../components/seller/SellerAnnouncementsBanner'
+import RequestVerificationModal from '../components/seller/RequestVerificationModal'
 
 const formatMoney = (value?: number | string | null) => {
   if (value === null || value === undefined || value === '') {
@@ -47,6 +48,7 @@ export default function SellerHubPage() {
   const [busyAction, setBusyAction] = useState<
     'activate' | 'onboard' | string | null
   >(null)
+  const [verifyModalTier, setVerifyModalTier] = useState<'trusted' | 'pro' | null>(null)
 
   useEffect(() => {
     if (hasHydrated && !isAuthenticated && !authLoading) {
@@ -177,6 +179,7 @@ export default function SellerHubPage() {
           requestedTier,
         )} verification submitted. You can keep selling while review is in progress.`,
       )
+      setVerifyModalTier(null)
     } catch (actionError: any) {
       setError(
         actionError?.response?.data?.error ||
@@ -185,6 +188,21 @@ export default function SellerHubPage() {
     } finally {
       setBusyAction(null)
     }
+  }
+
+  // Trusted/pro require ID verification -- the backend refuses to
+  // approve those without an accepted, malware-scanned-clean document on
+  // file (seller-lifecycle.service.ts's fail-closed rule), so those
+  // tiers walk the seller through uploading one first instead of firing
+  // off a bare text-note request that can never be approved. Basic
+  // doesn't require ID verification, so it keeps the direct one-click
+  // request it already had.
+  const handleTierButtonClick = (tier: SellerTierConfig) => {
+    if (tier.requires_id_verification) {
+      setVerifyModalTier(tier.tier as 'trusted' | 'pro')
+      return
+    }
+    handleRequestTier(tier.tier as 'basic' | 'trusted' | 'pro')
   }
 
   if (authLoading || !hasHydrated || loading) {
@@ -430,11 +448,7 @@ export default function SellerHubPage() {
                       {isUpgrade ? (
                         <button
                           type='button'
-                          onClick={() =>
-                            handleRequestTier(
-                              tier.tier as 'basic' | 'trusted' | 'pro',
-                            )
-                          }
+                          onClick={() => handleTierButtonClick(tier)}
                           disabled={isLocked || busyAction === tier.tier}
                           className='mt-5 inline-flex w-full items-center justify-center rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60'
                         >
@@ -559,6 +573,15 @@ export default function SellerHubPage() {
           </div>
         </div>
       </div>
+
+      {verifyModalTier && (
+        <RequestVerificationModal
+          tier={verifyModalTier}
+          busy={busyAction === verifyModalTier}
+          onClose={() => setVerifyModalTier(null)}
+          onConfirm={() => handleRequestTier(verifyModalTier)}
+        />
+      )}
     </div>
   )
 }
