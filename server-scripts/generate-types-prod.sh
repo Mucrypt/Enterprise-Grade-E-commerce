@@ -43,12 +43,25 @@ docker exec techtools-api-prod sh -c "cd /app && npm run generate:types:prod"
 
 if [ $? -eq 0 ]; then
     log_success "Types generated successfully!"
-    
-    # Copy from container to local
+
+    # /app itself is root-owned in this container (only uploads/,
+    # private-uploads/, and dist/ are chowned to the non-root user it
+    # runs as), so the script can't create /app/src/types there and
+    # falls back to the always-writable /app/dist/types/generated.ts
+    # instead (see generate-types-from-db.ts). Try the "real" path
+    # first so this script still works unchanged against a container
+    # that CAN write it (a future image that does chown /app, or a
+    # differently-built one), and only fall back if that file isn't
+    # actually there.
     log_info "Copying generated types to local..."
-    docker cp techtools-api-prod:/app/src/types/generated.ts tech-tools-api/src/types/generated.ts
-    docker cp techtools-api-prod:/app/src/types/generated.ts admin-dashboard/types/generated.ts
-    
+    CONTAINER_TYPES_PATH="/app/src/types/generated.ts"
+    if ! docker exec techtools-api-prod test -f "$CONTAINER_TYPES_PATH"; then
+        CONTAINER_TYPES_PATH="/app/dist/types/generated.ts"
+        log_info "  (using fallback path inside the container: $CONTAINER_TYPES_PATH)"
+    fi
+    docker cp "techtools-api-prod:$CONTAINER_TYPES_PATH" tech-tools-api/src/types/generated.ts
+    docker cp "techtools-api-prod:$CONTAINER_TYPES_PATH" admin-dashboard/types/generated.ts
+
     log_success "Types copied to:"
     echo "  - tech-tools-api/src/types/generated.ts"
     echo "  - admin-dashboard/types/generated.ts"

@@ -272,15 +272,34 @@ async function generateTypesFromDatabase() {
     // Dockerfile final stage copies nothing else) -- src/types/ genuinely
     // does not exist as a directory in that container, confirmed live
     // ("ENOENT: no such file or directory, open '/app/src/types/generated.ts'").
-    // It's fine to create it there: this write is ephemeral (lost on the
-    // next container recreate) and only needs to survive long enough for
-    // generate-types-prod.sh's `docker cp` to pull it onto the host right
-    // after this process exits. In local dev the directory already
-    // exists, so this is a no-op there.
+    // Worse, /app itself is owned by root there -- only uploads/,
+    // private-uploads/, and dist/ are explicitly chowned to the non-root
+    // `nodejs` user this process runs as (deliberately narrow, to avoid
+    // the cost of recursively chowning all of node_modules at build
+    // time), so `nodejs` can't even mkdir a new directory directly under
+    // /app. Confirmed live: EACCES creating /app/src/types.
+    //
+    // dist/types/ DOES already exist there (compiled from src/types/*.ts
+    // as part of the image's own build, and copied in WITH --chown, so
+    // it's writable) -- that's the fallback target inside a container
+    // that can't write the "real" path. In local dev the real path is
+    // always writable (a normal repo checkout owned by the developer),
+    // so the fallback never triggers there.
     const apiTypesPath = path.resolve(process.cwd(), 'src/types/generated.ts')
-    fs.mkdirSync(path.dirname(apiTypesPath), { recursive: true })
-    fs.writeFileSync(apiTypesPath, output)
-    console.log(`✅ API types saved to: ${apiTypesPath}`)
+    let actualApiTypesPath = apiTypesPath
+    try {
+      fs.mkdirSync(path.dirname(apiTypesPath), { recursive: true })
+      fs.writeFileSync(apiTypesPath, output)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EACCES') throw error
+      actualApiTypesPath = path.resolve(process.cwd(), 'dist/types/generated.ts')
+      fs.mkdirSync(path.dirname(actualApiTypesPath), { recursive: true })
+      fs.writeFileSync(actualApiTypesPath, output)
+      console.log(
+        `⚠️  ${apiTypesPath} is not writable here (expected inside the production container) -- wrote to ${actualApiTypesPath} instead.`,
+      )
+    }
+    console.log(`✅ API types saved to: ${actualApiTypesPath}`)
 
     // Only reachable in a full monorepo checkout (local dev) -- the
     // production container's build context is tech-tools-api/ alone, so
