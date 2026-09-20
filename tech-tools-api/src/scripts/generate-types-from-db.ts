@@ -268,7 +268,17 @@ async function generateTypesFromDatabase() {
     // would differ between the two (src/scripts vs dist/scripts) and
     // between environments where this file may or may not have been
     // compiled yet; cwd does not.
+    // The production runtime image ships ONLY dist/ (the API's
+    // Dockerfile final stage copies nothing else) -- src/types/ genuinely
+    // does not exist as a directory in that container, confirmed live
+    // ("ENOENT: no such file or directory, open '/app/src/types/generated.ts'").
+    // It's fine to create it there: this write is ephemeral (lost on the
+    // next container recreate) and only needs to survive long enough for
+    // generate-types-prod.sh's `docker cp` to pull it onto the host right
+    // after this process exits. In local dev the directory already
+    // exists, so this is a no-op there.
     const apiTypesPath = path.resolve(process.cwd(), 'src/types/generated.ts')
+    fs.mkdirSync(path.dirname(apiTypesPath), { recursive: true })
     fs.writeFileSync(apiTypesPath, output)
     console.log(`✅ API types saved to: ${apiTypesPath}`)
 
