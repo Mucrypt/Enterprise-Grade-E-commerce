@@ -2,6 +2,13 @@ import { Response } from 'express'
 import { AuthRequest } from '../../../middleware/auth'
 import { query } from '../../../database/connection'
 import logger from '../../../utils/logger'
+import {
+  ensureBusinessModeActivated,
+  ensureCreatorProfileForUser,
+} from '../../../services/account-mode-reconciliation.service'
+import { submitSellerApplication, IllegalTransitionError } from '../../../services/seller-lifecycle.service'
+
+const VALID_SELLER_TYPES = ['individual', 'registered_business']
 
 const isSellerSystemEnabled = () =>
   String(process.env.ENABLE_SELLER_TIERS || 'false').toLowerCase() === 'true'
@@ -35,13 +42,15 @@ const ensureSellerInfrastructure = async (res: Response) => {
   return true
 }
 
-const canBecomeSeller = (userType: string, isBusinessAccount: boolean) => {
-  if (isBusinessAccount) {
-    return true
-  }
-
-  return ['creator', 'admin', 'super_admin'].includes(userType)
-}
+// Onboarding is now the entry point itself (see onboardSeller below) --
+// it auto-activates business mode for whoever starts it, so there is no
+// longer a real precondition that can make a customer ineligible.
+// Previously this checked `userType === 'creator'`, a value
+// `users.user_type`'s CHECK constraints have never actually allowed --
+// that branch was dead code. Kept as a named function (rather than
+// inlining `true`) so a real future restriction (e.g. a banned user)
+// has one place to land.
+const canBecomeSeller = (_userType: string, _isBusinessAccount: boolean) => true
 
 const getTierConfig = async (tier: string) => {
   const result = await query(
@@ -208,7 +217,16 @@ export const onboardSeller = async (req: AuthRequest, res: Response) => {
       metadata,
       source,
       termsAccepted,
+      sellerType,
+      sellerTypeDetails,
     } = req.body
+
+    if (sellerType && !VALID_SELLER_TYPES.includes(sellerType)) {
+      return res.status(400).json({
+        success: false,
+        error: `sellerType must be one of: ${VALID_SELLER_TYPES.join(', ')}`,
+      })
+    }
 
     const userResult = await query(
       `SELECT id, user_type, is_business_account
@@ -226,11 +244,20 @@ export const onboardSeller = async (req: AuthRequest, res: Response) => {
     }
 
     const user = userResult.rows[0]
-    if (!canBecomeSeller(user.user_type, Boolean(user.is_business_account))) {
-      return res.status(403).json({
-        success: false,
-        error: 'Switch to business mode before onboarding as seller',
+
+    // Onboarding is now the entry point, not a second step gated behind
+    // a separate "activate business mode" click -- a customer starting
+    // onboarding IS the business-mode-activation event. This closes the
+    // gap where a user could end up with is_business_account=true and a
+    // creator_profiles row but no seller_profiles row (or vice versa)
+    // depending on which endpoint they happened to call first.
+    if (!user.is_business_account) {
+      await ensureBusinessModeActivated({
+        userId,
+        source: source || 'seller_onboarding',
+        actor: { actorId: userId, ip: req.ip, userAgent: req.headers['user-agent'] as string },
       })
+      await ensureCreatorProfileForUser({ userId, handle, displayName })
     }
 
     const existing = await query(
@@ -239,6 +266,13 @@ export const onboardSeller = async (req: AuthRequest, res: Response) => {
     )
 
     const current = existing.rows[0]
+
+    if (current && ['SUBMITTED', 'COMPLETED'].includes(current.onboarding_status) && current.account_status !== 'ACTIVE') {
+      return res.status(409).json({
+        success: false,
+        error: 'Your application has already been submitted and cannot be edited while under review',
+      })
+    }
 
     if (!current && !termsAccepted) {
       return res.status(400).json({
@@ -271,15 +305,17 @@ export const onboardSeller = async (req: AuthRequest, res: Response) => {
       const inserted = await query(
         `INSERT INTO seller_profiles (
           user_id, display_name, handle, bio, avatar_url, banner_url,
-          tier, verification_status,
+          tier, verification_status, account_status, onboarding_status, store_status,
+          seller_type, seller_type_details,
           max_active_listings, max_product_price,
           terms_accepted, terms_accepted_at, metadata
         )
         VALUES (
           $1, $2, $3, $4, $5, $6,
-          'unverified', 'none',
-          $7, $8,
-          true, CURRENT_TIMESTAMP, $9::jsonb
+          'unverified', 'NOT_STARTED', 'DRAFT', 'IN_PROGRESS', 'DRAFT',
+          $7, $8::jsonb,
+          $9, $10,
+          true, CURRENT_TIMESTAMP, $11::jsonb
         )
         RETURNING *`,
         [
@@ -289,6 +325,8 @@ export const onboardSeller = async (req: AuthRequest, res: Response) => {
           bio || null,
           avatarUrl || null,
           bannerUrl || null,
+          sellerType || null,
+          sellerTypeDetails ? JSON.stringify(sellerTypeDetails) : null,
           unverifiedConfig?.max_active_listings || 5,
           unverifiedConfig?.max_product_price || 99.99,
           metadata ? JSON.stringify(metadata) : null,
@@ -323,13 +361,15 @@ export const onboardSeller = async (req: AuthRequest, res: Response) => {
            avatar_url = COALESCE($4, avatar_url),
            banner_url = COALESCE($5, banner_url),
            metadata = COALESCE($6::jsonb, metadata),
-           terms_accepted = CASE WHEN $7 = true THEN true ELSE terms_accepted END,
+           seller_type = COALESCE($7, seller_type),
+           seller_type_details = COALESCE($8::jsonb, seller_type_details),
+           terms_accepted = CASE WHEN $9 = true THEN true ELSE terms_accepted END,
            terms_accepted_at = CASE
-             WHEN $7 = true AND terms_accepted_at IS NULL THEN CURRENT_TIMESTAMP
+             WHEN $9 = true AND terms_accepted_at IS NULL THEN CURRENT_TIMESTAMP
              ELSE terms_accepted_at
            END,
            updated_at = CURRENT_TIMESTAMP
-       WHERE user_id = $8
+       WHERE user_id = $10
        RETURNING *`,
       [
         displayName || null,
@@ -338,6 +378,8 @@ export const onboardSeller = async (req: AuthRequest, res: Response) => {
         avatarUrl || null,
         bannerUrl || null,
         metadata ? JSON.stringify(metadata) : null,
+        sellerType || null,
+        sellerTypeDetails ? JSON.stringify(sellerTypeDetails) : null,
         Boolean(termsAccepted),
         userId,
       ],
@@ -388,7 +430,7 @@ export const requestSellerVerification = async (
       })
     }
 
-    const { requestedTier = 'basic', documentsSubmitted, notes } = req.body
+    const { requestedTier = 'basic' } = req.body
 
     if (!['basic', 'trusted', 'pro'].includes(requestedTier)) {
       return res.status(400).json({
@@ -410,86 +452,37 @@ export const requestSellerVerification = async (
     }
 
     const profile = profileResult.rows[0]
-    if (profile.is_suspended) {
+    if (profile.is_suspended || profile.account_status === 'SUSPENDED') {
       return res.status(403).json({
         success: false,
         error: 'Seller account is suspended',
       })
     }
 
-    if (profile.tier === requestedTier) {
+    if (profile.account_status === 'ACTIVE' && profile.tier === requestedTier) {
       return res.status(409).json({
         success: false,
         error: `You are already on ${requestedTier} tier`,
       })
     }
 
-    const pending = await query(
-      `SELECT id
-       FROM seller_verification_requests
-       WHERE user_id = $1
-         AND status = 'pending'
-       LIMIT 1`,
-      [userId],
-    )
-
-    if (pending.rows.length > 0) {
-      return res.status(409).json({
-        success: false,
-        error: 'You already have a pending verification request',
-      })
-    }
-
-    const inserted = await query(
-      `INSERT INTO seller_verification_requests (
-        user_id,
-        seller_profile_id,
-        requested_tier,
-        status,
-        documents_submitted,
-        notes
-      )
-      VALUES ($1, $2, $3, 'pending', $4::jsonb, $5)
-      RETURNING *`,
-      [
-        userId,
-        profile.id,
+    try {
+      const result = await submitSellerApplication({
+        sellerProfileId: profile.id,
+        actor: { actorId: userId, ip: req.ip, userAgent: req.headers['user-agent'] as string },
         requestedTier,
-        documentsSubmitted ? JSON.stringify(documentsSubmitted) : null,
-        notes || null,
-      ],
-    )
+      })
 
-    await query(
-      `UPDATE seller_profiles
-       SET verification_status = 'pending',
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = $1`,
-      [profile.id],
-    )
-
-    await appendAuditLog({
-      profileId: profile.id,
-      userId,
-      actorId: userId,
-      action: 'seller_verification_requested',
-      previousState: profile,
-      newState: {
-        verification_status: 'pending',
-        requested_tier: requestedTier,
-      },
-      details: {
-        requestId: inserted.rows[0].id,
-      },
-      req,
-    })
-
-    return res.status(201).json({
-      success: true,
-      data: {
-        request: inserted.rows[0],
-      },
-    })
+      return res.status(result.noop ? 200 : 201).json({
+        success: true,
+        data: { request: result.verificationRequest },
+      })
+    } catch (error) {
+      if (error instanceof IllegalTransitionError) {
+        return res.status(409).json({ success: false, error: error.message })
+      }
+      throw error
+    }
   } catch (error) {
     logger.error('Request seller verification error:', error)
     return res.status(500).json({
@@ -564,7 +557,7 @@ export const getPublicSellerProfile = async (req: AuthRequest, res: Response) =>
               (SELECT COUNT(*) FROM discover_posts dp WHERE dp.seller_profile_id = sp.id AND dp.is_active = TRUE) as post_count
               ${viewerId ? ', EXISTS(SELECT 1 FROM seller_follows sf2 WHERE sf2.seller_profile_id = sp.id AND sf2.user_id = $2) as is_following' : ''}
        FROM seller_profiles sp
-       WHERE sp.handle = $1 AND sp.verification_status = 'approved' AND sp.is_active = TRUE AND sp.is_suspended = FALSE
+       WHERE sp.handle = $1 AND sp.account_status = 'ACTIVE'
        LIMIT 1`,
       viewerId ? [handle, viewerId] : [handle],
     )

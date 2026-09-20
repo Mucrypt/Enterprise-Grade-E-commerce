@@ -189,6 +189,26 @@ export const adminBookSchemas = {
   }),
 }
 
+const individualSellerTypeDetails = Joi.object({
+  legalFirstName: Joi.string().max(140),
+  legalLastName: Joi.string().max(140),
+  dateOfBirth: Joi.string().isoDate(),
+  country: Joi.string().max(80),
+  nationality: Joi.string().max(80),
+  residentialAddress: Joi.object().unknown(true),
+  phoneNumber: Joi.string().max(30),
+}).unknown(true)
+
+const businessSellerTypeDetails = Joi.object({
+  legalBusinessName: Joi.string().max(200),
+  registrationNumber: Joi.string().max(100),
+  taxId: Joi.string().max(100),
+  countryOfRegistration: Joi.string().max(80),
+  registeredAddress: Joi.object().unknown(true),
+  legalRepresentative: Joi.object().unknown(true),
+  businessContact: Joi.object().unknown(true),
+}).unknown(true)
+
 export const sellerSchemas = {
   onboard: Joi.object({
     displayName: Joi.string().max(140),
@@ -199,14 +219,28 @@ export const sellerSchemas = {
     metadata: Joi.object().unknown(true),
     source: Joi.string().max(60),
     termsAccepted: Joi.boolean(),
+    sellerType: Joi.string().valid('individual', 'registered_business'),
+    sellerTypeDetails: Joi.alternatives().conditional('sellerType', {
+      is: 'registered_business',
+      then: businessSellerTypeDetails,
+      otherwise: individualSellerTypeDetails,
+    }),
   }),
 
   requestVerification: Joi.object({
     requestedTier: Joi.string()
       .valid('basic', 'trusted', 'pro')
       .default('basic'),
-    documentsSubmitted: Joi.array().items(Joi.object().unknown(true)).max(20),
-    notes: Joi.string().max(4000),
+  }),
+
+  submitApplication: Joi.object({
+    requestedTier: Joi.string().valid('basic', 'trusted', 'pro'),
+  }),
+
+  uploadDocument: Joi.object({
+    category: Joi.string()
+      .valid('identity_document', 'proof_of_address', 'business_registration', 'tax_document', 'additional_requested')
+      .required(),
   }),
 }
 
@@ -225,17 +259,39 @@ export const adminSellerSchemas = {
     adminNotes: Joi.string().max(4000),
     decisionReason: Joi.string().max(2000),
     phoneVerified: Joi.boolean(),
-    idVerified: Joi.boolean(),
     paymentMethodVerified: Joi.boolean(),
+    grantedTier: Joi.string().valid('unverified', 'basic', 'trusted', 'pro'),
   }),
 
   rejectVerification: Joi.object({
     adminNotes: Joi.string().max(4000),
-    decisionReason: Joi.string().max(2000),
+    decisionReason: Joi.string().max(2000).required(),
+  }),
+
+  requestMoreInfo: Joi.object({
+    reason: Joi.string().max(2000).required(),
   }),
 
   suspendSeller: Joi.object({
     suspensionReason: Joi.string().max(4000).required(),
+  }),
+
+  restrictSeller: Joi.object({
+    reason: Joi.string().max(2000).required(),
+  }),
+
+  closeSeller: Joi.object({
+    reason: Joi.string().max(2000).required(),
+  }),
+
+  setStoreStatus: Joi.object({
+    toStatus: Joi.string().valid('DRAFT', 'READY', 'LIVE', 'PAUSED', 'CLOSED').required(),
+    reason: Joi.string().max(2000),
+  }),
+
+  reviewDocument: Joi.object({
+    reviewStatus: Joi.string().valid('accepted', 'rejected').required(),
+    reviewNotes: Joi.string().max(4000),
   }),
 
   setCreatorAccess: Joi.object({

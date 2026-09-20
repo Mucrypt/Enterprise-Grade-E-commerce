@@ -82,6 +82,7 @@ type CreatorAccessContext = {
   creatorProfileId: string
   sellerProfileId: string | null
   verificationStatus: string | null
+  sellerAccountStatus: string | null
   isSellerSuspended: boolean
   isSellerActive: boolean
   maxActiveListings: number | null
@@ -96,6 +97,7 @@ const getCreatorAccessContext = async (
     `SELECT cp.id AS creator_profile_id,
             sp.id AS seller_profile_id,
             sp.verification_status,
+            sp.account_status,
             COALESCE(sp.is_suspended, false) AS is_seller_suspended,
             COALESCE(sp.is_active, true) AS is_seller_active,
             sp.max_active_listings,
@@ -117,6 +119,7 @@ const getCreatorAccessContext = async (
     creatorProfileId: row.creator_profile_id,
     sellerProfileId: row.seller_profile_id || null,
     verificationStatus: row.verification_status || null,
+    sellerAccountStatus: row.account_status || null,
     isSellerSuspended: Boolean(row.is_seller_suspended),
     isSellerActive: Boolean(row.is_seller_active),
     maxActiveListings:
@@ -135,11 +138,18 @@ const getCreatorAccessContext = async (
       return null
     }
 
-    if (context.isSellerSuspended || !context.isSellerActive) {
-      return null
-    }
-
-    if (context.verificationStatus !== 'approved') {
+    // account_status is the new authoritative field (see
+    // seller-lifecycle.service.ts) -- checked first when present.
+    // is_suspended/is_active/verification_status are still checked as a
+    // fallback for any seller_profiles row that predates the lifecycle
+    // migration's backfill (should not exist in practice, since 076
+    // backfills every existing row, but this keeps the gate fail-closed
+    // rather than fail-open if that's ever untrue).
+    if (context.sellerAccountStatus) {
+      if (context.sellerAccountStatus !== 'ACTIVE') {
+        return null
+      }
+    } else if (context.isSellerSuspended || !context.isSellerActive || context.verificationStatus !== 'APPROVED') {
       return null
     }
   }
@@ -1533,35 +1543,22 @@ export const updateCreatorProduct = async (req: AuthRequest, res: Response) => {
 
     const { productId } = req.params
 
-    // Verify creator access
-    const profileResult = await query(
-      `SELECT cp.id AS creator_profile_id, sp.verification_status, sp.is_suspended
-       FROM creator_profiles cp
-       INNER JOIN seller_profiles sp ON sp.user_id = cp.user_id
-       WHERE cp.user_id = $1
-       LIMIT 1`,
-      [userId],
-    )
-
-    if (profileResult.rows.length === 0) {
-      return res
-        .status(403)
-        .json({ success: false, error: 'Creator profile not found.' })
-    }
-
-    const profile = profileResult.rows[0]
-    if (profile.verification_status !== 'approved') {
+    // Verify creator access -- uses the same getCreatorAccessContext
+    // every other creator-approval-gated endpoint uses, instead of its
+    // own separate INNER JOIN check. That separate check required a
+    // matching seller_profiles row to exist at all, which a creator who
+    // only ever went through business-mode activation (before this
+    // phase's account-mode reconciliation fix) would not have --
+    // producing a confusing "Creator profile not found" for a real,
+    // existing creator profile.
+    const access = await getCreatorAccessContext(userId, { requireApproved: true })
+    if (!access) {
       return res
         .status(403)
         .json({
           success: false,
           error: 'Creator access requires admin approval.',
         })
-    }
-    if (profile.is_suspended) {
-      return res
-        .status(403)
-        .json({ success: false, error: 'Creator access is suspended.' })
     }
 
     // Fetch the existing book owned by this creator
@@ -1571,7 +1568,7 @@ export const updateCreatorProduct = async (req: AuthRequest, res: Response) => {
        FROM products
        WHERE id = $1 AND creator_profile_id = $2 AND deleted_at IS NULL
        LIMIT 1`,
-      [productId, profile.creator_profile_id],
+      [productId, access.creatorProfileId],
     )
 
     if (bookResult.rows.length === 0) {
@@ -1704,7 +1701,7 @@ export const updateCreatorProduct = async (req: AuthRequest, res: Response) => {
     )
 
     await appendCreatorEntityAuditLog({
-      creatorProfileId: profile.creator_profile_id,
+      creatorProfileId: access.creatorProfileId,
       userId,
       action: 'product_updated',
       entityType: 'book',

@@ -70,6 +70,7 @@ import {
 import { webSocketService } from './services/websocket.service'
 import { notificationDispatcher } from './services/notification-dispatcher.service'
 import shippingService from './services/shipping'
+import { assertPrivateMediaStorageIsSafe } from './services/media-storage.service'
 import logger from './utils/logger'
 
 const PORT = process.env.PORT || 9000
@@ -126,6 +127,15 @@ if (cluster.isPrimary && numWorkers > 1) {
       // Connect to database
       await connectDatabase()
       logger.info('✅ Database connected successfully')
+
+      // Fail fast if seller-verification-document private storage is
+      // misconfigured -- e.g. PRIVATE_UPLOAD_DIR overlapping with
+      // UPLOAD_DIR (which src/app.ts serves unauthenticated at /media),
+      // or an R2 setup that would fall back to the public media bucket.
+      // Deliberately thrown before the server accepts any traffic,
+      // rather than discovered lazily on a seller's first upload.
+      await assertPrivateMediaStorageIsSafe()
+      logger.info('✅ Private document storage configuration verified')
 
       // Connect to Redis
       await connectRedis()

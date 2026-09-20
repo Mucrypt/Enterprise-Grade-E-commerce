@@ -2,6 +2,7 @@ import { Response } from 'express'
 import { AuthRequest } from '../../../middleware/auth'
 import { query } from '../../../database/connection'
 import logger from '../../../utils/logger'
+import { ensureSellerProfileForUser } from '../../../services/account-mode-reconciliation.service'
 
 const isBusinessModeSwitchEnabled = () =>
   String(process.env.ENABLE_BUSINESS_MODE_SWITCH || 'false').toLowerCase() ===
@@ -245,6 +246,24 @@ export const activateBusinessMode = async (req: AuthRequest, res: Response) => {
 
         profile = created.rows[0]
       }
+    }
+
+    // Closes the gap where activating business mode here and onboarding
+    // as a seller via POST /sellers/onboard could diverge: previously
+    // this endpoint only ever created a creator_profiles row, never a
+    // seller_profiles row, so a user who only ever called this endpoint
+    // had is_business_account=true with no seller_profiles row at all --
+    // which then failed getCreatorAccessContext's approval check with a
+    // confusing "Creator profile not found". Idempotent, so calling
+    // this repeatedly (or after onboardSeller already created the row)
+    // never overwrites anything.
+    const sellerTableReady = await tableExists('seller_profiles')
+    if (sellerTableReady) {
+      await ensureSellerProfileForUser({
+        userId,
+        actor: { actorId: userId, ip: req.ip || null, userAgent: (req.headers['user-agent'] as string) || null },
+        source: source || 'business_mode_activation',
+      }).catch((error) => logger.warn('Failed to ensure seller profile after business mode activation', error))
     }
 
     const auditReady = await tableExists('user_business_mode_audit')

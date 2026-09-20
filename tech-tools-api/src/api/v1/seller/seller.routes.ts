@@ -3,7 +3,7 @@ import rateLimit from 'express-rate-limit'
 import { authenticate, authenticateIfPresent, authorize } from '../../../middleware/auth'
 import { requireAdminOrApprovedSeller } from '../../../middleware/seller-auth'
 import { sellerSchemas, productSchemas, validate } from '../../../middleware/validation'
-import { upload, handleUploadErrors } from '../../../utils/media'
+import { upload, handleUploadErrors, uploadSellerDocument } from '../../../utils/media'
 import {
   getMySellerProfile,
   getMySellerVerificationRequests,
@@ -14,6 +14,17 @@ import {
   onboardSeller,
   requestSellerVerification,
 } from './seller.controller'
+import {
+  getMyOnboardingProgress,
+  submitMySellerApplication,
+  getMySellerCapabilities,
+} from './seller-onboarding.controller'
+import {
+  uploadMySellerDocument,
+  listMySellerDocuments,
+  downloadMySellerDocument,
+  deleteMySellerDocument,
+} from './seller-documents.controller'
 import {
   getMySellerProducts,
   getPendingSellerProducts,
@@ -62,6 +73,40 @@ router.post(
 )
 router.post('/profile/:id/follow', followSeller)
 router.delete('/profile/:id/follow', unfollowSeller)
+
+// =====================================================
+// Resumable onboarding -- backend-derived progress/eligibility, and the
+// single capability response the frontend is meant to trust instead of
+// re-deriving eligibility per page.
+// =====================================================
+router.get('/onboarding/progress', getMyOnboardingProgress)
+router.post(
+  '/onboarding/submit',
+  sellerWriteLimiter,
+  validate(sellerSchemas.submitApplication),
+  submitMySellerApplication,
+)
+router.get('/capabilities', getMySellerCapabilities)
+
+// =====================================================
+// Verification documents -- private storage only (see
+// media-storage.service.ts's storePrivateMediaBuffer/streamPrivateMedia).
+// A lighter limiter than sellerWriteLimiter would allow more requests,
+// but documents are exactly the kind of endpoint the founder's spec
+// calls out for rate limiting, so this reuses the stricter one.
+// =====================================================
+const uploadDocumentMiddleware = handleUploadErrors(uploadSellerDocument.single('document'))
+
+router.post(
+  '/documents',
+  sellerWriteLimiter,
+  uploadDocumentMiddleware,
+  validate(sellerSchemas.uploadDocument),
+  uploadMySellerDocument,
+)
+router.get('/documents', listMySellerDocuments)
+router.get('/documents/:documentId/download', downloadMySellerDocument)
+router.delete('/documents/:documentId', deleteMySellerDocument)
 
 // =====================================================
 // Seller-owned products -- requireAdminOrApprovedSeller lets both admin

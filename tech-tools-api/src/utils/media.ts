@@ -253,6 +253,47 @@ export const uploadBookAssets = multer({
 })
 
 // =====================================================
+// Seller verification documents -- deliberately memory storage, not
+// mediaTempStorage. Every other upload path above writes a temp file
+// under UPLOAD_DIR first (using the client-supplied filename's
+// extension), which is the directory src/app.ts serves unauthenticated
+// at /media -- an identity document should never touch that directory,
+// not even briefly. Memory storage keeps the file body as a Buffer only
+// (seller-documents.service.ts writes it straight to the private
+// storage path with a server-generated key), and the 10MB cap matches
+// this codebase's general MAX_FILE_SIZE default -- a scanned ID/proof
+// of address is a photo or a PDF, not a video.
+// =====================================================
+
+export const ALLOWED_DOCUMENT_TYPES = [
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+]
+
+const documentFileFilter = (
+  _req: any,
+  file: Express.Multer.File,
+  cb: multer.FileFilterCallback,
+) => {
+  if (ALLOWED_DOCUMENT_TYPES.includes(file.mimetype)) {
+    cb(null, true)
+    return
+  }
+  cb(new Error(`Invalid document type. Allowed types: ${ALLOWED_DOCUMENT_TYPES.join(', ')}`))
+}
+
+export const uploadSellerDocument = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: documentFileFilter,
+  limits: {
+    fileSize: MAX_FILE_SIZE,
+  },
+})
+
+// =====================================================
 // IMAGE PROCESSING
 // =====================================================
 

@@ -152,8 +152,17 @@ services:
       # reason ENABLE_SELLER_TIERS did above.
       ENABLE_BUSINESS_MODE_SWITCH: ${ENABLE_BUSINESS_MODE_SWITCH:-false}
       ENABLE_ADMIN_BOOK_PUBLISHING: ${ENABLE_ADMIN_BOOK_PUBLISHING:-false}
+      # Seller verification documents (ID scans, proof of address, etc.)
+      # -- deliberately a SEPARATE directory from UPLOAD_DIR above, never
+      # mounted into a static-file server. Must stay wired here, not just
+      # in .env, per the exact env-var-injection gap already found and
+      # fixed three times above for the ENABLE_* flags.
+      PRIVATE_UPLOAD_DIR: ${PRIVATE_UPLOAD_DIR:-private-uploads}
+      SELLER_DOCUMENTS_STORAGE_PROVIDER: ${SELLER_DOCUMENTS_STORAGE_PROVIDER:-}
+      R2_PRIVATE_BUCKET_NAME: ${R2_PRIVATE_BUCKET_NAME:-}
     volumes:
       - api_uploads:/app/uploads
+      - api_private_uploads:/app/private-uploads
     networks:
       - techtools-prod-network
     depends_on:
@@ -358,3 +367,4 @@ volumes:
   certbot_www:
   pgadmin_data:
   api_uploads:
+  api_private_uploads:

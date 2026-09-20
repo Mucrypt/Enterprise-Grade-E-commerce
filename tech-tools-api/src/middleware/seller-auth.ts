@@ -69,7 +69,7 @@ export async function requireAdminOrApprovedSeller(req: Request, res: Response, 
   try {
     const sellerResult = await dbQuery(
       `SELECT id FROM seller_profiles
-       WHERE user_id = $1 AND verification_status = 'approved' AND is_active = TRUE AND is_suspended = FALSE
+       WHERE user_id = $1 AND account_status = 'ACTIVE'
        LIMIT 1`,
       [authReq.user.id],
     )
