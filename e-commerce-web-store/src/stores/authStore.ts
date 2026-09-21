@@ -104,9 +104,26 @@ export const useAuthStore = create<AuthStore>()(
             .getAll()
             .then((items) => useWishlistStore.getState().hydrateFromServer(items))
             .catch(() => {});
-        } catch {
-          localStorage.removeItem('auth_token');
-          set({ user: null, isAuthenticated: false, isLoading: false });
+        } catch (error: any) {
+          // A bare `catch { logout }` treated ANY failure here as "not
+          // logged in" -- a 429 (the API's rate limiter; a page like
+          // Home firing a dozen-plus concurrent requests on load is far
+          // more likely to trip it than a lighter page), a 500, a
+          // network blip, all silently wiped a perfectly valid session.
+          // Reported live: refreshing on Home logged users out soon
+          // after login while Profile never did -- exactly the
+          // request-volume difference this explains. Only a real 401/403
+          // (the token itself is genuinely invalid/expired, or the
+          // interceptor's own refresh attempt already failed and turned
+          // this into a 401) means the session is actually over; anything
+          // else is transient and must leave the existing session alone.
+          const status = error?.response?.status;
+          if (status === 401 || status === 403) {
+            localStorage.removeItem('auth_token');
+            set({ user: null, isAuthenticated: false, isLoading: false });
+          } else {
+            set({ isLoading: false });
+          }
         }
       },
 
