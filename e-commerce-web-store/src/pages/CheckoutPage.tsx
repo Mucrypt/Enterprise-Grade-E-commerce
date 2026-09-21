@@ -78,6 +78,21 @@ export default function CheckoutPage() {
   const [isGuestCheckout, setIsGuestCheckout] = useState(!isAuthenticated)
   const [guestEmail, setGuestEmail] = useState('')
 
+  // isGuestCheckout's initial value above is a guess made before
+  // authStore's persisted state has rehydrated from localStorage --
+  // useState's initializer runs once, synchronously, on mount, when
+  // isAuthenticated is still its default `false` regardless of whether a
+  // real, persisted session exists. A genuinely logged-in shopper landing
+  // directly on checkout (e.g. via a hard refresh) got stuck showing the
+  // guest flow -- asking for a guest email, hiding their store credit --
+  // for the rest of that page load, since nothing ever corrected the
+  // initial guess once hydration confirmed they really are authenticated.
+  useEffect(() => {
+    if (isAuthenticated) {
+      setIsGuestCheckout(false)
+    }
+  }, [isAuthenticated])
+
   // Stripe state
   const [clientSecret, setClientSecret] = useState<string | null>(null)
   const [_paymentIntentId, setPaymentIntentId] = useState<string | null>(null)
