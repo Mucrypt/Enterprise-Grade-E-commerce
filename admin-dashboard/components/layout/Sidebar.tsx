@@ -594,7 +594,7 @@ function stripGatedItems(items: NavItem[]): NavItem[] {
     )
 }
 
-export function Sidebar() {
+export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const pathname = usePathname()
   const { user, logout } = useAuth()
   const { hasPermission, hasAnyPermission, isLegacyAdmin, isLoading: staffLoading } =
@@ -629,7 +629,7 @@ export function Sidebar() {
     <div className='flex h-screen w-64 flex-col border-r bg-card'>
       {/* Logo/Brand */}
       <div className='flex h-16 items-center border-b px-6'>
-        <Link href='/dashboard' className='flex items-center space-x-2'>
+        <Link href='/dashboard' onClick={onNavigate} className='flex items-center space-x-2'>
           <div className='h-8 w-8 rounded-lg bg-linear-to-br from-primary to-primary/60 flex items-center justify-center text-white font-bold'>
             TT
           </div>
@@ -696,6 +696,7 @@ export function Sidebar() {
                       <Link
                         key={child.href}
                         href={child.href}
+                        onClick={onNavigate}
                         className={cn(
                           'flex items-center space-x-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground',
                           isActive(child.href) &&
@@ -712,6 +713,7 @@ export function Sidebar() {
             ) : (
               <Link
                 href={item.href}
+                onClick={onNavigate}
                 className={cn(
                   'flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground',
                   isActive(item.href) && 'bg-accent text-accent-foreground',

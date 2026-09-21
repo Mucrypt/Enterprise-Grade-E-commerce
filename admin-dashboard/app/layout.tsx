@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Toaster } from 'sonner'
 import { Providers } from '@/components/providers'
@@ -18,6 +18,14 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'E-Commerce Admin Dashboard',
   description: 'Developed by Romeo Mukulah - Full Stack Developer',
+}
+
+// Next.js does inject a default viewport tag without this, but leaving it
+// implicit meant it was never actually verified -- made explicit here
+// while fixing mobile usability so it's guaranteed rather than assumed.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
 }
 
 export default function RootLayout({
