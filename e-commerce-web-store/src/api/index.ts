@@ -55,13 +55,119 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Response interceptor for errors
+// Response interceptor: transparently refresh an expired access token
+// instead of logging the user out.
+//
+// The backend issues a 15-minute access token alongside a 7-day refresh
+// token (auth.controller.ts), and this client already stores both
+// (auth_token / refresh_token) -- but until now nothing ever used the
+// refresh token. Every request just failed once the access token
+// expired, and authStore.fetchUser()'s catch block treated that as
+// "not logged in", clearing the whole session. In practice this meant
+// nobody stayed logged in longer than 15 minutes -- confirmed live: a
+// plain browser refresh logged users out constantly. This is the fix:
+// on a 401, use the refresh token to get a new access token and retry
+// the original request once, so a session now genuinely lasts up to 7
+// days (matching the refresh token's real lifetime) instead of 15
+// minutes, without changing anything about how authStore itself works.
+let isRefreshingToken = false
+let pendingRequests: Array<{
+  resolve: (token: string) => void
+  reject: (error: unknown) => void
+}> = []
+
+function resolvePendingRequests(error: unknown, token: string | null) {
+  pendingRequests.forEach(({ resolve, reject }) => {
+    if (token) resolve(token)
+    else reject(error)
+  })
+  pendingRequests = []
+}
+
+const AUTH_ENDPOINTS_EXCLUDED_FROM_REFRESH = ['/auth/login', '/auth/register', '/auth/refresh']
+
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    // Don't auto-redirect on 401 - let the app handle auth state
-    // The auth store will clear state when API calls fail
-    return Promise.reject(error)
+  async (error) => {
+    const originalRequest = error.config
+    const isAuthEndpoint = AUTH_ENDPOINTS_EXCLUDED_FROM_REFRESH.some((path) =>
+      originalRequest?.url?.includes(path),
+    )
+
+    if (error.response?.status !== 401 || isAuthEndpoint || originalRequest._retriedAfterRefresh) {
+      return Promise.reject(error)
+    }
+
+    const refreshTokenValue = localStorage.getItem('refresh_token')
+    if (!refreshTokenValue) {
+      return Promise.reject(error)
+    }
+
+    originalRequest._retriedAfterRefresh = true
+
+    // A concurrent request can 401 with the OLD token but not actually
+    // get processed until AFTER a refresh triggered by a different
+    // request already completed -- real timing, not merely theoretical
+    // (caught by this exact scenario in a real end-to-end test: the
+    // third of three concurrent requests arrived late enough that the
+    // first refresh had already finished and reset isRefreshingToken).
+    // In that case the fix isn't to queue OR to refresh again -- the
+    // token in storage right now is already newer than what this
+    // request tried, so just retry with it directly.
+    const tokenAtFailureTime = originalRequest.headers?.Authorization
+    const currentToken = localStorage.getItem('auth_token')
+    if (currentToken && tokenAtFailureTime !== `Bearer ${currentToken}`) {
+      originalRequest.headers.Authorization = `Bearer ${currentToken}`
+      return api(originalRequest)
+    }
+
+    // A page load commonly fires several authenticated requests at
+    // once -- if the access token is already expired, all of them 401
+    // together. Only the first one actually calls /auth/refresh; the
+    // rest queue and retry with whatever token that call produces,
+    // instead of each independently racing to refresh (which would
+    // work but is wasteful and briefly puts multiple valid-looking
+    // access tokens in flight for no reason).
+    if (isRefreshingToken) {
+      return new Promise((resolve, reject) => {
+        pendingRequests.push({
+          resolve: (token) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`
+            resolve(api(originalRequest))
+          },
+          reject,
+        })
+      })
+    }
+
+    isRefreshingToken = true
+    try {
+      // A plain axios call, not the `api` instance -- this must not
+      // carry the expired access token via the request interceptor
+      // above, and must not itself be subject to this same response
+      // interceptor.
+      const refreshResponse = await axios.post<{
+        success: boolean
+        data: { accessToken: string }
+      }>(`${API_URL}/auth/refresh`, { refreshToken: refreshTokenValue })
+
+      const newAccessToken = refreshResponse.data.data.accessToken
+      localStorage.setItem('auth_token', newAccessToken)
+      resolvePendingRequests(null, newAccessToken)
+
+      originalRequest.headers.Authorization = `Bearer ${newAccessToken}`
+      return api(originalRequest)
+    } catch (refreshError) {
+      // The refresh token itself is invalid or past its real 7-day
+      // expiry -- this is the one case where actually being logged out
+      // is correct, not a bug.
+      resolvePendingRequests(refreshError, null)
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('refresh_token')
+      return Promise.reject(refreshError)
+    } finally {
+      isRefreshingToken = false
+    }
   },
 )
 
