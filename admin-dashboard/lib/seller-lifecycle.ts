@@ -134,3 +134,38 @@ export const REVIEW_CASE_STATUS_VALUES: readonly SellerVerificationCaseStatus[] 
   'EXPIRED',
   'SUPERSEDED',
 ]
+
+// Per-document review/scan presentation -- these two ARE genuinely
+// lowercase on the wire (seller_document_review_status /
+// seller_document_scan_status), unlike every enum above.
+export function getDocumentReviewStatusPresentation(status: string): StatusPresentation {
+  switch (status) {
+    case 'pending':
+      return { label: 'Pending review', variant: 'secondary' }
+    case 'accepted':
+      return { label: 'Accepted', variant: 'default' }
+    case 'rejected':
+      return { label: 'Rejected', variant: 'destructive' }
+    default:
+      return { label: status, variant: 'outline' }
+  }
+}
+
+// A document can only back a verification approval once this is
+// 'clean' (see approveVerification on the backend) -- shown separately
+// from review status so an admin never mistakes "I clicked Accept" for
+// "this is actually safe to rely on."
+export function getDocumentScanStatusPresentation(status: string): StatusPresentation {
+  switch (status) {
+    case 'not_scanned':
+      return { label: 'Scan pending', variant: 'secondary' }
+    case 'clean':
+      return { label: 'Clean', variant: 'default' }
+    case 'flagged':
+      return { label: 'Flagged -- malware detected', variant: 'destructive' }
+    case 'error':
+      return { label: 'Scan failed', variant: 'destructive' }
+    default:
+      return { label: status, variant: 'outline' }
+  }
+}

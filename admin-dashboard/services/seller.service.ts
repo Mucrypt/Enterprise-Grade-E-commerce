@@ -75,6 +75,26 @@ export interface SellerListItem {
   last_name: string | null
 }
 
+// Mirrors tech-tools-api's DocumentMetadataDTO (seller-documents.service.ts)
+// -- never the raw DB row, so storage_key/storage_provider/checksum stay
+// server-only even in this admin-facing type.
+export interface SellerDocument {
+  id: string
+  category: string
+  uploadStatus: string
+  reviewStatus: 'pending' | 'accepted' | 'rejected'
+  // Reflects the real ClamAV scan outcome -- 'not_scanned' briefly right
+  // after upload (the scan runs async), then 'clean' | 'flagged' |
+  // 'error'. A verification request can only be approved once this is
+  // 'clean' AND reviewStatus is 'accepted' (see approveVerification on
+  // the backend), so this UI must show it, not just reviewStatus.
+  malwareScanStatus: 'not_scanned' | 'clean' | 'flagged' | 'error'
+  byteSize: number
+  contentType: string
+  createdAt: string
+  reviewedAt: string | null
+}
+
 export interface SellerDetail {
   sellerProfile: SellerListItem & {
     bio: string | null
@@ -90,6 +110,7 @@ export interface SellerDetail {
     tier: string | null
     commissionRate: number | null
   } | null
+  documents: SellerDocument[]
 }
 
 export const sellerService = {
@@ -273,6 +294,22 @@ export const sellerService = {
 
   async rejectProduct(productId: string) {
     return await apiClient.delete(`/seller/products/${productId}`)
+  },
+
+  // Gated by `sellers.manage` server-side (stronger than `sellers.view`)
+  // -- inspecting a raw identity document is a more sensitive action
+  // than browsing seller metadata.
+  async downloadSellerDocument(documentId: string) {
+    return await apiClient.get<Blob>(`/admin/sellers/documents/${documentId}/download`, {
+      responseType: 'blob',
+    })
+  },
+
+  async reviewSellerDocument(
+    documentId: string,
+    payload: { reviewStatus: 'accepted' | 'rejected'; reviewNotes?: string },
+  ) {
+    return await apiClient.patch(`/admin/sellers/documents/${documentId}/review`, payload)
   },
 }
 

@@ -6,12 +6,14 @@ import { useParams, useRouter } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { format, parseISO } from 'date-fns'
 import { toast } from 'sonner'
-import { sellerService } from '@/services/seller.service'
+import { sellerService, type SellerDocument } from '@/services/seller.service'
 import { supportTicketService, type SupportTicketCategory } from '@/services/support-ticket.service'
 import { RequirePagePermission } from '@/components/auth/RequirePagePermission'
 import { useStaffAccess } from '@/contexts/StaffAccessContext'
 import {
   getCaseStatusPresentation,
+  getDocumentReviewStatusPresentation,
+  getDocumentScanStatusPresentation,
   getProfileVerificationPresentation,
 } from '@/lib/seller-lifecycle'
 import { formatCurrency } from '@/components/analytics/format'
@@ -40,13 +42,244 @@ import {
 import {
   ArrowLeft,
   BadgeCheck,
+  Check,
   Clapperboard,
+  Download,
+  FileWarning,
   MessageSquarePlus,
   Package,
   RotateCcw,
   ShieldAlert,
   Wallet,
+  X,
 } from 'lucide-react'
+
+const DOCUMENT_CATEGORY_LABELS: Record<string, string> = {
+  identity_document: 'Identity document',
+  proof_of_address: 'Proof of address',
+  business_registration: 'Business registration',
+  tax_document: 'Tax document',
+  additional_requested: 'Additional document',
+}
+
+const EXTENSION_BY_CONTENT_TYPE: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'application/pdf': 'pdf',
+}
+
+function formatByteSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function RejectDocumentDialog({
+  document,
+  onClose,
+  onConfirm,
+  isPending,
+}: {
+  document: SellerDocument
+  onClose: () => void
+  onConfirm: (reviewNotes: string) => void
+  isPending: boolean
+}) {
+  const [reviewNotes, setReviewNotes] = useState('')
+
+  return (
+    <Dialog open onOpenChange={(open: boolean) => !open && onClose()}>
+      <DialogContent className='max-w-lg'>
+        <DialogHeader>
+          <DialogTitle>
+            Reject {DOCUMENT_CATEGORY_LABELS[document.category] || document.category}
+          </DialogTitle>
+          <DialogDescription>
+            Tell the seller what&apos;s wrong so they can re-upload the right document.
+          </DialogDescription>
+        </DialogHeader>
+        <div className='space-y-2'>
+          <Label>Reason (shown to the seller)</Label>
+          <Textarea
+            value={reviewNotes}
+            onChange={(e) => setReviewNotes(e.target.value)}
+            rows={3}
+            placeholder='e.g. Photo is blurry / document is expired / wrong document type'
+          />
+        </div>
+        <DialogFooter>
+          <Button variant='outline' onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            variant='destructive'
+            disabled={isPending}
+            onClick={() => onConfirm(reviewNotes)}
+          >
+            {isPending ? 'Rejecting...' : 'Reject document'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function SellerDocumentsCard({
+  documents,
+  canManage,
+}: {
+  documents: SellerDocument[]
+  canManage: boolean
+}) {
+  const queryClient = useQueryClient()
+  const params = useParams()
+  const sellerProfileId = params.id as string
+  const [rejectingDocument, setRejectingDocument] = useState<SellerDocument | null>(null)
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['admin-seller-detail', sellerProfileId] })
+  }
+
+  const reviewMutation = useMutation({
+    mutationFn: (vars: { documentId: string; reviewStatus: 'accepted' | 'rejected'; reviewNotes?: string }) =>
+      sellerService.reviewSellerDocument(vars.documentId, {
+        reviewStatus: vars.reviewStatus,
+        reviewNotes: vars.reviewNotes,
+      }),
+    onSuccess: (_data, vars) => {
+      toast.success(vars.reviewStatus === 'accepted' ? 'Document accepted' : 'Document rejected')
+      invalidate()
+      setRejectingDocument(null)
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.error || 'Failed to review document')
+    },
+  })
+
+  const handleDownload = async (doc: SellerDocument) => {
+    setDownloadingId(doc.id)
+    try {
+      const blob = await sellerService.downloadSellerDocument(doc.id)
+      const extension = EXTENSION_BY_CONTENT_TYPE[doc.contentType] || 'bin'
+      const url = URL.createObjectURL(blob)
+      const a = window.document.createElement('a')
+      a.href = url
+      a.download = `${doc.category}.${extension}`
+      window.document.body.appendChild(a)
+      a.click()
+      window.document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (error: any) {
+      toast.error(error?.response?.data?.error || 'Failed to download document')
+    } finally {
+      setDownloadingId(null)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Verification documents</CardTitle>
+        <CardDescription>
+          Identity documents the seller has uploaded -- each must be marked clean by malware
+          scanning and accepted here before it can back a verification approval.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className='space-y-3'>
+        {rejectingDocument && (
+          <RejectDocumentDialog
+            document={rejectingDocument}
+            onClose={() => setRejectingDocument(null)}
+            isPending={reviewMutation.isPending}
+            onConfirm={(reviewNotes) =>
+              reviewMutation.mutate({
+                documentId: rejectingDocument.id,
+                reviewStatus: 'rejected',
+                reviewNotes: reviewNotes.trim() || undefined,
+              })
+            }
+          />
+        )}
+
+        {documents.length === 0 ? (
+          <p className='text-sm text-muted-foreground'>No documents uploaded yet.</p>
+        ) : (
+          documents.map((doc) => {
+            const reviewPresentation = getDocumentReviewStatusPresentation(doc.reviewStatus)
+            const scanPresentation = getDocumentScanStatusPresentation(doc.malwareScanStatus)
+            const isFlagged = doc.malwareScanStatus === 'flagged'
+            const isReviewed = doc.reviewStatus !== 'pending'
+
+            return (
+              <div key={doc.id} className='rounded-lg border p-3'>
+                <div className='flex flex-wrap items-center justify-between gap-2'>
+                  <div>
+                    <p className='font-medium'>
+                      {DOCUMENT_CATEGORY_LABELS[doc.category] || doc.category}
+                    </p>
+                    <p className='text-xs text-muted-foreground'>
+                      {formatByteSize(doc.byteSize)} &middot;{' '}
+                      {doc.createdAt ? format(parseISO(doc.createdAt), 'MMM d, yyyy') : ''}
+                    </p>
+                  </div>
+                  <div className='flex items-center gap-2'>
+                    <Badge variant={reviewPresentation.variant}>{reviewPresentation.label}</Badge>
+                    <Badge variant={scanPresentation.variant}>{scanPresentation.label}</Badge>
+                  </div>
+                </div>
+
+                {isFlagged && (
+                  <p className='mt-2 flex items-center gap-1.5 text-xs font-medium text-destructive'>
+                    <FileWarning className='h-3.5 w-3.5' />
+                    ClamAV flagged this file as infected -- do not open it outside this
+                    download flow, and reject the document.
+                  </p>
+                )}
+
+                <div className='mt-3 flex flex-wrap items-center gap-2'>
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    disabled={downloadingId === doc.id}
+                    onClick={() => handleDownload(doc)}
+                  >
+                    <Download className='mr-1.5 h-3.5 w-3.5' />
+                    {downloadingId === doc.id ? 'Downloading...' : 'Download'}
+                  </Button>
+                  {canManage && !isReviewed && (
+                    <>
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        disabled={reviewMutation.isPending}
+                        onClick={() =>
+                          reviewMutation.mutate({ documentId: doc.id, reviewStatus: 'accepted' })
+                        }
+                      >
+                        <Check className='mr-1.5 h-3.5 w-3.5' /> Accept
+                      </Button>
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        disabled={reviewMutation.isPending}
+                        onClick={() => setRejectingDocument(doc)}
+                      >
+                        <X className='mr-1.5 h-3.5 w-3.5' /> Reject
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )
+          })
+        )}
+      </CardContent>
+    </Card>
+  )
+}
 
 function NewTicketDialog({ sellerProfileId, onClose }: { sellerProfileId: string; onClose: () => void }) {
   const router = useRouter()
@@ -192,7 +425,8 @@ function SellerDetailContent() {
     )
   }
 
-  const { sellerProfile, verificationRequests, storeProductCount, discoverPostCount, earningsSummary } = detail
+  const { sellerProfile, verificationRequests, storeProductCount, discoverPostCount, earningsSummary, documents } =
+    detail
   const displayName =
     sellerProfile.display_name || `${sellerProfile.first_name || ''} ${sellerProfile.last_name || ''}`.trim() || sellerProfile.email
 
@@ -329,6 +563,8 @@ function SellerDetailContent() {
           </Button>
         </CardContent>
       </Card>
+
+      <SellerDocumentsCard documents={documents} canManage={canManage} />
 
       <Card>
         <CardHeader>
