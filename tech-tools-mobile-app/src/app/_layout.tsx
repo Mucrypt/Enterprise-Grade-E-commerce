@@ -2,14 +2,16 @@
 // TechTools Mobile App - Root Layout
 // ============================================
 
+import { Ionicons } from '@expo/vector-icons'
 import {
   DarkTheme,
   DefaultTheme,
   ThemeProvider,
 } from '@react-navigation/native'
+import { useFonts } from 'expo-font'
 import { Stack, useRouter } from 'expo-router'
 import * as SplashScreen from 'expo-splash-screen'
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useColorScheme, StatusBar } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
@@ -29,6 +31,18 @@ export default function RootLayout() {
   const router = useRouter()
   const colorScheme = useColorScheme()
   const { initialize, isInitialized } = useAuthStore()
+  const [appReady, setAppReady] = useState(false)
+
+  // Every <Ionicons> instance across the app (72+ usage sites) otherwise
+  // loads this font independently on its own mount -- expo-font's cache
+  // only remembers a SUCCESSFUL load, not a failed one, so on a broken
+  // dev-server connection every icon that mounts as the user navigates
+  // fires its own fresh download and its own logged rejection. Loading
+  // it once here, up front, means at most one failure gets logged for
+  // the whole session instead of one per icon mount (this only matters
+  // in dev -- a standalone/production build has fonts statically bundled
+  // and never hits the network for this at all).
+  const [fontsLoaded, fontError] = useFonts({ ...Ionicons.font })
 
   useEffect(() => {
     let cleanupNotifications: (() => void) | undefined
@@ -41,7 +55,7 @@ export default function RootLayout() {
       cleanupNotifications = await MobileNotificationService.init((path) => {
         router.push(path as never)
       })
-      await SplashScreen.hideAsync()
+      setAppReady(true)
     }
 
     init()
@@ -52,6 +66,12 @@ export default function RootLayout() {
       }
     }
   }, [])
+
+  useEffect(() => {
+    if (appReady && (fontsLoaded || fontError)) {
+      SplashScreen.hideAsync()
+    }
+  }, [appReady, fontsLoaded, fontError])
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
