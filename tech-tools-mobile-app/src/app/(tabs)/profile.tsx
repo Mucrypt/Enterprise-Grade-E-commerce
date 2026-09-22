@@ -27,6 +27,7 @@ import { ordersApiNew, sellerApi, sellerEarningsApi } from '@/api'
 import type { SellerProfile } from '@/types'
 import { useAuthStore, useCartStore, useWishlistStore } from '@/stores'
 import { formatTier, getTierStyle } from '@/utils/sellerTier'
+import { formatPrice } from '@/utils'
 
 interface MenuItemProps {
   icon: string
@@ -361,7 +362,7 @@ export default function ProfileTabScreen() {
                 </View>
                 <Text style={styles.quickAccessSecondarySubtitle}>
                   {sellerOwed !== null
-                    ? `$${sellerOwed.toFixed(2)} owed to you`
+                    ? `${formatPrice(sellerOwed)} owed to you`
                     : sellerProfile.verification_status === 'PENDING_REVIEW'
                     ? 'Verification pending review'
                     : 'Open your seller dashboard'}

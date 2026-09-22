@@ -1,4 +1,4 @@
-import { activateBusinessMode } from './user.controller'
+import { activateBusinessMode, updateLocalePreferences } from './user.controller'
 import { query } from '../../../database/connection'
 
 jest.mock('../../../database/connection', () => ({
@@ -99,5 +99,63 @@ describe('activateBusinessMode', () => {
         }),
       }),
     )
+  })
+})
+
+describe('updateLocalePreferences', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('updates only the fields provided, COALESCE-preserving the rest', async () => {
+    mockQuery.mockResolvedValue({
+      rows: [{ id: 'user-1', country: 'IT', preferred_currency: 'EUR', preferred_locale: 'en' }],
+    })
+
+    const req: any = {
+      user: { userId: 'user-1' },
+      body: { country: 'IT', preferredLocale: 'en' },
+    }
+    const res = makeRes()
+
+    await updateLocalePreferences(req, res)
+
+    const [sql, params] = mockQuery.mock.calls[0]
+    expect(sql).toContain('COALESCE($1, country)')
+    expect(sql).toContain('COALESCE($2, preferred_currency)')
+    expect(sql).toContain('COALESCE($3, preferred_locale)')
+    expect(params).toEqual(['IT', undefined, 'en', 'user-1'])
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: true,
+        data: { country: 'IT', preferredCurrency: 'EUR', preferredLocale: 'en' },
+      }),
+    )
+  })
+
+  it('returns 404 when the user no longer exists', async () => {
+    mockQuery.mockResolvedValue({ rows: [] })
+
+    const req: any = { user: { userId: 'gone' }, body: { country: 'US' } }
+    const res = makeRes()
+
+    await updateLocalePreferences(req, res)
+
+    expect(res.status).toHaveBeenCalledWith(404)
+  })
+
+  it('returns 500 without leaking the raw error on a query failure', async () => {
+    mockQuery.mockRejectedValue(new Error('db down'))
+
+    const req: any = { user: { userId: 'user-1' }, body: { country: 'US' } }
+    const res = makeRes()
+
+    await updateLocalePreferences(req, res)
+
+    expect(res.status).toHaveBeenCalledWith(500)
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      error: 'Failed to update locale preferences',
+    })
   })
 })

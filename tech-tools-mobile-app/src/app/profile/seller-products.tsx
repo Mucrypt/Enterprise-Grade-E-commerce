@@ -23,6 +23,7 @@ import * as ImagePicker from 'expo-image-picker'
 import { useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { sellerProductsApi, categoriesApi, type SellerProduct } from '@/api'
+import { formatPrice } from '@/utils'
 import { AppColors, AppSpacing, AppBorderRadius } from '@/constants/appTheme'
 import type { Category } from '@/types'
 
@@ -273,7 +274,7 @@ export default function SellerProductsScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.productName}>{product.name}</Text>
                   <Text style={styles.productMeta}>
-                    ${Number(product.sale_price ?? product.base_price).toFixed(2)} -- stock:{' '}
+                    {formatPrice(product.sale_price ?? product.base_price)} -- stock:{' '}
                     {product.total_stock ?? 0}
                   </Text>
                 </View>

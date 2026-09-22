@@ -21,7 +21,10 @@ import {
   AppShadows,
   AppSpacing,
 } from '@/constants/appTheme'
-import { useAuthStore } from '@/stores'
+import { useAuthStore, usePreferencesStore } from '@/stores'
+import { getCountryByCode } from '@/data/countries'
+import { LANGUAGE_LABELS } from '@/i18n/config'
+import RegionLanguagePicker from '@/components/locale/RegionLanguagePicker'
 
 const settingsKey = 'accountPreferences.v1'
 
@@ -51,6 +54,10 @@ export default function AccountSettingsScreen() {
 
   const [settings, setSettings] = useState<LocalSettings>(defaultSettings)
   const [isLoading, setIsLoading] = useState(true)
+  const [localePickerVisible, setLocalePickerVisible] = useState(false)
+  const country = usePreferencesStore((state) => state.country)
+  const language = usePreferencesStore((state) => state.language)
+  const countryName = country ? getCountryByCode(country)?.name || country : 'Auto-detect'
 
   useEffect(() => {
     if (hasHydrated && !isAuthenticated && !authLoading) {
@@ -240,6 +247,23 @@ export default function AccountSettingsScreen() {
 
           <TouchableOpacity
             style={styles.linkRow}
+            onPress={() => setLocalePickerVisible(true)}
+          >
+            <View>
+              <Text style={styles.linkText}>Region & Language</Text>
+              <Text style={styles.linkSubtitle}>
+                {countryName} · {LANGUAGE_LABELS[language]}
+              </Text>
+            </View>
+            <Ionicons
+              name='chevron-forward'
+              size={18}
+              color={AppColors.gray500}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.linkRow}
             onPress={() => router.push('/profile/edit' as Href)}
           >
             <Text style={styles.linkText}>Edit profile</Text>
@@ -309,6 +333,11 @@ export default function AccountSettingsScreen() {
           <Text style={styles.signOutText}>Sign out</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <RegionLanguagePicker
+        visible={localePickerVisible}
+        onClose={() => setLocalePickerVisible(false)}
+      />
     </SafeAreaView>
   )
 }
@@ -407,6 +436,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: AppColors.gray800,
     fontWeight: '600',
+  },
+  linkSubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    color: AppColors.gray500,
   },
   businessModeWrap: {
     marginTop: AppSpacing.base,

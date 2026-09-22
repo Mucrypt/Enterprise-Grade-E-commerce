@@ -20,6 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { AppColors, AppSpacing } from '@/constants/appTheme'
 import { booksApi } from '@/api'
+import { formatPrice } from '@/utils'
 import type { Book } from '@/types'
 
 const extractBooks = (payload: unknown): Book[] => {
@@ -244,9 +245,7 @@ export default function BooksTabScreen() {
                 </Text>
                 <View style={styles.gridFooter}>
                   <Text style={styles.gridPrice}>
-                    {item.price != null
-                      ? `$${Number(item.price).toFixed(2)}`
-                      : 'Sample'}
+                    {item.price != null ? formatPrice(item.price) : 'Sample'}
                   </Text>
                   <Ionicons
                     name='chevron-forward'

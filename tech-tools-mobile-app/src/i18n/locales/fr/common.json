@@ -1,0 +1,22 @@
+{
+  "addToCart": "Ajouter au panier",
+  "buyNow": "Acheter maintenant",
+  "save": "Enregistrer",
+  "cancel": "Annuler",
+  "apply": "Appliquer",
+  "done": "Terminé",
+  "loading": "Chargement...",
+  "search": "Rechercher",
+  "account": "Compte",
+  "signIn": "Connexion",
+  "cart": "Panier",
+  "locale": {
+    "regionAndLanguage": "Région et langue",
+    "region": "Région",
+    "language": "Langue",
+    "selectRegion": "Sélectionnez votre région",
+    "selectLanguage": "Sélectionnez votre langue",
+    "detected": "Détecté",
+    "searchCountry": "Rechercher un pays"
+  }
+}

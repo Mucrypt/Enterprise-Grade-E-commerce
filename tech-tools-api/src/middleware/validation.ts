@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express'
 import Joi from 'joi'
 import logger from '../utils/logger'
+import { SUPPORTED_CURRENCIES } from '../services/pricing/currency-rate.service'
 
 export const validate = (schema: Joi.ObjectSchema) => {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -64,6 +65,20 @@ export const userSchemas = {
     lastName: Joi.string().max(100),
     phone: Joi.string().max(20),
     companyName: Joi.string().max(255),
+  }),
+
+  // Region/language picker -- all optional (partial updates, same
+  // COALESCE pattern as updateProfile), each independently settable so
+  // e.g. country can change without touching preferredLocale.
+  // preferredLocale's 5 codes must stay in sync with
+  // tech-tools-mobile-app's SUPPORTED_LANGUAGES (src/i18n/config.ts) --
+  // small, static, cross-repo list, not worth a generator for.
+  updateLocalePreferences: Joi.object({
+    country: Joi.string().length(2).uppercase(),
+    preferredCurrency: Joi.string()
+      .valid(...SUPPORTED_CURRENCIES)
+      .uppercase(),
+    preferredLocale: Joi.string().valid('en', 'fr', 'it', 'de', 'es'),
   }),
 
   activateBusinessMode: Joi.object({

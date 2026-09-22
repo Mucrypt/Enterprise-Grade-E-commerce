@@ -47,13 +47,14 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
     const userId = req.user?.userId
 
     const result = await query(
-      `SELECT 
-        id, email, first_name, last_name, phone, 
+      `SELECT
+        id, email, first_name, last_name, phone,
         user_type, company_name, tax_id, business_type,
         is_business_account, business_mode_activated_at,
         email_verified, phone_verified, is_active,
-        last_login, created_at, updated_at
-       FROM users 
+        last_login, created_at, updated_at,
+        country, preferred_currency, preferred_locale
+       FROM users
        WHERE id = $1`,
       [userId],
     )
@@ -94,6 +95,9 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
           lastLogin: user.last_login,
           createdAt: user.created_at,
           updatedAt: user.updated_at,
+          country: user.country,
+          preferredCurrency: user.preferred_currency,
+          preferredLocale: user.preferred_locale,
         },
         addresses: addressesResult.rows,
       },
@@ -156,6 +160,53 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Failed to update profile',
+    })
+  }
+}
+
+// Region/language picker's server-side save -- lets a logged-in user's
+// choice follow them across devices/sessions (mobile store logic reads
+// this back on login and prefers it over a fresh device guess). Kept
+// alongside updateProfile rather than in a new route group: this is a
+// profile-adjacent preference, not a separate domain.
+export const updateLocalePreferences = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.userId
+    const { country, preferredCurrency, preferredLocale } = req.body
+
+    const result = await query(
+      `UPDATE users
+       SET country = COALESCE($1, country),
+           preferred_currency = COALESCE($2, preferred_currency),
+           preferred_locale = COALESCE($3, preferred_locale),
+           updated_at = NOW()
+       WHERE id = $4
+       RETURNING id, country, preferred_currency, preferred_locale`,
+      [country, preferredCurrency, preferredLocale, userId],
+    )
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found',
+      })
+    }
+
+    const user = result.rows[0]
+
+    res.json({
+      success: true,
+      data: {
+        country: user.country,
+        preferredCurrency: user.preferred_currency,
+        preferredLocale: user.preferred_locale,
+      },
+    })
+  } catch (error) {
+    logger.error('Update locale preferences error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update locale preferences',
     })
   }
 }

@@ -9,6 +9,7 @@ import { User } from '../types'
 import { authApi, clearTokens, wishlistApi } from '../api'
 import { MobileNotificationService } from '../services/notification.service'
 import { useWishlistStore } from './wishlistStore'
+import { usePreferencesStore } from './preferencesStore'
 
 // Guest -> account merge: whatever was favorited locally before this
 // account existed (or before this login) gets folded into the real
@@ -75,6 +76,10 @@ export const useAuthStore = create<AuthState>()(
           const { user } = await authApi.login(email, password)
           set({ user, isAuthenticated: true, isLoading: false })
           void syncWishlistAfterAuth()
+          // An EXISTING account may already have a real saved preference
+          // (e.g. set on another device) -- that should win over
+          // whatever this device just auto-detected.
+          void usePreferencesStore.getState().syncFromServer()
         } catch (error: any) {
           const message =
             error.response?.data?.message || error.message || 'Login failed'
@@ -89,6 +94,11 @@ export const useAuthStore = create<AuthState>()(
           const { user } = await authApi.register(data)
           set({ user, isAuthenticated: true, isLoading: false })
           void syncWishlistAfterAuth()
+          // A brand-new account has nothing saved server-side yet (just
+          // column defaults) -- push this device's already-detected
+          // preference up, the opposite direction from login's sync,
+          // so it isn't clobbered back to EUR/English.
+          usePreferencesStore.getState().persistToServerIfSignedIn(true)
         } catch (error: any) {
           const message =
             error.response?.data?.message ||
@@ -144,6 +154,7 @@ export const useAuthStore = create<AuthState>()(
             const isAuth = await authApi.isAuthenticated()
             if (isAuth) {
               refreshWishlistFromServer()
+              void usePreferencesStore.getState().syncFromServer()
               // Optionally refresh user data, but don't fail if it errors
               try {
                 const user = await authApi.getCurrentUser()
@@ -171,6 +182,7 @@ export const useAuthStore = create<AuthState>()(
             const user = await authApi.getCurrentUser()
             set({ user, isAuthenticated: true, isLoading: false })
             refreshWishlistFromServer()
+            void usePreferencesStore.getState().syncFromServer()
           } else {
             set({ user: null, isAuthenticated: false, isLoading: false })
           }

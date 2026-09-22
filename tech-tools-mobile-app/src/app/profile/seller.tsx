@@ -37,13 +37,14 @@ import type {
 } from '@/types'
 import { useAuthStore } from '@/stores'
 import { SELLER_TIER_ORDER as tierOrder, formatTier, getTierStyle } from '@/utils/sellerTier'
+import { formatPrice } from '@/utils'
 
 const formatMoney = (value?: number | string | null) => {
   if (value === null || value === undefined || value === '') {
     return 'Custom'
   }
 
-  return `$${Number(value).toFixed(2)}`
+  return formatPrice(value)
 }
 
 // Broadcast announcements from admin -- real per-seller read tracking,

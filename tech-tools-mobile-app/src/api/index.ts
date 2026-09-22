@@ -1534,6 +1534,52 @@ export const wishlistApi = {
   },
 }
 
+// ============================================
+// Region/language/currency preferences
+// ============================================
+export interface LocalePreferences {
+  country: string | null
+  preferredCurrency: string
+  preferredLocale: string
+}
+
+export const localeApi = {
+  // Public, no-auth endpoint -- callable for guests too, before login.
+  getRates: async (
+    base: string,
+    targets: string[],
+  ): Promise<{ base: string; rates: Record<string, number>; fetchedAt: string }> => {
+    const response = await apiClient.get('/currency/rates', {
+      params: { base, targets: targets.join(',') },
+    })
+    return response.data.data
+  },
+
+  // Only ever called for a signed-in user (mirrors wishlistApi.sync's
+  // guest-vs-account boundary) -- lets a choice follow the user across
+  // devices/sessions.
+  updatePreferences: async (
+    preferences: Partial<{ country: string; preferredCurrency: string; preferredLocale: string }>,
+  ): Promise<LocalePreferences> => {
+    const response = await apiClient.put('/users/locale-preferences', preferences)
+    return response.data.data
+  },
+
+  // Reads the saved preference back (via /users/profile, which already
+  // returns these three fields -- no need for a second dedicated
+  // endpoint) so a fresh login can prefer the server value over a new
+  // device guess.
+  getMyPreferences: async (): Promise<LocalePreferences> => {
+    const response = await apiClient.get('/users/profile')
+    const user = response.data.data?.user || response.data.data || response.data
+    return {
+      country: user.country ?? null,
+      preferredCurrency: user.preferredCurrency || 'EUR',
+      preferredLocale: user.preferredLocale || 'en',
+    }
+  },
+}
+
 // Export token management for external use
 export { setTokens, clearTokens, getAccessToken }
 

@@ -23,6 +23,7 @@ import {
   type SellerLedgerEntry,
 } from '@/api'
 import { AppColors, AppSpacing, AppBorderRadius } from '@/constants/appTheme'
+import { formatPrice } from '@/utils'
 
 const REASON_LABEL: Record<string, string> = {
   earning_confirmed: 'Earning confirmed',
@@ -117,19 +118,19 @@ export default function SellerEarningsScreen() {
                 <View style={styles.summaryCard}>
                   <Text style={styles.summaryLabel}>Pending</Text>
                   <Text style={styles.summaryValue}>
-                    ${(summary?.pendingBalance ?? 0).toFixed(2)}
+                    {formatPrice(summary?.pendingBalance ?? 0)}
                   </Text>
                 </View>
                 <View style={styles.summaryCard}>
                   <Text style={styles.summaryLabel}>Owed to you</Text>
                   <Text style={[styles.summaryValue, styles.summaryValueEmerald]}>
-                    ${(summary?.confirmedUnpaidBalance ?? 0).toFixed(2)}
+                    {formatPrice(summary?.confirmedUnpaidBalance ?? 0)}
                   </Text>
                 </View>
                 <View style={styles.summaryCard}>
                   <Text style={styles.summaryLabel}>Lifetime paid</Text>
                   <Text style={styles.summaryValue}>
-                    ${(summary?.lifetimePaid ?? 0).toFixed(2)}
+                    {formatPrice(summary?.lifetimePaid ?? 0)}
                   </Text>
                 </View>
               </View>
@@ -178,7 +179,8 @@ export default function SellerEarningsScreen() {
                       amount >= 0 ? styles.ledgerAmountPositive : styles.ledgerAmountNegative,
                     ]}
                   >
-                    {amount >= 0 ? '+' : ''}${amount.toFixed(2)}
+                    {amount >= 0 ? '+' : '-'}
+                    {formatPrice(Math.abs(amount))}
                   </Text>
                 </View>
               )

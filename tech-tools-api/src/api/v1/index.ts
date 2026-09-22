@@ -52,6 +52,7 @@ import sourcedProductRoutes from './sourcing/sourced-product.routes'
 import sourcingPricingRuleRoutes from './sourcing/sourcing-pricing-rule.routes'
 import sourcingTokenRoutes from './sourcing/sourcing-token.routes'
 import sourcingExtensionRoutes from './sourcing/sourcing-extension.routes'
+import currencyRoutes from './currency/currency.routes'
 
 const router = Router()
 
@@ -76,6 +77,7 @@ router.use('/admin', adminRoutes)
 router.use('/admin/books', adminBooksRoutes)
 router.use('/users', userRoutes)
 router.use('/seller', sellerRoutes)
+router.use('/currency', currencyRoutes)
 router.use('/products', productRoutes)
 router.use('/products', productMediaRoutes) // Product media endpoints
 router.use('/categories', categoryRoutes)

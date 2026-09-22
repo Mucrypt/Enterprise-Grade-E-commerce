@@ -27,6 +27,7 @@ import Animated, { FadeIn } from 'react-native-reanimated'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Category, Brand, CategoryAttribute } from '@/types'
 import { categoriesApi } from '@/api'
+import { formatPrice } from '@/utils'
 import {
   AppColors,
   AppSpacing,
@@ -34,14 +35,23 @@ import {
   AppShadows,
 } from '@/constants/appTheme'
 
-// Same 5 ranges as the web storefront's FilterSidebar.tsx, verbatim.
-export const PRICE_RANGES: { min: number; max?: number; label: string }[] = [
-  { min: 0, max: 25, label: 'Under €25' },
-  { min: 25, max: 50, label: '€25 - €50' },
-  { min: 50, max: 100, label: '€50 - €100' },
-  { min: 100, max: 200, label: '€100 - €200' },
-  { min: 200, max: undefined, label: 'Over €200' },
+// Same 5 ranges as the web storefront's FilterSidebar.tsx, verbatim --
+// min/max stay in EUR (the store's base currency, what the API actually
+// filters against); only the display label converts to the user's
+// preferred currency, via getPriceRangeLabel below.
+export const PRICE_RANGES: { min: number; max?: number; key: string }[] = [
+  { min: 0, max: 25, key: 'under-25' },
+  { min: 25, max: 50, key: '25-50' },
+  { min: 50, max: 100, key: '50-100' },
+  { min: 100, max: 200, key: '100-200' },
+  { min: 200, max: undefined, key: 'over-200' },
 ]
+
+export function getPriceRangeLabel(range: { min: number; max?: number }): string {
+  if (range.max === undefined) return `Over ${formatPrice(range.min)}`
+  if (range.min === 0) return `Under ${formatPrice(range.max)}`
+  return `${formatPrice(range.min)} - ${formatPrice(range.max)}`
+}
 
 // Same "N & Up" star options as the web storefront's FilterSidebar.tsx.
 export const RATING_OPTIONS = [4, 3, 2, 1]
@@ -363,8 +373,8 @@ export default function FilterSheet({
             <FilterSection title='Price' defaultOpen>
               {PRICE_RANGES.map((range) => (
                 <OptionRow
-                  key={range.label}
-                  label={range.label}
+                  key={range.key}
+                  label={getPriceRangeLabel(range)}
                   selected={
                     draft.minPrice === range.min && draft.maxPrice === range.max
                   }

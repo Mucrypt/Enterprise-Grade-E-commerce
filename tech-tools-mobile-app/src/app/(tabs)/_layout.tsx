@@ -35,6 +35,7 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated'
+import { useTranslation } from 'react-i18next'
 import { AppColors, AppGradients } from '@/constants/appTheme'
 import { useCartStore } from '@/stores'
 
@@ -46,11 +47,14 @@ const BAR_DARK = '#0F1420'
 // the header's heart icon.
 const HIDDEN_ROUTES = new Set(['books', 'wishlist'])
 
-const TAB_META: Record<string, { label: string; icon: string; iconOutline: string }> = {
-  index: { label: 'Home', icon: 'home', iconOutline: 'home-outline' },
-  explore: { label: 'Explore', icon: 'search', iconOutline: 'search-outline' },
-  cart: { label: 'Cart', icon: 'cart', iconOutline: 'cart-outline' },
-  profile: { label: 'Profile', icon: 'person', iconOutline: 'person-outline' },
+// labelKey resolves against the `navigation` i18next namespace
+// (src/i18n/locales/*/navigation.json) -- the raw English strings only
+// ever existed as a fallback default, never hardcoded display text.
+const TAB_META: Record<string, { labelKey: string; icon: string; iconOutline: string }> = {
+  index: { labelKey: 'home', icon: 'home', iconOutline: 'home-outline' },
+  explore: { labelKey: 'explore', icon: 'search', iconOutline: 'search-outline' },
+  cart: { labelKey: 'cart', icon: 'cart', iconOutline: 'cart-outline' },
+  profile: { labelKey: 'profile', icon: 'person', iconOutline: 'person-outline' },
 }
 
 function SideTabButton({
@@ -113,6 +117,7 @@ function SideTabButton({
 }
 
 function CenterTabButton({ focused, onPress }: { focused: boolean; onPress: () => void }) {
+  const { t } = useTranslation('navigation')
   const pulse = useSharedValue(0)
   const press = useSharedValue(0)
 
@@ -153,7 +158,7 @@ function CenterTabButton({ focused, onPress }: { focused: boolean; onPress: () =
       hitSlop={{ top: 12, bottom: 4, left: 12, right: 12 }}
       accessibilityRole='button'
       accessibilityState={focused ? { selected: true } : {}}
-      accessibilityLabel='Discover'
+      accessibilityLabel={t('discover')}
     >
       <Animated.View style={[styles.centerGlowOuter, glowStyle]} />
       <Animated.View style={[styles.centerButtonShadowWrap, pressStyle]}>
@@ -172,6 +177,7 @@ function CenterTabButton({ focused, onPress }: { focused: boolean; onPress: () =
 
 function CustomTabBar({ state, navigation, insets }: BottomTabBarProps) {
   const cartCount = useCartStore((s) => s.itemCount())
+  const { t } = useTranslation('navigation')
   const bottomPadding = Math.max(10, insets.bottom)
 
   const visibleRoutes = state.routes.filter((route) => !HIDDEN_ROUTES.has(route.name))
@@ -220,7 +226,7 @@ function CustomTabBar({ state, navigation, insets }: BottomTabBarProps) {
             <SideTabButton
               key={route.key}
               focused={isFocused}
-              label={meta.label}
+              label={t(meta.labelKey)}
               icon={isFocused ? meta.icon : meta.iconOutline}
               badge={route.name === 'cart' ? cartCount : undefined}
               onPress={onPress}

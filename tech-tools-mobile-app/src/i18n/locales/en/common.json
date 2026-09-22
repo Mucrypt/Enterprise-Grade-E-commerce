@@ -1,0 +1,22 @@
+{
+  "addToCart": "Add to Cart",
+  "buyNow": "Buy Now",
+  "save": "Save",
+  "cancel": "Cancel",
+  "apply": "Apply",
+  "done": "Done",
+  "loading": "Loading...",
+  "search": "Search",
+  "account": "Account",
+  "signIn": "Sign in",
+  "cart": "Cart",
+  "locale": {
+    "regionAndLanguage": "Region & Language",
+    "region": "Region",
+    "language": "Language",
+    "selectRegion": "Select your region",
+    "selectLanguage": "Select your language",
+    "detected": "Detected",
+    "searchCountry": "Search country"
+  }
+}

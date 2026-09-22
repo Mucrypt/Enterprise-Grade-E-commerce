@@ -27,6 +27,7 @@ import {
   AppSpacing,
 } from '@/constants/appTheme'
 import { useAuthStore } from '@/stores'
+import { formatPrice } from '@/utils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -131,7 +132,7 @@ const formatDate = (iso: string) => {
   }
 }
 
-const formatCurrency = (amount: number) => `$${Number(amount).toFixed(2)}`
+const formatCurrency = (amount: number) => formatPrice(amount)
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 

@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { Category, Brand } from '@/types'
 import { formatPrice } from '@/utils'
 import { AppColors, AppSpacing, AppBorderRadius } from '@/constants/appTheme'
-import { ProductFilterState, PRICE_RANGES } from './FilterSheet'
+import { ProductFilterState, PRICE_RANGES, getPriceRangeLabel } from './FilterSheet'
 
 export type RemovableFilterKey =
   | 'category'
@@ -90,7 +90,7 @@ export default function ActiveFilterChips({
       )}
       {(filters.minPrice !== undefined || filters.maxPrice !== undefined) && (
         <Chip onRemove={() => onRemove('price')}>
-          {priceRange?.label ??
+          {(priceRange && getPriceRangeLabel(priceRange)) ??
             `${formatPrice(filters.minPrice || 0)} - ${
               filters.maxPrice ? formatPrice(filters.maxPrice) : '∞'
             }`}

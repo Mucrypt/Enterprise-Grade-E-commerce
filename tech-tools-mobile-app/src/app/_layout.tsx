@@ -21,8 +21,9 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import ScreenViewTracker from '@/components/ScreenViewTracker'
 import ReferralCapture from '@/components/ReferralCapture'
 import MobileNotificationService from '@/services/notification.service'
-import { useAuthStore } from '@/stores'
+import { useAuthStore, usePreferencesStore } from '@/stores'
 import { initializeEventTracking } from '@/services/event-tracking'
+import { useCurrencyRates } from '@/hooks/useCurrencyRates'
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync()
@@ -44,12 +45,37 @@ export default function RootLayout() {
   // and never hits the network for this at all).
   const [fontsLoaded, fontError] = useFonts({ ...Ionicons.font })
 
+  // Fetches EUR->{USD,GBP,CHF,CAD} once per session so formatPrice()
+  // can convert everywhere without a per-screen fetch.
+  useCurrencyRates()
+
   useEffect(() => {
     let cleanupNotifications: (() => void) | undefined
+
+    const waitForPreferencesHydration = (): Promise<void> =>
+      new Promise((resolve) => {
+        if (usePreferencesStore.getState().hasHydrated) {
+          resolve()
+          return
+        }
+        const unsubscribe = usePreferencesStore.subscribe((state) => {
+          if (state.hasHydrated) {
+            unsubscribe()
+            resolve()
+          }
+        })
+      })
 
     const init = async () => {
       // Initialize event tracking on app launch
       initializeEventTracking()
+
+      // Region/language/currency: auto-detect once (idempotent --
+      // initializeFromDevice() no-ops after the very first launch) so
+      // i18next has the right language before the app becomes visible,
+      // avoiding an English flash for a non-English device.
+      await waitForPreferencesHydration()
+      usePreferencesStore.getState().initializeFromDevice()
 
       await initialize()
       cleanupNotifications = await MobileNotificationService.init((path) => {

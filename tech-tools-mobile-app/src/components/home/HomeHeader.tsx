@@ -24,8 +24,15 @@ import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { AppColors, AppSpacing, AppShadows } from '@/constants/appTheme'
 import { notificationsApi } from '@/api'
-import { useAuthStore, useWishlistStore, useRecentlyViewedStore } from '@/stores'
+import {
+  useAuthStore,
+  useWishlistStore,
+  useRecentlyViewedStore,
+  usePreferencesStore,
+} from '@/stores'
+import { getCountryFlag } from '@/data/countries'
 import SearchBar from '@/components/SearchBar'
+import RegionLanguagePicker from '@/components/locale/RegionLanguagePicker'
 
 export default function HomeHeader() {
   const router = useRouter()
@@ -35,6 +42,9 @@ export default function HomeHeader() {
     (state) => state.items.length,
   )
   const [unreadCount, setUnreadCount] = useState(0)
+  const [localePickerVisible, setLocalePickerVisible] = useState(false)
+  const country = usePreferencesStore((state) => state.country)
+  const language = usePreferencesStore((state) => state.language)
 
   useEffect(() => {
     if (!hasHydrated || !isAuthenticated) {
@@ -104,6 +114,25 @@ export default function HomeHeader() {
       <TouchableOpacity
         style={styles.iconButton}
         activeOpacity={0.8}
+        onPress={() => setLocalePickerVisible(true)}
+        accessibilityLabel='Region and language'
+      >
+        <Text style={styles.flagText}>
+          {country ? getCountryFlag(country) : '🌍'}
+        </Text>
+        <View style={styles.languageBadge}>
+          <Text style={styles.languageBadgeText}>{language.toUpperCase()}</Text>
+        </View>
+      </TouchableOpacity>
+
+      <RegionLanguagePicker
+        visible={localePickerVisible}
+        onClose={() => setLocalePickerVisible(false)}
+      />
+
+      <TouchableOpacity
+        style={styles.iconButton}
+        activeOpacity={0.8}
         onPress={() => router.push('/wishlist' as never)}
       >
         <Ionicons name='heart-outline' size={19} color={AppColors.gray800} />
@@ -154,6 +183,25 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 8,
+    fontWeight: '700',
+    color: AppColors.white,
+  },
+  flagText: {
+    fontSize: 16,
+  },
+  languageBadge: {
+    position: 'absolute',
+    bottom: -3,
+    right: -6,
+    backgroundColor: AppColors.gray800,
+    borderRadius: 6,
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    borderWidth: 1.5,
+    borderColor: AppColors.background,
+  },
+  languageBadgeText: {
+    fontSize: 7,
     fontWeight: '700',
     color: AppColors.white,
   },

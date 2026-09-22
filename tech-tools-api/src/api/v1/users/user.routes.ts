@@ -3,6 +3,7 @@ import {
   activateBusinessMode,
   getProfile,
   updateProfile,
+  updateLocalePreferences,
   getUserAddresses,
   addUserAddress,
   updateUserAddress,
@@ -41,6 +42,11 @@ router.use(authenticate)
 // Profile routes
 router.get('/profile', getProfile)
 router.put('/profile', validate(userSchemas.updateProfile), updateProfile)
+router.put(
+  '/locale-preferences',
+  validate(userSchemas.updateLocalePreferences),
+  updateLocalePreferences,
+)
 router.post(
   '/business-mode/activate',
   businessModeLimiter,

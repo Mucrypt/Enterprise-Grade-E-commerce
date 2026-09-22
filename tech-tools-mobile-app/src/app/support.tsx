@@ -22,6 +22,7 @@ import {
   AppSpacing,
 } from '@/constants/appTheme'
 import { contactApi, ordersApiNew, supportApi } from '@/api'
+import { formatPrice } from '@/utils'
 import { useAuthStore } from '@/stores'
 import type { SupportProfile } from '@/types'
 import { Button, Input } from '@/components'
@@ -411,7 +412,7 @@ export default function SupportScreen() {
                     <View style={styles.orderCardBody}>
                       <View>
                         <Text style={styles.orderAmount}>
-                          ${Number(order.grand_total).toFixed(2)}
+                          {formatPrice(order.grand_total)}
                         </Text>
                         <Text style={styles.orderPayment}>
                           Payment: {order.payment_status}

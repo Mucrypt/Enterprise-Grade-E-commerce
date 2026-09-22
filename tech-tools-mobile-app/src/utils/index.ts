@@ -4,17 +4,49 @@
 
 import { Product, ProductMedia } from '../types'
 import { IMAGE_BASE_URL } from '../config/env'
+import { usePreferencesStore } from '../stores/preferencesStore'
+import { CURRENCY_SYMBOLS, type SupportedCurrency } from '../i18n/currencyConfig'
+
+function formatAmountInCurrency(amount: number, currency: SupportedCurrency): string {
+  const symbol = CURRENCY_SYMBOLS[currency]
+  // CHF is conventionally written with a space before the amount
+  // ("CHF 12.34"); every other supported currency prefixes tight
+  // against the number ("$12.34", "€12.34").
+  return currency === 'CHF' ? `${symbol} ${amount.toFixed(2)}` : `${symbol}${amount.toFixed(2)}`
+}
 
 /**
- * Format price with currency symbol
+ * Format a price (stored in EUR, the store's base currency) converted
+ * to the user's preferred currency and symbol. Reads
+ * usePreferencesStore.getState() directly (not the hook) so every one
+ * of this function's ~40 existing call sites keeps working unchanged --
+ * they don't re-render on a currency change themselves, but the screens
+ * that show prices already re-render on other data changes constantly,
+ * and useCurrencyRates' consumers re-render explicitly when rates land.
+ *
+ * No rate available yet for the selected currency (still loading, or
+ * the fetch failed) shows the real EUR price rather than a wrong or
+ * undefined conversion -- matches the backend's "never guess" rule for
+ * FX rates.
  */
 export const formatPrice = (
   price: number | string | null | undefined,
 ): string => {
-  if (price === null || price === undefined) return '$0.00'
-  const numPrice = typeof price === 'string' ? parseFloat(price) : price
-  if (isNaN(numPrice)) return '$0.00'
-  return `$${numPrice.toFixed(2)}`
+  const numPrice =
+    price === null || price === undefined
+      ? 0
+      : typeof price === 'string'
+        ? parseFloat(price)
+        : price
+  const safePrice = Number.isFinite(numPrice) ? numPrice : 0
+
+  const { currency, rates } = usePreferencesStore.getState()
+  if (currency === 'EUR') return formatAmountInCurrency(safePrice, 'EUR')
+
+  const rate = rates[currency]
+  if (!rate) return formatAmountInCurrency(safePrice, 'EUR')
+
+  return formatAmountInCurrency(safePrice * rate, currency)
 }
 
 /**
