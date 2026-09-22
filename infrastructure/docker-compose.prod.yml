@@ -76,6 +76,64 @@ services:
         max-size: '10m'
         max-file: '3'
 
+  clamav:
+    # Real, live malware scanning for seller verification documents
+    # (identity docs uploaded via /seller/documents) -- previously an
+    # explicit no-op (seller-documents.service.ts's scanDocumentForMalware),
+    # which correctly kept approval fail-closed rather than fake-passing,
+    # but meant no document could ever actually clear review. Verified the
+    # exact image behavior against its real source before adding this
+    # (Cisco-Talos/clamav-docker): TCPSocket 3310 and TCPAddr commented out
+    # (= listen on all interfaces) are BOTH already the image's own
+    # defaults, so no clamd.conf override or extra env var is needed for
+    # the API container to reach it at clamav:3310 on this network.
+    image: clamav/clamav:1.4
+    container_name: techtools-clamav-prod
+    volumes:
+      - clamav_data:/var/lib/clamav
+    networks:
+      - techtools-prod-network
+    # Hard memory ceiling actually ENFORCED by the Docker daemon via
+    # cgroups. `deploy.resources.limits` (used below on web-store) is a
+    # Swarm-only construct and is silently a no-op under plain
+    # `docker compose up`, which is how this project actually deploys
+    # (rebuild.sh / deploy-from-registry.sh are not Swarm) -- do not copy
+    # that pattern for a limit that actually needs to hold. ClamAV's own
+    # docs state a 3GiB minimum / 4GiB preferred; this server has 7.6GB
+    # RAM total (already running Postgres with a 2GB shared_buffers
+    # allocation, Redis, and every app container) plus a 4GB swap file
+    # added specifically for this. If ClamAV's virus-database load or a
+    # freshclam update ever needs more than this cap, Docker kills and
+    # restarts ONLY this container (restart: always below) instead of the
+    # kernel OOM-killer picking an arbitrary victim among Postgres/Redis/
+    # the API.
+    mem_limit: 3g
+    mem_reservation: 1g
+    healthcheck:
+      # clamdcheck.sh is the image's OWN built-in healthcheck script
+      # (baked into its Dockerfile) -- verified directly against the
+      # image's source rather than assumed. Its default start_period is
+      # only 6 minutes; overridden longer here because a genuinely fresh
+      # /var/lib/clamav volume means freshclam has to download the full
+      # virus database (main/daily/bytecode .cvd, several hundred MB)
+      # before clamd can even start, and CLAMD_STARTUP_TIMEOUT's own
+      # documented default is 1800s (30 minutes) for exactly this reason.
+      # Nothing else in this compose file depends on this being healthy
+      # -- scanDocumentForMalware already treats an unreachable scanner
+      # as a scan error (fail-closed), never as "clean", so the API
+      # starts immediately regardless of how long this takes.
+      test: ['CMD', 'clamdcheck.sh']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 25m
+    restart: always
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
+
   api:
     # `image:` is what deploy-from-registry.sh pulls (built by
     # .github/workflows/deploy-prod.yml and pushed to GHCR). `build:` stays
@@ -160,6 +218,12 @@ services:
       PRIVATE_UPLOAD_DIR: ${PRIVATE_UPLOAD_DIR:-private-uploads}
       SELLER_DOCUMENTS_STORAGE_PROVIDER: ${SELLER_DOCUMENTS_STORAGE_PROVIDER:-}
       R2_PRIVATE_BUCKET_NAME: ${R2_PRIVATE_BUCKET_NAME:-}
+      # Same env-var-injection gap as above -- must be listed here, not
+      # just in .env. Service name `clamav` resolves on this compose
+      # file's shared network; 3310 is the image's own default TCPSocket
+      # port (verified against its baked-in clamd.conf), unchanged.
+      CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
+      CLAMAV_PORT: ${CLAMAV_PORT:-3310}
     volumes:
       - api_uploads:/app/uploads
       - api_private_uploads:/app/private-uploads
@@ -368,3 +432,4 @@ volumes:
   pgadmin_data:
   api_uploads:
   api_private_uploads:
+  clamav_data:

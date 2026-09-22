@@ -12,11 +12,16 @@ jest.mock('./media-storage.service', () => ({
   streamPrivateMedia: (...args: unknown[]) => mockStreamPrivateMedia(...args),
 }))
 
+const mockScanStream = jest.fn()
+const mockClamInit = jest.fn()
+jest.mock('clamscan', () => jest.fn().mockImplementation(() => ({ init: (...args: unknown[]) => mockClamInit(...args) })))
+
 import { query, getClient } from '../database/connection'
 import {
   uploadSellerDocument,
   getSellerDocumentForDownload,
   deleteSellerDocument,
+  scanDocumentForMalware,
 } from './seller-documents.service'
 
 const mockQuery = query as jest.Mock
@@ -259,6 +264,99 @@ describe('seller-documents.service -- ownership authorization (IDOR)', () => {
 
     expect(deleted).toBe(false)
     const updateCall = mockQuery.mock.calls.find((c: any[]) => c[0].includes('UPDATE seller_verification_documents'))
+    expect(updateCall).toBeUndefined()
+  })
+})
+
+describe('seller-documents.service -- scanDocumentForMalware (fail-closed contract)', () => {
+  const originalClamavHost = process.env.CLAMAV_HOST
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockClamInit.mockResolvedValue({ scanStream: mockScanStream })
+    mockStreamPrivateMedia.mockResolvedValue({ stream: 'fake-stream' })
+  })
+
+  afterEach(() => {
+    if (originalClamavHost === undefined) delete process.env.CLAMAV_HOST
+    else process.env.CLAMAV_HOST = originalClamavHost
+  })
+
+  it('fails closed to "error" without attempting a network scan when no scanner is configured', async () => {
+    delete process.env.CLAMAV_HOST
+    mockQuery.mockResolvedValue({ rows: [] })
+
+    await scanDocumentForMalware('doc-1')
+
+    expect(mockStreamPrivateMedia).not.toHaveBeenCalled()
+    expect(mockScanStream).not.toHaveBeenCalled()
+    expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining("malware_scan_status = 'error'"), ['doc-1'])
+  })
+
+  it('marks a document clean when ClamAV reports no infection', async () => {
+    process.env.CLAMAV_HOST = 'clamav'
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('SELECT storage_provider')) return { rows: [{ storage_provider: 'local', storage_key: 'k' }] }
+      return { rows: [] }
+    })
+    mockScanStream.mockResolvedValue({ isInfected: false })
+
+    await scanDocumentForMalware('doc-2')
+
+    const updateCall = mockQuery.mock.calls.find((c: any[]) => c[0].includes('SET malware_scan_status'))
+    expect(updateCall[1]).toEqual(['clean', 'doc-2'])
+  })
+
+  it('flags a document when ClamAV reports an infection -- never silently defaults to clean', async () => {
+    process.env.CLAMAV_HOST = 'clamav'
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('SELECT storage_provider')) return { rows: [{ storage_provider: 'local', storage_key: 'k' }] }
+      return { rows: [] }
+    })
+    mockScanStream.mockResolvedValue({ isInfected: true })
+
+    await scanDocumentForMalware('doc-3')
+
+    const updateCall = mockQuery.mock.calls.find((c: any[]) => c[0].includes('SET malware_scan_status'))
+    expect(updateCall[1]).toEqual(['flagged', 'doc-3'])
+  })
+
+  it('fails closed to "error" (never "clean") when the scan connection itself fails', async () => {
+    process.env.CLAMAV_HOST = 'clamav'
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('SELECT storage_provider')) return { rows: [{ storage_provider: 'local', storage_key: 'k' }] }
+      return { rows: [] }
+    })
+    mockScanStream.mockRejectedValue(new Error('ECONNREFUSED'))
+
+    await scanDocumentForMalware('doc-4')
+
+    const updateCall = mockQuery.mock.calls.find((c: any[]) => c[0].includes('SET malware_scan_status'))
+    expect(updateCall[1]).toEqual(['error', 'doc-4'])
+  })
+
+  it('fails closed to "error" when ClamAV returns an inconclusive (non-boolean) result', async () => {
+    process.env.CLAMAV_HOST = 'clamav'
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('SELECT storage_provider')) return { rows: [{ storage_provider: 'local', storage_key: 'k' }] }
+      return { rows: [] }
+    })
+    mockScanStream.mockResolvedValue({ isInfected: null })
+
+    await scanDocumentForMalware('doc-5')
+
+    const updateCall = mockQuery.mock.calls.find((c: any[]) => c[0].includes('SET malware_scan_status'))
+    expect(updateCall[1]).toEqual(['error', 'doc-5'])
+  })
+
+  it('does nothing when the document was replaced/removed before the scan could run', async () => {
+    process.env.CLAMAV_HOST = 'clamav'
+    mockQuery.mockResolvedValue({ rows: [] })
+
+    await scanDocumentForMalware('doc-6')
+
+    expect(mockStreamPrivateMedia).not.toHaveBeenCalled()
+    const updateCall = mockQuery.mock.calls.find((c: any[]) => c[0].includes('SET malware_scan_status'))
     expect(updateCall).toBeUndefined()
   })
 })

@@ -10,6 +10,7 @@
 
 import { createHash, randomUUID } from 'crypto'
 import type { Response } from 'express'
+import NodeClam from 'clamscan'
 import { query, getClient } from '../database/connection'
 import logger from '../utils/logger'
 import {
@@ -235,11 +236,83 @@ export async function uploadSellerDocument(input: {
   }
 }
 
-// Explicit no-op extension seam for this phase -- no malware scanner is
-// integrated. A future scanner replaces only this function body; every
-// caller and the schema (malware_scan_status) are already in place.
-export async function scanDocumentForMalware(_documentId: string): Promise<void> {
-  return
+// One long-lived clamdscan connection config, reused across scans rather
+// than reconnecting per document. `clamscan.active: false` + a TCP-only
+// `clamdscan` block means this never shells out to a local binary (the
+// API container has none) -- it only ever talks to the `clamav` Compose
+// service over TCP. `localFallback: false` keeps that true even if a
+// local binary somehow existed, so a misconfigured host fails the scan
+// instead of silently scanning with something else.
+let clamClientPromise: Promise<NodeClam> | null = null
+function getClamClient(): Promise<NodeClam> {
+  if (!clamClientPromise) {
+    clamClientPromise = new NodeClam().init({
+      clamscan: { active: false },
+      clamdscan: {
+        host: process.env.CLAMAV_HOST,
+        port: Number(process.env.CLAMAV_PORT) || 3310,
+        timeout: 120_000,
+        localFallback: false,
+        active: true,
+      },
+      preference: 'clamdscan',
+    })
+  }
+  return clamClientPromise
+}
+
+// approveVerification (seller-lifecycle.service.ts) only accepts a
+// document whose malware_scan_status is exactly 'clean' -- so every
+// path out of this function other than a confirmed-clean scan result
+// must land on 'flagged' or 'error', never leave the row on
+// 'not_scanned' or guess 'clean'. That fail-closed contract is the
+// whole point of this function; keep it that way if this ever changes.
+export async function scanDocumentForMalware(documentId: string): Promise<void> {
+  // No scanner configured for this environment (local dev, CI, tests --
+  // none of which run the `clamav` Compose service) -- fail closed
+  // immediately instead of attempting a TCP connection to a host that
+  // doesn't exist, which would otherwise hang every upload's background
+  // scan for the full connection timeout.
+  if (!process.env.CLAMAV_HOST) {
+    await query(
+      `UPDATE seller_verification_documents SET malware_scan_status = 'error', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+      [documentId],
+    )
+    return
+  }
+
+  const result = await query(
+    `SELECT storage_provider, storage_key FROM seller_verification_documents WHERE id = $1 AND is_current = TRUE LIMIT 1`,
+    [documentId],
+  )
+  const doc = result.rows[0]
+  // Document was replaced (re-upload) or removed before the scan ran --
+  // nothing to update; the row this scan was for no longer exists as
+  // "current", so it can never be the one an approval reads anyway.
+  if (!doc) return
+
+  let status: 'clean' | 'flagged' | 'error' = 'error'
+  try {
+    const clam = await getClamClient()
+    const { stream } = await streamPrivateMedia(doc.storage_provider, doc.storage_key)
+    const { isInfected } = await clam.scanStream(stream)
+    if (isInfected === true) status = 'flagged'
+    else if (isInfected === false) status = 'clean'
+    // Anything else (null/undefined -- "unable to scan file" per
+    // clamscan's own docs) stays 'error': an inconclusive result is not
+    // the same as a clean one.
+  } catch (error) {
+    logger.warn('ClamAV scan failed -- leaving document scan status as error (fail-closed)', error)
+  }
+
+  await query(
+    `UPDATE seller_verification_documents SET malware_scan_status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+    [status, documentId],
+  )
+
+  if (status === 'flagged') {
+    logger.warn(`Seller verification document ${documentId} flagged as infected by ClamAV`)
+  }
 }
 
 export async function listCurrentSellerDocuments(sellerProfileId: string): Promise<DocumentMetadataDTO[]> {
