@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { useAuthStore } from '../stores'
 import { cn } from '../utils'
+import Logo from '../components/common/Logo'
 
 export default function RegisterPage() {
   const { t } = useTranslation('auth')
@@ -125,14 +126,7 @@ export default function RegisterPage() {
       <div className='w-full max-w-lg mx-auto'>
         {/* Logo */}
         <div className='text-center mb-8'>
-          <Link to='/' className='inline-flex items-center gap-2'>
-            <div className='w-12 h-12 bg-linear-to-r from-orange-500 to-red-500 rounded-xl flex items-center justify-center'>
-              <span className='text-2xl font-black text-white'>T</span>
-            </div>
-            <span className='text-2xl font-black bg-linear-to-r from-orange-500 to-red-500 bg-clip-text text-transparent'>
-              TechTools
-            </span>
-          </Link>
+          <Logo size='lg' wordmarkVariant='brand' className='justify-center' />
         </div>
 
         {/* Register Card */}

@@ -36,6 +36,7 @@ import MobileMenu from './MobileMenu'
 import CartDrawer from '../cart/CartDrawer'
 import { NotificationBell } from '../notifications/NotificationBell'
 import LanguageSelector from './LanguageSelector'
+import Logo from '../common/Logo'
 
 // Marketing pills only -- New In / Sale / Trending / Brands aren't real
 // catalog categories, so they stay static. Every actual product category
@@ -268,16 +269,7 @@ export default function Header() {
             </button>
 
             {/* Logo */}
-            <Link to='/' className='flex items-center gap-1.5 sm:gap-2'>
-              <div className='w-8 h-8 sm:w-10 sm:h-10 bg-linear-to-br from-orange-500 to-red-600 rounded-lg sm:rounded-xl flex items-center justify-center'>
-                <span className='text-white font-bold text-lg sm:text-xl'>
-                  T
-                </span>
-              </div>
-              <span className='text-lg sm:text-2xl font-bold bg-linear-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent'>
-                TechTools
-              </span>
-            </Link>
+            <Logo size='sm' />
 
             {/* Search Bar - Desktop */}
             <div className='hidden lg:flex flex-1 max-w-2xl mx-8'>

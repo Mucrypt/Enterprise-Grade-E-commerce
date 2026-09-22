@@ -9,6 +9,7 @@ import { Eye, EyeOff, Mail, Lock, AlertCircle, ArrowRight } from 'lucide-react'
 import { useAuthStore } from '../stores'
 import { cn, formatPrice } from '../utils'
 import { useFreeShippingThreshold } from '../hooks/useFreeShippingThreshold'
+import Logo from '../components/common/Logo'
 
 export default function LoginPage() {
   const { t } = useTranslation('auth')
@@ -75,14 +76,7 @@ export default function LoginPage() {
       <div className='w-full max-w-md'>
         {/* Logo */}
         <div className='text-center mb-8'>
-          <Link to='/' className='inline-flex items-center gap-2'>
-            <div className='w-12 h-12 bg-linear-to-r from-orange-500 to-red-500 rounded-xl flex items-center justify-center'>
-              <span className='text-2xl font-black text-white'>T</span>
-            </div>
-            <span className='text-2xl font-black bg-linear-to-r from-orange-500 to-red-500 bg-clip-text text-transparent'>
-              TechTools
-            </span>
-          </Link>
+          <Logo size='lg' wordmarkVariant='brand' className='justify-center' />
         </div>
 
         {/* Login Card */}

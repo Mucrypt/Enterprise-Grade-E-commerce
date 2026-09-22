@@ -14,6 +14,7 @@ import {
   MapPin,
   CreditCard,
 } from 'lucide-react'
+import Logo from '../common/Logo'
 
 const footerLinks = {
   shop: {
@@ -73,12 +74,7 @@ export default function Footer() {
         <div className='grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-8'>
           {/* Brand Column */}
           <div className='col-span-2'>
-            <Link to='/' className='inline-flex items-center gap-2 mb-6'>
-              <div className='w-10 h-10 bg-linear-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center'>
-                <span className='text-white font-bold text-xl'>T</span>
-              </div>
-              <span className='text-2xl font-bold text-white'>TechTools</span>
-            </Link>
+            <Logo size='md' wordmarkVariant='light' className='mb-6' />
             <p className='text-gray-400 mb-6 max-w-xs'>
               Your one-stop shop for premium automotive accessories, tools, and
               electronics. Quality products, unbeatable prices.
