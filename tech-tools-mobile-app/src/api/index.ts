@@ -1969,9 +1969,15 @@ export const liveApi = {
   },
 
   // Restores the Go Live screen's state after navigating away and back.
+  // The backend legitimately returns `{ success: true, data: null }` when
+  // the seller has no active session -- unlike the other calls below,
+  // `data` being null here is a real, expected state, not a sign the
+  // envelope itself is missing, so this must NOT fall back to the raw
+  // envelope object (that object has no `.status`, which crashed the
+  // Go Live screen with "Cannot read property 'toUpperCase' of undefined").
   getMyCurrentSession: async (): Promise<LiveSessionSummary | null> => {
     const response = await apiClient.get('/live/sessions/mine/current')
-    return response.data.data ?? response.data ?? null
+    return response.data.data ?? null
   },
 
   getStreamKey: async (sessionId: string): Promise<string> => {
