@@ -48,6 +48,7 @@ import {
   Wallet,
   GalleryHorizontal,
   Clapperboard,
+  Radio,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useStaffAccess } from '@/contexts/StaffAccessContext'
@@ -193,6 +194,15 @@ const navigation: NavItem[] = [
         // catalog/seller-review permission (staff-permissions.config.ts).
         icon: Wallet,
         permission: 'sellers.payouts.view',
+      },
+      {
+        title: 'Live',
+        href: '/sellers/live',
+        // The force-end kill switch is a real safety action, so this
+        // needs sellers.manage (not just .view) -- same bar as
+        // suspend/reactivate elsewhere in this section.
+        icon: Radio,
+        permission: 'sellers.manage',
       },
     ],
   },
