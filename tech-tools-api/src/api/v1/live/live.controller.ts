@@ -16,6 +16,21 @@ async function canActOnSession(req: SellerAuthRequest, sessionId: string): Promi
   return result.rows[0]?.seller_profile_id === req.sellerProfileId
 }
 
+/** Seller-only -- restores the "Go Live" screen's state after navigating away and back. */
+export const getMyCurrentLiveSession = async (req: SellerAuthRequest, res: Response) => {
+  try {
+    if (!req.sellerProfileId) {
+      return res.status(403).json({ success: false, message: 'Only sellers can do this' })
+    }
+
+    const session = await liveSessionService.getCurrentSessionForSeller(req.sellerProfileId)
+    res.json({ success: true, data: session })
+  } catch (error: any) {
+    logger.error('Error fetching current live session:', error)
+    res.status(500).json({ success: false, message: 'Failed to fetch current live session', error: error.message })
+  }
+}
+
 export const createLiveSession = async (req: SellerAuthRequest, res: Response) => {
   try {
     if (!req.sellerProfileId) {

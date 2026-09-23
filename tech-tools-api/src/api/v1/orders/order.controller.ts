@@ -1214,6 +1214,13 @@ type PricedItem = {
   // actually gets incremented (only once payment is confirmed, never at
   // checkout-session creation time).
   discoverPostId?: string
+  // Same idea, for a purchase made during a live shopping stream --
+  // threaded through to order_items.live_session_id
+  // (078_live_shopping.sql). No aggregate purchase-count column on
+  // live_sessions yet (out of scope this phase, see the live-shopping
+  // plan's deferred-analytics note) -- this raw FK is the whole
+  // attribution mechanism for now.
+  liveSessionId?: string
 }
 
 /** Thrown by validateAndPriceOrderItems for a client-facing validation failure. */
@@ -1232,7 +1239,7 @@ class OrderValidationError extends Error {
  */
 async function validateAndPriceOrderItems(
   client: { query: (text: string, params?: any[]) => Promise<any> },
-  items: Array<{ productId: string; quantity: number; discoverPostId?: string }>,
+  items: Array<{ productId: string; quantity: number; discoverPostId?: string; liveSessionId?: string }>,
 ): Promise<{ orderItems: PricedItem[]; totalAmount: number }> {
   let totalAmount = 0
   const orderItems: PricedItem[] = []
@@ -1271,6 +1278,7 @@ async function validateAndPriceOrderItems(
       unitPrice: effectivePrice,
       totalPrice: itemTotal,
       discoverPostId: item.discoverPostId,
+      liveSessionId: item.liveSessionId,
     })
   }
 
@@ -1307,8 +1315,8 @@ async function insertOrderItemsAndReserveStock(
     await client.query(
       `INSERT INTO order_items (
         order_id, product_id, sku, product_name,
-        quantity, unit_price, supplier_id, discover_post_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        quantity, unit_price, supplier_id, discover_post_id, live_session_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
         orderId,
         item.productId,
@@ -1318,6 +1326,7 @@ async function insertOrderItemsAndReserveStock(
         item.unitPrice,
         supplierId,
         item.discoverPostId || null,
+        item.liveSessionId || null,
       ],
     )
     await client.query(

@@ -174,7 +174,11 @@ export async function pinProduct(sessionId: string, productId: string): Promise<
   )
 
   const productResult = await query(
-    `SELECT id, name, slug, base_price, sale_price FROM products WHERE id = $1 LIMIT 1`,
+    `SELECT p.id, p.name, p.slug, p.base_price, p.sale_price,
+            (SELECT pm.url FROM product_media pm
+             WHERE pm.product_id = p.id AND pm.type = 'image'
+             ORDER BY pm.is_primary DESC, pm.position LIMIT 1) AS image_url
+     FROM products p WHERE p.id = $1 LIMIT 1`,
     [productId],
   )
   webSocketService.sendToRoom(liveRoom(sessionId), 'live-product-pinned', {
@@ -203,6 +207,7 @@ export async function getSessionForViewer(
   pinnedProduct: any | null
   chatToken: string
   chatRoomArn: string
+  chatRegion: string
 } | null> {
   const sessionResult = await query(`SELECT * FROM live_sessions WHERE id = $1 LIMIT 1`, [sessionId])
   const session = sessionResult.rows[0]
@@ -211,7 +216,10 @@ export async function getSessionForViewer(
   const [state, pinnedResult, chatToken] = await Promise.all([
     ivs.getStreamState(session.ivs_channel_arn).catch(() => ({ isLive: false, viewerCount: 0, startedAt: null })),
     query(
-      `SELECT p.id, p.name, p.slug, p.base_price, p.sale_price
+      `SELECT p.id, p.name, p.slug, p.base_price, p.sale_price,
+              (SELECT pm.url FROM product_media pm
+               WHERE pm.product_id = p.id AND pm.type = 'image'
+               ORDER BY pm.is_primary DESC, pm.position LIMIT 1) AS image_url
        FROM live_session_products lsp
        JOIN products p ON p.id = lsp.product_id
        WHERE lsp.live_session_id = $1 AND lsp.is_pinned = TRUE
@@ -228,7 +236,23 @@ export async function getSessionForViewer(
     pinnedProduct: pinnedResult.rows[0] || null,
     chatToken: chatToken.token,
     chatRoomArn: session.ivs_chat_room_arn,
+    // The chat SDK needs the same region the room was created in
+    // (ivs.service.ts's IvschatClient) -- returned here rather than
+    // hardcoded client-side, so the two never drift.
+    chatRegion: process.env.AWS_IVS_REGION || 'us-east-1',
   }
+}
+
+/** The seller's own most recent non-ended session (scheduled or live) -- lets the Go Live screen restore state after navigating away and back, rather than only ever working for a session just created in the same screen instance. */
+export async function getCurrentSessionForSeller(sellerProfileId: string): Promise<LiveSessionDTO | null> {
+  const result = await query(
+    `SELECT * FROM live_sessions
+     WHERE seller_profile_id = $1 AND status IN ('scheduled', 'live')
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [sellerProfileId],
+  )
+  return result.rows[0] ? toDTO(result.rows[0]) : null
 }
 
 /**

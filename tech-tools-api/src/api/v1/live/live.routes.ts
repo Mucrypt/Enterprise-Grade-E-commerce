@@ -1,6 +1,7 @@
 import { Router, raw } from 'express'
 import {
   createLiveSession,
+  getMyCurrentLiveSession,
   getStreamKey,
   startLiveSession,
   endLiveSession,
@@ -10,8 +11,9 @@ import {
   getLiveSessionForViewer,
   listLiveSessions,
 } from './live.controller'
-import { authenticate, authorize } from '../../../middleware/auth'
+import { authenticate } from '../../../middleware/auth'
 import { requireAdminOrOnboardedSeller } from '../../../middleware/seller-auth'
+import { requirePermissionOrLegacyRole } from '../../../middleware/staff'
 import { handleIvsSnsEvent } from './live-webhook.controller'
 
 const router = Router()
@@ -55,6 +57,7 @@ router.get('/sessions/:id', authenticate, getLiveSessionForViewer)
 // controller (canActOnSession), same pattern as discover's seller-scoped
 // routes.
 router.post('/sessions', authenticate, requireAdminOrOnboardedSeller, createLiveSession)
+router.get('/sessions/mine/current', authenticate, requireAdminOrOnboardedSeller, getMyCurrentLiveSession)
 router.get('/sessions/:id/stream-key', authenticate, requireAdminOrOnboardedSeller, getStreamKey)
 router.post('/sessions/:id/start', authenticate, requireAdminOrOnboardedSeller, startLiveSession)
 router.post('/sessions/:id/end', authenticate, requireAdminOrOnboardedSeller, endLiveSession)
@@ -72,10 +75,16 @@ export default router
 // /admin/live in api/v1/index.ts, matching the existing convention
 // (/admin/sellers is its own top-level mount, not nested under
 // /sellers/admin) rather than this file's own /live prefix.
+//
+// sellers.manage (not just legacy admin/super_admin) -- matches
+// admin/sellers.routes.ts's own `manage` gate exactly, so a staff
+// member (e.g. MARKET_MANAGER) holding that granular permission isn't
+// shown an enabled "Force end" button in admin-dashboard only to get a
+// 403 from the API.
 export const adminLiveRouter = Router()
 adminLiveRouter.post(
   '/sessions/:id/force-end',
   authenticate,
-  authorize('admin', 'super_admin'),
+  requirePermissionOrLegacyRole('sellers.manage', 'admin', 'super_admin'),
   forceEndLiveSession,
 )
