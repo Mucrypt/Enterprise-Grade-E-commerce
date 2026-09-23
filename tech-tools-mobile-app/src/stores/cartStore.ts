@@ -21,6 +21,7 @@ interface CartState {
     quantity?: number,
     variant?: ProductVariant,
     sourceDiscoverPostId?: string,
+    sourceLiveSessionId?: string,
   ) => void
   removeItem: (productId: string, variantId?: string) => void
   updateQuantity: (productId: string, quantity: number, variantId?: string) => void
@@ -48,7 +49,7 @@ export const useCartStore = create<CartState>()(
         }, 0)
       },
 
-      addItem: (product: Product, quantity = 1, variant, sourceDiscoverPostId) => {
+      addItem: (product: Product, quantity = 1, variant, sourceDiscoverPostId, sourceLiveSessionId) => {
         set((state) => {
           const existingItem = state.items.find(
             (item) =>
@@ -76,6 +77,7 @@ export const useCartStore = create<CartState>()(
                 quantity,
                 variant,
                 sourceDiscoverPostId,
+                sourceLiveSessionId,
               },
             ],
           }

@@ -189,6 +189,8 @@ export default function CheckoutScreen() {
         // Real purchase attribution -- present only for items added via a
         // Discover feed post's bottom sheet.
         discoverPostId: item.sourceDiscoverPostId,
+        // Same idea, for a purchase made during a live shopping stream.
+        liveSessionId: item.sourceLiveSessionId,
       }))
 
       const referralCode = (await getReferralCode()) || undefined

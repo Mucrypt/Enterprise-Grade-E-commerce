@@ -304,6 +304,9 @@ export interface CartItem {
   // post's bottom sheet, threaded through to order_items.discover_post_id
   // at checkout. Absent for every other add-to-cart path.
   sourceDiscoverPostId?: string
+  // Same idea, for a purchase made during a live shopping stream --
+  // threaded through to order_items.live_session_id at checkout.
+  sourceLiveSessionId?: string
 }
 
 export interface ProductVariant {

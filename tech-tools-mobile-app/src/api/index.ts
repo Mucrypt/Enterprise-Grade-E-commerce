@@ -1910,6 +1910,95 @@ export const discoverApi = {
 }
 
 // ============================================
+// Live Shopping (AWS IVS)
+// ============================================
+export interface LiveSessionSummary {
+  id: string
+  sellerProfileId: string
+  title: string
+  status: 'scheduled' | 'live' | 'ended' | 'errored'
+  ivsIngestEndpoint: string | null
+  ivsPlaybackUrl: string | null
+  thumbnailUrl: string | null
+  scheduledStartAt: string | null
+  startedAt: string | null
+  endedAt: string | null
+  viewerCountPeak: number
+  createdAt: string
+  sellerDisplayName?: string | null
+  sellerHandle?: string | null
+}
+
+export interface LiveSessionProduct {
+  id: string
+  name: string
+  slug: string
+  base_price: string | number
+  sale_price: string | number | null
+  image_url: string | null
+}
+
+export interface LiveSessionViewerDetail {
+  session: LiveSessionSummary
+  isLive: boolean
+  viewerCount: number
+  pinnedProduct: LiveSessionProduct | null
+  chatToken: string
+  chatRoomArn: string
+  chatRegion: string
+}
+
+export const liveApi = {
+  // Public -- the Discover feed's "who's live now" rail.
+  getLiveNow: async (): Promise<LiveSessionSummary[]> => {
+    const response = await apiClient.get('/live/sessions')
+    return (response.data.data || response.data)?.sessions || []
+  },
+
+  // Viewer-facing -- playback URL comes from the session itself
+  // (ivsPlaybackUrl), this call adds the live poll + chat token + pinned product.
+  getSessionDetail: async (sessionId: string): Promise<LiveSessionViewerDetail> => {
+    const response = await apiClient.get(`/live/sessions/${sessionId}`)
+    return response.data.data || response.data
+  },
+
+  // Seller-only from here down.
+  createSession: async (data: { title: string; scheduledStartAt?: string }): Promise<LiveSessionSummary> => {
+    const response = await apiClient.post('/live/sessions', data)
+    return response.data.data || response.data
+  },
+
+  // Restores the Go Live screen's state after navigating away and back.
+  getMyCurrentSession: async (): Promise<LiveSessionSummary | null> => {
+    const response = await apiClient.get('/live/sessions/mine/current')
+    return response.data.data ?? response.data ?? null
+  },
+
+  getStreamKey: async (sessionId: string): Promise<string> => {
+    const response = await apiClient.get(`/live/sessions/${sessionId}/stream-key`)
+    return (response.data.data || response.data).streamKey
+  },
+
+  start: async (sessionId: string): Promise<LiveSessionSummary> => {
+    const response = await apiClient.post(`/live/sessions/${sessionId}/start`)
+    return response.data.data || response.data
+  },
+
+  end: async (sessionId: string): Promise<LiveSessionSummary> => {
+    const response = await apiClient.post(`/live/sessions/${sessionId}/end`)
+    return response.data.data || response.data
+  },
+
+  pinProduct: async (sessionId: string, productId: string): Promise<void> => {
+    await apiClient.post(`/live/sessions/${sessionId}/products`, { productId })
+  },
+
+  unpinProduct: async (sessionId: string, productId: string): Promise<void> => {
+    await apiClient.delete(`/live/sessions/${sessionId}/products/${productId}`)
+  },
+}
+
+// ============================================
 // Push Notifications API -- device/token registration. Uses this file's
 // real, configured `apiClient` (baseURL + auth header interceptor already
 // wired up), unlike the plain `axios.post(...)` MobileNotificationService
@@ -2630,7 +2719,7 @@ export const ordersApiNew = {
   // exists before any money can be captured, unlike the old create() above
   // (still used nowhere now, kept only for reference/backward compat).
   checkoutSession: async (data: {
-    items: { productId: string; quantity: number; discoverPostId?: string }[]
+    items: { productId: string; quantity: number; discoverPostId?: string; liveSessionId?: string }[]
     shippingAddress: {
       firstName: string
       lastName: string

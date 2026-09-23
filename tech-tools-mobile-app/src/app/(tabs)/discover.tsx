@@ -28,6 +28,7 @@ import { setAudioModeAsync } from 'expo-audio'
 import { discoverApi, DiscoverPost } from '@/api'
 import DiscoverSlide from '@/components/discover/DiscoverSlide'
 import ProductBottomSheet from '@/components/discover/ProductBottomSheet'
+import LiveNowRail from '@/components/discover/LiveNowRail'
 import { getEventTracker } from '@/services/event-tracking'
 import { Product } from '@/types'
 import { AppColors } from '@/constants/appTheme'
@@ -162,6 +163,7 @@ export default function DiscoverTabScreen() {
 
   return (
     <View style={styles.container}>
+      <LiveNowRail />
       <FlatList
         ref={flatListRef}
         data={posts}

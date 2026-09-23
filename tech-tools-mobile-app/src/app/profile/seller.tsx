@@ -494,6 +494,20 @@ export default function SellerHubScreen() {
               <Ionicons name="trending-up-outline" size={16} color={AppColors.white} />
               <Text style={styles.manageProductsButtonText}>Performance</Text>
             </TouchableOpacity>
+            {/* Live shopping is gated (trusted/pro tier + good standing,
+                see evaluateLiveEligibility on the backend) -- shown here
+                only for a tier that can plausibly pass that check, rather
+                than showing it to everyone and having it 403. The
+                backend remains the real gate either way. */}
+            {(sellerProfile?.tier === 'trusted' || sellerProfile?.tier === 'pro') && (
+              <TouchableOpacity
+                style={[styles.manageProductsButton, styles.hubActionButton, styles.liveButton]}
+                onPress={() => router.push('/profile/seller-live' as never)}
+              >
+                <Ionicons name="videocam-outline" size={16} color={AppColors.white} />
+                <Text style={styles.manageProductsButtonText}>Go Live</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -835,6 +849,9 @@ const styles = StyleSheet.create({
   },
   performanceButton: {
     backgroundColor: AppColors.secondary,
+  },
+  liveButton: {
+    backgroundColor: AppColors.error,
   },
   manageProductsButtonText: {
     fontSize: 13,

@@ -125,6 +125,14 @@ export default function RootLayout() {
                 }}
               />
               <Stack.Screen
+                name='live/[id]'
+                options={{
+                  headerShown: false,
+                  animation: 'slide_from_bottom',
+                  presentation: 'fullScreenModal',
+                }}
+              />
+              <Stack.Screen
                 name='products/index'
                 options={{
                   headerShown: false,
@@ -239,6 +247,13 @@ export default function RootLayout() {
               />
               <Stack.Screen
                 name='profile/seller-products'
+                options={{
+                  headerShown: false,
+                  animation: 'slide_from_right',
+                }}
+              />
+              <Stack.Screen
+                name='profile/seller-live'
                 options={{
                   headerShown: false,
                   animation: 'slide_from_right',
