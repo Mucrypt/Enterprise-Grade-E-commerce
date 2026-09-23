@@ -177,6 +177,15 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_REGION: ${AWS_REGION:-us-east-1}
       S3_BUCKET_NAME: ${S3_BUCKET_NAME:-}
+      # AWS IVS (live shopping) -- separate from the generic AWS_* vars
+      # above, which nothing currently reads. Same env-var-injection gap
+      # already found and fixed for ENABLE_SELLER_TIERS/CLAMAV_HOST/etc:
+      # a var not explicitly listed here is invisible to the container
+      # regardless of what's in .env.
+      AWS_IVS_ACCESS_KEY_ID: ${AWS_IVS_ACCESS_KEY_ID:-}
+      AWS_IVS_SECRET_ACCESS_KEY: ${AWS_IVS_SECRET_ACCESS_KEY:-}
+      AWS_IVS_REGION: ${AWS_IVS_REGION:-us-east-1}
+      AWS_IVS_SNS_TOPIC_ARN: ${AWS_IVS_SNS_TOPIC_ARN:-}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
       STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
