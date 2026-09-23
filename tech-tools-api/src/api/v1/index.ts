@@ -53,6 +53,7 @@ import sourcingPricingRuleRoutes from './sourcing/sourcing-pricing-rule.routes'
 import sourcingTokenRoutes from './sourcing/sourcing-token.routes'
 import sourcingExtensionRoutes from './sourcing/sourcing-extension.routes'
 import currencyRoutes from './currency/currency.routes'
+import liveRoutes, { adminLiveRouter } from './live/live.routes'
 
 const router = Router()
 
@@ -70,6 +71,7 @@ router.get('/health', (_req, res) => {
 router.use('/auth', authRoutes)
 router.use('/admin/customers', customersRoutes) // Must be before /admin to avoid /:adminId catching "customers"
 router.use('/admin/sellers', adminSellersRoutes)
+router.use('/admin/live', adminLiveRouter)
 router.use('/admin/seller-payouts', adminSellerPayoutsRoutes)
 router.use('/admin/support-tickets', adminSupportTicketsRoutes)
 router.use('/admin/announcements', adminAnnouncementsRoutes)
@@ -95,6 +97,7 @@ router.use('/shipping', shippingRoutes)
 router.use('/settings/homepage', homepageSettingsRoutes)
 router.use('/settings/hero-slides', heroSlidesRoutes)
 router.use('/discover', discoverRoutes)
+router.use('/live', liveRoutes)
 router.use('/coupons', couponRoutes)
 router.use('/affiliates', affiliateRoutes)
 router.use('/reviews', reviewRoutes)

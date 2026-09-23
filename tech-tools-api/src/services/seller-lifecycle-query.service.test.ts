@@ -4,6 +4,7 @@ import { query } from '../database/connection'
 import {
   resolveSellerCapabilities,
   evaluateStoreReadiness,
+  evaluateLiveEligibility,
   computeOnboardingProgress,
 } from './seller-lifecycle-query.service'
 
@@ -214,6 +215,53 @@ describe('seller-lifecycle-query.service -- evaluateStoreReadiness invents nothi
     mockQuery.mockResolvedValue({ rows: [] })
 
     const readiness = await evaluateStoreReadiness('sp-missing')
+
+    expect(readiness.eligible).toBe(false)
+    expect(readiness.missing).toContain('seller_profile_not_found')
+  })
+})
+
+describe('seller-lifecycle-query.service -- evaluateLiveEligibility gates live shopping on tier, not just good standing', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it('is ineligible below the trusted tier even when ACTIVE and terms accepted', async () => {
+    mockQuery.mockResolvedValue({ rows: [{ account_status: 'ACTIVE', terms_accepted: true, tier: 'basic' }] })
+
+    const readiness = await evaluateLiveEligibility('sp-1')
+
+    expect(readiness.eligible).toBe(false)
+    expect(readiness.missing).toContain('seller_tier_too_low_for_live')
+  })
+
+  it('is eligible for a trusted-tier seller in good standing', async () => {
+    mockQuery.mockResolvedValue({ rows: [{ account_status: 'ACTIVE', terms_accepted: true, tier: 'trusted' }] })
+
+    const readiness = await evaluateLiveEligibility('sp-1')
+
+    expect(readiness).toEqual({ eligible: true, missing: [] })
+  })
+
+  it('is eligible for a pro-tier seller in good standing', async () => {
+    mockQuery.mockResolvedValue({ rows: [{ account_status: 'ACTIVE', terms_accepted: true, tier: 'pro' }] })
+
+    const readiness = await evaluateLiveEligibility('sp-1')
+
+    expect(readiness).toEqual({ eligible: true, missing: [] })
+  })
+
+  it('still requires ACTIVE account status regardless of tier', async () => {
+    mockQuery.mockResolvedValue({ rows: [{ account_status: 'RESTRICTED', terms_accepted: true, tier: 'pro' }] })
+
+    const readiness = await evaluateLiveEligibility('sp-1')
+
+    expect(readiness.eligible).toBe(false)
+    expect(readiness.missing).toContain('seller_account_must_be_active')
+  })
+
+  it('reports not-found rather than inventing eligibility for a nonexistent profile', async () => {
+    mockQuery.mockResolvedValue({ rows: [] })
+
+    const readiness = await evaluateLiveEligibility('sp-missing')
 
     expect(readiness.eligible).toBe(false)
     expect(readiness.missing).toContain('seller_profile_not_found')

@@ -37,6 +37,29 @@ export async function evaluateStoreReadiness(sellerProfileId: string): Promise<R
   return { eligible: missing.length === 0, missing }
 }
 
+// Live shopping's go-live gate. Same account-standing foundation as
+// evaluateStoreReadiness, plus a tier floor -- broadcasting real-time
+// video carries more trust/abuse surface than a static post, so this is
+// deliberately not open to every onboarded seller. 'trusted'/'pro' only;
+// tunable here if the founder wants to loosen or tighten it later.
+export async function evaluateLiveEligibility(sellerProfileId: string): Promise<ReadinessResult> {
+  const result = await query(
+    `SELECT account_status, terms_accepted, tier FROM seller_profiles WHERE id = $1 LIMIT 1`,
+    [sellerProfileId],
+  )
+  const profile = result.rows[0]
+  if (!profile) {
+    return { eligible: false, missing: ['seller_profile_not_found'] }
+  }
+
+  const missing: string[] = []
+  if (profile.account_status !== 'ACTIVE') missing.push('seller_account_must_be_active')
+  if (!profile.terms_accepted) missing.push('marketplace_terms_not_accepted')
+  if (!['trusted', 'pro'].includes(profile.tier)) missing.push('seller_tier_too_low_for_live')
+
+  return { eligible: missing.length === 0, missing }
+}
+
 export async function evaluateSubmissionEligibility(sellerProfileId: string): Promise<ReadinessResult> {
   const profileResult = await query(`SELECT * FROM seller_profiles WHERE id = $1 LIMIT 1`, [
     sellerProfileId,

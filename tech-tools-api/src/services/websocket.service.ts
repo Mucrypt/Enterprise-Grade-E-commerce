@@ -208,6 +208,21 @@ class WebSocketService {
       socket.on('unsubscribe-metrics', (metrics: string[]) => {
         socket.leave(`metrics:${metrics.join(',')}`)
       })
+
+      // Live shopping -- a viewer opening a stream's screen joins its
+      // room to receive product pin/unpin and lifecycle events
+      // (live-session.service.ts sends via sendToRoom below); no auth
+      // check here since a live session's existence/pinned product
+      // isn't sensitive, unlike the dashboard room above. Leaving is
+      // explicit (screen unmount) rather than relying only on
+      // disconnect, since a viewer can navigate to another live stream
+      // without disconnecting the socket at all.
+      socket.on('join-live', (sessionId: string) => {
+        if (typeof sessionId === 'string' && sessionId) socket.join(`live:${sessionId}`)
+      })
+      socket.on('leave-live', (sessionId: string) => {
+        if (typeof sessionId === 'string' && sessionId) socket.leave(`live:${sessionId}`)
+      })
     })
   }
 
